@@ -1,0 +1,39 @@
+/* The usage section of the version page, until the profile page (phase 36a). */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.heading {
+  margin: 0;
+  font-family: var(--text-heading-font-family);
+  font-size: var(--text-heading-font-size);
+  font-weight: var(--text-heading-font-weight);
+  line-height: var(--text-heading-line-height);
+  letter-spacing: var(--text-heading-letter-spacing);
+  color: var(--color-text-primary);
+}
+
+.line {
+  margin: 0;
+  font-family: var(--text-body-font-family);
+  font-size: var(--text-body-font-size);
+  font-weight: var(--text-body-font-weight);
+  line-height: var(--text-body-line-height);
+  color: var(--color-text-primary);
+}
+
+.meta {
+  color: var(--color-text-muted);
+}
+
+/* Errors are sentences, not colour alone. */
+.error {
+  margin: 0;
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  font-weight: var(--text-small-font-weight);
+  line-height: var(--text-small-line-height);
+  color: var(--color-state-removed-text);
+}

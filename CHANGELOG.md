@@ -4,6 +4,30 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-10-31 — Phase 1c: sign-in and control plane
+
+### Try it
+
+1. On staging, **sign in with GitHub or Google** (your email must be on the allowlist). Your name appears under Account, with Sign out.
+2. **Create a project.** It's listed with "Workspace not created yet"; cloud workspaces arrive in the next phase.
+3. Open its **Secrets** and save one with a made-up value. It's listed by name only, masked, and can never be shown again; replace it by saving the same name.
+4. As an admin, look at **Admin**: everyone who has signed in, and the allowlist you can change from here.
+
+### Added
+
+- **Sign-in with GitHub and Google**, one account across both, limited to an allowlist while in private development. Sessions last 30 days; only a hash of the session token is stored.
+- **Projects:** create and list your own projects; each has its cloud workspace record from the start.
+- **Secrets vault:** project secrets encrypted with a key per project (envelope encryption, AES-256-GCM). Values are write-only: no page or API ever returns one.
+- **Usage this month:** measured workspace time and the reset date (0 until workspaces run). Limits and plans come later.
+- **Admin view:** people with their project count and usage (counts only, never project contents), and the allowlist: add, change role, remove (which signs that person out everywhere).
+- **Control plane** inside the app's Worker under `/api` (Hono), with Neon Postgres, plain SQL migrations and in-process Postgres (PGlite) for tests.
+
+### Security
+
+- Every log line is redacted on its way out: connection strings, tokens, sign-in codes, cookies and email addresses. A canary test runs the whole flow, failures included, and checks every response and log line.
+- Requests that change something must come from Flowcanvas itself; admin routes check the role on every request; API answers are never cached.
+- Sign-in only works on staging and local development; branch previews say so.
+
 ## [0.3.0] — 2026-10-29 — Phase 1b: see-and-test harness
 
 ### Try it

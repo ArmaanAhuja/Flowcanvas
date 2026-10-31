@@ -10,16 +10,24 @@ import {
   useThemePreference,
   type ThemePreference,
 } from '@flowcanvas/ui';
+import { useCallback, useState } from 'react';
 import releases from 'virtual:changelog';
+import { Account } from './account/Account';
+import { Admin } from './admin/Admin';
+import type { Session } from './account/session';
 import styles from './App.module.css';
 import { LabsPanel } from './labs/LabsPanel';
 import { LabsProvider } from './labs/LabsProvider';
+import { Projects } from './projects/Projects';
 import { CATALOGUE_URL } from './links';
+import { Usage } from './usage/Usage';
 import { useWhatsNewSeen } from './whats-new/seen';
 import { WhatsNew } from './whats-new/WhatsNew';
 
 interface AppProps {
   readonly buildInfo: BuildInfo;
+  /** Replaces the browser's fetch for the API calls, in tests. */
+  readonly fetcher?: typeof fetch;
 }
 
 const THEMES: readonly { readonly id: ThemePreference; readonly label: string }[] = [
@@ -32,9 +40,15 @@ function themeLabel(preference: ThemePreference): string {
   return THEMES.find((theme) => theme.id === preference)?.label ?? 'System';
 }
 
-export function App({ buildInfo }: AppProps) {
+export function App({ buildInfo, fetcher }: AppProps) {
   const [theme, setTheme] = useThemePreference();
   const [unseen, markSeen] = useWhatsNewSeen(releases[0]?.version);
+  const [session, setSession] = useState<Session | undefined>(undefined);
+  const onSessionChange = useCallback((changed: Session) => {
+    setSession(changed);
+  }, []);
+  const user = session?.kind === 'signed-in' ? session.user : undefined;
+  const apiFetcher = fetcher === undefined ? {} : { fetcher };
   return (
     <LabsProvider>
       <main className={styles.page}>
@@ -47,7 +61,12 @@ export function App({ buildInfo }: AppProps) {
           <dl className={styles.facts}>
             <dt className={styles.term}>Build</dt>
             <dd className={styles.build}>{formatBuildInfo(buildInfo)}</dd>
+            <Account {...apiFetcher} onSessionChange={onSessionChange} />
           </dl>
+          {user !== undefined && <Projects {...apiFetcher} />}
+          {user !== undefined && <Usage {...apiFetcher} />}
+          {/* The API checks the role on every request too; hiding the section is for clarity, not security. */}
+          {user?.role === 'admin' && <Admin ownEmail={user.email} {...apiFetcher} />}
           <div className={styles.actions}>
             <a className={styles.link} href={CATALOGUE_URL}>
               Open the component catalogue

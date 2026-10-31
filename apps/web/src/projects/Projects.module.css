@@ -1,0 +1,132 @@
+/* The projects section of the version page, until the phase 2 start screen. */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+.heading {
+  margin: 0;
+  font-family: var(--text-heading-font-family);
+  font-size: var(--text-heading-font-size);
+  font-weight: var(--text-heading-font-weight);
+  line-height: var(--text-heading-line-height);
+  letter-spacing: var(--text-heading-letter-spacing);
+  color: var(--color-text-primary);
+}
+
+.form {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-8) var(--space-12);
+  align-items: center;
+}
+
+.label {
+  font-family: var(--text-small-strong-font-family);
+  font-size: var(--text-small-strong-font-size);
+  font-weight: var(--text-small-strong-font-weight);
+  line-height: var(--text-small-strong-line-height);
+  color: var(--color-text-secondary);
+}
+
+.actions {
+  grid-column: 2;
+}
+
+/* Errors are sentences, not colour alone (Graphite: state is never shown by colour only). */
+.error {
+  grid-column: 2;
+  margin: 0;
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  font-weight: var(--text-small-font-weight);
+  line-height: var(--text-small-line-height);
+  color: var(--color-state-removed-text);
+}
+
+.empty {
+  margin: 0;
+  font-family: var(--text-body-font-family);
+  font-size: var(--text-body-font-size);
+  font-weight: var(--text-body-font-weight);
+  line-height: var(--text-body-line-height);
+  color: var(--color-text-secondary);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: var(--border-width-default) solid var(--color-border-subtle);
+  border-radius: var(--radius-popover);
+  background: var(--color-surface-panel);
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-12) var(--space-16);
+  border-block-end: var(--border-width-default) solid var(--color-border-subtle);
+}
+
+.item:last-child {
+  border-block-end: 0;
+}
+
+.name {
+  font-family: var(--text-body-strong-font-family);
+  font-size: var(--text-body-strong-font-size);
+  font-weight: var(--text-body-strong-font-weight);
+  line-height: var(--text-body-strong-line-height);
+  color: var(--color-text-primary);
+}
+
+.repo {
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  font-weight: var(--text-mono-small-font-weight);
+  line-height: var(--text-mono-small-line-height);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  font-weight: var(--text-caption-font-weight);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+}
+
+.itemHeader {
+  display: flex;
+  gap: var(--space-12);
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+/* A text button, like the account links: underlined, never accent-coloured. */
+.toggle {
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  cursor: pointer;
+  font-family: var(--text-small-strong-font-family);
+  font-size: var(--text-small-strong-font-size);
+  font-weight: var(--text-small-strong-font-weight);
+  line-height: var(--text-small-strong-line-height);
+  color: var(--color-text-primary);
+  text-decoration: underline;
+  text-decoration-color: var(--color-border-strong);
+  text-underline-offset: var(--space-4);
+  transition: text-decoration-color var(--duration-hover) ease-out;
+}
+
+.toggle:hover {
+  text-decoration-color: var(--color-text-primary);
+}

@@ -34,9 +34,11 @@
   color: var(--color-text-secondary);
 }
 
+/* Label and value pairs (Build, Account): labels in one column, values in the next. */
 .facts {
-  display: flex;
-  gap: var(--space-8);
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-8) var(--space-12);
   align-items: baseline;
   margin: 0;
 }

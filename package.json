@@ -1,6 +1,6 @@
 {
   "name": "flowcanvas",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Canvas-first, AI-native development environment (working name)",
   "type": "module",
@@ -19,7 +19,10 @@
     "format:check": "prettier --check .",
     "test:visual": "turbo run build-storybook --filter=@flowcanvas/ui && pnpm --filter @flowcanvas/e2e --fail-if-no-match test:visual",
     "test:visual:update": "turbo run build-storybook --filter=@flowcanvas/ui && pnpm --filter @flowcanvas/e2e --fail-if-no-match test:visual --update-snapshots",
-    "corpus:check": "pnpm --filter @flowcanvas/corpus --fail-if-no-match check"
+    "corpus:check": "pnpm --filter @flowcanvas/corpus --fail-if-no-match check",
+    "db:migrate": "pnpm --filter @flowcanvas/control-plane --fail-if-no-match db:migrate",
+    "db:status": "pnpm --filter @flowcanvas/control-plane --fail-if-no-match db:status",
+    "db:allow": "pnpm --filter @flowcanvas/control-plane --fail-if-no-match db:allow"
   },
   "devDependencies": {
     "@eslint/js": "catalog:",

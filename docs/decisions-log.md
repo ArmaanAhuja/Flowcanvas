@@ -272,6 +272,15 @@ Signal is close to, but softer than, the original saturated palette replaced on 
    The evidence files and each licence's SHA-256 are in `corpus/manifest.json`, and `pnpm corpus:check` re-verifies them, also in CI.
 5. **Reports protection deadline relaxed.** Upgrade-later 11 had required protecting the reports site before phase 1d because recordings would show private copies. With public forks it reverts to the general trigger: before reports show real user or project data, or are shared outside the team.
 
+## 30 Oct 2026: phase 1c decisions (owner)
+
+1. **The control plane runs inside the existing app Worker, under `/api`, with a free Neon Postgres database** (option A; no payment method needed).
+   - The service moves from Fastify to a Workers-compatible framework (Hono, same TypeScript).
+   - The API shares the app's origin, so session cookies are first-party and the app's CSP (`connect-src 'self'`) needs no change.
+   - Verified first by a spike (step 1, ADR). Fly.io stays in upgrade-later 12 for when a separate service is needed.
+2. **Sign-in is limited to an allowlist** while in private development, starting with the owner, who is the admin.
+3. **Sign-in works on staging and local development only.** GitHub and Google only redirect to pre-registered addresses, and preview addresses change per branch. Previews show a "sign in on staging" notice.
+
 
 ## 31 Oct 2026: repository moved to another account (owner decision)
 
@@ -281,6 +290,7 @@ GitHub Actions never ran on `ArmaanAhuja-7777` because of the account billing lo
 2. **What moved with it:** history, PRs #1–#6, the Actions secrets (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`) and the variable `CLOUDFLARE_WORKERS_SUBDOMAIN` (all checked after the transfer). Old URLs redirect, but links in the docs now point to the new address.
 3. **`ArmaanAhuja-7777` stays a collaborator** (write access, added by the transfer), so commits and PRs can still come from it. Repository settings (secrets, branch protection) need the owner account.
 4. **Cloudflare Workers Builds reconnected** to the moved repository for both `flowcanvas` and `flowcanvas-catalogue`, with the same build commands and variables as before (phase 1 step 11, phase 1a); the Cloudflare GitHub app now has access to this repository only.
-5. **What stays on `ArmaanAhuja-7777`:** the six corpus forks (separate repositories that `corpus:check` only reads) and the GitHub OAuth apps for sign-in (they don't depend on where the code lives).
+5. **What stays on `ArmaanAhuja-7777`:** the six corpus forks (separate repositories that `corpus:check` only reads) and the GitHub OAuth apps for sign-in (they don't depend on where the code lives). **Update (same day):** the owner transferred both GitHub OAuth apps (staging and local) to `ArmaanAhuja` as well, ahead of a notice that the old account may be restricted from 26 Nov 2026; their client IDs and secrets didn't change.
 6. **Acceptance:** once a PR run and the following `main` run pass on GitHub, the upgrade-later item 8 steps are done, and phases 1 and 1b move to *accepted*. From then on the "PR #1 exception" ends: merge only when CI is green.
 7. **Result (same day):** PR #7 ran every job on GitHub and passed, and so did its merge to `main` (`157b55f`), which tested staging and moved the reports' main address. Phases 1 and 1b are **accepted**, as the owner had agreed. The PR #1 exception has ended.
+8. **`main` is protected by a ruleset (same day, owner).** Pull request required (0 approvals while the owner works alone), the three test jobs must pass on a branch that is up to date with `main`, no bypass, deletions and force pushes blocked. `Publish report and comment` is deliberately not required: it runs even when tests fail, and a reports outage shouldn't block merges. This replaces the "merge only when green" honour rule with enforcement and closes upgrade-later items 1 and 5.

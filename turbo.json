@@ -26,6 +26,11 @@
       "cache": false,
       "persistent": true
     },
+    "@flowcanvas/control-plane#dev": {
+      "dependsOn": ["@flowcanvas/web#build"],
+      "cache": false,
+      "persistent": true
+    },
     "test:e2e": {
       "dependsOn": ["^build"],
       "cache": false,

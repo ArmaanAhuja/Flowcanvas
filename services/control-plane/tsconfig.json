@@ -1,9 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist",
-    "types": ["node"]
+    "types": ["node"],
+    "noEmit": true
   },
-  "include": ["src"]
+  // Type-check everything, including the db scripts. Nothing is emitted: Wrangler bundles src/api/worker.ts.
+  "include": ["src", "scripts"]
 }

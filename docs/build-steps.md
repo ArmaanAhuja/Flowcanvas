@@ -2002,7 +2002,7 @@ E2E_BASE_URL=https://flowcanvas.ahujaarmaan7777.workers.dev E2E_EXPECTED_COMMIT=
 ```fish
 # Locally
 pnpm install
-pnpm dev                                   # http://localhost:5173 and http://127.0.0.1:8080/health
+pnpm dev                                   # http://localhost:5173 (since phase 1c step 3, the API is http://localhost:5173/api/health; the Fastify server on 8080 is retired)
 pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e
 # Deployed
 open https://flowcanvas.ahujaarmaan7777.workers.dev                       # staging (main)
@@ -8295,3 +8295,1016 @@ Then repository links in the docs updated, and this branch (`chore/move-repo`) o
 **After the merge:** the `main` run (https://github.com/ArmaanAhuja/Flowcanvas/actions/runs/41183867839) passed all four jobs; the walkthroughs ran against staging once it served `157b55f`, and the reports' main address moved to `157b55f`. Phases 1 and 1b accepted (decisions log, 31 Oct 2026).
 
 **Commits:** `docs: move the repository to ArmaanAhuja/Flowcanvas` · `fix(e2e): label the report with the tested commit, not the PR merge commit` · `docs: accept phases 1 and 1b after CI ran on GitHub`
+
+## Phase 1c — Sign-in and control plane
+
+**From the build plan:**
+- **Build:** GitHub and Google sign-in; projects list; workspace records; secrets vault; usage metering skeleton; admin view.
+- **Done when:** a new user signs in, creates a project and sees it listed; saved secrets never appear in logs.
+- **Try it:** sign in with GitHub, create a project, add a secret, confirm the logs show no value.
+
+**Owner decisions (30 Oct 2026, decisions log):**
+- the control plane in the app Worker under `/api`, with free Neon Postgres
+- an allowlist, with the owner as admin
+- sign-in on staging and local development only
+
+**Why this phase matters:** everything from 1d on is per user and per project (workspaces, saved agent keys, usage limits), and this is the first time the product holds sensitive data. Hence the vault and the "never in logs" acceptance test.
+
+**Expected outcome:**
+- At the staging link: sign in with GitHub or Google (allowlisted), and see a projects list.
+- Create a project; add a secret, then shown by name only and never readable back; a workspace-hours meter.
+- An admin page.
+- Canary tests prove secret values never reach logs, responses or pages.
+
+### Steps (planned)
+
+| # | Step | Status |
+| --- | --- | --- |
+| 0 | Owner accounts: Neon database, GitHub OAuth apps (staging + local), Google OAuth client; keys stored as Worker secrets and in `.dev.vars` | done · owner · `.dev.vars` checked by name and format; Worker secrets verified by `/api/db/ping` on version `26f9c237`, and inherited by the next preview (`9ae581e`) |
+| 1 | Spike: Hono and Neon on the Workers free plan; ADR | done · `ba4718e` · Claude · ADR 0013 |
+| 2 | Database schema and migrations | done · see commit below · Claude · ADR 0014 · applied to Neon `dev` |
+| 3 | GitHub sign-in, sessions, sign out; Fastify server retired | done · see commit below · Claude · owner: one real sign-in by hand (below) |
+| 4 | Google sign-in, allowlist, admin role | done · see commit below · Claude · owner: one real Google sign-in by hand |
+| 5 | Projects list and create | done · see commit below · Claude · checked against Neon `dev` |
+| 6 | Secrets vault, Project secrets page, canary tests | done · see commit below · Claude · ADR 0015 · owner: local VAULT_KEY |
+| 7 | Usage metering skeleton and workspace records | done · see commit below · Claude · migration 0002 applied to Neon `dev` |
+| 8 | Admin view | done · see commit below · Claude · read-only check against Neon `dev` |
+| 9 | Logs and redaction across everything; walkthroughs | done · see commit below · Claude · owner: Cloudflare logs check at phase close |
+| 10 | Close the phase (0.4.0) | done · see commit below · Claude · owner: after-merge checks on staging |
+
+### Step 1c.0 — Account setup (owner)
+
+**Goal:** the outside services phase 1c needs, set up on free plans, with every key stored only where it belongs: Cloudflare Worker secrets (staging) and the git-ignored `.dev.vars` (local). Never in the repo, a shell command line or chat.
+
+**Concepts:**
+- **Two environments, two sets of keys.** Staging and local development get separate OAuth apps and separate database branches, so a leaked local key can't touch staging, and local experiments can't damage staging data.
+- **Callback (redirect) URLs.** After you approve, GitHub and Google send the browser back to a registered address with a one-time code. GitHub's OAuth app form now accepts up to 10 redirect URIs, but we still use **two GitHub apps** (staging and local): each has its own client secret, so a leaked local secret can't be used against staging, and either can be revoked alone. Leave **Allow wildcard matching** off (exact addresses only, so codes can't be sent anywhere else), **Enable Device Flow** off, and **Expire user access tokens** on: we only use GitHub's token once, at sign-in, to read who you are, then issue our own session.
+- **Neon branches.** A Neon project has a default branch, named `production` in new projects (used for staging), and can have a `dev` branch (local): separate copies of the database, both free. Create `dev` from `production` with "Branch data and schema".
+- **Where secrets live:**
+  - **On Cloudflare:** `pnpm exec wrangler versions secret put NAME` prompts for the value and stores it encrypted on a new Worker version, without deploying. Use `versions secret put`, not `secret put`, because branch previews make the newest version differ from the live one.
+  - **Secrets only attach to a Worker version that has a script.** The first attempt, on the assets-only Worker, said "Success" but attached nothing.
+  - **Check by behaviour:** `/api/db/ping` on the new version's own URL (`https://<first 8 characters of the version id>-flowcanvas.ahujaarmaan7777.workers.dev`) answers `{"database":"ok"}`. `wrangler versions secret list --latest-version` crashes in Wrangler 4.152 (a Wrangler bug), so it can't be used.
+  - **Locally:** `.dev.vars` holds the values and is git-ignored. Run `cp .dev.vars.example .dev.vars` **once**, before filling it in; running it again overwrites your values.
+
+**Callback URLs:**
+
+| Environment | GitHub | Google |
+| --- | --- | --- |
+| Staging | `https://flowcanvas.ahujaarmaan7777.workers.dev/api/auth/callback/github` | `https://flowcanvas.ahujaarmaan7777.workers.dev/api/auth/callback/google` |
+| Local | `http://localhost:5173/api/auth/callback/github` | `http://localhost:5173/api/auth/callback/google` |
+
+**Google Cloud steps** (Google Auth Platform, current console):
+1. Use a **dedicated `flowcanvas` project**, not an existing one (for example a "Gemini Project"), so keys, quotas and the consent-screen name belong to Flowcanvas alone.
+2. Google Auth Platform → **Get started**:
+   - app name `Flowcanvas`, your support email
+   - audience **External**
+   - contact email, then accept the policy
+3. **Data Access** → *Add or remove scopes*: `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile`. All three are non-sensitive, so no verification is needed.
+4. **Audience**: publishing status stays **Testing**; **Test users** → add your Google address. Only test users can sign in, which matches the allowlist.
+5. **Branding**: no logo (uploading one triggers Google's brand verification); leave the domain fields empty while testing.
+6. **Clients** → *Create client* → **Web application** `Flowcanvas`:
+   - JavaScript origins: the staging and `http://localhost:5173` addresses
+   - redirect URIs: the two Google callbacks above
+
+   Copy the client secret when it's shown; Google may show it only once. Don't download the JSON into the repo.
+
+**Don't use Neon's "Set up this app on Neon" agent prompt.** It installs the `neon` CLI, runs `neon init`/`neon deploy` in the repo, writes connection strings into `.env.local`, and asks an agent to wire the database into the app. That would bypass our plan: keys go only into Worker secrets and `.dev.vars`, and the database code is written and reviewed in step 1. Copy the connection strings from the dashboard instead (**Connect** button).
+
+**Values to store:**
+
+| Name | Staging (Worker secret) | Local (`.dev.vars`) |
+| --- | --- | --- |
+| `DATABASE_URL` | Neon `production` branch connection string (pooled) | Neon `dev` branch connection string (pooled) |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | "Flowcanvas (staging)" OAuth app | "Flowcanvas (local)" OAuth app |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | the Google client | the same Google client |
+
+### Step 1c.1 — Spike: the API inside our Worker, talking to Neon
+
+**Goal:** prove decision 1A before building on it. One Worker serves the app's static files *and* a Hono API under `/api`, the API reaches Neon, and a request fits the free plan's CPU limit.
+
+**Concepts:**
+- **A spike:** a small, real experiment answering a risky question first. The result goes into an ADR (0013).
+- **Static assets plus a script in one Worker.** `assets.run_worker_first: ["/api/*"]` sends only `/api/*` to the script. https://developers.cloudflare.com/workers/static-assets/routing/worker-script/
+- **Hono:** a web-standards framework that runs on Workers; `app.request()` tests it without a server. https://hono.dev
+- **Neon's serverless driver:** SQL over HTTPS. https://neon.com/docs/serverless/serverless-driver
+- **Dependency injection for testability.** `createApi({ query, now, log })` lets tests replace the database, clock and logger, so they run offline and deterministically.
+- **Redaction with a canary.** A fake connection string with a recognisable password; the test fails if it appears in any response or log line.
+- **Cold starts.** Neon's free compute sleeps when idle, so the first query took 4.2 s, then 117 ms.
+
+**What changed:**
+- `pnpm-workspace.yaml` catalog: `hono` 4.13.13, `@neondatabase/serverless` 1.2.0 (both MIT, more than two weeks old); added to `services/control-plane`.
+- `services/control-plane/src/api/`:
+  - `app.ts`: `createApi()` with `/api/health`, `/api/db/ping` and a JSON 404
+  - `redact.ts`: removes connection strings and bearer tokens
+  - `worker.ts`: the Worker's entry point
+  - `app.test.ts`: 6 tests, including the canary
+- `wrangler.jsonc`: `main`, `run_worker_first: ["/api/*"]`, `observability.enabled`.
+- `docs/adr/0013-control-plane-in-the-app-worker.md`.
+
+**`services/control-plane/src/api/app.ts`:**
+
+```ts
+import { neon } from '@neondatabase/serverless';
+import { Hono } from 'hono';
+import { describeError } from './redact.js';
+
+/** Values Cloudflare passes to the Worker: Worker secrets on Cloudflare, `.dev.vars` under `wrangler dev`. */
+export interface ApiBindings {
+  readonly DATABASE_URL?: string;
+}
+
+/** Outside effects the API needs, passed in so tests can replace them. */
+export interface ApiDependencies {
+  /** Runs one SQL statement against the database at `databaseUrl`. */
+  readonly query: (
+    databaseUrl: string,
+    text: string,
+  ) => Promise<readonly Record<string, unknown>[]>;
+  readonly now: () => number;
+  readonly log: (message: string) => void;
+}
+
+/** Neon's serverless driver sends SQL over HTTPS, which suits Workers (no long-lived sockets). */
+const neonQuery: ApiDependencies['query'] = async (databaseUrl, text) =>
+  neon(databaseUrl).query(text) as Promise<Record<string, unknown>[]>;
+
+const defaults: ApiDependencies = {
+  query: neonQuery,
+  now: () => Date.now(),
+  log: (message) => {
+    console.error(message);
+  },
+};
+
+/** The control plane's HTTP API, mounted under /api in the app's Worker (decisions log, 30 Oct 2026). */
+export function createApi(overrides: Partial<ApiDependencies> = {}) {
+  const deps = { ...defaults, ...overrides };
+  const api = new Hono<{ Bindings: ApiBindings }>().basePath('/api');
+
+  api.get('/health', (c) => c.json({ status: 'ok', service: 'control-plane' }));
+
+  // Proves the Worker can reach its database; never echoes the connection string, even on errors.
+  api.get('/db/ping', async (c) => {
+    const databaseUrl = c.env.DATABASE_URL;
+    if (databaseUrl === undefined || databaseUrl === '') {
+      return c.json({ database: 'not configured', fix: 'Set the DATABASE_URL secret' }, 503);
+    }
+    const started = deps.now();
+    try {
+      await deps.query(databaseUrl, 'select 1 as ok');
+      return c.json({ database: 'ok', roundTripMs: deps.now() - started });
+    } catch (error) {
+      deps.log(`database ping failed: ${describeError(error)}`);
+      return c.json({ database: 'unreachable' }, 503);
+    }
+  });
+
+  api.notFound((c) => c.json({ error: 'not found' }, 404));
+  return api;
+}
+```
+
+**`services/control-plane/src/api/redact.ts`:**
+
+```ts
+/**
+ * Removes secret-shaped text from anything about to be logged or returned: database connection strings
+ * (which embed a password) and bearer tokens. Errors from drivers can quote the URL they failed on.
+ */
+export function redact(text: string): string {
+  return text
+    .replace(/postgres(?:ql)?:\/\/[^\s"'<>]+/gi, 'postgresql://[redacted]')
+    .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/g, 'Bearer [redacted]');
+}
+
+/** A short, safe description of an unknown error for logs. */
+export function describeError(error: unknown): string {
+  if (error instanceof Error) return redact(`${error.name}: ${error.message}`);
+  return redact(String(error));
+}
+```
+
+**`services/control-plane/src/api/worker.ts`:**
+
+```ts
+import { createApi } from './app.js';
+
+/**
+ * The Worker's script. wrangler.jsonc sends only /api/* here (`run_worker_first`); every other request is
+ * served from the app's static files, as before.
+ */
+export default createApi();
+```
+
+**`wrangler.jsonc`:**
+
+```jsonc
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "flowcanvas",
+  // The control plane's API (Hono), mounted under /api (decisions log, 30 Oct 2026; ADR 0013).
+  "main": "./services/control-plane/src/api/worker.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./apps/web/dist",
+    "not_found_handling": "single-page-application",
+    // Only /api/* runs the script; everything else is served straight from the static files.
+    "run_worker_first": ["/api/*"],
+  },
+  // Request logs, including CPU time per request (free plan allowance), to watch the 10 ms CPU limit.
+  "observability": {
+    "enabled": true,
+  },
+  "preview_urls": true,
+  "workers_dev": true,
+  "send_metrics": false,
+}
+```
+
+**Commands:**
+
+```fish
+pnpm install
+pnpm --filter @flowcanvas/control-plane test           # 9 passed (6 new)
+pnpm build --filter=@flowcanvas/web                    # wrangler dev serves this build
+pnpm exec wrangler dev --port 8787                     # reads .dev.vars; shows each value as (hidden)
+curl http://127.0.0.1:8787/api/health                  # {"status":"ok","service":"control-plane"}
+curl http://127.0.0.1:8787/api/db/ping                 # {"database":"ok","roundTripMs":…}
+```
+
+**Run and check it (30 Oct 2026):**
+1. Locally: health 200, and the database ping 200 against Neon `dev` (4.2 s cold, then 117 ms). `/` is still the app, with its CSP.
+2. Preview `https://phase-1c-sign-in-control-plane-flowcanvas.ahujaarmaan7777.workers.dev/api/health` gives 200 from the script; `/api/db/ping` gave 503 "not configured" until the staging secrets were set on a version with a script.
+3. After the owner re-set the secrets, version `26f9c237`'s own URL answered `/api/db/ping` 200 against Neon `production` (734 ms cold, 63 ms warm).
+4. **New uploads inherit secrets.** The preview built from the next push (`9ae581e`) also answered `{"database":"ok"}`, so secrets are set once.
+
+**Gotchas:**
+- **`wrangler dev` serves `apps/web/dist`,** so build the web app first.
+- **Don't log errors from the database driver raw:** they can quote the connection string. Use `describeError()`.
+- **The first request after Neon idles is slow.** That's not a bug.
+
+**Commit:** `feat(control-plane): spike the API in the app Worker with Hono and Neon`
+
+### Step 1c.2 — Database schema and migrations
+
+**Goal:** the tables phase 1c stands on, as versioned migration files, applied by a small runner the same way locally and on staging, and tested against a throwaway Postgres.
+
+**Concepts:**
+- **Migrations:** numbered SQL files applied once, in order, recorded in `schema_migrations` with a SHA-256. Never edit an applied file; add a new one. The runner refuses edited files, unknown versions, bad names and duplicate numbers, and rolls a failing file back completely.
+- **Plain SQL, not an ORM** (ADR 0014): visible, reviewable, nothing added to the Worker bundle; Postgres constraints enforce the rules.
+- **Constraints as the last line of defence:** `check`, `unique`, `references … on delete cascade`.
+- **Sessions as hashes:** the database stores the SHA-256 of the session token, never the token.
+- **Envelope encryption, shaped in the schema:** `project_keys` holds each project's data key encrypted by a master key in a Worker secret; `project_secrets` holds only ciphertext and IV.
+- **PGlite:** Postgres compiled to WebAssembly, in the test process. A fresh database per test, offline, in milliseconds. https://pglite.dev
+- **Transactions:** each migration runs between `begin` and `commit`; on any error, `rollback` leaves no trace.
+- **No personal data in the repo:** the allowlist is filled by `pnpm db:allow`, because migrations are public.
+
+**What changed:**
+- `services/control-plane/migrations/0001_initial.sql`: 9 tables (see `ARCHITECTURE.md`, "Data model").
+- `src/db/migrations.ts` (runner), `src/db/migration-files.ts` (loads the folder), `scripts/db.ts` (status, migrate, allow).
+- `src/db/schema.test.ts`: 13 tests (runner safety, plus every rule: lower-case unique emails, unique identities, 32-byte session hashes with valid expiry, trimmed project names unique per owner, secret name pattern, 12-byte IVs, cascading user deletion, usage periods, allowlist).
+- `@electric-sql/pglite` 0.5.10 (dev only).
+- Scripts:
+  - `db:status`, `db:migrate`, `db:allow` in the package (run with `tsx`, reading `../../.dev.vars`) and at the root
+  - `tsconfig.json` now type-checks `scripts/`; `tsconfig.build.json` emits `src` only
+- Docs: ADR 0014, `ARCHITECTURE.md` (data model), upgrade-later 23 (automatic staging migrations with a lock and backups).
+
+**`services/control-plane/migrations/0001_initial.sql`:**
+
+```sql
+-- 0001 — Phase 1c: accounts, sessions, projects, workspace records, secrets vault, usage.
+-- Never edit this file once applied anywhere; add a new numbered migration instead.
+
+-- People who may sign in while in private development (decisions log, 30 Oct 2026). Filled by
+-- `pnpm db:allow`, never by a migration: the repository is public, so no emails live in it.
+create table sign_in_allowlist (
+  email text primary key check (email = lower(email) and email like '%_@_%'),
+  role text not null default 'member' check (role in ('member', 'admin')),
+  added_at timestamptz not null default now()
+);
+
+create table users (
+  id uuid primary key default gen_random_uuid(),
+  email text not null check (email = lower(email) and email like '%_@_%'),
+  display_name text not null check (char_length(display_name) between 1 and 200),
+  avatar_url text check (avatar_url is null or avatar_url like 'https://%'),
+  role text not null default 'member' check (role in ('member', 'admin')),
+  created_at timestamptz not null default now(),
+  last_signed_in_at timestamptz
+);
+create unique index users_email_key on users (email);
+
+-- One row per external account (GitHub, Google) linked to a user.
+create table identities (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users (id) on delete cascade,
+  provider text not null check (provider in ('github', 'google')),
+  provider_user_id text not null check (char_length(provider_user_id) between 1 and 200),
+  username text,
+  created_at timestamptz not null default now(),
+  unique (provider, provider_user_id)
+);
+create index identities_user_id_idx on identities (user_id);
+
+-- The browser holds a random session token; only its SHA-256 hash is stored, so a database leak
+-- doesn't hand out live sessions.
+create table sessions (
+  token_hash bytea primary key check (octet_length(token_hash) = 32),
+  user_id uuid not null references users (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  user_agent text check (user_agent is null or char_length(user_agent) <= 500),
+  check (expires_at > created_at)
+);
+create index sessions_user_id_idx on sessions (user_id);
+create index sessions_expires_at_idx on sessions (expires_at);
+
+create table projects (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references users (id) on delete cascade,
+  name text not null check (char_length(btrim(name)) between 1 and 100 and name = btrim(name)),
+  repo_url text check (repo_url is null or repo_url like 'https://%'),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (owner_id, name)
+);
+
+-- One cloud workspace per project. Records only for now; the machines arrive in phase 1d.
+create table workspaces (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null unique references projects (id) on delete cascade,
+  state text not null default 'not_created'
+    check (state in ('not_created', 'creating', 'running', 'sleeping', 'resuming', 'stopped', 'failed')),
+  region text,
+  machine_size text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Envelope encryption: each project has its own data key, stored only encrypted (wrapped) by a master
+-- key that lives in a Worker secret, never in the database. key_version names which master key.
+create table project_keys (
+  project_id uuid primary key references projects (id) on delete cascade,
+  wrapped_key bytea not null check (octet_length(wrapped_key) between 32 and 64),
+  wrap_iv bytea not null check (octet_length(wrap_iv) = 12),
+  key_version integer not null check (key_version > 0),
+  created_at timestamptz not null default now()
+);
+
+-- Secret values are write-only: stored as AES-GCM ciphertext under the project's data key, never in
+-- plain text, never returned by the API.
+create table project_secrets (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects (id) on delete cascade,
+  name text not null check (name ~ '^[A-Z_][A-Z0-9_]{0,127}$'),
+  ciphertext bytea not null check (octet_length(ciphertext) between 17 and 65552),
+  iv bytea not null check (octet_length(iv) = 12),
+  created_by uuid references users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (project_id, name)
+);
+
+-- Usage metering skeleton: measured amounts per user, e.g. workspace seconds (phase 1d onward).
+create table usage_records (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references users (id) on delete cascade,
+  workspace_id uuid references workspaces (id) on delete set null,
+  kind text not null check (kind in ('workspace_seconds', 'storage_byte_hours')),
+  quantity bigint not null check (quantity >= 0),
+  started_at timestamptz not null,
+  ended_at timestamptz not null,
+  recorded_at timestamptz not null default now(),
+  check (ended_at >= started_at)
+);
+create index usage_records_user_period_idx on usage_records (user_id, started_at);
+```
+
+**`services/control-plane/src/db/migrations.ts`:**
+
+```ts
+import { createHash } from 'node:crypto';
+
+/** The two things the runner needs from a database connection; Neon and PGlite both fit. */
+export interface MigrationDatabase {
+  /** Runs SQL that may contain several statements (a migration file). */
+  readonly exec: (sql: string) => Promise<void>;
+  /** Runs one parameterised statement and returns its rows. */
+  readonly query: <Row>(sql: string, params?: readonly unknown[]) => Promise<Row[]>;
+}
+
+export interface Migration {
+  /** e.g. "0001_initial". */
+  readonly version: string;
+  readonly sql: string;
+}
+
+export interface MigrationReport {
+  readonly applied: readonly string[];
+  readonly alreadyApplied: readonly string[];
+}
+
+const NAME = /^(\d{4})_[a-z0-9_]+\.sql$/;
+
+export function checksum(sql: string): string {
+  return createHash('sha256').update(sql).digest('hex');
+}
+
+/** Turns migration files into an ordered list, refusing badly named or duplicate-numbered files. */
+export function orderMigrations(files: readonly { name: string; sql: string }[]): Migration[] {
+  const numbers = new Set<string>();
+  return files
+    .map(({ name, sql }) => {
+      const match = NAME.exec(name);
+      if (match?.[1] === undefined) {
+        throw new Error(`migration file "${name}" must be named NNNN_lowercase_words.sql`);
+      }
+      if (numbers.has(match[1])) throw new Error(`two migrations are numbered ${match[1]}`);
+      numbers.add(match[1]);
+      return { version: name.replace(/\.sql$/, ''), sql };
+    })
+    .sort((a, b) => a.version.localeCompare(b.version));
+}
+
+/**
+ * Applies pending migrations in order, each in its own transaction, recording version and checksum.
+ * Refuses to run if an applied migration's file has changed since (never edit applied migrations).
+ */
+export async function migrate(
+  db: MigrationDatabase,
+  migrations: readonly Migration[],
+): Promise<MigrationReport> {
+  await db.exec(`create table if not exists schema_migrations (
+    version text primary key,
+    checksum text not null,
+    applied_at timestamptz not null default now()
+  )`);
+  const rows = await db.query<{ version: string; checksum: string }>(
+    'select version, checksum from schema_migrations',
+  );
+  const done = new Map(rows.map((row) => [row.version, row.checksum]));
+
+  for (const migration of migrations) {
+    const recorded = done.get(migration.version);
+    if (recorded !== undefined && recorded !== checksum(migration.sql)) {
+      throw new Error(
+        `migration ${migration.version} changed after it was applied; add a new migration instead`,
+      );
+    }
+  }
+  const known = new Set(migrations.map((migration) => migration.version));
+  for (const version of done.keys()) {
+    if (!known.has(version))
+      throw new Error(`database has migration ${version}, which this code doesn't know`);
+  }
+
+  const applied: string[] = [];
+  for (const migration of migrations) {
+    if (done.has(migration.version)) continue;
+    await db.exec('begin');
+    try {
+      await db.exec(migration.sql);
+      await db.query('insert into schema_migrations (version, checksum) values ($1, $2)', [
+        migration.version,
+        checksum(migration.sql),
+      ]);
+      await db.exec('commit');
+    } catch (error) {
+      await db.exec('rollback');
+      throw new Error(`migration ${migration.version} failed and was rolled back`, {
+        cause: error,
+      });
+    }
+    applied.push(migration.version);
+  }
+  return { applied, alreadyApplied: [...done.keys()].sort() };
+}
+```
+
+**Commands:**
+
+```fish
+pnpm install
+pnpm --filter @flowcanvas/control-plane test     # 22 passed (13 new, offline with PGlite)
+pnpm db:status                                   # 0001_initial  pending | applied
+pnpm db:migrate                                  # Applied: 0001_initial   (then: Up to date)
+pnpm db:allow you@example.com --admin            # owner: lets you sign in, as admin (needed from step 3)
+```
+
+Staging, when the phase merges (the URL is typed into a hidden prompt, never into history):
+
+```fish
+read -s -P 'Neon production URL: ' DATABASE_URL; DATABASE_URL=$DATABASE_URL pnpm db:migrate; set -e DATABASE_URL
+```
+
+**Run and check it (30 Oct 2026):** against Neon `dev` (AWS ap-southeast-1):
+1. `db:status` showed `pending`.
+2. `db:migrate` showed `Applied: 0001_initial`.
+3. `db:status` showed `applied`.
+4. `db:migrate` again showed `Up to date: nothing to apply.`
+
+**Gotchas:**
+- **Never edit an applied migration.** The runner refuses it; write `0002_…` instead.
+- **Don't put emails or other personal data in migrations.** Use `db:allow`.
+- **Run the db scripts with `tsx`,** not `node`: the package's imports name `.js` files that only exist after a build.
+- **`--env-file-if-exists` doesn't override an exported `DATABASE_URL`.** That's how staging is targeted on purpose, and also how it could happen by accident. The command always prints the host first.
+
+**Commit:** `feat(control-plane): schema migrations, runner and PGlite tests`
+
+### Step 1c.3 — GitHub sign-in, sessions, sign out
+
+**Goal:** on the version page, **Sign in with GitHub** takes an allowlisted person to GitHub and back, signed in, with their name and **Sign out**. Anyone else is turned away with a clear message. Also retire the old Fastify server (ADR 0013), so the control plane has one API.
+
+**Concepts:**
+- **OAuth web flow.** The app sends the browser to GitHub with its client ID and a registered return address. GitHub asks the person, then returns the browser to that address with a one-time `code`. The server swaps the code (plus its client secret) for a GitHub token, reads who the person is, and issues its **own** session. https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps
+- **`state`** is a random value sent to GitHub and also kept in a cookie. The callback must bring the same value back. That stops another site from finishing a sign-in into your browser (login CSRF).
+- **PKCE** (RFC 7636): the server keeps a random *verifier* and sends GitHub only its SHA-256 (the *challenge*). The exchange must include the verifier, so an intercepted code is useless alone. https://www.rfc-editor.org/rfc/rfc7636
+- **Session cookie attributes.** `HttpOnly` (page scripts can't read it), `Secure` (HTTPS only, and `http://localhost`), `SameSite=Lax` (not sent on other sites' background requests or form posts, but sent when GitHub sends you back), and the **`__Host-` prefix** (browsers only accept it with `Secure`, `Path=/` and no `Domain`, so no other site or subdomain can set it). https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies#cookie_prefixes
+- **Only a hash is stored.** The session token is 32 random bytes; the database keeps its SHA-256. A database leak can't be replayed as live sessions.
+- **One registered address.** `APP_ORIGIN` names where sign-in works: staging in `wrangler.jsonc` `vars`, overridden to `http://localhost:5173` by `pnpm dev`. Branch previews have other addresses, so `/api/me` says `staging-only` and the page links to staging (decision 3A).
+
+**What changed:**
+
+| File | What |
+| --- | --- |
+| `services/control-plane/src/auth/crypto.ts` | Random tokens (base64url), SHA-256, the PKCE challenge, a constant-time compare |
+| `services/control-plane/src/auth/github.ts` | Authorize URL (`read:user user:email`, PKCE S256, `allow_signup=false`), code exchange, profile with the **primary verified** email |
+| `services/control-plane/src/auth/accounts.ts` | `signIn` (allowlist decides entry and role on every sign-in; find by provider ID, else link by verified email, else create), `createSession`, `sessionUser` (also refreshes `last_seen_at`), `endSession` |
+| `services/control-plane/src/auth/routes.ts` | `GET /api/me`, `GET /api/auth/github`, `GET /api/auth/callback/github`, `POST /api/auth/sign-out` |
+| `services/control-plane/src/db/database.ts` | The `Database` interface (one parameterised statement) and its Neon implementation. Neon's HTTP driver has no interactive transactions, so writes that belong together are one SQL statement |
+| `services/control-plane/src/api/app.ts` | Mounts the auth routes; `Cache-Control: no-store` on every API answer; `/api/health` includes the version; dependencies are now `database`, `fetch`, `now`, `log` |
+| `services/control-plane/src/test/database.ts` | PGlite with the real migrations, for tests |
+| removed | Fastify `src/app.ts`, `server.ts`, `build-info.ts`, their test, the `Dockerfile`, `tsconfig.build.json`; the `fastify` and `graph-model` dependencies |
+| `services/control-plane/package.json`, `turbo.json` | `dev` runs `wrangler dev` on 8787 with `APP_ORIGIN=http://localhost:5173`; Turbo builds the web app first (Wrangler refuses to start without `apps/web/dist`) |
+| `apps/web/vite.config.ts` | `/api` forwarded to 8787, keeping the `Host` header |
+| `apps/web/src/account/` | `session.ts` (load, sign out, problem messages), `Account.tsx` and its CSS: the **Account** row |
+| `wrangler.jsonc` | `vars.APP_ORIGIN` = staging |
+
+**Callback problems** come back as `/?sign-in=<code>`, and the page shows one sentence for each:
+- `cancelled`: you clicked Cancel on GitHub
+- `expired`: the state didn't match, or the 10-minute cookie was gone
+- `no-verified-email`: GitHub has no verified primary email for you
+- `not-allowed`: that email isn't on the allowlist
+- `unavailable`: sign-in was tried on a preview
+- `failed`: anything else; the details go to the log, redacted
+
+Unknown codes show the `failed` sentence; the address text is never echoed onto the page.
+
+**Tests (all offline):**
+
+| File | Proves |
+| --- | --- |
+| `auth/crypto.test.ts` (4) | RFC 7636's own PKCE example; token shape and uniqueness |
+| `auth/github.test.ts` (7) | Scopes and PKCE in the authorize URL; GitHub's "200 with error" handled; primary *verified* email only; errors never contain the code |
+| `auth/accounts.test.ts` (9, PGlite) | Not allowlisted: nothing stored. First sign-in creates the user with the allowlist role; the next finds the same user and refreshes name and role; a second provider with the same email links to the same user. Only the token's SHA-256 is stored; unknown and expired tokens are ignored; sign-out deletes the row |
+| `auth/routes.test.ts` (16, PGlite + fake GitHub) | The whole flow with real cookies: a `__Host-` cookie with the right attributes, state and PKCE checked, `/api/me` with the user. Plus forged state, missing cookie, cancel, not allowlisted, unverified email, previews, a missing secret, `no-store`, session replaced on re-sign-in, sign-out (with a foreign `Origin` refused). Canary client secret, code and GitHub token never in logs, responses or the database |
+| `account/Account.test.tsx` (8) and `App.test.tsx` (+1) | Every account state, sign out (and its failure), problem messages, the address cleaned, unknown codes not echoed |
+
+**Run and check it:**
+
+```fish
+pnpm install
+pnpm --filter @flowcanvas/control-plane test     # 55 passed
+pnpm --filter @flowcanvas/web test               # includes the 8 Account tests
+pnpm dev                                         # open http://localhost:5173
+```
+
+Owner, by hand (a real GitHub sign-in can't run in CI without a real account and password):
+1. Run `pnpm db:allow <your GitHub primary email> --admin` once, if you haven't.
+2. `pnpm dev`, open http://localhost:5173. The **Account** row says **Sign in with GitHub**.
+3. Click it, then approve "Flowcanvas (local)" on GitHub. You're back on the page with your name, your email and "· admin", and **Sign out**.
+4. Reload the page: you're still signed in. In devtools → Application → Cookies, `__Host-fc_session` is HttpOnly and Secure, and `document.cookie` in the console doesn't show it.
+5. Click **Sign out**: the row shows **Sign in with GitHub** again.
+6. Optional: sign in with a GitHub account whose email isn't allowlisted. The page says the account isn't on the allowlist.
+
+Checked by Claude in Chromium (31 Oct 2026), against `pnpm dev` with the Neon `dev` database:
+- `/api/me` → `available`
+- the button reached github.com's sign-in page
+- Chrome stored `__Host-fc_oauth` on `http://localhost` (HttpOnly, Secure, Lax)
+- a forged callback showed the "expired" sentence and cleared the cookie
+
+**Gotchas:**
+- **Vite's proxy shorthand rewrites `Host`.** `proxy: { '/api': 'http://…' }` sets `changeOrigin`, so the Worker sees `127.0.0.1:8787`, decides it's a preview, and won't offer sign-in. Use the object form with `changeOrigin: false`.
+- **`wrangler dev` refuses to start without `apps/web/dist`.** Turbo builds the web app before the control plane's `dev`.
+- **A leftover `wrangler dev` holds port 8787.** The new one then fails, or you test old code. Find it with `ss -ltnp | grep 8787` and stop that PID.
+- **No profile pictures yet:** the CSP only allows images from our own origin (upgrade-later 24).
+- **Secrets on previews disappeared after PRs #7 and #8.** Each new Worker version copies its secrets from the newest version. Merging those PRs deployed `main`, which has no script until phase 1c merges, as static-files-only versions, and secrets can't attach to those. Previews built afterwards had no `DATABASE_URL` (`/api/me` said `not-configured`). Fix: put the five secrets again with `pnpm exec wrangler versions secret put NAME`. Until 1c merges, any merge to `main` breaks the chain again. **At phase close, check staging's secrets** (`/api/db/ping` on staging), because `main`'s first deploy with a script starts from a version without them.
+- **"The `redirect_uri` is not associated with this application"** on GitHub means the app's keys and the return address don't match. Here, `.dev.vars` held the **staging** app's client ID and secret, and the staging app only accepts the staging callback. Fix: put the **local** app's ID and secret in `.dev.vars` (and restart `pnpm dev`, since Wrangler reads it at startup). To check which app an ID belongs to, compare it with the Client ID shown on each OAuth app's page; the ID isn't secret.
+- **GitHub signs in whichever account the browser is signed in to,** and after the first approval it doesn't ask again. To test another GitHub account, sign out at github.com first. An account whose primary verified email isn't allowlisted comes back with the "not on the allowlist" sentence and no session, so there's nothing to sign out of (owner check, 31 Oct 2026).
+- **At phase close:** check that the Worker secrets hold the **staging** app's keys, and generate a new staging client secret, because the old one was stored in a local file.
+- **Request logs:** Cloudflare's request logs may record the callback URL, including the one-time `code`. With PKCE the code is useless without the verifier, which never leaves the cookie. Step 9 checks everything the logs record.
+
+**Commit:** `feat(control-plane): GitHub sign-in with sessions; retire the Fastify server`
+
+### Step 1c.4 — Google sign-in, allowlist, admin role
+
+**Goal:** **Sign in with Google** next to GitHub. A person who uses both with the same verified email gets one Flowcanvas account. Routes can require a signed-in user, or an admin.
+
+**Concepts:**
+- **OpenID Connect (OIDC)** is OAuth plus a standard way to learn who signed in. With the scopes `openid email profile`, Google's **userinfo** endpoint returns `sub` (a stable account ID), `email`, `email_verified` and `name`. https://developers.google.com/identity/openid-connect/openid-connect
+- **Why userinfo, not the ID token.** Google also returns an *ID token* (a signed JWT). Using it means checking its signature against Google's published keys, its audience and its expiry. Calling userinfo with the token we just received, over TLS from Google's own endpoint, gives the same facts without any of that code. One more request per sign-in.
+- **`prompt=select_account`** makes Google, and GitHub when several accounts are signed in, show an account picker, instead of silently using the account already signed in. That was the confusion in step 3.
+- **Linking by verified email.** The `identities` table links each external account to a user. A Google account with the same **verified** email as an existing user is linked to that user, not made into a second one. This is safe only because both providers verify the email. Unverified emails are refused (`no-verified-email`).
+- **Guards (middleware).** `requireUser` reads the session cookie and gives the route `c.get('user')`, or answers 401. `requireAdmin` runs after it and answers 403 unless the allowlist made the user an admin. The projects (step 5) and admin (step 8) routes use them. https://hono.dev/docs/guides/middleware
+
+**What changed:**
+
+| File | What |
+| --- | --- |
+| `services/control-plane/src/auth/google.ts` | Authorize URL (`openid email profile`, PKCE S256, `prompt=select_account`), code exchange, userinfo with the **verified** email only |
+| `services/control-plane/src/auth/providers.ts` | One `OAuthProvider` shape for GitHub and Google: keys, authorize URL, `identify` (the provider's token never leaves it) |
+| `services/control-plane/src/auth/routes.ts` | `/api/auth/:provider` and `/api/auth/callback/:provider`. The sign-in cookie records which provider started, and a callback for another provider is refused. `/api/me` also lists `providers` (those with both keys set) |
+| `services/control-plane/src/auth/guards.ts` | `requireUser`, `requireAdmin` |
+| `services/control-plane/src/auth/cookies.ts` | Cookie names and attributes, shared by routes and guards |
+| `services/control-plane/src/auth/github.ts` | Adds `prompt=select_account` |
+| `apps/web/src/account/` | One link per configured provider. Problem messages no longer name GitHub. **Sign out** is a text button that lines up with the text (owner's screenshot) |
+
+**Tests:**
+- **`google.test.ts` (6):** the grant includes the PKCE verifier; Google's error is named without the code or secret; only verified emails count; a missing name falls back to the email's name part; a missing `sub` fails clearly.
+- **`routes.test.ts` (now 25, fake GitHub and Google):**
+  - Google's authorize URL, sign-in, an unverified email, and an email not on the allowlist
+  - **the same verified email on GitHub and Google is one user with two identities**
+  - a callback for the wrong provider is refused
+  - `/api/me` lists only providers with both keys, or `not-configured` when there are none
+  - unknown providers answer 404
+  - Google's secret, code and token are canaries: never logged
+- **`guards.test.ts` (5):** no session or an unknown one gets 401; a signed-in user reaches the route; an admin passes `requireAdmin`; a member gets 403.
+- **`Account.test.tsx` (9):** both links, only the configured ones, the new message wording.
+
+**Run and check it:**
+
+```fish
+pnpm --filter @flowcanvas/control-plane test
+pnpm --filter @flowcanvas/web test
+pnpm dev                                         # http://localhost:5173
+```
+
+Owner, by hand:
+1. The **Account** row shows **Sign in with GitHub** and **Sign in with Google**.
+2. **Sign in with Google**, using an account that is both a **test user** in Google Auth Platform → Audience and on the allowlist. You come back signed in.
+3. If that Google account has the same email as your GitHub account, it's the **same** Flowcanvas account: same name row, and still admin.
+4. **Sign out**, then sign in with GitHub. GitHub now shows its account picker when several GitHub accounts are signed in.
+
+Checked by Claude (31 Oct 2026), against the owner's running `pnpm dev`: `/api/me` listed `github` and `google`, and **Sign in with Google** reached Google's "Sign in to continue to Flowcanvas" page. That means Google accepted the client ID and the local return address (a mismatch would show "Error 400: redirect_uri_mismatch").
+
+**Gotchas:**
+- **Google only lets test users in while the app is in *Testing*** (step 0). Anyone else sees "Access blocked" on Google's side, before our allowlist runs. A Google sign-in needs both: a test user in Google, and the email on our allowlist (upgrade-later 26).
+- **`wrangler dev` reloads on code changes** but reads `.dev.vars` only at startup.
+
+**Commit:** `feat(control-plane): Google sign-in, one account across providers, user and admin guards`
+
+### Step 1c.5 — Projects list and create
+
+**Goal:** a signed-in person creates a project (a name, and optionally a repository address) and sees it in their list. Nobody sees anyone else's projects. This is the first half of the phase's *Done when*.
+
+**Concepts:**
+- **Authorization by query, not by check.** Every projects query includes `where owner_id = <the signed-in user>`, taken from the session (`c.get('user')`) and never from the request. A forged project ID or owner in a request has nothing to act on.
+- **Validate at the edge, enforce in the database.** `parseNewProject` gives readable messages (and names the field). The schema's checks (`0001_initial.sql`: trimmed, 1–100 characters, unique per owner) stay as the backstop. Both count *code points*, so a name in Hindi or Japanese fits the same 100 as one in English.
+- **`on conflict do nothing … returning`** makes a duplicate name come back as "no row", so there's no database error code to parse (Neon and PGlite word their errors differently).
+- **Changes need our own `Origin`.** The same-origin check from sign-out is now the shared guard `requireSameOrigin`. Creating also requires `content-type: application/json` (415 otherwise): a cross-site form can't send that type without a CORS preflight, which we don't allow. Bodies are capped at 4 KB.
+- **No credentials in URLs.** A repository address with a username or token (`https://ghp_…@github.com/…`) is refused with a reason, so it's never stored or shown. Private repositories connect another way later.
+
+**What changed:**
+
+| File | What |
+| --- | --- |
+| `services/control-plane/src/projects/projects.ts` | `parseNewProject`, `listProjects` (own projects only, newest first), `createProject` |
+| `services/control-plane/src/projects/routes.ts` | `GET /api/projects`, `POST /api/projects` (201; 400 with `field`; 409 for a duplicate name; 403, 413, 415) |
+| `services/control-plane/src/auth/guards.ts` | `requireSameOrigin`, now used by sign-out and project creation |
+| `services/control-plane/src/test/sessions.ts` | `signedInAs(db, email, role)` for route tests |
+| `apps/web/src/projects/` | `api.ts` (list, create, readable problems), `Projects.tsx` (form, list, empty and error states) and its CSS |
+| `apps/web/src/App.tsx`, `account/Account.tsx` | The Projects section shows only when signed in (`onSessionChange`) |
+
+**Design note for the owner's review:** the design brief puts projects on the **Start screen** ("Recent projects": type and support badges, last opened, a canvas thumbnail; plus "Clone from URL", "Upload folder" and "New project"). That screen comes with the app shell (phase 2) and with workspaces (phase 1d). This step adds a plain Projects section to the version page, built from the design system's Input and Button, so the *Done when* can be shown now.
+
+**Tests:**
+- **`projects/projects.test.ts` (8, PGlite):**
+  - trimming and name limits; names in other scripts; https only
+  - a token in the address refused
+  - newest first; nobody sees another person's projects
+  - duplicate names refused per person only
+- **`projects/routes.test.ts` (9):**
+  - 401 when signed out; empty, then the created project listed
+  - per-person lists; 400 with the field; 409
+  - a foreign `Origin` gets 403; 415, 400 and 413 for bad bodies
+  - a pasted token never stored or echoed; database failures logged without the canary
+- **`Projects.test.tsx` (6) and `App.test.tsx` (+1):**
+  - empty state, list, create (newest first, form cleared)
+  - the name is required before any request
+  - the API's reason shown next to the field it names (`aria-invalid`, `aria-describedby`)
+  - load failure; Projects hidden when signed out
+
+**Checked against Neon `dev` (31 Oct 2026):** a throwaway script created a test user and two projects through the same functions, got `duplicate-name` for a repeated name, listed them newest first with ISO dates, then deleted the user and its allowlist row (0 left).
+
+**Run and check it:**
+
+```fish
+pnpm --filter @flowcanvas/control-plane test
+pnpm --filter @flowcanvas/web test
+pnpm dev                                         # http://localhost:5173, signed in
+```
+
+Owner, by hand:
+1. Signed in, the page shows **Projects** with "No projects yet".
+2. Create "Rallly" with `https://github.com/lukevella/rallly`. It appears at the top, and the form clears.
+3. Create "Rallly" again: "You already have a project with that name."
+4. Try `https://abc@github.com/x/y` as the address: it's refused with the reason, and nothing is created.
+5. Reload: the list is still there. Sign out: the section disappears.
+
+**Gotchas:**
+- **React 19's types deprecate `FormEvent`;** a form's submit handler takes `SubmitEvent<HTMLFormElement>`.
+- **typescript-eslint flags `[...text].length`.** Counting code points is deliberate here, to match Postgres; `Array.from(text).length` says the same thing explicitly.
+
+**Commit:** `feat: projects list and create for signed-in people`
+
+### Step 1c.6 — Secrets vault, project secrets, canary tests
+
+**Goal:** each project can hold secrets (environment-variable values). They're saved encrypted, listed by name only, can be replaced or deleted, and are never shown, logged or returned. This is the second half of the phase's *Done when*.
+
+**Concepts:**
+- **AES-GCM** is authenticated encryption: it hides the value and detects any change to the ciphertext. Each encryption needs a fresh random IV (nonce); reusing one with the same key breaks it. https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/encrypt#aes-gcm
+- **Envelope encryption.** A master key (`VAULT_KEY`, a Worker secret) encrypts ("wraps") a random data key per project. The data key encrypts that project's values. The database holds only wrapped keys and ciphertext, so a database copy alone decrypts nothing. https://cloud.google.com/kms/docs/envelope-encryption
+- **Additional authenticated data (AAD)** is extra text that must match when decrypting but isn't stored in the ciphertext. Here it's the project and the secret's name, so a ciphertext moved to another row fails to open.
+- **Write-only values.** No API route returns a value, so the page can't leak one even by mistake. To change a value, save it again under the same name ("rotate").
+- **Canary tests** plant a recognisable fake value (`CANARY-…`) and assert it never appears in responses, logs or any database row.
+
+**Design:** ADR 0015.
+
+**What changed:**
+
+| File | What |
+| --- | --- |
+| `services/control-plane/src/vault/crypto.ts` | Master key import (32 bytes, base64; errors never echo it), wrap and unwrap a data key, encrypt and decrypt a value with AAD, hex helpers |
+| `services/control-plane/src/vault/vault.ts` | Name and value rules (`^[A-Z_][A-Z0-9_]{0,127}$`, 1 byte to 64 KB), data key created on first use (safe if two requests race), `listSecrets` (names, who added, when), `putSecret` (created or replaced), `deleteSecret`, `readSecret` (for phase 1d's workspace and the tests) |
+| `services/control-plane/src/vault/routes.ts` | `GET /api/projects/:id/secrets`; `PUT …/secrets/:name` with `{ value }` (201 created, 200 replaced; the answer has only the name); `DELETE …/secrets/:name`. Another person's project, or a malformed ID, answers like a missing one (404). A missing `VAULT_KEY` answers 503 with the fix |
+| `services/control-plane/src/projects/projects.ts` | `ownsProject` |
+| `apps/web/src/secrets/` | API client and the **Secrets** panel: masked list with who added and when, two-click delete, a form whose button says **Replace NAME** for an existing name, and a value field that browsers and password managers shouldn't save |
+| `apps/web/src/projects/Projects.tsx` | A **Secrets** toggle on each project |
+| `.dev.vars.example` | `VAULT_KEY` |
+
+**Tests:**
+- **`vault/crypto.test.ts` (5):**
+  - a bad master key is refused without being echoed
+  - round trip; a fresh IV every time
+  - moved or renamed ciphertext won't open
+  - another master key, or another project, can't unwrap
+- **`vault/vault.test.ts` (9, PGlite):**
+  - name and value rules
+  - listed by name only
+  - **the canary appears nowhere in the database, as text or as hex**
+  - replace (rotate); one 48-byte data key per project
+  - a different master key fails; a copied ciphertext fails; delete
+- **`vault/routes.test.ts` (7):**
+  - 201 then 200; names only
+  - **the canary never appears in any response or log line**, including failed saves, a missing key and a database outage
+  - 401 when signed out; 404 for other people's projects; per-field 400; 413; the 503 fix message; a foreign `Origin` gets 403; delete
+- **`ProjectSecrets.test.tsx` (5), `Projects.test.tsx` (+1):**
+  - masked list; save clears the value and the canary isn't in the page
+  - Replace; errors next to their field; two-click delete; the toggle opens the panel
+
+**Checked against Neon `dev` (31 Oct 2026):** a throwaway script, with a test key and user, saved then replaced a value and read it back. Stored sizes were 41-byte ciphertext, 12-byte IV and 48-byte wrapped key; the value wasn't readable as text. It then deleted everything (0 left).
+
+**Owner: create the local master key** (fish). It goes straight from `openssl` into the git-ignored `.dev.vars`, and the value is never printed:
+
+```fish
+printf '\nVAULT_KEY=%s\n' (openssl rand -base64 32) >> .dev.vars
+grep -c '^VAULT_KEY=' .dev.vars        # 1 (counts the line; doesn't show it)
+```
+
+Then restart `pnpm dev`, because Wrangler reads `.dev.vars` only at startup. Losing this local key only loses local test secrets.
+
+**Staging's key comes at phase close,** with the other Worker secrets. Generate it, **save it in your password manager first**, then `pnpm exec wrangler versions secret put VAULT_KEY` and paste it at the prompt. If the staging key is lost, every saved staging secret is lost with it.
+
+**Run and check it:**
+
+```fish
+pnpm --filter @flowcanvas/control-plane test     # includes 21 vault tests
+pnpm --filter @flowcanvas/web test
+pnpm dev                                         # http://localhost:5173, signed in
+```
+
+Owner, by hand:
+(Any name works: `MY_TEST_SECRET` is just an example. Nothing here connects to Stripe or any other service; you're only checking that a value can be stored and never shown back.)
+1. On a project, click **Secrets**. It says "No secrets yet."
+2. Save `MY_TEST_SECRET` with any made-up value. It's listed as `MY_TEST_SECRET ••••••••`, "Added by <you>", and the value field is empty again.
+3. Type `MY_TEST_SECRET` again with a new value: the button says **Replace MY_TEST_SECRET**.
+4. Try the name `my_test_secret`: you get the naming rule next to the Name field.
+5. **Delete**, then **Delete MY_TEST_SECRET**: gone.
+6. In devtools → Network, the `PUT` response contains only the name and `created` or `replaced`. In the terminal running `pnpm dev`, the value never appears.
+
+**Gotchas:**
+- **With only Node's types, `CryptoKey` is a value, not a type.** `AesKey` is derived from `crypto.subtle.importKey` instead, so it means the same in Workers and Node.
+- **Bytes go to Postgres as hex** (`decode($1, 'hex')`), so Neon's HTTP driver and PGlite agree.
+
+**Commit:** `feat: secrets vault with envelope encryption, write-only project secrets`
+
+### Step 1c.7 — Workspace records and usage metering skeleton
+
+**Goal:** every project has its cloud workspace record from the moment it's created, and the control plane can record and sum usage per person. Phase 1d's machines then only update the record and write usage; phase 44a builds limits and billing on the sums.
+
+**Concepts:**
+- **A data-modifying CTE** (`with p as (insert … returning *), w as (insert … select from p)`) runs two inserts as one statement, so both happen or neither does. Neon's HTTP driver sends one statement per request, so this replaces a multi-call transaction. https://www.postgresql.org/docs/current/queries-with.html#QUERIES-WITH-MODIFYING
+- **A backfill migration** fixes existing rows when a rule changes. Migration 0002 gives projects created before this step their workspace record. Applied migrations are never edited (ADR 0014), so this is a new file.
+- **Metering:** measure raw amounts (seconds, byte-hours) over periods, and sum them per billing period when needed. Each record must fall within one UTC month, so a monthly sum never has to split a record. The recorder splits at the boundary instead.
+
+**What changed:**
+
+| File | What |
+| --- | --- |
+| `services/control-plane/migrations/0002_workspace_for_every_project.sql` | Backfills a `not_created` workspace for every existing project |
+| `services/control-plane/src/projects/projects.ts` | `createProject` inserts the project and its workspace in one statement; projects carry `workspace: { id, state }` |
+| `services/control-plane/src/usage/usage.ts` | `monthPeriod` (UTC calendar month), `recordUsage` (refuses negative, fractional or impossible amounts, records crossing a month, more workspace seconds than the period has, and another person's workspace), `usageSummary` (this month's sums, a real 0 when nothing's recorded) |
+| `services/control-plane/src/usage/routes.ts` | `GET /api/usage` (signed in only): `{ usage: { periodStart, resetsAt, workspaceSeconds, storageByteHours } }` |
+| `apps/web/src/projects/` | Each project's line says its workspace state in words ("Workspace not created yet") |
+| `apps/web/src/usage/` | **Usage this month**: workspace time ("2 h 5 min") and the reset date (shown in UTC, because the period is UTC) |
+
+**Tests:**
+- **`usage/usage.test.ts` (5, PGlite):**
+  - the month period, including across a year end
+  - a real 0 and the reset date before anything is recorded
+  - sums this month only, per person and per kind
+  - refuses six kinds of impossible record, and stores nothing
+  - refuses another person's workspace; usage with no workspace is allowed
+- **`usage/routes.test.ts` (3):** 401 when signed out; only the signed-in person's sums, with `no-store`; a database failure answers 503 without details, and is logged
+- **`projects/projects.test.ts` (+1):** the workspace is created with the project, `not_created`, exactly once (a duplicate name creates none)
+- **`db/schema.test.ts` (+1):** a project made before 0002 gets its workspace when 0002 runs
+- **`Usage.test.tsx` (4), `Projects.test.tsx`, `App.test.tsx`:** time formatting; the measured time and reset date; a real 0; the error; the workspace state on each project; usage only for a signed-in person
+
+**Applied to Neon `dev` (31 Oct 2026):** `pnpm db:migrate` applied 0002. A count afterwards showed 1 project, 1 workspace and none missing. Staging is migrated at phase close.
+
+**Run and check it:**
+
+```fish
+pnpm --filter @flowcanvas/control-plane test     # 123 tests
+pnpm --filter @flowcanvas/web test               # 52 tests
+pnpm db:status                                   # 0002_workspace_for_every_project applied
+pnpm dev                                         # http://localhost:5173, signed in
+```
+
+Owner, by hand (optional; the tests cover it):
+1. Each project's line ends with "Workspace not created yet".
+2. Under the projects, **Usage this month** says "Workspace time: 0 min. Resets <the 1st of next month>."
+
+**Gotchas:**
+- **Pull, then `pnpm db:migrate`.** Without 0002, projects created earlier have no workspace and drop out of the list.
+- **Postgres `bigint` and `sum()` come back as strings** from drivers. The sums are cast to `float8` so they arrive as numbers; exact up to 2^53, far beyond any month's seconds.
+- **No allowance or limit yet.** The meter shows only what was measured; inventing a free allowance now would be a product decision (phase 44a).
+
+**Commit:** `feat(control-plane): workspace record with every project, usage metering skeleton`
+
+### Step 1c.8 — Admin view
+
+**Goal:** the admin can see who has signed in and how much each person uses, and manage the allowlist from the app instead of `pnpm db:allow`. Counts only: the admin view never shows project names, repository addresses or secrets.
+
+**Concepts:**
+- **Authorisation on the server, every time.** The page hides the Admin section from members, but that's only for clarity. Each `/api/admin` request checks the session and the role (`requireUser`, then `requireAdmin`), so calling the API directly gets 403.
+- **Revoking access means ending sessions.** A session stays valid until it expires (30 days), whatever the allowlist says. Removing an email therefore deletes that person's sessions in the same statement, and they're signed out everywhere at once.
+- **Lockout protection.** An admin can't demote or remove their own entry (409). Another admin has to do it, so the app can't be left with nobody able to manage it by accident.
+- **Data minimisation:** an admin needs to know *how much*, not *what*. The queries return counts and sums, and a test checks that a project's name and address never appear.
+
+**What changed:**
+
+| File | What |
+| --- | --- |
+| `services/control-plane/src/admin/admin.ts` | `parseEmail` (trimmed, lower case, ≤ 254), `listPeople` (role, providers, project count, workspace seconds this month, last sign-in, still allowed), `listAllowlist` (role, added, signed up yet), `allowEmail` (add, or change the role; a signed-up person's role changes at once), `disallowEmail` (remove and end their sessions in one statement; their data stays) |
+| `services/control-plane/src/admin/routes.ts` | `GET /api/admin`, `PUT /api/admin/allowlist/:email` with `{ role }` (201 added, 200 changed), `DELETE /api/admin/allowlist/:email` (204). Admins only; changes need our own `Origin`; 409 for your own entry. Logs the acting admin's user ID, never the email |
+| `apps/web/src/admin/` | The **Admin** section: people with their counts; the allowlist with **Make admin** or **Make member**, a two-click **Remove**, and a form with an **Admin** switch. Your own entry shows "You" and no actions |
+| `apps/web/src/App.tsx` | Keeps the whole session (not just "signed in"), and shows Admin only to admins |
+
+**Tests:**
+- **`admin/admin.test.ts` (4, PGlite):**
+  - email parsing
+  - people listed with counts and usage; **the project's name and address don't appear**
+  - add, then change a role, including for someone already signed in
+  - removal ends their session and keeps their data; removing twice reports nothing removed
+- **`admin/routes.test.ts` (6):**
+  - 401 signed out; 403 for members on every route
+  - the view, with `no-store`
+  - add, change and remove; **log lines never contain the email**
+  - a removed person's next request gets 401
+  - no self-demotion or self-removal (409)
+  - bad email, bad role, and a foreign `Origin` refused
+- **`Admin.test.tsx` (6), `App.test.tsx` (+1):** people's counts; no actions on your own entry; allow as admin; the field error; two-click remove; a load error; admins only
+
+**Checked against Neon `dev` (31 Oct 2026):** a read-only script ran `listPeople` and `listAllowlist` and printed only roles and counts: 2 people, 2 allowlist entries.
+
+**Run and check it:**
+
+```fish
+pnpm --filter @flowcanvas/control-plane test     # 133 tests
+pnpm --filter @flowcanvas/web test               # 59 tests
+pnpm dev                                         # http://localhost:5173, signed in as the admin
+```
+
+Owner, by hand:
+1. Under Usage, the **Admin** section lists everyone who has signed in, with providers, project count, workspace time and last sign-in.
+2. In **Allowlist**, your own email says "You" and has no buttons.
+3. Allow a made-up address such as `test-person@example.com`. It appears as "Member · hasn't signed in yet". Click **Make admin**, then **Make member**.
+4. **Remove**, then **Remove test-person@example.com**: it's gone.
+5. Optional: sign in with your second account in another browser, remove it here, then reload there. It's signed out.
+
+**Gotchas:**
+- **A data-modifying CTE runs even if nothing reads it.** `allowEmail` updates `users.role` in a CTE that the final `select` doesn't use. Postgres still runs it, which keeps the role change in one statement.
+- **The email goes in the path, URL-encoded** (`/allowlist/ada%40example.com`). Hono decodes it, and `parseEmail` lower-cases it, so `Ada@Example.com` and `ada@example.com` are the same entry.
+
+**Commit:** `feat: admin view with people, usage and allowlist management`
+
+### Step 1c.9 — Logs and redaction across everything; the walkthrough
+
+**Goal:** prove the phase's *Done when*, "saved secrets never appear in logs", for the whole control plane at once, not route by route. Also make leaking hard even for code written later, and record the phase's Try it as a walkthrough.
+
+**Concepts:**
+- **Defence in depth for logs.**
+  - First, routes log short messages and never raw requests or error objects.
+  - Second, every line passes through `redact()` on its way out (in `createApi`), so a mistake in a future route is still caught.
+  - Third, a test plants canaries and checks everything.
+- **Over-redaction is the safe failure.** The patterns also hide harmless text, such as `state: running` or any email address. Losing a little log detail beats leaking a token.
+- **A mutation check proves a test can fail.** With `redact()` switched off, `no-leaks.test.ts` fails on the leaked database password; with it on, it passes. A leak test that can't fail proves nothing.
+- **Playwright `page.route`** answers the page's requests from inside the test, so the signed-in steps can be recorded without a real GitHub sign-in. https://playwright.dev/docs/mock
+
+**What changed:**
+
+| File | What |
+| --- | --- |
+| `services/control-plane/src/api/redact.ts` | Also removes GitHub and Google tokens; OAuth `code`, `state`, verifier, client secret and tokens (query strings, form bodies, JSON); our `__Host-fc_*` cookies; email addresses |
+| `services/control-plane/src/api/app.ts` | Wraps `log` so every line is redacted. `onError` answers uncaught errors with a plain 500 and logs only a redacted description |
+| `services/control-plane/src/api/no-leaks.test.ts` | The phase's acceptance test (below) |
+| `e2e/try-it/phase-1c.spec.ts` | The phase 1c walkthrough (below) |
+
+**Tests:**
+- **`api/app.test.ts` (+4):**
+  - each new redaction pattern; ordinary messages untouched
+  - a route that logs raw text is still redacted
+  - an uncaught error answers 500 and logs nothing private
+- **`api/no-leaks.test.ts`: the phase's acceptance test.**
+  - **Flow:** a fake GitHub sign-in, then create a project; save and replace a secret; list secrets, projects, usage, the admin view and `/api/me`.
+  - **Failures:** a missing vault key, a bad name, an oversized value, a database outage on every route, a GitHub that echoes what it was sent, then sign out.
+  - **Canaries:** the secret value, the rotated value, the OAuth client secret, the code, the GitHub token and the database password. None may appear in any response (body and headers), any log line or anything written to the console. The email may not appear in logs or the console.
+- **`e2e/try-it/phase-1c.spec.ts` (2 walkthroughs):**
+  1. **Real API:** signed out, the page offers sign-in or says where it works, and `/api/projects`, `/api/usage`, `/api/admin` and `/api/projects/x/secrets` answer 401 with `no-store`. Skipped only where there's no API. Locally, `vite preview` forwards `/api` to `pnpm dev` if it's running.
+  2. **Real page, API answered by the test:** projects, usage and admin shown; create a project; save a secret. Afterwards it's listed by name and masked, the field is empty, and the value appears neither in the page nor in any response.
+
+**Why the signed-in walkthrough uses a fake API:** a real sign-in needs a GitHub or Google account and only works on staging, so it can't run unattended. Instead:
+- the API's side is proven by `no-leaks.test.ts`
+- the page's side by walkthrough 2
+- the real sign-in, and Cloudflare's own request logs, by the owner's check at phase close
+
+**Run and check it:**
+
+```fish
+pnpm --filter @flowcanvas/control-plane test     # 138 tests, including no-leaks
+pnpm test:e2e                                    # 6 walkthroughs, 2 for phase 1c
+pnpm --filter @flowcanvas/e2e report             # watch the recordings
+```
+
+**Owner, at phase close** (on staging, after merge):
+1. Sign in with GitHub, create a project, and add a secret with a made-up value.
+2. In the Cloudflare dashboard, go to Workers & Pages → `flowcanvas` → Observability → Logs, and search for the made-up value. There should be no results.
+3. Open the `GET /api/auth/callback/github` entry. If its URL shows `code=` or it lists request headers with cookies, turn invocation logs off in `wrangler.jsonc` (`"observability": { "enabled": true, "logs": { "invocation_logs": false } }`). Cloudflare's docs don't say what these logs record or redact, so we check by looking.
+
+**Gotchas:**
+- **`getByLabel('Value')` also matched "Value hidden"** (the masked dots' label). Use `{ exact: true }`.
+- **`vite preview` uses the dev server's proxy too** (`preview.proxy` defaults to `server.proxy`). So a local walkthrough reaches the real local API when `pnpm dev` is running.
+
+**Commit:** `feat(control-plane): redact every log line, no-leaks acceptance test, phase 1c walkthrough`
+
+### Step 1c.10 — Close the phase (0.4.0)
+
+**Goal:** release 0.4.0 and write the phase report. Then open the PR, and after the merge make staging work: secrets, database and the real Try it.
+
+**What changed:**
+- `package.json` version `0.4.0`. The version page and What's new show it. The guard test keeps the newest changelog entry equal to it.
+- `CHANGELOG.md`: the 0.4.0 entry, with Try it first (shown in What's new).
+- `docs/reports/phase-1c.md`: the report, including the after-merge checks in order.
+- `docs/STATUS.md`: 1c in review. `docs/upgrade-later.md`: item 20's trigger moved to the first Labs switch. `ARCHITECTURE.md`: the version example.
+
+**Evidence (31 Oct 2026):**
+- 347 tests pass, the format, lint and type checks pass, the build passes (web bundle 131 kB gzip), and all 6 walkthroughs pass.
+- CI runs the same checks, plus visual tests in Docker, on the PR.
+
+**Owner, after the merge (staging), in this order:**
+
+1. **Wait for staging to deploy `main`:** Cloudflare → Workers & Pages → `flowcanvas` → Deployments shows the merge commit.
+2. **Put the Worker secrets,** one at a time. Each command prompts for the value, so it's never typed on the command line:
+   ```fish
+   pnpm exec wrangler versions secret put DATABASE_URL          # Neon production branch URL
+   pnpm exec wrangler versions secret put GITHUB_CLIENT_ID      # the STAGING OAuth app
+   pnpm exec wrangler versions secret put GITHUB_CLIENT_SECRET  # a NEW secret, generated on the staging OAuth app
+   pnpm exec wrangler versions secret put GOOGLE_CLIENT_ID
+   pnpm exec wrangler versions secret put GOOGLE_CLIENT_SECRET
+   pnpm exec wrangler versions secret put VAULT_KEY             # new; in the password manager first
+   pnpm exec wrangler versions deploy                           # pick the newest version, 100%
+   ```
+   To create the staging vault key, run `openssl rand -base64 32`, save the output in the password manager, then paste it at the `VAULT_KEY` prompt. Afterwards, clear the terminal.
+3. **Migrate staging and allow yourself** (fish; the URL is typed at a hidden prompt):
+   ```fish
+   read -s -P 'Neon production URL: ' DATABASE_URL; DATABASE_URL=$DATABASE_URL pnpm db:status; DATABASE_URL=$DATABASE_URL pnpm db:migrate; DATABASE_URL=$DATABASE_URL pnpm db:allow <your email> --admin; set -e DATABASE_URL
+   ```
+4. **Check** that `https://flowcanvas.ahujaarmaan7777.workers.dev/api/db/ping` says `"database":"ok"`, and that the page offers sign-in.
+5. **Try it on staging:** sign in with GitHub, create a project, and add a secret with a made-up value.
+6. **Cloudflare's logs:** Workers & Pages → `flowcanvas` → Observability → Logs (or Events).
+   - Search for the made-up value: there should be no results.
+   - Open the `GET /api/auth/callback/github` entry. If it shows `code=` or a `cookie` header, tell Claude: invocation logs get turned off in a follow-up PR.
+
+**Commit:** `chore: release 0.4.0, close phase 1c`

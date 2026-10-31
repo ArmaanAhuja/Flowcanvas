@@ -1,0 +1,10 @@
+# Local secrets for `wrangler dev` (copy to .dev.vars, which git ignores). Never commit real values.
+DATABASE_URL=postgresql://user:password@ep-example.region.aws.neon.tech/flowcanvas?sslmode=require
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+# The secrets vault's master key (ADR 0015): 32 random bytes, base64. Create yours with:
+#   printf '\nVAULT_KEY=%s\n' (openssl rand -base64 32) >> .dev.vars
+VAULT_KEY=
+# APP_ORIGIN (where sign-in works) comes from `pnpm dev` (http://localhost:5173); don't set it here.
