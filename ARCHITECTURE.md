@@ -111,7 +111,7 @@ control plane       ──► part of the app's Worker (wrangler.jsonc `main`), 
   - People are named in logs by user ID only.
   - `api.onError` answers anything a route didn't catch with a plain 500, and logs only a redacted description (Hono's default would print the whole error).
   - `no-leaks.test.ts` runs the whole flow, failures included, with canaries, and checks every response, log line and console write.
-  - Cloudflare's own request (invocation) logs are outside our code. The owner checks them at phase close; see `docs/STATUS.md`.
+  - Cloudflare's own request (invocation) logs are **off** (`wrangler.jsonc`): they recorded full URLs, including the sign-in callback's OAuth `code` (1 Nov 2026). Workers Logs keeps only our own redacted lines; request counts and CPU time are in the Worker's Metrics tab.
 - No secrets in the repository, image layers or front-end environment.
 - Telemetry off for Turborepo, Wrangler and Storybook.
 - Supply-chain defaults: ADR 0006.
