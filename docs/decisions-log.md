@@ -303,4 +303,6 @@ GitHub Actions never ran on `ArmaanAhuja-7777` because of the account billing lo
 2. **Clean-up (owner approved, 2 Nov 2026):** the local test project `Rallyy` was deleted from production, with its workspace record and data key. It had no secrets, and its key was wrapped by the local vault key, so staging couldn't have used it. Kept: the owner's two user rows and allowlist entries, and the staging project `Staging test`.
 3. **Fix:** the owner puts the `dev` branch's string in `.dev.vars`; then `pnpm db:migrate` and `pnpm db:allow` run against `dev`. The local and staging vault keys already differ.
 4. **Cloudflare's invocation logs are off** (`observability.logs.invocation_logs: false`). The staging check showed they record each request's full URL, including the sign-in callback's OAuth `code`. Cloudflare redacted `state` and IDs, not the code. Our own log lines (already redacted) are still kept in Workers Logs.
+5. **Done (2 Nov 2026):** `.dev.vars` now points at the `dev` branch (`ep-square-leaf…`), migrated with 0001 and 0002, owner allowed as admin. Local and staging no longer share a database.
+6. **Phase 1c accepted by the owner (2 Nov 2026).** The staging GitHub client secret wasn't rotated: the owner kept the stored one (upgrade-later 32).
 
