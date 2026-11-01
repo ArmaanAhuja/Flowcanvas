@@ -8374,7 +8374,7 @@ Then repository links in the docs updated, and this branch (`chore/move-repo`) o
 
 | Name | Staging (Worker secret) | Local (`.dev.vars`) |
 | --- | --- | --- |
-| `DATABASE_URL` | Neon `production` branch connection string (pooled) | Neon `dev` branch connection string (pooled) |
+| `DATABASE_URL` | Neon `production` branch connection string (pooled) | Neon `dev` branch connection string (pooled). **Check the host differs from production's** (`pnpm db:status` prints it); until 2 Nov 2026 local used production by mistake |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | "Flowcanvas (staging)" OAuth app | "Flowcanvas (local)" OAuth app |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | the Google client | the same Google client |
 

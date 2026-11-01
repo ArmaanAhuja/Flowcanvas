@@ -3,7 +3,7 @@
 - Version: `0.4.0`
 - Branch: `phase/1c-sign-in-control-plane`; PR: see `docs/STATUS.md`
 - Dates: 30–31 Oct 2026
-- Status: **in review**. It needs the owner's after-merge checks on staging (below) before acceptance.
+- Status: **accepted** by the owner on 2 Nov 2026, after the after-merge checks on staging (below).
 
 ## From the build plan
 
@@ -57,7 +57,7 @@ The order matters. Secrets go in before the database migration, and the migratio
 | 4. Try it on staging | ✅ The owner signed in with GitHub, created `Staging test` and saved `MY_TEST_SECRET`. A read-only check found it stored as 30 bytes of ciphertext: the value isn't in it, as text or as hex |
 | 5. Cloudflare's logs | ⚠ → fixed. No secret value anywhere. But the invocation log of `GET /api/auth/callback/github` showed the OAuth `code` in its URL (Cloudflare hid `state` and the IDs, not the code). The code was single-use, already redeemed, expired after 10 minutes and useless without the PKCE verifier, so nothing could be done with it. Invocation logs are now off (`wrangler.jsonc`, PR "turn off Cloudflare's request logs") |
 
-**Found during these checks: local development used the production database.** `.dev.vars` held the `production` branch's connection string from step 1c.1 on. So every "checked against Neon" note in this phase ran on production (the docs now say so), and local test data sat in staging's database. The owner's local test project `Rallyy` (no secrets; its key was wrapped by the local vault key, so staging couldn't have used it) was deleted with the owner's approval on 2 Nov 2026. Next, local development moves to the `dev` branch (decisions log, 1 Nov 2026).
+**Found during these checks: local development used the production database.** `.dev.vars` held the `production` branch's connection string from step 1c.1 on. So every "checked against Neon" note in this phase ran on production (the docs now say so), and local test data sat in staging's database. The owner's local test project `Rallyy` (no secrets; its key was wrapped by the local vault key, so staging couldn't have used it) was deleted with the owner's approval on 2 Nov 2026. On 2 Nov 2026 local development moved to the `dev` branch (`ep-square-leaf…`), which was migrated (0001, 0002) with the owner as admin.
 
 ## How to try it
 
@@ -104,7 +104,7 @@ The order matters. Secrets go in before the database migration, and the migratio
 
 - **Worker secrets are lost on assets-only deploys of `main`.** Re-adding them is after-merge check 1.
 - **Cloudflare invocation logs are off,** because they recorded the sign-in code. CPU time per request is still in the Worker's Metrics tab (upgrade-later 31).
-- **Local development still points at production** until `.dev.vars` moves to the `dev` branch (decisions log, 1 Nov 2026).
+- **The staging GitHub client secret wasn't rotated** (owner's choice). It had sat in local `.dev.vars` once, and was never pushed (push protection blocked it). Upgrade-later 32.
 - **Previews and reports are public by link** (item 11). They show no user data: previews can't sign in, and reports use fake data.
 - **Profile pictures not shown** (item 24), GitHub token not revoked after sign-in (25), Google app in Testing (26), no per-person limits (27), no vault key rotation (28), usage summed on read (29), admin audit log only in Worker logs (30).
 
