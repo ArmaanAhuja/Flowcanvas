@@ -8322,13 +8322,13 @@ Then repository links in the docs updated, and this branch (`chore/move-repo`) o
 | --- | --- | --- |
 | 0 | Owner accounts: Neon database, GitHub OAuth apps (staging + local), Google OAuth client; keys stored as Worker secrets and in `.dev.vars` | done · owner · `.dev.vars` checked by name and format; Worker secrets verified by `/api/db/ping` on version `26f9c237`, and inherited by the next preview (`9ae581e`) |
 | 1 | Spike: Hono and Neon on the Workers free plan; ADR | done · `ba4718e` · Claude · ADR 0013 |
-| 2 | Database schema and migrations | done · see commit below · Claude · ADR 0014 · applied to Neon `dev` |
+| 2 | Database schema and migrations | done · see commit below · Claude · ADR 0014 · applied to Neon via `.dev.vars` (the `production` branch; see "1 Nov" in the decisions log) |
 | 3 | GitHub sign-in, sessions, sign out; Fastify server retired | done · see commit below · Claude · owner: one real sign-in by hand (below) |
 | 4 | Google sign-in, allowlist, admin role | done · see commit below · Claude · owner: one real Google sign-in by hand |
-| 5 | Projects list and create | done · see commit below · Claude · checked against Neon `dev` |
+| 5 | Projects list and create | done · see commit below · Claude · checked against Neon via `.dev.vars` (the `production` branch; see "1 Nov" in the decisions log) |
 | 6 | Secrets vault, Project secrets page, canary tests | done · see commit below · Claude · ADR 0015 · owner: local VAULT_KEY |
-| 7 | Usage metering skeleton and workspace records | done · see commit below · Claude · migration 0002 applied to Neon `dev` |
-| 8 | Admin view | done · see commit below · Claude · read-only check against Neon `dev` |
+| 7 | Usage metering skeleton and workspace records | done · see commit below · Claude · migration 0002 applied to Neon via `.dev.vars` (the `production` branch; see "1 Nov" in the decisions log) |
+| 8 | Admin view | done · see commit below · Claude · read-only check against Neon via `.dev.vars` (the `production` branch; see "1 Nov" in the decisions log) |
 | 9 | Logs and redaction across everything; walkthroughs | done · see commit below · Claude · owner: Cloudflare logs check at phase close |
 | 10 | Close the phase (0.4.0) | done · see commit below · Claude · owner: after-merge checks on staging |
 
@@ -8533,7 +8533,7 @@ curl http://127.0.0.1:8787/api/db/ping                 # {"database":"ok","round
 ```
 
 **Run and check it (30 Oct 2026):**
-1. Locally: health 200, and the database ping 200 against Neon `dev` (4.2 s cold, then 117 ms). `/` is still the app, with its CSP.
+1. Locally: health 200, and the database ping 200 against Neon via `.dev.vars` (the `production` branch; see "1 Nov" in the decisions log) (4.2 s cold, then 117 ms). `/` is still the app, with its CSP.
 2. Preview `https://phase-1c-sign-in-control-plane-flowcanvas.ahujaarmaan7777.workers.dev/api/health` gives 200 from the script; `/api/db/ping` gave 503 "not configured" until the staging secrets were set on a version with a script.
 3. After the owner re-set the secrets, version `26f9c237`'s own URL answered `/api/db/ping` 200 against Neon `production` (734 ms cold, 63 ms warm).
 4. **New uploads inherit secrets.** The preview built from the next push (`9ae581e`) also answered `{"database":"ok"}`, so secrets are set once.
@@ -8798,7 +8798,7 @@ Staging, when the phase merges (the URL is typed into a hidden prompt, never int
 read -s -P 'Neon production URL: ' DATABASE_URL; DATABASE_URL=$DATABASE_URL pnpm db:migrate; set -e DATABASE_URL
 ```
 
-**Run and check it (30 Oct 2026):** against Neon `dev` (AWS ap-southeast-1):
+**Run and check it (30 Oct 2026):** against Neon via `.dev.vars` (the `production` branch; see "1 Nov" in the decisions log) (AWS ap-southeast-1):
 1. `db:status` showed `pending`.
 2. `db:migrate` showed `Applied: 0001_initial`.
 3. `db:status` showed `applied`.
@@ -8878,7 +8878,7 @@ Owner, by hand (a real GitHub sign-in can't run in CI without a real account and
 5. Click **Sign out**: the row shows **Sign in with GitHub** again.
 6. Optional: sign in with a GitHub account whose email isn't allowlisted. The page says the account isn't on the allowlist.
 
-Checked by Claude in Chromium (31 Oct 2026), against `pnpm dev` with the Neon `dev` database:
+Checked by Claude in Chromium (31 Oct 2026), against `pnpm dev` with the Neon via `.dev.vars` (the `production` branch; see "1 Nov" in the decisions log) database:
 - `/api/me` → `available`
 - the button reached github.com's sign-in page
 - Chrome stored `__Host-fc_oauth` on `http://localhost` (HttpOnly, Secure, Lax)
@@ -8995,7 +8995,7 @@ Checked by Claude (31 Oct 2026), against the owner's running `pnpm dev`: `/api/m
   - the API's reason shown next to the field it names (`aria-invalid`, `aria-describedby`)
   - load failure; Projects hidden when signed out
 
-**Checked against Neon `dev` (31 Oct 2026):** a throwaway script created a test user and two projects through the same functions, got `duplicate-name` for a repeated name, listed them newest first with ISO dates, then deleted the user and its allowlist row (0 left).
+**Checked against Neon via `.dev.vars` (the `production` branch; see "1 Nov" in the decisions log) (31 Oct 2026):** a throwaway script created a test user and two projects through the same functions, got `duplicate-name` for a repeated name, listed them newest first with ISO dates, then deleted the user and its allowlist row (0 left).
 
 **Run and check it:**
 
@@ -9063,7 +9063,7 @@ Owner, by hand:
   - masked list; save clears the value and the canary isn't in the page
   - Replace; errors next to their field; two-click delete; the toggle opens the panel
 
-**Checked against Neon `dev` (31 Oct 2026):** a throwaway script, with a test key and user, saved then replaced a value and read it back. Stored sizes were 41-byte ciphertext, 12-byte IV and 48-byte wrapped key; the value wasn't readable as text. It then deleted everything (0 left).
+**Checked against Neon via `.dev.vars` (the `production` branch; see "1 Nov" in the decisions log) (31 Oct 2026):** a throwaway script, with a test key and user, saved then replaced a value and read it back. Stored sizes were 41-byte ciphertext, 12-byte IV and 48-byte wrapped key; the value wasn't readable as text. It then deleted everything (0 left).
 
 **Owner: create the local master key** (fish). It goes straight from `openssl` into the git-ignored `.dev.vars`, and the value is never printed:
 
@@ -9131,7 +9131,7 @@ Owner, by hand:
 - **`db/schema.test.ts` (+1):** a project made before 0002 gets its workspace when 0002 runs
 - **`Usage.test.tsx` (4), `Projects.test.tsx`, `App.test.tsx`:** time formatting; the measured time and reset date; a real 0; the error; the workspace state on each project; usage only for a signed-in person
 
-**Applied to Neon `dev` (31 Oct 2026):** `pnpm db:migrate` applied 0002. A count afterwards showed 1 project, 1 workspace and none missing. Staging is migrated at phase close.
+**Applied to Neon via `.dev.vars` (the `production` branch; see "1 Nov" in the decisions log) (31 Oct 2026):** `pnpm db:migrate` applied 0002. A count afterwards showed 1 project, 1 workspace and none missing. Staging is migrated at phase close.
 
 **Run and check it:**
 
@@ -9187,7 +9187,7 @@ Owner, by hand (optional; the tests cover it):
   - bad email, bad role, and a foreign `Origin` refused
 - **`Admin.test.tsx` (6), `App.test.tsx` (+1):** people's counts; no actions on your own entry; allow as admin; the field error; two-click remove; a load error; admins only
 
-**Checked against Neon `dev` (31 Oct 2026):** a read-only script ran `listPeople` and `listAllowlist` and printed only roles and counts: 2 people, 2 allowlist entries.
+**Checked against Neon via `.dev.vars` (the `production` branch; see "1 Nov" in the decisions log) (31 Oct 2026):** a read-only script ran `listPeople` and `listAllowlist` and printed only roles and counts: 2 people, 2 allowlist entries.
 
 **Run and check it:**
 

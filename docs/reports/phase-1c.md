@@ -22,11 +22,11 @@
 | --- | --- | --- |
 | GitHub sign-in | ✅ | `auth/github.test.ts`, `auth/routes.test.ts` (fake GitHub, real SQL and cookies). Owner signed in for real locally (31 Oct) |
 | Google sign-in | ✅ | `auth/google.test.ts`, `auth/routes.test.ts`. Google's account chooser reached locally, and the owner completed it (31 Oct) |
-| Projects list | ✅ | `projects/*.test.ts`, `Projects.test.tsx`; checked against Neon `dev` |
-| Workspace records | ✅ | Created with each project in one statement; migration 0002 backfilled older projects (applied to Neon `dev`) |
-| Secrets vault | ✅ | ADR 0015; `vault/*.test.ts` (21 tests); checked against Neon `dev`; owner's manual check (31 Oct) |
+| Projects list | ✅ | `projects/*.test.ts`, `Projects.test.tsx`; checked against Neon via `.dev.vars` (the `production` branch; see "1 Nov" in the decisions log) |
+| Workspace records | ✅ | Created with each project in one statement; migration 0002 backfilled older projects (applied to Neon via `.dev.vars` (the `production` branch; see "1 Nov" in the decisions log)) |
+| Secrets vault | ✅ | ADR 0015; `vault/*.test.ts` (21 tests); checked against Neon via `.dev.vars` (the `production` branch; see "1 Nov" in the decisions log); owner's manual check (31 Oct) |
 | Usage metering skeleton | ✅ | `usage/*.test.ts`; `GET /api/usage`; Usage this month on the page |
-| Admin view | ✅ | `admin/*.test.ts`, `Admin.test.tsx`; read-only check against Neon `dev` |
+| Admin view | ✅ | `admin/*.test.ts`, `Admin.test.tsx`; read-only check against Neon via `.dev.vars` (the `production` branch; see "1 Nov" in the decisions log) |
 | **Done when:** a new user signs in, creates a project and sees it listed | ✅ local · ⏳ staging | Locally by the owner. On staging after the merge: after-merge check 4 |
 | **Done when:** saved secrets never appear in logs | ✅ our logs · ⏳ Cloudflare's | `api/no-leaks.test.ts` (whole flow and failures, canaries in every response, log line and console write; it was shown to fail with redaction off). Cloudflare's own request logs: after-merge check 5 |
 | **Try it** | ✅ recorded · ⏳ staging | `e2e/try-it/phase-1c.spec.ts`: signed out against the real API, then the signed-in steps with the API answered by the test (a real sign-in can't run unattended). The real Try it is after-merge checks 4–5 |
@@ -47,7 +47,17 @@ The order matters. Secrets go in before the database migration, and the migratio
 4. **Try it on staging:** sign in with GitHub, create a project, and add a secret with a made-up value.
 5. **Cloudflare's logs:** in Workers Logs, search for the made-up value; there should be nothing. Then open the sign-in callback's entry. If it shows `code=` or cookies, turn invocation logs off (`wrangler.jsonc`) in a follow-up PR.
 
-Results are recorded here when done.
+**Results (1–2 Nov 2026):**
+
+| Check | Result |
+| --- | --- |
+| 1. Worker secrets | ✅ The owner put all six (versions on top of the 0.4.0 deploy `cbc0615f`); Claude deployed them (`e58f9132`, then `de60897e` after `DATABASE_URL` was put again with the same value) |
+| 2. Migrate staging | ✅ Already applied: the Neon `production` branch had 0001 and 0002, because local `.dev.vars` had pointed at it since step 1 (see below). Owner allowed as admin |
+| 3. `/api/db/ping`, `/api/me` | ✅ `"database":"ok"`; `signIn: available`, providers GitHub and Google |
+| 4. Try it on staging | ✅ The owner signed in with GitHub, created `Staging test` and saved `MY_TEST_SECRET`. A read-only check found it stored as 30 bytes of ciphertext: the value isn't in it, as text or as hex |
+| 5. Cloudflare's logs | ⚠ → fixed. No secret value anywhere. But the invocation log of `GET /api/auth/callback/github` showed the OAuth `code` in its URL (Cloudflare hid `state` and the IDs, not the code). The code was single-use, already redeemed, expired after 10 minutes and useless without the PKCE verifier, so nothing could be done with it. Invocation logs are now off (`wrangler.jsonc`, PR "turn off Cloudflare's request logs") |
+
+**Found during these checks: local development used the production database.** `.dev.vars` held the `production` branch's connection string from step 1c.1 on. So every "checked against Neon" note in this phase ran on production (the docs now say so), and local test data sat in staging's database. The owner's local test project `Rallyy` (no secrets; its key was wrapped by the local vault key, so staging couldn't have used it) was deleted with the owner's approval on 2 Nov 2026. Next, local development moves to the `dev` branch (decisions log, 1 Nov 2026).
 
 ## How to try it
 
@@ -73,7 +83,7 @@ Results are recorded here when done.
 | Build | `pnpm build` | web bundle 131 kB gzip (126 kB at 0.3.0) |
 | Walkthroughs (recorded) | `pnpm test:e2e` | 6 passed |
 | Visual and accessibility | `pnpm test:visual` | No changes to `packages/ui` in this phase; CI runs it on the PR |
-| Against Neon `dev` | throwaway and read-only scripts | projects, vault round trip (ciphertext unreadable, cleaned up), migration 0002, admin queries |
+| Against Neon via `.dev.vars` (the `production` branch; see "1 Nov" in the decisions log) | throwaway and read-only scripts | projects, vault round trip (ciphertext unreadable, cleaned up), migration 0002, admin queries |
 
 ## Deviations from the plan and why
 
@@ -93,7 +103,8 @@ Results are recorded here when done.
 ## Known issues and follow-ups
 
 - **Worker secrets are lost on assets-only deploys of `main`.** Re-adding them is after-merge check 1.
-- **Cloudflare invocation logs:** unknown whether they record query strings or cookies (after-merge check 5).
+- **Cloudflare invocation logs are off,** because they recorded the sign-in code. CPU time per request is still in the Worker's Metrics tab (upgrade-later 31).
+- **Local development still points at production** until `.dev.vars` moves to the `dev` branch (decisions log, 1 Nov 2026).
 - **Previews and reports are public by link** (item 11). They show no user data: previews can't sign in, and reports use fake data.
 - **Profile pictures not shown** (item 24), GitHub token not revoked after sign-in (25), Google app in Testing (26), no per-person limits (27), no vault key rotation (28), usage summed on read (29), admin audit log only in Worker logs (30).
 

@@ -294,3 +294,13 @@ GitHub Actions never ran on `ArmaanAhuja-7777` because of the account billing lo
 6. **Acceptance:** once a PR run and the following `main` run pass on GitHub, the upgrade-later item 8 steps are done, and phases 1 and 1b move to *accepted*. From then on the "PR #1 exception" ends: merge only when CI is green.
 7. **Result (same day):** PR #7 ran every job on GitHub and passed, and so did its merge to `main` (`157b55f`), which tested staging and moved the reports' main address. Phases 1 and 1b are **accepted**, as the owner had agreed. The PR #1 exception has ended.
 8. **`main` is protected by a ruleset (same day, owner).** Pull request required (0 approvals while the owner works alone), the three test jobs must pass on a branch that is up to date with `main`, no bypass, deletions and force pushes blocked. `Publish report and comment` is deliberately not required: it runs even when tests fail, and a reports outage shouldn't block merges. This replaces the "merge only when green" honour rule with enforcement and closes upgrade-later items 1 and 5.
+
+## 1 Nov 2026: phase 1c on staging; local development used production
+
+1. **Local development pointed at the production database.** `.dev.vars`'s `DATABASE_URL` had been the Neon `production` branch's string since step 1c.1, not `dev`'s (setup table in build-steps 1c.0). Found when migrating staging printed the same host as local runs. Consequences:
+   - The migrations and every "checked against Neon" script in phase 1c ran on production; the docs now say so.
+   - Local test data was in staging's database.
+2. **Clean-up (owner approved, 2 Nov 2026):** the local test project `Rallyy` was deleted from production, with its workspace record and data key. It had no secrets, and its key was wrapped by the local vault key, so staging couldn't have used it. Kept: the owner's two user rows and allowlist entries, and the staging project `Staging test`.
+3. **Fix:** the owner puts the `dev` branch's string in `.dev.vars`; then `pnpm db:migrate` and `pnpm db:allow` run against `dev`. The local and staging vault keys already differ.
+4. **Cloudflare's invocation logs are off** (`observability.logs.invocation_logs: false`). The staging check showed they record each request's full URL, including the sign-in callback's OAuth `code`. Cloudflare redacted `state` and IDs, not the code. Our own log lines (already redacted) are still kept in Workers Logs.
+
