@@ -1,7 +1,8 @@
 // An in-memory WorkspaceProvider for lifecycle and route tests: no Docker, no network.
+import type { AgentRequest, AgentResponse } from '@flowcanvas/workspace-agent/protocol';
 import { ProviderError, type WorkspaceProvider } from '../workspaces/provider.js';
 
-type Method = 'create' | 'start' | 'pause' | 'resume' | 'stop';
+type Method = 'create' | 'start' | 'pause' | 'resume' | 'stop' | 'agent';
 type FakeState = 'running' | 'paused' | 'stopped';
 
 export class FakeProvider implements WorkspaceProvider {
@@ -10,6 +11,9 @@ export class FakeProvider implements WorkspaceProvider {
   readonly workspaces = new Map<string, FakeState>();
   /** Every call, in order, e.g. `create 1f…` or `pause fake-1f…`. */
   readonly calls: string[] = [];
+  /** Requests the agent received, and what it answers next (a hello by default). */
+  readonly agentRequests: { ref: string; request: AgentRequest }[] = [];
+  agentAnswer: AgentResponse = { ok: true, result: { protocol: 1, node: 'v24' } };
   private readonly failures = new Map<Method, Error>();
   private readonly holds = new Map<Method, Promise<void>>();
 
@@ -82,5 +86,12 @@ export class FakeProvider implements WorkspaceProvider {
     await this.enter('stop', ref);
     this.known(ref);
     this.workspaces.set(ref, 'stopped');
+  }
+
+  async agent(ref: string, request: AgentRequest): Promise<AgentResponse> {
+    await this.enter('agent', ref);
+    if (this.known(ref) !== 'running') throw new ProviderError('refused', 'Resume it first.');
+    this.agentRequests.push({ ref, request });
+    return this.agentAnswer;
   }
 }

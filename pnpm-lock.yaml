@@ -513,6 +513,9 @@ importers:
 
   services/control-plane:
     dependencies:
+      '@flowcanvas/workspace-agent':
+        specifier: workspace:*
+        version: link:../../workspace/agent
       '@flowcanvas/workspace-host':
         specifier: workspace:*
         version: link:../../workspace/host
@@ -559,6 +562,9 @@ importers:
 
   workspace/agent:
     devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.2
       eslint:
         specifier: 'catalog:'
         version: 10.13.0(supports-color@10.2.2)
@@ -571,6 +577,9 @@ importers:
 
   workspace/host:
     dependencies:
+      '@flowcanvas/workspace-agent':
+        specifier: workspace:*
+        version: link:../agent
       '@flowcanvas/workspace-image':
         specifier: workspace:*
         version: link:../image

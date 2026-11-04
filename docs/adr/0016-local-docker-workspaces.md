@@ -60,7 +60,7 @@ browser ──► Worker /api (wrangler dev) ──HTTP, 127.0.0.1, bearer token
   - its own internal network in isolated gateway mode (the host refuses to start on Docker older than 28)
   - a named volume for its files
 - **Internet only through an egress proxy** on the workspace's network. It's one shared proxy container, connected to every workspace network with IP forwarding turned off (`net.ipv4.ip_forward=0`; Docker had it on), so it can't route between them, with an allowlist (GitHub for clones and the npm registry to start). It resolves names itself and refuses private, loopback and link-local addresses. A minimal proxy comes with the clone (step 4); the rules and the isolation test, in step 7.
-- **Host ↔ agent:** typed, versioned JSON-lines messages over one `docker exec -i` stream per workspace. No ports are opened on the container.
+- **Host ↔ agent:** typed, versioned JSON-lines messages over one `docker exec -i` stream per workspace. No ports are opened on the container. The host copies the built agent into the container's `/tmp` (on stdin, never on a command line) and starts it there, so it needs no mount and is always the current build (step 5). The agent runs as the workspace's own user, so its answers are checked as untrusted.
 - **Sleep is `docker pause`** (the cgroup freezer): memory and processes stay frozen in place, so "resumes intact" holds. After a host restart a workspace comes back stopped, with its volume kept.
 - **Staging has no workspace host,** so its API answers "Workspaces run locally for now" and the UI says the same.
 

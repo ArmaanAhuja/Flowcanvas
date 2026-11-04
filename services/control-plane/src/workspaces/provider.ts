@@ -1,3 +1,5 @@
+import type { AgentRequest, AgentResponse } from '@flowcanvas/workspace-agent/protocol';
+
 /**
  * What the control plane needs from whatever runs workspaces (ADR 0016). For now that's the local workspace host
  * and Docker (step 4); a cloud provider implements the same interface later (upgrade-later 33).
@@ -18,7 +20,16 @@ export interface WorkspaceProvider {
   resume(ref: string): Promise<void>;
   /** Stops it; its files are kept. */
   stop(ref: string): Promise<void>;
+  /**
+   * A file or process request for the agent in a running workspace (step 5). The agent's own refusals (a
+   * missing file, a .env file) come back as `{ ok: false }`; a ProviderError means it couldn't be asked.
+   */
+  agent(ref: string, request: AgentRequest): Promise<AgentResponse>;
 }
+
+/** What the API says where nothing can run workspaces (staging, until a cloud provider is connected). */
+export const WORKSPACES_UNAVAILABLE =
+  'Workspaces run locally for now. Open this project on your own computer with pnpm dev.';
 
 /**
  * - `unavailable`: the provider can't be reached (the local host isn't running).

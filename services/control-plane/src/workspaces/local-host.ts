@@ -7,6 +7,11 @@ import {
   type CreateResponse,
   type HostAction,
 } from '@flowcanvas/workspace-host/protocol';
+import {
+  isAgentResponse,
+  type AgentRequest,
+  type AgentResponse,
+} from '@flowcanvas/workspace-agent/protocol';
 import { ProviderError, type WorkspaceProvider } from './provider.js';
 
 export interface LocalHostBindings {
@@ -17,6 +22,8 @@ export interface LocalHostBindings {
 /** Creating can include building the image (about a minute, once) and the clone (60 s at most). */
 const CREATE_TIMEOUT_MS = 180_000;
 const ACTION_TIMEOUT_MS = 30_000;
+/** On top of a command's own time limit, for the host and the agent to answer. */
+const AGENT_GRACE_MS = 20_000;
 
 export const MESSAGES = {
   notRunning: "The workspace host isn't running. Start it with pnpm dev, then try again.",
@@ -50,6 +57,7 @@ function misconfigured(message: string): WorkspaceProvider {
     pause: refuse,
     resume: refuse,
     stop: refuse,
+    agent: refuse,
   };
 }
 
@@ -115,6 +123,15 @@ export function localHostProvider(options: {
     pause: (ref) => action(ref, 'pause'),
     resume: (ref) => action(ref, 'resume'),
     stop: (ref) => action(ref, 'stop'),
+    async agent(ref: string, request: AgentRequest): Promise<AgentResponse> {
+      const timeout =
+        (request.op === 'exec' ? request.timeoutMs : ACTION_TIMEOUT_MS) + AGENT_GRACE_MS;
+      const response = await call(PATHS.agent(ref), request, timeout);
+      const body: unknown = await response.json().catch(() => undefined);
+      // From inside the workspace: checked before anything is passed on.
+      if (!isAgentResponse(body)) throw new ProviderError('failed', MESSAGES.unexpected);
+      return body;
+    },
   };
 }
 

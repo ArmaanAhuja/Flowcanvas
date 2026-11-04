@@ -9410,8 +9410,8 @@ browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0
 | 2 | Workspace image (`workspace/image`): Node 24, pnpm, git, non-root user; CPU, memory, process and disk limits | done (Claude, 4 Nov) |
 | 3 | `WorkspaceProvider` interface; lifecycle and states in the control plane, tested with a fake provider | done (Claude, 4 Nov) |
 | 4 | Local workspace host and Docker adapter; a minimal egress proxy (GitHub only); open a project: create the container and clone the repo; timed. Also the 2-workspace cap, `pnpm workspace:clean` and `pnpm workspace:resources` | done (Claude, 4 Nov) |
-| 5 | File and process API (the agent in the container): typed, versioned, owner only | *next* |
-| 6 | Terminal: Durable Object WebSocket gateway and xterm.js | *planned* |
+| 5 | File and process API (the agent in the container): typed, versioned, owner only | done (Claude, 4 Nov) |
+| 6 | Terminal: Durable Object WebSocket gateway and xterm.js | *next* |
 | 7 | Network rules: the egress proxy's full allowlist and address checks; limits; the isolation test | *planned* |
 | 8 | Sleep after 10 idle minutes and resume intact; usage metering writes workspace seconds | *planned* |
 | 8a | The resource guard: laptop pressure and Flowcanvas's budget checked every 30 s; refuse, sleep, stop, clean up (owner, 4 Nov) | *planned* |
@@ -9731,3 +9731,80 @@ There's still no button: the page gets **Open** in step 9. Signed in locally, `P
 - **Laptop:** 24.2 of 30.8 GiB memory available, 580.7 GiB disk free, load 6.5 during tests. Flowcanvas uses 0.5 GiB (one image); no containers, networks or volumes left.
 
 **Commit:** `feat(workspace): local workspace host, egress proxy and the Docker provider`
+
+### Step 1d.5 — The file and process API (done by Claude)
+
+**Goal:** the control plane can list, read and write a project's files and run commands in its workspace. It does this through a small agent inside the workspace, over a typed, versioned protocol, for the project's owner only.
+
+**Concepts:**
+- **An agent inside the sandbox.** The control plane can't touch files in a container directly, and it shouldn't. The agent is a small Node program running *inside* the workspace, as the workspace's own user, so it can only do what that user can. Everything it answers is checked again outside, because code in the workspace could tamper with it.
+- **JSON lines over stdio.** Each message is one line of JSON: `{ "v": 1, "id": 7, "body": {...} }`. The `id` matches each answer to its question, so a slow command doesn't block a quick read, and `v` rejects a mismatched agent. It's the same idea as the Language Server Protocol, which comes later. https://jsonlines.org/
+- **Delivering code without a mount.** The workspace's locked-down settings allow only the workspace volume and `/tmp`. The host copies the built agent into `/tmp` through `docker exec -i … cat` (content on stdin, never on a command line) and starts it. `/tmp` is a tmpfs, so a restarted container gets a fresh copy, which is always the current build.
+- **Path containment.** `resolve(root, path)` and a prefix check catch `../`. Links need more: `realpath` follows them, and the result is checked again. Writes use `O_NOFOLLOW`, so even a link created after the checks can't redirect them. https://man7.org/linux/man-pages/man2/open.2.html
+- **No shell.** Commands are argument lists (`["git", "status"]`) passed to `spawn` directly, so `$(…)`, `;` and backticks mean nothing. Each command gets its own process group, so a time-out stops everything it started (`kill(-pid)`).
+- **Secrets stay out (CLAUDE.md rule 5).** `.env`, `.env.*` and `.dev.vars*` (except `.example`, `.sample`, `.template`) are listed with `secret: true`, and can never be read or written through the API, even through a link. A command in the terminal could still print one; that's the person's own action in their own workspace, and it's never logged.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `workspace/agent/src/protocol.ts` | `AGENT_PROTOCOL` 1, `PROJECT_ROOT`, `LIMITS` (1 MiB files, 5,000 entries, commands up to 2 minutes with 1 MiB of output each); `AgentRequest` (`hello`, `list`, `read`, `write`, `exec`) and results; error codes; `parseAgentRequest` (for untrusted requests) and `isAgentResponse` (for untrusted answers); `isSecretFile`. No imports, so the Worker can bundle it |
+| `workspace/agent/src/agent.ts` | `createAgent({ root })`: the five operations with the containment rules above; `answer()`; `serve()` over line streams |
+| `workspace/agent/src/main.ts`, `files.ts` | The entry point inside the workspace; the built files the host copies in |
+| `workspace/host/src/agents.ts` | `dockerAgent()` (copy in, `docker exec -i`); `Agents`: one connection per workspace, a hello and version check, ids, per-request time limits (the command's own plus 15 s), reconnect after the agent stops, fail waiting requests when it does |
+| `workspace/host/src/workspaces.ts`, `server.ts`, `protocol.ts`, `docker-cli.ts` | `WorkspaceHost.agent()` (running workspaces only; "asleep" and "not running" refused); stop ends the agent; `POST /v1/workspaces/:ref/agent` (checked with `parseAgentRequest`, 2 MiB body); `input` for docker commands |
+| `services/control-plane/src/workspaces/file-routes.ts` | `GET /files`, `GET /file`, `PUT /file`, `POST /exec` under `/api/projects/:id/workspace`. Owner only, running only, same origin for changes. Each counts as activity. Statuses per error code. Logs the operation and outcome only |
+| `services/control-plane/src/workspaces/provider.ts`, `local-host.ts` | `WorkspaceProvider.agent()`; the adapter posts to the host and checks the answer; `WORKSPACES_UNAVAILABLE` moved here to avoid a circular import |
+
+**Tests:**
+- **Agent (18, against a temporary folder):**
+  - list order and secret flags
+  - text and binary reads
+  - `.env` refused, even through a link (canary)
+  - `..`, absolute paths and links out refused
+  - folders and big files refused
+  - writes with folders made as needed and base64
+  - writes refused for `.env`, outside the project and through a link
+  - the size limits, including 3-byte characters
+  - commands: exit code, cwd, no shell, a time-out that kills child processes, the output cap, a missing program
+  - malformed requests, hello, the line protocol and version check
+- **Host (11 new):**
+  - the connections run against the real built agent: reuse, side-by-side requests, reconnect, waiting requests failed, a lying agent refused
+  - `WorkspaceHost.agent()` states
+  - the route: a checked request, a malformed one answered without reaching the agent, the 1 MiB limit
+- **Control plane (15 new):**
+  - the four routes and the requests they build
+  - error codes mapped to statuses
+  - checked before forwarding
+  - counted as activity
+  - logs without paths, content or commands (canary)
+  - running, owner and origin checks
+  - the adapter's answer check
+- **Docker (4 new, 27 in total):**
+  - against the real Rallly clone: list, read and write (owned by uid 1000); `.env` refused (canary); a link to `/etc/passwd` and `../.home` refused
+  - commands: `node -v`, `id -u` and `pwd` in a subfolder, and `git ls-remote` through the proxy
+  - after a stop and start, the agent is copied in again and reads the note back
+  - through the real host process: an empty workspace says "no project files yet"
+
+**Run and check it:**
+```fish
+pnpm test               # 492 tests, no Docker needed
+pnpm test:docker        # 27 Docker tests; Rallly opens in about 8.4 s, then the agent's checks run against it
+```
+Signed in locally, with a project open, the page itself can't use these yet (no UI until step 9 and the editor in phase 3). The routes answer `/api/projects/<id>/workspace/files` and so on.
+
+**Gotchas:**
+- **`read` with no path read the project folder.** A missing `path` defaulted to `''` for both list and read. `read` now requires one, and `list` still defaults to the top of the project. The route test caught it.
+- **A path through a file.** Writing `package.json/x` first failed with a generic error. The nearest existing "folder" is now checked to really be a folder ("Part of that path is a file.").
+- **Circular imports.** The file routes needed a constant from `routes.ts`, which mounts them. It worked only because the constant was read at request time, so it moved to `provider.ts`.
+- **A step 4 test edit hadn't applied.** The wrong-token Docker test should have checked the actionable message, but only its import had changed. That left a lint error in the step 4 commit (CI runs only on PRs and `main`, so nothing failed). Both are fixed. From now on, the full `pnpm lint` runs as the last thing before each commit.
+
+**Docs:** this write-up; ARCHITECTURE (parts, "Files and commands"); ADR 0016 (how the agent is delivered); STATUS.
+
+**Risks:**
+- R1 and R7: the agent runs as the workspace user and is treated as untrusted; commands have time and output limits.
+- R6: the routes are owner only and same origin, the host checks the request again, and the token is unchanged.
+- The others are unchanged.
+- **Laptop:** all five checks ok (24.3 GiB memory available, 580.8 GiB disk free, load 6.4 during tests). Flowcanvas uses 0.5 GiB; no containers or agent processes left behind.
+
+**Commit:** `feat(workspace): workspace agent with the file and process API`

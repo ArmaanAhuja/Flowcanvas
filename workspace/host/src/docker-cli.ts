@@ -10,7 +10,7 @@ export interface DockerResult {
 /** Runs `docker <args>`. Rejects with DockerFailure when the command fails, HostError when Docker isn't there. */
 export type Docker = (
   args: readonly string[],
-  options?: { timeoutMs?: number },
+  options?: { timeoutMs?: number; input?: string },
 ) => Promise<DockerResult>;
 
 /** A failed docker command, for the host's own decisions and logs; never shown to the person as is. */
@@ -33,7 +33,7 @@ export const DOCKER_DOWN = "Docker isn't running on this computer. Start Docker,
 
 export const dockerCli: Docker = (args, options = {}) =>
   new Promise((resolve, reject) => {
-    execFile(
+    const child = execFile(
       'docker',
       [...args],
       { timeout: options.timeoutMs ?? 60_000, maxBuffer: 16 * 1024 * 1024 },
@@ -50,4 +50,6 @@ export const dockerCli: Docker = (args, options = {}) =>
         reject(new DockerFailure(typeof code === 'number' ? code : null, stderr));
       },
     );
+    // Content for the command's stdin (e.g. the agent's files), so it never goes on a command line.
+    child.stdin?.end(options.input);
   });

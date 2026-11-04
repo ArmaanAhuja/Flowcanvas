@@ -15,7 +15,7 @@ The system as it is **today** (end of phase 1b). Kept current at the end of ever
 | `@flowcanvas/engine` | `packages/engine` | Inside each user workspace (later) | Wired-in placeholder package; indexer arrives in phase 4 |
 | `@flowcanvas/workspace-host` | `workspace/host` | Developer machine, started by `pnpm dev` (127.0.0.1:8790) | The local workspace host (ADR 0016): an HTTP API with a token (`src/server.ts`; protocol in `src/protocol.ts`, shared with the control plane), workspaces as Docker containers (`src/workspaces.ts`; the 2-running cap), the egress proxy (`src/egress/proxy.ts`), the laptop budget (`src/resources.ts`) and clean-up (`src/clean.ts`) |
 | `@flowcanvas/workspace-image` | `workspace/image` | Developer machine (builds the image); used by the workspace host | The workspace image (`Dockerfile`: Node 24 by digest, pnpm, git, `node` user, telemetry off). Its tag is a hash of the Dockerfile. Also the locked-down `docker run` and network arguments, and the default limits (2 CPUs, 4 GiB, 1,024 processes, 1 GiB `/tmp`, 10 GiB disk measured) |
-| `@flowcanvas/workspace-agent` | `workspace/agent` | Inside each workspace (a local Docker container for now, ADR 0016) | Wired-in placeholder package; the agent arrives in phase 1d (step 5) |
+| `@flowcanvas/workspace-agent` | `workspace/agent` | Inside each workspace (a local Docker container for now, ADR 0016), as the workspace's user | The workspace agent: list, read and write the project's files and run commands, under `/workspace/project` only, never `.env` files (`src/agent.ts`). Its protocol (`src/protocol.ts`: one JSON message per line, versioned, with `parseAgentRequest`) is shared with the host and the control plane |
 | `@flowcanvas/corpus` | `corpus` | Developer machine / CI | The test corpus: six public forks pinned in `manifest.json`; `pnpm corpus:check` verifies fork, commit, licence and stack through the GitHub API |
 | `@flowcanvas/e2e` | `e2e` | Developer machine / CI | Playwright: one recorded walkthrough per phase (`try-it/`, video and trace) against any URL; visual tests (catalogue baselines in both themes, axe) |
 
@@ -24,6 +24,8 @@ Dependencies between packages:
 - `ui → tokens`
 - `tokens → figma-tokens` (generator, dev only)
 - `e2e → web` (build order only)
+- `control-plane → workspace-host` (its `protocol` only) and `workspace-agent` (its `protocol` only); both are pure modules the Worker bundles
+- `workspace-host → workspace-image, workspace-agent`
 
 ## Design system
 
@@ -197,6 +199,24 @@ browser ──► Worker /api ──HTTP 127.0.0.1 + token──► workspace ho
 - **Names:** a workspace's container, network and volume are all `fc-ws-<workspace id>`. The proxy is `fc-egress` on `fc-egress-out`. Everything is labelled `org.flowcanvas.workspace=1`, with `org.flowcanvas.prefix` and `org.flowcanvas.role`; tests use their own `fc-test-<hex>` prefix.
 - **The egress proxy** allows only `CONNECT` to port 443 on `github.com` and `codeload.github.com` (step 7 adds more). It resolves the name itself and refuses non-public addresses. It runs with IP forwarding off, and is connected to each workspace's network.
 - **Opening a project:** create or wake the container, then a shallow clone (`--depth 1`, https only) into `/workspace/project`; opening again keeps the files. The adapter (`services/control-plane/src/workspaces/local-host.ts`) only talks to loopback addresses, and only passes known error kinds and bounded sentences through.
+
+## Files and commands (phase 1d, step 5)
+
+```
+GET  /api/projects/:id/workspace/files?path=src      ──► { path, entries: [{ name, type, size, secret }], truncated }
+GET  /api/projects/:id/workspace/file?path=a.ts      ──► { path, size, encoding: utf8 | base64, content }
+PUT  /api/projects/:id/workspace/file?path=a.ts      { content, encoding }  (same origin, ≤ 1 MiB)
+POST /api/projects/:id/workspace/exec                { command: [...], cwd, timeoutMs ≤ 120 s }  (same origin)
+        │ parseAgentRequest, owner only, running only (409 "Open the workspace first."), counts as activity
+        ▼
+WorkspaceProvider.agent ──► host POST /v1/workspaces/:ref/agent ──► docker exec -i … node /tmp/flowcanvas-agent/main.js
+                                                                     (JSON lines, protocol 1, hello on connect)
+```
+
+- **The agent** is copied into the workspace's `/tmp` (a tmpfs) by the host and started with `docker exec -i`. A restarted container gets a fresh copy, and no mount is needed. It runs as the workspace's user, so the host and the control plane check its answers (`isAgentResponse`) like any untrusted input.
+- **What it can reach:** `/workspace/project` only. Paths are resolved and links followed, then checked to still be inside. Writes never follow a link (`O_NOFOLLOW`). `.env`-style files (`isSecretFile`) are listed, marked `secret`, and never read or written (CLAUDE.md rule 5).
+- **Commands** run without a shell, from an argument list, in their own process group. They stop at their time limit, and each output is capped at 1 MiB. Long-running and interactive programs are the terminal's job (step 6).
+- **Logs** name the operation and the outcome only, never paths, content or commands.
 
 ## Workspace lifecycle (phase 1d, step 3)
 

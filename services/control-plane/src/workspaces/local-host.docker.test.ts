@@ -87,6 +87,16 @@ describe('the control plane driving the real workspace host', { timeout: 120_000
     expect(await status()).toBe('running');
   });
 
+  it('asks the agent inside the workspace', async () => {
+    const { ref } = await provider.create({ workspaceId: randomUUID(), repoUrl: null });
+    // No repository, so no project folder yet.
+    expect(await provider.agent(ref, { op: 'list', path: '' })).toMatchObject({
+      ok: false,
+      error: { code: 'not_found', message: 'This workspace has no project files yet.' },
+    });
+    await provider.stop(ref);
+  });
+
   it("passes the host's refusals through with their kind and sentence", async () => {
     await expect(provider.resume(`${prefix}-ws-${randomUUID()}`)).rejects.toMatchObject({
       kind: 'gone',
@@ -105,6 +115,7 @@ describe('the control plane driving the real workspace host', { timeout: 120_000
     );
     await expect(wrong?.stop(`${prefix}-ws-${randomUUID()}`)).rejects.toMatchObject({
       kind: 'unavailable',
+      userMessage: MESSAGES.noToken,
     });
   });
 

@@ -10,6 +10,8 @@ import {
   networkCreateArgs,
   runArgs,
 } from '@flowcanvas/workspace-image';
+import type { AgentRequest, AgentResponse } from '@flowcanvas/workspace-agent/protocol';
+import { Agents, dockerAgent } from './agents.js';
 import { DockerFailure, type Docker } from './docker-cli.js';
 import { HostError } from './errors.js';
 import type { CreateRequest, CreateResponse } from './protocol.js';
@@ -31,6 +33,8 @@ export const MESSAGES = {
   cloneFailed:
     "The repository couldn't be cloned. Check that it's a public GitHub repository, then try again.",
   gone: 'This workspace no longer exists on this computer.',
+  asleep: 'This workspace is asleep. Resume it first.',
+  notRunning: 'This workspace isn’t running. Open it first.',
 } as const;
 
 const PROXY_SCRIPT = fileURLToPath(new URL('./egress/proxy.ts', import.meta.url));
@@ -47,14 +51,18 @@ export interface WorkspaceHostOptions {
   readonly log: (line: string) => void;
   readonly now?: () => number;
   readonly limits?: Parameters<typeof runArgs>[0]['limits'];
+  /** The agent connections; by default, the agent copied in and started with docker exec. */
+  readonly agents?: Agents;
 }
 
 export class WorkspaceHost {
   readonly #options: WorkspaceHostOptions;
   readonly #locks = new Map<string, Promise<unknown>>();
+  readonly #agents: Agents;
 
   constructor(options: WorkspaceHostOptions) {
     this.#options = options;
+    this.#agents = options.agents ?? new Agents(dockerAgent(options.docker));
   }
 
   get #prefix() {
@@ -139,8 +147,17 @@ export class WorkspaceHost {
     });
   }
 
+  /** A file or process request for the agent in a running workspace. Not locked: requests run side by side. */
+  async agent(ref: string, request: AgentRequest): Promise<AgentResponse> {
+    const state = await this.#known(ref);
+    if (state === 'paused') throw new HostError('refused', MESSAGES.asleep);
+    if (state !== 'running') throw new HostError('refused', MESSAGES.notRunning);
+    return this.#agents.call(ref, request);
+  }
+
   async stop(ref: string): Promise<void> {
     await this.#locked(ref, async () => {
+      this.#agents.close(ref);
       const state = await this.#known(ref);
       if (state === 'paused') await this.#docker(['unpause', ref]);
       if (state === 'running' || state === 'paused' || state === 'restarting') {

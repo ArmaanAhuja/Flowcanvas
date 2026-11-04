@@ -69,6 +69,69 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
     });
   });
 
+  it('lists, reads and writes the project through the agent', async () => {
+    const list = await host.agent(ref, { op: 'list', path: '' });
+    expect(list.ok && 'entries' in list.result && list.result.entries.map((e) => e.name)).toEqual(
+      expect.arrayContaining(['package.json', 'apps']),
+    );
+    const read = await host.agent(ref, { op: 'read', path: 'package.json' });
+    expect(read.ok && 'content' in read.result && read.result.content).toContain('"name"');
+    expect(
+      await host.agent(ref, {
+        op: 'write',
+        path: 'flowcanvas-note.md',
+        content: '# Hi\n',
+        encoding: 'utf8',
+      }),
+    ).toMatchObject({ ok: true, result: { size: 5 } });
+    expect((await sh(ref, 'stat -c "%u %s" /workspace/project/flowcanvas-note.md')).out).toBe(
+      '1000 5',
+    );
+  });
+
+  it('never reads a .env file, and never leaves the project', async () => {
+    await sh(ref, 'echo DATABASE_URL=CANARY-postgres > /workspace/project/.env');
+    const secret = await host.agent(ref, { op: 'read', path: '.env' });
+    expect(secret).toMatchObject({ ok: false, error: { code: 'secret_file' } });
+    expect(JSON.stringify(secret)).not.toContain('CANARY');
+    await sh(ref, 'ln -s /etc/passwd /workspace/project/passwd');
+    expect(await host.agent(ref, { op: 'read', path: 'passwd' })).toMatchObject({
+      ok: false,
+      error: { code: 'outside_project' },
+    });
+    expect(await host.agent(ref, { op: 'list', path: '../.home' })).toMatchObject({
+      ok: false,
+      error: { code: 'outside_project' },
+    });
+  });
+
+  it('runs commands in the project, as the workspace user, through the proxy', async () => {
+    const node = await host.agent(ref, {
+      op: 'exec',
+      command: ['node', '-v'],
+      cwd: '',
+      timeoutMs: 10_000,
+    });
+    expect(node).toMatchObject({ ok: true, result: { exitCode: 0 } });
+    expect(node.ok && 'stdout' in node.result && node.result.stdout).toMatch(/^v24\./);
+    const who = await host.agent(ref, {
+      op: 'exec',
+      command: ['sh', '-c', 'id -u; pwd'],
+      cwd: 'apps',
+      timeoutMs: 10_000,
+    });
+    expect(who.ok && 'stdout' in who.result && who.result.stdout).toBe(
+      '1000\n/workspace/project/apps\n',
+    );
+    const git = await host.agent(ref, {
+      op: 'exec',
+      command: ['git', 'ls-remote', '--heads', 'https://github.com/ArmaanAhuja-7777/rallly'],
+      cwd: '',
+      timeoutMs: 30_000,
+    });
+    expect(git).toMatchObject({ ok: true, result: { exitCode: 0 } });
+  });
+
   it('reaches GitHub only through the proxy, and nothing else at all', async () => {
     const through = await sh(ref, 'curl -sS -o /dev/null -w "%{http_code}" https://github.com');
     expect(through.out).toBe('200');
@@ -107,6 +170,11 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
     await expect(host.resume(ref)).rejects.toMatchObject({ kind: 'gone' });
     await host.start(ref);
     expect((await sh(ref, 'test -d /workspace/project/.git && echo kept')).out).toBe('kept');
+    // A restarted container has a fresh /tmp: the agent is copied in and started again.
+    expect(await host.agent(ref, { op: 'read', path: 'flowcanvas-note.md' })).toMatchObject({
+      ok: true,
+      result: { content: '# Hi\n' },
+    });
   });
 
   it('refuses a third running workspace', async () => {

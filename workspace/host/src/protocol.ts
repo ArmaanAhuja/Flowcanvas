@@ -34,6 +34,8 @@ export const PATHS = {
   create: `/${PROTOCOL_VERSION}/workspaces`,
   action: (ref: string, action: HostAction) =>
     `/${PROTOCOL_VERSION}/workspaces/${encodeURIComponent(ref)}/${action}`,
+  /** Body: one AgentRequest (@flowcanvas/workspace-agent/protocol); answer: its AgentResponse, always 200. */
+  agent: (ref: string) => `/${PROTOCOL_VERSION}/workspaces/${encodeURIComponent(ref)}/agent`,
 } as const;
 
 export function isHostErrorKind(value: unknown): value is HostErrorKind {

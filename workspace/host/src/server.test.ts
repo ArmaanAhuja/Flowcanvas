@@ -37,6 +37,11 @@ const fake: HostOperations = {
     calls.push(`stop ${ref}`);
     return Promise.resolve();
   },
+  agent: async (ref, request) => {
+    calls.push(`agent ${ref} ${JSON.stringify(request)}`);
+    if (failWith !== undefined) throw failWith;
+    return Promise.resolve({ ok: true, result: { protocol: 1, node: 'v24' } });
+  },
 };
 
 beforeEach(async () => {
@@ -154,6 +159,37 @@ describe('routes', () => {
       expect((await call(method, path)).status).toBe(404);
     }
     expect(calls).toEqual([]);
+  });
+});
+
+describe('agent requests', () => {
+  it('passes a checked request to the agent and returns its answer', async () => {
+    const body = JSON.stringify({ op: 'list', path: 'src' });
+    expect(await call('POST', PATHS.agent(REF), { body })).toEqual({
+      status: 200,
+      body: JSON.stringify({ ok: true, result: { protocol: 1, node: 'v24' } }),
+    });
+    expect(calls).toEqual([`agent ${REF} {"op":"list","path":"src"}`]);
+  });
+
+  it('answers a malformed request itself, without reaching the agent', async () => {
+    const response = await call('POST', PATHS.agent(REF), {
+      body: '{"op":"read","path":"/etc/passwd"}',
+    });
+    expect(response.status).toBe(200);
+    expect(JSON.parse(response.body)).toMatchObject({
+      ok: false,
+      error: { code: 'outside_project' },
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it('takes a 1 MiB file, but not much more', async () => {
+    const content = Buffer.alloc(1024 * 1024).toString('base64');
+    const ok = JSON.stringify({ op: 'write', path: 'a.bin', content, encoding: 'base64' });
+    expect((await call('POST', PATHS.agent(REF), { body: ok })).status).toBe(200);
+    const huge = JSON.stringify({ op: 'write', path: 'a', content: 'x'.repeat(3 * 1024 * 1024) });
+    expect((await call('POST', PATHS.agent(REF), { body: huge })).status).toBe(422);
   });
 });
 

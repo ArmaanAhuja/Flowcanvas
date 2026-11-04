@@ -1,4 +1,6 @@
+import { PassThrough } from 'node:stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Agents, type StartAgent } from './agents.js';
 import { HostError } from './errors.js';
 import { FakeDocker } from './test/fake-docker.js';
 import { CLONE_TIMEOUT_MS, MESSAGES, WorkspaceHost } from './workspaces.js';
@@ -10,15 +12,47 @@ const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')
 let docker: FakeDocker;
 let log: ReturnType<typeof vi.fn<(line: string) => void>>;
 let host: WorkspaceHost;
+let agentStarts: string[];
+let agentKills: number;
+
+/** An agent that answers every request with a hello. */
+const fakeAgent: StartAgent = (ref) => {
+  agentStarts.push(ref);
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  const exits: (() => void)[] = [];
+  stdin.on('data', (chunk: Buffer) => {
+    for (const line of chunk
+      .toString()
+      .split('\n')
+      .filter((l) => l !== '')) {
+      const { id } = JSON.parse(line) as { id: number };
+      const result = { protocol: 1, node: 'v24' };
+      stdout.write(`${JSON.stringify({ v: 1, id, body: { ok: true, result } })}\n`);
+    }
+  });
+  return Promise.resolve({
+    stdin,
+    stdout,
+    kill: () => {
+      agentKills += 1;
+      for (const exit of exits) exit();
+    },
+    onExit: (listener) => exits.push(listener),
+  });
+};
 
 beforeEach(() => {
   docker = new FakeDocker();
   log = vi.fn<(line: string) => void>();
+  agentStarts = [];
+  agentKills = 0;
   host = new WorkspaceHost({
     docker: docker.run,
     prefix: 'fc',
     image: () => Promise.resolve(IMAGE),
     log,
+    agents: new Agents(fakeAgent),
   });
 });
 
@@ -251,5 +285,36 @@ describe('start, pause, resume, stop', () => {
     release?.();
     await Promise.all([pause, stop]);
     expect(order).toEqual(['pause starts', 'pause ends', 'stop']);
+  });
+});
+
+describe('agent', () => {
+  beforeEach(async () => {
+    await host.create({ workspaceId: id(1), repoUrl: null });
+  });
+
+  it('passes requests to the running workspace’s agent', async () => {
+    expect(await host.agent(ref(1), { op: 'hello' })).toEqual({
+      ok: true,
+      result: { protocol: 1, node: 'v24' },
+    });
+    expect(agentStarts).toEqual([ref(1)]);
+  });
+
+  it('refuses a workspace that is asleep, stopped or not ours', async () => {
+    await host.pause(ref(1));
+    await expectHostError(host.agent(ref(1), { op: 'hello' }), 'refused', MESSAGES.asleep);
+    await host.resume(ref(1));
+    await host.stop(ref(1));
+    await expectHostError(host.agent(ref(1), { op: 'hello' }), 'refused', MESSAGES.notRunning);
+    await expectHostError(host.agent('postgres', { op: 'hello' }), 'gone');
+    expect(agentStarts).toEqual([]);
+  });
+
+  it('ends the agent when the workspace stops', async () => {
+    await host.agent(ref(1), { op: 'hello' });
+    await host.stop(ref(1));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(agentKills).toBe(1);
   });
 });

@@ -23,6 +23,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@flowcanvas/workspace-agent": "workspace:*",
     "@flowcanvas/workspace-image": "workspace:*"
   },
   "devDependencies": {

@@ -2,6 +2,7 @@
 // needs the token from .dev.vars. Browsers are turned away: a web page could send requests to 127.0.0.1, but
 // it can't set the Host header to something else or leave out Origin, and it doesn't know the token.
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { AgentProblem, LIMITS, parseAgentRequest } from '@flowcanvas/workspace-agent/protocol';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { ERROR_STATUS, HostError } from './errors.js';
 import {
@@ -15,7 +16,10 @@ import {
 import type { WorkspaceHost } from './workspaces.js';
 
 /** The part of WorkspaceHost the server calls, so tests can pass a fake. */
-export type HostOperations = Pick<WorkspaceHost, 'create' | 'start' | 'pause' | 'resume' | 'stop'>;
+export type HostOperations = Pick<
+  WorkspaceHost,
+  'create' | 'start' | 'pause' | 'resume' | 'stop' | 'agent'
+>;
 
 export interface ServerOptions {
   readonly host: HostOperations;
@@ -25,7 +29,10 @@ export interface ServerOptions {
 }
 
 export const BODY_MAX_BYTES = 4 * 1024;
+/** An agent request can carry a 1 MiB file as base64. */
+export const AGENT_BODY_MAX_BYTES = LIMITS.lineBytes;
 const ACTION_PATH = new RegExp(`^/${PROTOCOL_VERSION}/workspaces/([^/]+)/(${ACTIONS.join('|')})$`);
+const AGENT_PATH = new RegExp(`^/${PROTOCOL_VERSION}/workspaces/([^/]+)/agent$`);
 
 const digest = (value: string) => createHash('sha256').update(value).digest();
 
@@ -45,12 +52,12 @@ function fail(response: ServerResponse, error: HostError): void {
   send(response, ERROR_STATUS[error.kind], body);
 }
 
-async function readJson(request: IncomingMessage): Promise<unknown> {
+async function readJson(request: IncomingMessage, limit = BODY_MAX_BYTES): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request as AsyncIterable<Buffer>) {
     size += chunk.length;
-    if (size > BODY_MAX_BYTES) throw new HostError('failed', 'That request is too large.');
+    if (size > limit) throw new HostError('failed', 'That request is too large.');
     chunks.push(chunk);
   }
   try {
@@ -94,6 +101,21 @@ export function createHostServer(options: ServerOptions): Server {
         throw new HostError('failed', 'Send a workspaceId and a repoUrl (or null).');
       }
       send(response, 200, await options.host.create({ workspaceId, repoUrl }));
+      return;
+    }
+    const agentMatch = request.method === 'POST' ? AGENT_PATH.exec(path) : null;
+    if (agentMatch !== null) {
+      const ref = decodeURIComponent(agentMatch[1] ?? '');
+      const body = await readJson(request, AGENT_BODY_MAX_BYTES);
+      let parsed;
+      try {
+        parsed = parseAgentRequest(body);
+      } catch (error) {
+        if (!(error instanceof AgentProblem)) throw error;
+        send(response, 200, { ok: false, error: { code: error.code, message: error.message } });
+        return;
+      }
+      send(response, 200, await options.host.agent(ref, parsed));
       return;
     }
     const match = request.method === 'POST' ? ACTION_PATH.exec(path) : null;

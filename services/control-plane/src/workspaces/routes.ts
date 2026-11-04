@@ -13,7 +13,8 @@ import {
   type LifecycleProblem,
   type LifecycleResult,
 } from './lifecycle.js';
-import type { WorkspaceProvider } from './provider.js';
+import { WORKSPACES_UNAVAILABLE, type WorkspaceProvider } from './provider.js';
+import { fileRoutes } from './file-routes.js';
 
 export interface WorkspaceDependencies {
   readonly database: (databaseUrl: string) => Database;
@@ -23,8 +24,7 @@ export interface WorkspaceDependencies {
   readonly workspaceProvider: (env: SignedInEnv['Bindings']) => WorkspaceProvider | undefined;
 }
 
-export const WORKSPACES_UNAVAILABLE =
-  'Workspaces run locally for now. Open this project on your own computer with pnpm dev.';
+export { WORKSPACES_UNAVAILABLE } from './provider.js';
 
 const ACTIONS = {
   open: openWorkspace,
@@ -100,6 +100,8 @@ export function workspaceRoutes(deps: WorkspaceDependencies) {
       );
     });
   }
+
+  workspace.route('/', fileRoutes(deps));
 
   return workspace;
 }

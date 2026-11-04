@@ -94,7 +94,11 @@ describe('localHostProvider', () => {
     await provider.pause(REF);
     await provider.resume(REF);
     await provider.stop(REF);
-    expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual(
+    expect(
+      fetcher.mock.calls.map(([url]) =>
+        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url,
+      ),
+    ).toEqual(
       ['start', 'pause', 'resume', 'stop'].map(
         (action) => `${URL_}/v1/workspaces/${REF}/${action}`,
       ),
@@ -157,5 +161,23 @@ describe('localHostProvider', () => {
     const { provider } = host(() => json(500, {}));
     const error = await rejection(provider.stop(REF));
     expect(`${error.message} ${error.userMessage}`).not.toContain('CANARY');
+  });
+
+  it('asks the agent and checks its answer, with time for the command on top', async () => {
+    const answer = { ok: true, result: { protocol: 1, node: 'v24' } };
+    const { fetcher, provider } = host(() => json(200, answer));
+    expect(await provider.agent(REF, { op: 'hello' })).toEqual(answer);
+    const [url, init] = fetcher.mock.calls[0] ?? [];
+    expect(url).toBe(`${URL_}/v1/workspaces/${REF}/agent`);
+    expect(init?.body).toBe('{"op":"hello"}');
+
+    for (const nonsense of [
+      { ok: 'yes' },
+      { ok: false, error: { code: 'pwned', message: 'x' } },
+      {},
+    ]) {
+      const { provider: other } = host(() => json(200, nonsense));
+      expect(await rejection(other.agent(REF, { op: 'hello' }))).toMatchObject({ kind: 'failed' });
+    }
   });
 });
