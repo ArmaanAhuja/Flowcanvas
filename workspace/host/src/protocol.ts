@@ -36,6 +36,12 @@ export const PATHS = {
     `/${PROTOCOL_VERSION}/workspaces/${encodeURIComponent(ref)}/${action}`,
   /** Body: one AgentRequest (@flowcanvas/workspace-agent/protocol); answer: its AgentResponse, always 200. */
   agent: (ref: string) => `/${PROTOCOL_VERSION}/workspaces/${encodeURIComponent(ref)}/agent`,
+  /**
+   * A WebSocket (ADR 0017): binary frames are terminal bytes, text frames JSON control messages
+   * (`{ type: 'resize', cols, rows }` in; `{ type: 'exit', code }` and `{ type: 'error', message }` out).
+   */
+  terminal: (ref: string, cols: number, rows: number) =>
+    `/${PROTOCOL_VERSION}/workspaces/${encodeURIComponent(ref)}/terminal?cols=${String(cols)}&rows=${String(rows)}`,
 } as const;
 
 export function isHostErrorKind(value: unknown): value is HostErrorKind {

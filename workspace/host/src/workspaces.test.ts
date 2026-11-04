@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Agents, type StartAgent } from './agents.js';
 import { HostError } from './errors.js';
 import { FakeDocker } from './test/fake-docker.js';
-import { CLONE_TIMEOUT_MS, MESSAGES, WorkspaceHost } from './workspaces.js';
+import type { Engine } from './engine.js';
+import { CLONE_TIMEOUT_MS, MAX_TERMINALS, MESSAGES, WorkspaceHost } from './workspaces.js';
 
 const IMAGE = 'flowcanvas-workspace:0123456789ab';
 const REPO = 'https://github.com/ArmaanAhuja-7777/rallly';
@@ -14,6 +15,16 @@ let log: ReturnType<typeof vi.fn<(line: string) => void>>;
 let host: WorkspaceHost;
 let agentStarts: string[];
 let agentKills: number;
+let execBodies: unknown[];
+
+/** Records exec bodies and hands back a stream for each terminal. */
+const fakeEngine: Engine = {
+  json: (method, path, body) => {
+    if (method === 'POST' && path.endsWith('/exec')) execBodies.push(body);
+    return Promise.resolve({ status: 201, body: { Id: 'a'.repeat(64) } });
+  },
+  upgrade: () => Promise.resolve(new PassThrough()),
+};
 
 /** An agent that answers every request with a hello. */
 const fakeAgent: StartAgent = (ref) => {
@@ -47,12 +58,14 @@ beforeEach(() => {
   log = vi.fn<(line: string) => void>();
   agentStarts = [];
   agentKills = 0;
+  execBodies = [];
   host = new WorkspaceHost({
     docker: docker.run,
     prefix: 'fc',
     image: () => Promise.resolve(IMAGE),
     log,
     agents: new Agents(fakeAgent),
+    engine: fakeEngine,
   });
 });
 
@@ -316,5 +329,62 @@ describe('agent', () => {
     await host.stop(ref(1));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(agentKills).toBe(1);
+  });
+});
+
+describe('terminal', () => {
+  beforeEach(async () => {
+    await host.create({ workspaceId: id(1), repoUrl: REPO });
+  });
+
+  it('starts bash on a pty as the workspace user, in the project', async () => {
+    await host.terminal(ref(1), { cols: 100, rows: 30 });
+    expect(execBodies).toEqual([
+      expect.objectContaining({
+        Tty: true,
+        Cmd: ['bash', '-l'],
+        User: '1000:1000',
+        WorkingDir: '/workspace/project',
+        ConsoleSize: [30, 100],
+      }),
+    ]);
+  });
+
+  it('starts in /workspace when there is no project', async () => {
+    await host.create({ workspaceId: id(2), repoUrl: null });
+    await host.terminal(ref(2), { cols: 80, rows: 24 });
+    expect(execBodies).toEqual([expect.objectContaining({ WorkingDir: '/workspace' })]);
+  });
+
+  it(`allows ${String(MAX_TERMINALS)} at once, and another once one closes`, async () => {
+    const sessions = [];
+    for (let n = 0; n < MAX_TERMINALS; n += 1)
+      sessions.push(await host.terminal(ref(1), { cols: 80, rows: 24 }));
+    await expectHostError(
+      host.terminal(ref(1), { cols: 80, rows: 24 }),
+      'refused',
+      MESSAGES.tooManyTerminals,
+    );
+    sessions[0]?.stream.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await host.terminal(ref(1), { cols: 80, rows: 24 });
+  });
+
+  it('refuses a workspace that is asleep, stopped or not ours', async () => {
+    await host.pause(ref(1));
+    await expectHostError(
+      host.terminal(ref(1), { cols: 80, rows: 24 }),
+      'refused',
+      MESSAGES.asleep,
+    );
+    await host.resume(ref(1));
+    await host.stop(ref(1));
+    await expectHostError(
+      host.terminal(ref(1), { cols: 80, rows: 24 }),
+      'refused',
+      MESSAGES.notRunning,
+    );
+    await expectHostError(host.terminal('postgres', { cols: 80, rows: 24 }), 'gone');
+    expect(execBodies).toEqual([]);
   });
 });

@@ -47,7 +47,9 @@ const server = createHostServer({ host, token, port, log });
 // Another `pnpm dev` already has the port: step aside instead of taking this one down with a crash.
 server.on('error', (error: NodeJS.ErrnoException) => {
   if (error.code !== 'EADDRINUSE') throw error;
-  log(`Not started: port ${String(port)} is in use. Is pnpm dev already running in another terminal?`);
+  log(
+    `Not started: port ${String(port)} is in use. Is pnpm dev already running in another terminal?`,
+  );
   process.exit(0);
 });
 server.listen(port, '127.0.0.1', () => {

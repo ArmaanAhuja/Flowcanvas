@@ -24,10 +24,12 @@
   },
   "dependencies": {
     "@flowcanvas/workspace-agent": "workspace:*",
-    "@flowcanvas/workspace-image": "workspace:*"
+    "@flowcanvas/workspace-image": "workspace:*",
+    "ws": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/ws": "catalog:",
     "eslint": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",

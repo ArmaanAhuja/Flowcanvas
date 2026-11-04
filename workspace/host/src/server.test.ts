@@ -1,6 +1,8 @@
 import { request as httpRequest, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { Duplex } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { WebSocket } from 'ws';
 import { HostError } from './errors.js';
 import { PATHS } from './protocol.js';
 import { BODY_MAX_BYTES, createHostServer, type HostOperations } from './server.js';
@@ -13,6 +15,23 @@ let port: number;
 let calls: string[];
 let log: ReturnType<typeof vi.fn<(line: string) => void>>;
 let failWith: Error | undefined;
+let resizes: string[];
+let shell: Duplex | undefined;
+
+/** A fake shell that echoes what it's sent, and ends when sent 'exit'. */
+function echoShell(): Duplex {
+  const stream: Duplex = new Duplex({
+    read() {
+      // Pushed from write().
+    },
+    write(chunk: Buffer, _encoding, done) {
+      if (chunk.toString() === 'exit') stream.push(null);
+      else stream.push(Buffer.concat([Buffer.from('echo:'), chunk]));
+      done();
+    },
+  });
+  return stream;
+}
 
 const fake: HostOperations = {
   create: async (request) => {
@@ -37,6 +56,19 @@ const fake: HostOperations = {
     calls.push(`stop ${ref}`);
     return Promise.resolve();
   },
+  terminal: async (ref, size) => {
+    calls.push(`terminal ${ref} ${String(size.cols)}x${String(size.rows)}`);
+    if (failWith !== undefined) throw failWith;
+    shell = echoShell();
+    return Promise.resolve({
+      stream: shell,
+      resize: (cols, rows) => {
+        resizes.push(`${String(cols)}x${String(rows)}`);
+        return Promise.resolve();
+      },
+      exitCode: () => Promise.resolve(3),
+    });
+  },
   agent: async (ref, request) => {
     calls.push(`agent ${ref} ${JSON.stringify(request)}`);
     if (failWith !== undefined) throw failWith;
@@ -47,6 +79,8 @@ const fake: HostOperations = {
 beforeEach(async () => {
   calls = [];
   failWith = undefined;
+  resizes = [];
+  shell = undefined;
   log = vi.fn<(line: string) => void>();
   // Port 0 picks a free one; the server needs to know it to check the Host header, so it's started twice.
   const probe = createHostServer({ host: fake, token: TOKEN, port: 0, log });
@@ -190,6 +224,98 @@ describe('agent requests', () => {
     expect((await call('POST', PATHS.agent(REF), { body: ok })).status).toBe(200);
     const huge = JSON.stringify({ op: 'write', path: 'a', content: 'x'.repeat(3 * 1024 * 1024) });
     expect((await call('POST', PATHS.agent(REF), { body: huge })).status).toBe(422);
+  });
+});
+
+/** Opens a terminal WebSocket; resolves with the socket once open, or the refusal's status and body. */
+function terminal(
+  path = PATHS.terminal(REF, 80, 24),
+  headers: Record<string, string> = { authorization: `Bearer ${TOKEN}` },
+): Promise<WebSocket | { status: number; body: string }> {
+  return new Promise((resolve) => {
+    const socket = new WebSocket(`ws://127.0.0.1:${String(port)}${path}`, { headers });
+    socket.on('open', () => {
+      resolve(socket);
+    });
+    socket.on('unexpected-response', (_request, response) => {
+      let body = '';
+      response.on('data', (chunk: Buffer) => (body += chunk.toString()));
+      response.on('end', () => {
+        resolve({ status: response.statusCode ?? 0, body });
+      });
+    });
+  });
+}
+
+function next(socket: WebSocket): Promise<{ binary: boolean; text: string }> {
+  return new Promise((resolve) => {
+    socket.once('message', (data: Buffer, binary: boolean) => {
+      resolve({ binary, text: data.toString() });
+    });
+  });
+}
+
+describe('terminals', () => {
+  it('carries bytes both ways, resizes, and reports the exit code', async () => {
+    const socket = await terminal();
+    if (!(socket instanceof WebSocket)) throw new Error(`refused: ${socket.body}`);
+    expect(calls).toEqual([`terminal ${REF} 80x24`]);
+    socket.send(Buffer.from('ls'), { binary: true });
+    expect(await next(socket)).toEqual({ binary: true, text: 'echo:ls' });
+    socket.send(JSON.stringify({ type: 'resize', cols: 120, rows: 40 }));
+    await vi.waitFor(() => {
+      expect(resizes).toEqual(['120x40']);
+    });
+    const closed = new Promise((resolve) => socket.once('close', resolve));
+    socket.send(Buffer.from('exit'), { binary: true });
+    expect(await next(socket)).toEqual({ binary: false, text: '{"type":"exit","code":3}' });
+    await closed;
+  });
+
+  it('answers unknown control messages, and never treats them as input', async () => {
+    const socket = await terminal();
+    if (!(socket instanceof WebSocket)) throw new Error('refused');
+    for (const text of ['ls', '{"type":"resize","cols":9999,"rows":1}', '{"type":"exec"}']) {
+      socket.send(text);
+      expect(await next(socket)).toEqual({
+        binary: false,
+        text: '{"type":"error","message":"Unknown control message."}',
+      });
+    }
+    expect(resizes).toEqual([]);
+    socket.close();
+  });
+
+  it('hangs up the shell when the page goes away', async () => {
+    const socket = await terminal();
+    if (!(socket instanceof WebSocket)) throw new Error('refused');
+    socket.close();
+    await vi.waitFor(() => {
+      expect(shell?.destroyed).toBe(true);
+    });
+  });
+
+  it('checks the caller before accepting the WebSocket', async () => {
+    expect(await terminal(undefined, {})).toMatchObject({ status: 401 });
+    expect(
+      await terminal(undefined, {
+        authorization: `Bearer ${TOKEN}`,
+        origin: 'https://evil.example',
+      }),
+    ).toMatchObject({ status: 403 });
+    expect(await terminal(PATHS.terminal(REF, 9999, 24))).toMatchObject({ status: 404 });
+    expect(await terminal(`/v1/workspaces/${REF}/shell`)).toMatchObject({ status: 404 });
+    expect(calls).toEqual([]);
+  });
+
+  it("passes the host's refusal on, with its sentence", async () => {
+    failWith = new HostError('refused', 'This workspace is asleep. Resume it first.');
+    expect(await terminal()).toEqual({
+      status: 409,
+      body: JSON.stringify({
+        error: { kind: 'refused', message: 'This workspace is asleep. Resume it first.' },
+      }),
+    });
   });
 });
 

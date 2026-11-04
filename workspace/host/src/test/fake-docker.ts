@@ -137,7 +137,12 @@ export class FakeDocker {
     if (container.status !== 'running')
       throw new DockerFailure(1, `container ${name} is not running`);
     if (program === 'test') {
-      if (!container.files.has(argv.at(-1) ?? '')) throw new DockerFailure(1, '');
+      const path = argv.at(-1) ?? '';
+      // `test -d dir` is true when anything lives under it.
+      const found =
+        container.files.has(path) ||
+        [...container.files].some((file) => file.startsWith(`${path}/`));
+      if (!found) throw new DockerFailure(1, '');
       return '';
     }
     if (program === 'git') {

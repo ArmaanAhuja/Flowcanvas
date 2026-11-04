@@ -10,6 +10,10 @@ import { findObjects, remove } from './clean.js';
 import { dockerCli } from './docker-cli.js';
 import { HostError } from './errors.js';
 import { WorkspaceHost } from './workspaces.js';
+import type { AddressInfo } from 'node:net';
+import { WebSocket } from 'ws';
+import { PATHS } from './protocol.js';
+import { createHostServer } from './server.js';
 
 const run = promisify(execFile);
 const RALLLY = 'https://github.com/ArmaanAhuja-7777/rallly';
@@ -130,6 +134,50 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
       timeoutMs: 30_000,
     });
     expect(git).toMatchObject({ ok: true, result: { exitCode: 0 } });
+  });
+
+  it('gives a real shell over the WebSocket: input, output, resize and exit code', async () => {
+    const token = randomBytes(32).toString('hex');
+    const probe = createHostServer({ host, token, port: 0, log: () => undefined });
+    await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
+    const port = (probe.address() as AddressInfo).port;
+    await new Promise((resolve) => probe.close(resolve));
+    const server = createHostServer({ host, token, port, log: (line) => lines.push(line) });
+    await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
+    try {
+      const socket = new WebSocket(`ws://127.0.0.1:${String(port)}${PATHS.terminal(ref, 80, 24)}`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      let output = '';
+      let exit: unknown;
+      socket.on('message', (data: Buffer, binary: boolean) => {
+        if (binary) output += data.toString();
+        else exit = JSON.parse(data.toString());
+      });
+      await new Promise((resolve) => socket.once('open', resolve));
+      const until = async (text: string) => {
+        const started = Date.now();
+        while (!output.includes(text)) {
+          if (Date.now() - started > 15_000)
+            throw new Error(`no "${text}" in: ${output.slice(-500)}`);
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      };
+      socket.send(Buffer.from('echo answer-$((6*7)); whoami; pwd\r'), { binary: true });
+      await until('answer-42');
+      await until('/workspace/project');
+      expect(output).toContain('node');
+      socket.send(JSON.stringify({ type: 'resize', cols: 120, rows: 40 }));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      socket.send(Buffer.from('stty size\r'), { binary: true });
+      await until('40 120');
+      const closed = new Promise((resolve) => socket.once('close', resolve));
+      socket.send(Buffer.from('exit 3\r'), { binary: true });
+      await closed;
+      expect(exit).toEqual({ type: 'exit', code: 3 });
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 
   it('reaches GitHub only through the proxy, and nothing else at all', async () => {

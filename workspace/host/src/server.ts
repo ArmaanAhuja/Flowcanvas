@@ -4,6 +4,8 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { AgentProblem, LIMITS, parseAgentRequest } from '@flowcanvas/workspace-agent/protocol';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import type { Duplex } from 'node:stream';
+import { WebSocketServer } from 'ws';
 import { ERROR_STATUS, HostError } from './errors.js';
 import {
   ACTIONS,
@@ -13,12 +15,13 @@ import {
   type HostAction,
   type HostErrorBody,
 } from './protocol.js';
+import { TERMINAL_LIMITS, checkSize, relayTerminal } from './terminal.js';
 import type { WorkspaceHost } from './workspaces.js';
 
 /** The part of WorkspaceHost the server calls, so tests can pass a fake. */
 export type HostOperations = Pick<
   WorkspaceHost,
-  'create' | 'start' | 'pause' | 'resume' | 'stop' | 'agent'
+  'create' | 'start' | 'pause' | 'resume' | 'stop' | 'agent' | 'terminal'
 >;
 
 export interface ServerOptions {
@@ -33,6 +36,7 @@ export const BODY_MAX_BYTES = 4 * 1024;
 export const AGENT_BODY_MAX_BYTES = LIMITS.lineBytes;
 const ACTION_PATH = new RegExp(`^/${PROTOCOL_VERSION}/workspaces/([^/]+)/(${ACTIONS.join('|')})$`);
 const AGENT_PATH = new RegExp(`^/${PROTOCOL_VERSION}/workspaces/([^/]+)/agent$`);
+const TERMINAL_PATH = new RegExp(`^/${PROTOCOL_VERSION}/workspaces/([^/]+)/terminal$`);
 
 const digest = (value: string) => createHash('sha256').update(value).digest();
 
@@ -74,16 +78,25 @@ export function createHostServer(options: ServerOptions): Server {
     `localhost:${String(options.port)}`,
   ]);
 
-  async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
-    // A browser always sends Origin on a cross-site POST, and a DNS-rebinding page has someone else's Host.
+  /** Who may call: the token, and not a browser. Undefined when allowed, else the status and sentence. */
+  function refusal(request: IncomingMessage): { status: number; message: string } | undefined {
+    // A browser always sends Origin on a cross-site request (WebSockets too), and a DNS-rebinding page has
+    // someone else's Host.
     if (request.headers.origin !== undefined || !ownHosts.has(request.headers.host ?? '')) {
-      send(response, 403, { error: { kind: 'refused', message: 'Not from here.' } });
-      return;
+      return { status: 403, message: 'Not from here.' };
     }
     const given = /^Bearer (.+)$/.exec(request.headers.authorization ?? '')?.[1] ?? '';
     // Compared as fixed-length digests in constant time, so timing reveals nothing about the token.
     if (!timingSafeEqual(digest(given), expected)) {
-      send(response, 401, { error: { kind: 'refused', message: 'Wrong or missing token.' } });
+      return { status: 401, message: 'Wrong or missing token.' };
+    }
+    return undefined;
+  }
+
+  async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    const refused = refusal(request);
+    if (refused !== undefined) {
+      send(response, refused.status, { error: { kind: 'refused', message: refused.message } });
       return;
     }
 
@@ -129,7 +142,7 @@ export function createHostServer(options: ServerOptions): Server {
     send(response, 404, { error: { kind: 'failed', message: 'No such route.' } });
   }
 
-  return createServer((request, response) => {
+  const server = createServer((request, response) => {
     const started = Date.now();
     handle(request, response)
       .catch((error: unknown) => {
@@ -152,4 +165,57 @@ export function createHostServer(options: ServerOptions): Server {
         );
       });
   });
+
+  // Terminals (ADR 0017): the same checks as every other request, before the WebSocket is accepted.
+  const sockets = new WebSocketServer({ noServer: true, maxPayload: TERMINAL_LIMITS.frameBytes });
+  server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+    const answer = (status: number, kind: string, message: string) => {
+      const body = JSON.stringify({ error: { kind, message } });
+      socket.end(
+        `HTTP/1.1 ${String(status)} ${status === 401 ? 'Unauthorized' : 'Refused'}\r\n` +
+          `content-type: application/json\r\ncontent-length: ${String(Buffer.byteLength(body))}\r\n` +
+          `connection: close\r\n\r\n${body}`,
+      );
+    };
+    void (async () => {
+      const refused = refusal(request);
+      if (refused !== undefined) {
+        answer(refused.status, 'refused', refused.message);
+        return;
+      }
+      const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+      const match = TERMINAL_PATH.exec(url.pathname);
+      const size = checkSize(
+        Number(url.searchParams.get('cols')),
+        Number(url.searchParams.get('rows')),
+      );
+      if (match === null || size === undefined) {
+        answer(404, 'failed', 'No such route.');
+        return;
+      }
+      const ref = decodeURIComponent(match[1] ?? '');
+      let session;
+      try {
+        session = await options.host.terminal(ref, size);
+      } catch (error) {
+        const known = error instanceof HostError ? error : undefined;
+        if (known === undefined) options.log(`terminal failed to start: ${String(error)}`);
+        answer(
+          known === undefined ? 422 : ERROR_STATUS[known.kind],
+          known?.kind ?? 'failed',
+          known?.userMessage ?? 'The terminal could not be started.',
+        );
+        return;
+      }
+      sockets.handleUpgrade(request, socket, head, (webSocket) => {
+        options.log(`terminal opened for ${ref}`);
+        relayTerminal(webSocket, session, options.log);
+        webSocket.once('close', () => {
+          options.log(`terminal closed for ${ref}`);
+        });
+      });
+    })();
+  });
+
+  return server;
 }

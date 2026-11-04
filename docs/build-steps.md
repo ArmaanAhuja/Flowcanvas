@@ -9411,7 +9411,10 @@ browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0
 | 3 | `WorkspaceProvider` interface; lifecycle and states in the control plane, tested with a fake provider | done (Claude, 4 Nov) |
 | 4 | Local workspace host and Docker adapter; a minimal egress proxy (GitHub only); open a project: create the container and clone the repo; timed. Also the 2-workspace cap, `pnpm workspace:clean` and `pnpm workspace:resources` | done (Claude, 4 Nov) |
 | 5 | File and process API (the agent in the container): typed, versioned, owner only | done (Claude, 4 Nov) |
-| 6 | Terminal: Durable Object WebSocket gateway and xterm.js | *next* |
+| 6 | Terminal (ADR 0017), in three parts: | |
+| 6.1 | Terminal sessions on the host: a pty through Docker's API, a WebSocket endpoint | done (Claude, 4 Nov) |
+| 6.2 | The Worker's WebSocket relay (owner, origin, running checks) and the adapter; Vite forwards WebSockets | *next* |
+| 6.3 | The terminal on the page: xterm.js, token colours, the CSP shim; a walkthrough under the deployed CSP | *planned* |
 | 7 | Network rules: the egress proxy's full allowlist and address checks; limits; the isolation test | *planned* |
 | 8 | Sleep after 10 idle minutes and resume intact; usage metering writes workspace seconds | *planned* |
 | 8a | The resource guard: laptop pressure and Flowcanvas's budget checked every 30 s; refuse, sleep, stop, clean up (owner, 4 Nov) | *planned* |
@@ -9859,3 +9862,56 @@ pnpm workspace:clean      # removes test leftovers and old images ("Nothing to r
 - `503 "Add WORKSPACE_HOST_TOKEN…"`: the line is missing from `.dev.vars`, or `pnpm dev` was started before it was added. Restart `pnpm dev`.
 - `503 "Workspaces run locally for now"`: you're on staging; that's expected until a cloud provider is connected.
 - `503 "2 workspaces are already running…"`: put one to sleep or stop it (the laptop budget).
+
+### Step 1d.6 — The terminal (ADR 0017)
+
+Three checks came first (details in ADR 0017):
+1. Docker's Engine API gives a real pty that can be resized, with no native modules.
+2. A Worker under `wrangler dev` can relay a WebSocket to the host, provided both sides set `binaryType = 'arraybuffer'` (otherwise binary frames arrive as `Blob`s and go on as the text `[object Blob]`).
+3. xterm.js 6 injects `<style>` elements, which our CSP blocks. They're moved into constructed stylesheets instead of loosening the CSP.
+
+The Durable Object gateway is deferred to the cloud provider (upgrade-later 36): locally, the host already holds the session.
+
+#### 6.1 — Terminal sessions on the host (done by Claude)
+
+**Goal:** the workspace host can open a shell on a pty inside a running workspace, and carry it over a WebSocket with the same checks as its other routes.
+
+**Concepts:**
+- **A pty (pseudo-terminal)** is what makes a program believe it's talking to a terminal: line editing, colours, Ctrl-C, full-screen programs and a size. Docker can create one for an exec (`Tty: true`). The Engine API then switches the HTTP connection to a raw two-way stream, which is the terminal. https://docs.docker.com/reference/api/engine/version/v1.47/#tag/Exec
+- **The Docker Engine API over its Unix socket.** It's the same API the `docker` CLI uses. The CLI can't hand us a pty without a real terminal on its own side, so the host makes these few calls itself (`src/engine.ts`). Only checked names and fixed bodies go in.
+- **The WebSocket upgrade.** A WebSocket starts as an HTTP request with `Upgrade: websocket`. The host checks it like any other request (no `Origin`, the right `Host`, the token) *before* accepting it. A refusal is a plain HTTP answer with the usual JSON error. https://github.com/websockets/ws#multiple-servers-sharing-a-single-https-server
+- **The wire format.** Binary frames are terminal bytes; text frames are JSON control messages. Only `resize` goes in, and `exit` and `error` come out. Anything else is answered with an error and never typed into the shell.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `workspace/host/src/engine.ts` | The Engine API client: JSON calls and the upgraded stream, over `DOCKER_HOST` (when `unix://`) or `/var/run/docker.sock` |
+| `workspace/host/src/terminal.ts` | `openTerminal()`: `bash -l` as uid 1000, `TERM=xterm-256color`, the starting size, resize, exit code. `relayTerminal()`: bytes both ways in frames of at most 64 KiB, control messages, the exit message, hanging up the shell when the page goes away. `checkSize()` (2–500 columns, 2–200 rows) and `parseControl()` |
+| `workspace/host/src/workspaces.ts` | `WorkspaceHost.terminal()`: running only; works in `/workspace/project` (or `/workspace` without a repository); at most 4 per workspace |
+| `workspace/host/src/server.ts` | The upgrade handler for `GET /v1/workspaces/:ref/terminal?cols=&rows=` (`ws`, 64 KiB frames), sharing `refusal()` with the other routes |
+| `workspace/host/src/protocol.ts` | `PATHS.terminal()` |
+| `pnpm-workspace.yaml`, `workspace/host/package.json` | `ws` 8.21.0 (MIT, already in the tree through Wrangler) and `@types/ws` 8.18.2 |
+
+**Tests:**
+- **Server (7 new):** over real WebSockets, against an echoing fake shell: bytes both ways, resize, the exit code, unknown control messages answered and never typed, the shell hung up when the page closes, the caller checked before accepting (token, Origin, size, path), the host's refusal passed on.
+- **Host (4 new):** the exec settings (pty, bash, user, project folder, size), `/workspace` without a project, the cap of 4 and its release, asleep, stopped and foreign refused.
+- **Docker (1 new, 28 in total):** a real shell in the Rallly workspace through the real server: `answer-42`, `node`, `/workspace/project`, a resize seen by `stty size` (`40 120`), and `exit 3` reported as code 3.
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/workspace-host test     # 61 tests
+pnpm test:docker                                  # 28; includes the real shell
+```
+Nothing to click until 6.3.
+
+**Gotchas:**
+- **The fake Docker's `test -d` knew only exact paths,** so a cloned project didn't look like a folder. It now treats a path with anything under it as a folder.
+- **Closing a terminal's stream is how a shell hangs up.** No separate kill is needed. Docker closes the pty, and bash gets `SIGHUP`.
+
+**Risks:**
+- R1 and R7: the shell runs as the workspace user inside the same limits; 4 at most per workspace.
+- R6: the WebSocket gets the same token, Origin and Host checks as everything else.
+- **Laptop:** unchanged (all ok); no containers left after the tests.
+
+**Commit:** `feat(workspace): terminal sessions on the host through the Docker Engine API`

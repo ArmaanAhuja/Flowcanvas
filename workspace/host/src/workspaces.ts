@@ -13,6 +13,8 @@ import {
 import type { AgentRequest, AgentResponse } from '@flowcanvas/workspace-agent/protocol';
 import { Agents, dockerAgent } from './agents.js';
 import { DockerFailure, type Docker } from './docker-cli.js';
+import { socketEngine, type Engine } from './engine.js';
+import { openTerminal, type TerminalSession } from './terminal.js';
 import { HostError } from './errors.js';
 import type { CreateRequest, CreateResponse } from './protocol.js';
 
@@ -20,6 +22,8 @@ import type { CreateRequest, CreateResponse } from './protocol.js';
 export const MAX_RUNNING = 2;
 export const CLONE_TIMEOUT_MS = 120_000;
 export const PROJECT_DIR = '/workspace/project';
+/** Shells open at once in one workspace. */
+export const MAX_TERMINALS = 4;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // Public GitHub repositories only for now: the egress proxy allows nothing else (step 7 widens it).
@@ -35,6 +39,7 @@ export const MESSAGES = {
   gone: 'This workspace no longer exists on this computer.',
   asleep: 'This workspace is asleep. Resume it first.',
   notRunning: 'This workspace isn’t running. Open it first.',
+  tooManyTerminals: `This workspace already has ${String(MAX_TERMINALS)} terminals open. Close one first.`,
 } as const;
 
 const PROXY_SCRIPT = fileURLToPath(new URL('./egress/proxy.ts', import.meta.url));
@@ -53,16 +58,21 @@ export interface WorkspaceHostOptions {
   readonly limits?: Parameters<typeof runArgs>[0]['limits'];
   /** The agent connections; by default, the agent copied in and started with docker exec. */
   readonly agents?: Agents;
+  /** The Docker Engine API, for terminals (ADR 0017); by default, Docker's own socket. */
+  readonly engine?: Engine;
 }
 
 export class WorkspaceHost {
   readonly #options: WorkspaceHostOptions;
   readonly #locks = new Map<string, Promise<unknown>>();
   readonly #agents: Agents;
+  readonly #engine: Engine;
+  readonly #terminals = new Map<string, number>();
 
   constructor(options: WorkspaceHostOptions) {
     this.#options = options;
     this.#agents = options.agents ?? new Agents(dockerAgent(options.docker));
+    this.#engine = options.engine ?? socketEngine();
   }
 
   get #prefix() {
@@ -153,6 +163,39 @@ export class WorkspaceHost {
     if (state === 'paused') throw new HostError('refused', MESSAGES.asleep);
     if (state !== 'running') throw new HostError('refused', MESSAGES.notRunning);
     return this.#agents.call(ref, request);
+  }
+
+  /** A shell on a pty in a running workspace, in the project folder when there is one (ADR 0017). */
+  async terminal(ref: string, size: { cols: number; rows: number }): Promise<TerminalSession> {
+    const state = await this.#known(ref);
+    if (state === 'paused') throw new HostError('refused', MESSAGES.asleep);
+    if (state !== 'running') throw new HostError('refused', MESSAGES.notRunning);
+    const open = this.#terminals.get(ref) ?? 0;
+    if (open >= MAX_TERMINALS) throw new HostError('refused', MESSAGES.tooManyTerminals);
+    this.#terminals.set(ref, open + 1);
+    try {
+      const hasProject = await this.#docker(['exec', ref, 'test', '-d', PROJECT_DIR]).then(
+        () => true,
+        () => false,
+      );
+      const session = await openTerminal(this.#engine, ref, {
+        ...size,
+        cwd: hasProject ? PROJECT_DIR : '/workspace',
+      });
+      session.stream.once('close', () => {
+        this.#release(ref);
+      });
+      return session;
+    } catch (error) {
+      this.#release(ref);
+      throw error;
+    }
+  }
+
+  #release(ref: string): void {
+    const open = (this.#terminals.get(ref) ?? 1) - 1;
+    if (open <= 0) this.#terminals.delete(ref);
+    else this.#terminals.set(ref, open);
   }
 
   async stop(ref: string): Promise<void> {
