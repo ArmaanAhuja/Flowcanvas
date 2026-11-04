@@ -9408,8 +9408,8 @@ browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0
 | 0 | Docker on the dev machine: works without sudo (checked: Docker 29.9.2, cgroup v2, `hello-world` ran) | done (Claude, 4 Nov) |
 | 1 | Spike: the Worker in `wrangler dev` reaching a loopback host. Clone timing for Rallly; pause and resume intact; two containers on separate internal networks; how the host talks to the agent (`docker exec` stdio or the bridge address). ADR 0016 | done (Claude, 4 Nov) |
 | 2 | Workspace image (`workspace/image`): Node 24, pnpm, git, non-root user; CPU, memory, process and disk limits | done (Claude, 4 Nov) |
-| 3 | `WorkspaceProvider` interface; lifecycle and states in the control plane, tested with a fake provider | *next* |
-| 4 | Local workspace host and Docker adapter; a minimal egress proxy (GitHub only); open a project: create the container and clone the repo; timed. Also the 2-workspace cap, `pnpm workspace:clean` and `pnpm workspace:resources` | *planned* |
+| 3 | `WorkspaceProvider` interface; lifecycle and states in the control plane, tested with a fake provider | done (Claude, 4 Nov) |
+| 4 | Local workspace host and Docker adapter; a minimal egress proxy (GitHub only); open a project: create the container and clone the repo; timed. Also the 2-workspace cap, `pnpm workspace:clean` and `pnpm workspace:resources` | *next* |
 | 5 | File and process API (the agent in the container): typed, versioned, owner only | *planned* |
 | 6 | Terminal: Durable Object WebSocket gateway and xterm.js | *planned* |
 | 7 | Network rules: the egress proxy's full allowlist and address checks; limits; the isolation test | *planned* |
@@ -9578,3 +9578,84 @@ docker run --rm (docker images -q flowcanvas-workspace | head -1) sh -c 'node -v
 - The others are unchanged.
 
 **Commit:** `feat(workspace): workspace image, locked-down container settings and Docker tests`
+
+### Step 1d.3 — `WorkspaceProvider` and the lifecycle (done by Claude)
+
+**Goal:** the control plane knows each workspace's state and moves it safely between states. It does that through one interface that a Docker adapter (step 4) and, later, a cloud provider plug into. Tested with a fake provider, so no Docker is needed.
+
+**Concepts:**
+- **A state machine in the database.** The workspace's state lives in Postgres, and only a fixed set of moves is allowed (diagram in ARCHITECTURE, "Workspace lifecycle"). The page reads it, so it always shows the control plane's view, never a guess.
+- **Compare-and-set with a version number** (optimistic concurrency). Every change is `update … set state = $new, version = version + 1 where id = $id and version = $versionWeRead`. If two requests race, only one matches the version; the other gets no row back and answers 409. Neon's HTTP driver has no multi-statement transactions, so one-statement changes are how we stay correct. https://www.postgresql.org/docs/current/sql-update.html
+- **Calling something slow between two statements.** `open` first moves to `creating` (which claims the workspace), then calls the provider (seconds), then moves to `running`. A request that arrives in between sees `creating` and is told to wait. If the first request dies part-way, `creating` would stay forever, so after 5 minutes (`STUCK_MS`) opening again is allowed.
+- **Errors with a safe sentence.** A provider throws `ProviderError(kind, userMessage)`. The kind decides what happens to the state, and the message is what the page shows and the database stores. Anything else, such as a raw error that could quote a token or path, is replaced with a plain sentence. Only a redacted description goes to the log.
+- **Dependency injection for the provider.** `ApiDependencies.workspaceProvider(env)` decides what runs workspaces. Tests pass the fake; step 4 passes the Docker adapter when the local host is configured; staging passes nothing, and the API honestly says so.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `services/control-plane/migrations/0003_workspace_lifecycle.sql` | `provider`, `provider_ref`, `version`, `state_changed_at`, `running_since`, `last_active_at`, `failure` (≤ 300 characters); a check that `running_since` is set exactly while running; an index on running workspaces by last activity |
+| `src/workspaces/provider.ts` | `WorkspaceProvider` (`create`, `start`, `pause`, `resume`, `stop`; every method safe to call twice); `ProviderError` with kinds `unavailable`, `gone`, `refused`, `failed` |
+| `src/workspaces/lifecycle.ts` | `loadWorkspace`, `openWorkspace` (create, start again, or resume), `sleepWorkspace`, `resumeWorkspace`, `stopWorkspace`, `touchWorkspace`, `sleepIdleWorkspaces`; usage recorded on sleep and stop, split at month ends |
+| `src/workspaces/routes.ts` | `GET /api/projects/:id/workspace`; `POST …/open`, `/sleep`, `/resume`, `/stop` (same origin); statuses 409, 502 and 503 with the sentence to show; logs by IDs only |
+| `src/test/fake-provider.ts` | In-memory provider for tests: `failNext`, `holdNext` (to create races), `lose` |
+| `src/workspaces/lifecycle.test.ts` | 24 tests against real SQL (PGlite) with a test clock |
+| `src/workspaces/routes.test.ts` | 9 tests through the whole API |
+| `src/api/app.ts`, `src/projects/routes.ts`, `src/projects/projects.ts` | `workspaceProvider` dependency (none by default); routes mounted; `isUuid` shared |
+
+**What the tests prove:**
+- **Open:**
+  - first time: create with the repository
+  - already running: nothing more happens
+  - asleep: resume instead of creating another
+  - stopped: start again, same files
+  - stopped but lost by the provider: create again
+- **Failures:**
+  - a failed clone shows "failed" with its sentence, and can be tried again
+  - "host down" or "laptop busy" leaves the state as it was
+  - an unexpected error never reaches the page or the database (canary)
+- **Races:**
+  - a second open while the first is starting is refused, and only one create happens
+  - a crashed start can be taken over after 5 minutes
+  - two sleeps with the same stale view record usage only once
+- **Usage:**
+  - only running time counts (60 s, an hour asleep, then 30 s is 90 s)
+  - a run across midnight on 31 October is two records (60 s and 60 s)
+- **Sleep and resume:**
+  - resume when lost while asleep: "stopped", with a message saying the files are kept
+  - resume refused: stays asleep with the reason
+  - pause fails: stays running
+  - stop works from running or sleeping, and a lost one counts as stopped
+  - moves that make no sense are refused
+- **Idle:** asleep at exactly 10 idle minutes, counted from the last activity.
+- **Database:** the check constraint refuses "running" without a start time, and the reverse.
+- **Routes:**
+  - the whole cycle works
+  - with no provider, "Workspaces run locally for now"
+  - problems map to statuses
+  - checks for same origin, signed in and own project
+  - only the four actions exist
+  - the provider's name for the workspace never appears in a response
+  - log lines use IDs only
+
+**Run and check it:**
+```fish
+pnpm test                                                   # 395 tests; control-plane 171
+pnpm --filter @flowcanvas/control-plane exec vitest run src/workspaces   # the 33 new ones
+pnpm db:status                                              # dev branch: 0001–0003 applied
+```
+There's nothing to click yet. With no provider configured, `POST /api/projects/<id>/workspace/open` answers 503 "Workspaces run locally for now". Step 4 connects the local host.
+
+**Gotchas:**
+- **Hono's regex route parameters aren't anchored when mounted.** `/:action{open|sleep|resume|stop}` also matched `/open/extra` inside the full API (alone, it didn't). It's now four explicit routes, and the test checks `/open/extra` and `/xopen` are 404 with no provider call.
+- **Usage is written when a workspace stops running.** If the server died between the state change and the usage insert, that run would go uncounted (never overcounted). A very long active session is only counted when it sleeps; step 8 adds periodic records.
+- **Migration 0003 is on the dev branch only.** Staging's database gets it at phase close (after-merge checks).
+
+**Docs:** this write-up; ARCHITECTURE (data model, "Workspace lifecycle", the control plane's row); STATUS.
+
+**Risks:**
+- R8: the lifecycle is provider-neutral, so the cloud provider only adds an adapter.
+- The others are unchanged.
+- **Laptop:** 22 of 30 GiB available, 581 GB disk free, load 6.2 (tests running). Flowcanvas has one 559 MB image and no containers, volumes or networks.
+
+**Commit:** `feat(control-plane): workspace lifecycle behind WorkspaceProvider, migration 0003`

@@ -4,9 +4,10 @@ import { describeError } from '../api/redact.js';
 import { requireSameOrigin, requireUser, type SignedInEnv } from '../auth/guards.js';
 import type { Database } from '../db/database.js';
 import { secretRoutes } from '../vault/routes.js';
+import { workspaceRoutes, type WorkspaceDependencies } from '../workspaces/routes.js';
 import { createProject, listProjects, parseNewProject } from './projects.js';
 
-interface ProjectDependencies {
+interface ProjectDependencies extends WorkspaceDependencies {
   readonly database: (databaseUrl: string) => Database;
   readonly log: (message: string) => void;
 }
@@ -65,6 +66,7 @@ export function projectRoutes(deps: ProjectDependencies) {
   );
 
   projects.route('/:projectId/secrets', secretRoutes(deps));
+  projects.route('/:projectId/workspace', workspaceRoutes(deps));
 
   return projects;
 }

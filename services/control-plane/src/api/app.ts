@@ -5,6 +5,7 @@ import { authRoutes, type AuthBindings } from '../auth/routes.js';
 import { projectRoutes } from '../projects/routes.js';
 import { neonDatabase, type Database } from '../db/database.js';
 import { usageRoutes } from '../usage/routes.js';
+import type { WorkspaceProvider } from '../workspaces/provider.js';
 import { describeError, redact } from './redact.js';
 
 /** Values Cloudflare passes to the Worker: Worker secrets and `vars` on Cloudflare, `.dev.vars` under `wrangler dev`. */
@@ -17,6 +18,8 @@ export interface ApiDependencies {
   readonly fetch: typeof fetch;
   readonly now: () => number;
   readonly log: (message: string) => void;
+  /** What runs workspaces here; undefined means none can run (staging for now, ADR 0016). */
+  readonly workspaceProvider: (env: ApiBindings) => WorkspaceProvider | undefined;
 }
 
 const defaults: ApiDependencies = {
@@ -27,6 +30,8 @@ const defaults: ApiDependencies = {
   log: (message) => {
     console.error(message);
   },
+  // The local workspace host's adapter arrives in step 4; until then nothing runs workspaces.
+  workspaceProvider: () => undefined,
 };
 
 /** The control plane's HTTP API, mounted under /api in the app's Worker (decisions log, 30 Oct 2026). */

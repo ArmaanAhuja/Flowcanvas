@@ -1,6 +1,6 @@
 import type { Database } from '../db/database.js';
 
-/** The states a workspace record can be in (0001_initial.sql); only `not_created` until phase 1d. */
+/** The states a workspace record can be in (0001_initial.sql); the lifecycle is in src/workspaces/lifecycle.ts. */
 export type WorkspaceState =
   'not_created' | 'creating' | 'running' | 'sleeping' | 'resuming' | 'stopped' | 'failed';
 
@@ -128,13 +128,18 @@ export async function createProject(
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Checked before an ID reaches SQL: Postgres would fail the whole statement on a malformed uuid. */
+export function isUuid(value: string): boolean {
+  return UUID.test(value);
+}
+
 /** Whether this project exists and belongs to this person. Anything else, including a malformed ID, is "no". */
 export async function ownsProject(
   db: Database,
   projectId: string,
   ownerId: string,
 ): Promise<boolean> {
-  if (!UUID.test(projectId)) return false;
+  if (!isUuid(projectId)) return false;
   const rows = await db.query('select 1 from projects where id = $1 and owner_id = $2', [
     projectId,
     ownerId,

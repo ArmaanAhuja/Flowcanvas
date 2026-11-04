@@ -10,7 +10,7 @@ The system as it is **today** (end of phase 1b). Kept current at the end of ever
 | `@flowcanvas/ui` | `packages/ui` | The browser (consumed as source by Vite, ADR 0007) | Graphite components (Button, Tag, Input, Toggle, Tabs, Panel, Menu, Popover, Tooltip, Flow node), global styles, fonts, theme switching; Storybook catalogue |
 | `@flowcanvas/tokens` | `packages/tokens` | Shared (CSS and TypeScript) | Design tokens: DTCG source JSON → generated `css/tokens.css` and typed `vars` / `themeValues`; dark and light themes |
 | `@flowcanvas/figma-tokens` | `tools/figma-tokens` | Developer machine / build | Generator: DTCG token JSON (Figma variable export format) → CSS variables + TypeScript |
-| `@flowcanvas/control-plane` | `services/control-plane` | Inside the app's Cloudflare Worker under `/api` (ADR 0013); Neon Postgres | Hono API (`src/api/`): health, database ping, GitHub and Google sign-in, sessions, sign-out and the user/admin/same-origin guards (`src/auth/`), projects list and create (`src/projects/`), the secrets vault (`src/vault/`, ADR 0015); schema migrations and runner (`migrations/`, `src/db/`, ADR 0014). The earlier Fastify server was retired in phase 1c step 3 |
+| `@flowcanvas/control-plane` | `services/control-plane` | Inside the app's Cloudflare Worker under `/api` (ADR 0013); Neon Postgres | Hono API (`src/api/`): health, database ping, GitHub and Google sign-in, sessions, sign-out and the user/admin/same-origin guards (`src/auth/`), projects list and create (`src/projects/`), the secrets vault (`src/vault/`, ADR 0015), the workspace lifecycle and `WorkspaceProvider` (`src/workspaces/`); schema migrations and runner (`migrations/`, `src/db/`, ADR 0014). The earlier Fastify server was retired in phase 1c step 3 |
 | `@flowcanvas/graph-model` | `packages/graph-model` | Shared library (browser and Node) | `BuildInfo` type and `formatBuildInfo()`; becomes the flow graph model in phase 6 |
 | `@flowcanvas/engine` | `packages/engine` | Inside each user workspace (later) | Wired-in placeholder package; indexer arrives in phase 4 |
 | `@flowcanvas/workspace-image` | `workspace/image` | Developer machine (builds the image); used by the workspace host | The workspace image (`Dockerfile`: Node 24 by digest, pnpm, git, `node` user, telemetry off). Its tag is a hash of the Dockerfile. Also the locked-down `docker run` and network arguments, and the default limits (2 CPUs, 4 GiB, 1,024 processes, 1 GiB `/tmp`, 10 GiB disk measured) |
@@ -57,7 +57,7 @@ Defined by `services/control-plane/migrations/*.sql` (ADR 0014); applied with `p
 | `identities` | GitHub or Google account linked to a user | Unique per (provider, provider user id) |
 | `sessions` | SHA-256 hash of the session token, expiry | The token itself is never stored |
 | `projects` | Owner, trimmed name (unique per owner), optional repo URL | |
-| `workspaces` | One per project, created in the same statement as the project; state (not created … running, sleeping …) | Records only until phase 1d; migration 0002 backfilled older projects |
+| `workspaces` | One per project, created in the same statement as the project; state, provider and its name for the workspace, `version`, when the state changed, running since, last active, failure sentence | Migration 0002 backfilled older projects; 0003 added the lifecycle columns. `running_since` is set exactly while running (a check constraint) |
 | `project_keys` | Each project's data key, encrypted by a master key held in a Worker secret | Envelope encryption |
 | `project_secrets` | Secret values as AES-GCM ciphertext and IV; environment-variable-style names | Write-only; never returned |
 | `usage_records` | Measured amounts (workspace seconds, storage) over periods | Metering skeleton; each record sits within one UTC month |
@@ -192,6 +192,22 @@ browser ──► Worker /api ──HTTP 127.0.0.1 + token──► workspace ho
 - Sleep is `docker pause`; resume is `docker unpause` (about 50 ms each way, processes intact).
 - Containers run as uid 1000 with no capabilities, `no-new-privileges`, a read-only root filesystem, a 1 GiB `/tmp`, no logs and `--init` (`workspace/image/src/spec.ts`). Only the workspace volume can grow, and Docker can't cap it on every storage driver (not on btrfs), so the host measures it (step 8; upgrade-later 35).
 - Staging has no workspace host, so it shows "Workspaces run locally for now".
+
+## Workspace lifecycle (phase 1d, step 3)
+
+```
+not_created ─open─► creating ─► running ─sleep─► sleeping ─resume─► resuming ─► running
+stopped / failed ─open─► creating        running / sleeping ─stop─► stopped
+GET  /api/projects/:id/workspace                      ──► { workspace: { id, state, stateChangedAt, failure }, available }
+POST /api/projects/:id/workspace/{open,sleep,resume,stop}  (same origin) ──► { workspace } or { error, problem, workspace }
+```
+
+- `src/workspaces/lifecycle.ts` drives every change. Each one is a compare-and-set on `version`, so two requests at once can't both act; the loser gets 409 "changed in the meantime". The provider is called between two such statements.
+- `WorkspaceProvider` (`src/workspaces/provider.ts`): `create`, `start`, `pause`, `resume`, `stop`. Failures are `ProviderError`s whose kind maps to a status: `unavailable` and `refused` → 503 (left as it was), `failed` → 502 (state `failed`), `gone` → 409 (state `stopped`). Any other error becomes a plain sentence, and only a redacted description is logged.
+- The provider comes from `ApiDependencies.workspaceProvider(env)`. Undefined means none can run here (staging for now), and `open` answers "Workspaces run locally for now".
+- Usage: the time between `running_since` and sleep or stop is written to `usage_records`, split at month boundaries. Asleep costs nothing.
+- `sleepIdleWorkspaces()` puts workspaces idle for 10 minutes to sleep; `touchWorkspace()` records activity. Step 8 schedules them.
+- The page never sees the provider's own name for a workspace.
 
 ## Local development
 
