@@ -308,6 +308,8 @@ GitHub Actions never ran on `ArmaanAhuja-7777` because of the account billing lo
 
 ## 4 Nov 2026: phase 1d sandbox provider (owner decision)
 
+*Items 1 and 2 were superseded the same day by the next entry: E2B needed a payment, so workspaces run in local Docker containers for now.*
+
 1. **E2B is the managed sandbox provider** for cloud workspaces. Compared: E2B, Modal, Daytona and Vercel Sandbox (phase 1d overview). E2B is the only free option that fits all three Done-when items as written: Firecracker microVMs (isolation), pause and resume that keep memory and disk ("resumes intact"), and egress allow and deny lists. Alternatives and why not:
    - Modal: gVisor, and its snapshots restore disk only
    - Daytona: containers, and custom network rules only at a $500 tier
@@ -316,3 +318,12 @@ GitHub Actions never ran on `ArmaanAhuja-7777` because of the account billing lo
 3. **Contained:** everything goes through our own `WorkspaceProvider` interface, so a later switch (to another provider or our own fleet) doesn't touch the rest.
 4. **Risks R1–R7** of the phase plan (build-steps, phase 1d) are tracked at every step and closed in the phase report. The owner asked for them to be confirmed and kept in check.
 
+## 4 Nov 2026: local Docker workspaces for now; phase 1d closes "in review" (owner decision)
+
+1. **E2B needs a payment.** Its pricing page says "No credit card required to start", and the account showed the Hobby plan. But creating an API key asked for a $5 payment. Under the free-first rule, the owner chose not to pay for now.
+2. **Workspaces run in local Docker containers for now** (option C of three; the others were paying the $5, or switching to another provider that's free without a card). A small local workspace host (`workspace/host`, 127.0.0.1 only, token-protected) is the only thing that talks to Docker. It sits behind the same `WorkspaceProvider` interface a cloud provider will use. The cloud provider is chosen and connected later (upgrade-later 33).
+3. **What this costs:**
+   - Containers share the host's kernel, so they isolate less than the VMs the build plan asks for (risk R1, upgrade-later 34).
+   - Staging can't reach a laptop, so workspaces work locally only. Staging says "Workspaces run locally for now".
+4. **Phase 1d closes as "in review", not "accepted",** and phase 2 goes ahead. This is the owner's exception to the one-phase-at-a-time rule (CLAUDE.md rule 1). The *Done when* items are proven locally and in CI with Docker. Phase 1d is accepted once a cloud provider is connected and the same checks pass on staging.
+5. **Risks:** R1–R7 were rewritten for Docker, and R8 (the phase can't be fully accepted yet) was added (build-steps, phase 1d).

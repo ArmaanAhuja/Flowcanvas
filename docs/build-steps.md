@@ -9317,21 +9317,27 @@ pnpm --filter @flowcanvas/e2e report             # watch the recordings
 - **Try it:** open Rallly from its GitHub URL, run a command in the terminal, wait for sleep, then resume.
 - **Also here:** the "Open demo project" button, moved from 1b (decisions log, 29 Oct 2026).
 
-**Owner decision (4 Nov 2026, decisions log):** the managed sandbox provider is **E2B**: Firecracker microVMs, pause and resume that keep memory and disk, and egress allow and deny lists. Its free tier is a one-time $100 credit with no card (upgrade-later 33).
+**Owner decisions (4 Nov 2026, decisions log):**
+- **Workspaces run in local Docker containers for now.** The chosen cloud provider, E2B, turned out to need a $5 payment before it would issue an API key, so the cloud provider will be chosen and connected later (upgrade-later 33).
+- **When it closes, this phase goes to "in review", not "accepted",** and phase 2 goes ahead. The phase is accepted once a cloud provider is connected and the *Done when* checks pass on staging.
 
 **Why this phase matters:** everything after it runs inside these machines: the editor's files (phase 3), the analysis engine, live frames and the agents. It's also the first time the product runs code it didn't write, so isolation and limits come before features.
 
-**Expected outcome:**
-- On staging (and locally), a project has an **Open** button. It starts the project's own cloud machine and clones its repository in under 60 seconds.
-- A **terminal** in the page runs commands inside that machine.
-- A status chip says Starting, Running, Sleeping or Resuming (Figma 29). After 10 idle minutes the machine sleeps. **Resume** brings it back with files and running processes intact.
+**Why containers are only a stand-in:** a container shares the host's kernel, so it isolates less than a VM does. The build plan asks for VMs. Everything goes through our own `WorkspaceProvider` interface, so connecting a cloud provider later replaces one adapter and nothing else. Until then, the local setup gets as close as containers allow: a non-root user, dropped capabilities, Docker's seccomp profile, a network of its own for each workspace, and limits.
+
+**Expected outcome (locally, with `pnpm dev`):**
+- A project has an **Open** button. It starts the project's own container and clones its repository in under 60 seconds.
+- A **terminal** in the page runs commands inside that container.
+- A status chip says Starting, Running, Sleeping or Resuming (Figma 29). After 10 idle minutes the workspace sleeps (it's paused, with memory and processes frozen). **Resume** brings it back with files and running processes intact.
 - **Open demo project** opens Rallly in one click.
 - Tests prove that two workspaces can't reach each other, and that secrets never reach logs.
+- **On staging,** projects honestly say "Workspaces run locally for now" until a cloud provider is connected. Nothing is faked.
 
 **Concepts this phase introduces** (each gets a primer in its step):
-- MicroVMs and Firecracker: https://firecracker-microvm.github.io/
-- E2B sandboxes, templates, pause and resume, internet access: https://e2b.dev/docs
-- Egress rules (allow and deny lists, private ranges, cloud metadata addresses)
+- Containers vs VMs: namespaces, cgroups, seccomp, capabilities: https://docs.docker.com/engine/security/
+- The Docker Engine API, and why its socket is root-equivalent: https://docs.docker.com/engine/api/
+- `docker pause` and the cgroup freezer: https://docs.docker.com/reference/cli/docker/container/pause/
+- Internal networks and an egress proxy: https://docs.docker.com/engine/network/drivers/bridge/
 - WebSockets and Cloudflare Durable Objects: https://developers.cloudflare.com/durable-objects/
 - Terminals: ptys and xterm.js: https://xtermjs.org/
 
@@ -9343,83 +9349,78 @@ pnpm --filter @flowcanvas/e2e report             # watch the recordings
 
 **Scope:**
 - **In:**
-  - a provider behind our own `WorkspaceProvider` interface
+  - our own `WorkspaceProvider` interface, with a Docker adapter
+  - a **local workspace host** (`workspace/host`): a small Node service on 127.0.0.1, protected by a token, and the only thing that talks to Docker
   - the lifecycle in the control plane
   - clone; the file and process API; the terminal
-  - network rules; CPU, memory and time limits
+  - network rules; CPU, memory, process-count and time limits
   - sleep after 10 idle minutes, and resume
   - usage metering (`workspace_seconds`)
   - the status chip and cards; Open demo project
 - **Out:**
+  - a cloud sandbox provider (later, upgrade-later 33)
   - the editor (phase 3)
   - the app's dev server as a live frame (stage 2)
   - backups and restore history (18a)
   - agents in the workspace (stage 3)
   - project secrets as environment variables in the workspace: only if simple and safe here, otherwise a later phase, decided in step 5
 
+**How the pieces talk:**
+browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0.1, token) → Docker → workspace container (runs `workspace/agent`). The Worker never touches the Docker socket. The host accepts only a fixed set of operations: no image names, mounts or flags come from requests.
+
 ### Steps (planned)
 
 | # | Step | Status |
 | --- | --- | --- |
-| 0 | Owner: E2B account; API key in `.dev.vars` (staging's Worker secret comes at phase close) | *next* |
-| 1 | Spike: E2B from the Worker (SDK or HTTP), clone timing, pause and resume, egress rules, two-sandbox reachability; ADR 0016 | *planned* |
-| 2 | Workspace image (E2B template): Node 24, pnpm, git; CPU, memory and disk sizes | *planned* |
+| 0 | Docker on the dev machine: works without sudo (checked: Docker 29.9.2, cgroup v2, `hello-world` ran) | done (Claude, 4 Nov) |
+| 1 | Spike: the Worker in `wrangler dev` reaching a loopback host. Clone timing for Rallly; pause and resume intact; two containers on separate internal networks; how the host talks to the agent (`docker exec` stdio or the bridge address). ADR 0016 | *next* |
+| 2 | Workspace image (`workspace/image`): Node 24, pnpm, git, non-root user; CPU, memory, process and disk limits | *planned* |
 | 3 | `WorkspaceProvider` interface; lifecycle and states in the control plane, tested with a fake provider | *planned* |
-| 4 | Open a project: create the machine and clone the repo; timed | *planned* |
-| 5 | File and process API: typed, versioned, owner only | *planned* |
+| 4 | Local workspace host and Docker adapter; open a project: create the container and clone the repo; timed | *planned* |
+| 5 | File and process API (the agent in the container): typed, versioned, owner only | *planned* |
 | 6 | Terminal: Durable Object WebSocket gateway and xterm.js | *planned* |
-| 7 | Network rules and limits; the isolation test | *planned* |
+| 7 | Network rules (internal network plus an egress proxy with an allowlist) and limits; the isolation test | *planned* |
 | 8 | Sleep after 10 idle minutes and resume intact; usage metering writes workspace seconds | *planned* |
-| 9 | Status chip and cards (Figma 29); Open demo project (Rallly) | *planned* |
-| 10 | Security tests (canary secrets, isolation), walkthrough, performance timing | *planned* |
-| 11 | Close the phase (0.5.0): report, staging secrets and checks | *planned* |
+| 9 | Status chip and cards (Figma 29); Open demo project (Rallly); staging's "Workspaces run locally for now" | *planned* |
+| 10 | Security tests (canary secrets, isolation), walkthrough, timing; Docker tests in CI if the runners allow | *planned* |
+| 11 | Close the phase as **in review** (0.5.0): report, and what waits for the cloud provider | *planned* |
 
 ### How each Done-when item is proven
 
-| Item | Test |
-| --- | --- |
-| A fork clones and opens in under 60 s | A timed walkthrough opening Rallly on staging. Each real run records the time, and it fails above 60 s |
-| Sleeps after 10 idle minutes, resumes intact | Lifecycle tests with a fake clock and fake provider. A live test with a short idle limit: write a file, start a process, sleep, resume, check both. One real 10-minute run at phase close |
-| Workspaces can't reach each other | A live test starts two sandboxes. One tries the other's addresses and the private and metadata ranges, and every attempt must fail |
+| Item | Now (Docker, locally and in CI) | Waits for the cloud provider |
+| --- | --- | --- |
+| A fork clones and opens in under 60 s | A timed test opens Rallly. It records the time and fails above 60 s | The same test against staging |
+| Sleeps after 10 idle minutes, resumes intact | Lifecycle tests with a fake clock and fake provider. A Docker test with a short idle limit: write a file, start a process, sleep, resume, check both. One real 10-minute run at phase close | The same live test on the provider |
+| Workspaces can't reach each other | A Docker test starts two workspaces. One tries the other's address, the host and the private and metadata ranges, and every attempt must fail | Repeated on the provider, whose network differs |
 
 ### Risks and questions (checked at every step)
 
-Each step's write-up ends with a **Risks** line saying what changed. The phase report closes each one.
+Each step's write-up ends with a **Risks** line saying what changed. The phase report closes each one, or hands it to the provider step.
 
 | # | Risk or question | How we keep it in check | Status |
 | --- | --- | --- | --- |
-| R1 | **The free tier is a one-time $100 credit.** Careless tests could burn it | CI and unit tests use a fake provider. Real-machine tests run only on demand (`pnpm test:live`) and at phase close, with short timeouts and clean-up. Each live run prints the machine-seconds used. The owner glances at E2B's usage page at each step. Upgrade-later 33 holds the paid options | open: watched every step |
-| R2 | **Whether E2B's SDK runs inside a Cloudflare Worker** | The step 1 spike tries the SDK in `wrangler dev`. If it fails, we call E2B's HTTP API directly. Nothing is built on it before then | open: step 1 |
-| R3 | **"Can't reach each other" depends on E2B's network,** not only on our rules | Step 1 measures it with two real sandboxes. Step 7 adds deny rules for private and metadata ranges, and the live isolation test | open: steps 1 and 7 |
-| R4 | **The free plan limits sessions to 1 hour;** pause resets the clock | Workspaces sleep after 10 idle minutes anyway. Step 1 confirms that pause and resume reset the limit, and step 8 handles a machine that hit it (shown as "sleeping", never as lost) | open: steps 1 and 8 |
-| R5 | **Under 60 s for Rallly** depends on clone size and E2B's start time | Step 1 times a real clone. Shallow clones (`--depth 1`) and a prebuilt template keep it short. Dependencies install after "open", in the background, outside the 60 s | open: steps 1 and 4 |
-| R6 | **The E2B API key is powerful:** anyone with it can start machines on our credit | It lives only in Worker secrets and `.dev.vars`, never in the browser. The terminal goes through our gateway. Canary tests cover it like the other secrets | open: steps 0, 6, 10 |
-| R7 | **Untrusted code:** a cloned repo or a terminal user could mine crypto, or attack others | Resource and time limits (step 2), egress rules (step 7), sleep when idle (step 8), and only allowlisted people can open workspaces | open: steps 2, 7, 8 |
+| R1 | **Containers aren't VMs:** they share the host's kernel, so a kernel bug could let code escape | Non-root user, all capabilities dropped, `no-new-privileges`, Docker's seccomp profile, no Docker socket inside, limits. Only the owner uses it. A gVisor runtime is an optional hardening (upgrade-later 34). Real VMs come with the cloud provider | open: steps 2 and 7 |
+| R2 | **The Worker in `wrangler dev` has to reach the local host** | The step 1 spike checks it before anything is built on it. The fallback is calling the host from Vite's proxy | open: step 1 |
+| R3 | **"Can't reach each other" is now our job,** not a provider's | Each workspace gets its own internal network with no route out. The internet goes only through an egress proxy with an allowlist. Measured in step 1; the test comes in step 7 | open: steps 1 and 7 |
+| R4 | **`docker pause` keeps memory in use,** and a host restart loses paused processes | It's fine for a few local workspaces. After a restart, a workspace shows as stopped with its files kept (in a volume), never as lost. The cloud provider brings real snapshots | open: step 8 |
+| R5 | **Under 60 s for Rallly** depends on the clone and the home connection | Step 1 times a real clone. A shallow clone (`--depth 1`) and a prebuilt image keep it short. Dependencies install after "open", in the background, outside the 60 s | open: steps 1 and 4 |
+| R6 | **The Docker socket is root-equivalent,** so whatever drives it is powerful | Only the host touches it. The host listens on 127.0.0.1 only and needs a token (`WORKSPACE_HOST_TOKEN` in `.dev.vars`). It takes no image names, mounts or flags from requests. Canary tests cover the token | open: steps 1, 4 and 10 |
+| R7 | **Untrusted code runs on the owner's laptop:** a cloned repo or a terminal command could mine crypto or attack the home network | Limits (step 2); egress only through the proxy, with the home network and metadata ranges blocked (step 7); sleep when idle (step 8); only allowlisted people can open workspaces | open: steps 2, 7 and 8 |
+| R8 | **The phase can't be fully accepted yet:** the *Done when* items are proven locally, not on staging | The phase is "in review" in STATUS. Upgrade-later 33 holds the provider step, and the phase report lists exactly which checks wait for it. Later phases that need workspaces on staging say so in their plans | open: until the provider is connected |
 
-### Step 1d.0 — E2B account and API key (owner)
+### Step 1d.0 — Docker on the dev machine (done)
 
-**Goal:** an E2B account on the free tier, and its API key in local `.dev.vars`, so step 1 can start real sandboxes from `pnpm dev`. Staging's copy of the key is added at phase close, like phase 1c's secrets.
+**Goal:** Docker runs containers for the owner's user without sudo, so the local workspace host can use it.
+
+**Checked by Claude (4 Nov 2026):**
+- `docker version`: server 29.9.2
+- cgroup v2, with Docker's built-in seccomp profile
+- `docker run --rm hello-world`: printed "Hello from Docker!"
+- the user is in the `docker` group
 
 **Concepts:**
-- **An E2B team and API key.** The account belongs to a team; the key lets our server create and control sandboxes for that team, and uses its credit. It's a server-side secret, like the OAuth client secrets. https://e2b.dev/docs/api-key
-- **No card means no surprise bills.** Without a payment method, E2B stops when the free credit runs out instead of charging (R1).
+- **The `docker` group is root-equivalent.** Anyone who can use the Docker socket can start a container that mounts `/` and so control the machine. That's why only our host process talks to Docker, never the Worker or the browser (R6). https://docs.docker.com/engine/security/#docker-daemon-attack-surface
 
-**Owner steps:**
-1. Go to https://e2b.dev and sign up. Signing in with GitHub (`ArmaanAhuja`) is simplest. Don't add a payment method.
-2. In the dashboard, check the plan says **Hobby**, and that the usage or billing page shows the **$100 credit**.
-3. Open **API Keys** and create a key named `flowcanvas-local`. Copy it once and save it in the password manager.
-4. Add it to `.dev.vars` in your editor, as a new line `E2B_API_KEY=<the key>`. Never in a terminal command, chat or file in the repo. `.dev.vars` is git-ignored.
-5. Check, without showing it:
-   ```fish
-   grep -c '^E2B_API_KEY=e2b_' .dev.vars        # 1
-   ```
-   E2B keys start with `e2b_`; if this prints 0, check the line.
-6. Tell Claude it's done. Claude never reads the value; step 1 uses it through `.dev.vars`.
+**Earlier attempt:** the plan first used E2B, but creating an API key needed a $5 payment. The owner chose local Docker instead (decisions log, 4 Nov 2026). The `E2B_API_KEY` line was removed from `.dev.vars.example`. If one was added to `.dev.vars`, it can stay or go; nothing reads it.
 
-**Repo changes (Claude):** `.dev.vars.example` gains `E2B_API_KEY`. Upgrade-later 33: E2B's paid plan or our own fleet, with "credit low" as the trigger.
-
-**Gotchas:**
-- **One key per place.** Staging gets its own key at phase close (`flowcanvas-staging`), so either one can be revoked alone.
-- **The key can spend credit.** If it's ever pasted somewhere by mistake, delete it in the dashboard at once and make a new one.
-
-**Risks:** R1 and R6 start here; nothing else has changed.
+**Risks:** R1–R8 are set; nothing is built yet.
