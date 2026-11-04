@@ -4,47 +4,15 @@ import type { Duplex } from 'node:stream';
 import type { WebSocket } from 'ws';
 import type { Engine } from './engine.js';
 import { HostError } from './errors.js';
+import { TERMINAL_LIMITS, parseControl, type ServerControl } from './protocol.js';
 
-export const TERMINAL_LIMITS = {
-  cols: { min: 2, max: 500 },
-  rows: { min: 2, max: 200 },
-  /** Largest frame either way. Typing and pasting are far smaller; output is sent in chunks. */
-  frameBytes: 64 * 1024,
-} as const;
-
-/** Control messages, as JSON text frames. */
-export interface ClientControl {
-  readonly type: 'resize';
-  readonly cols: number;
-  readonly rows: number;
-}
-export type ServerControl =
-  | { readonly type: 'exit'; readonly code: number | null }
-  | { readonly type: 'error'; readonly message: string };
-
-export function checkSize(
-  cols: unknown,
-  rows: unknown,
-): { cols: number; rows: number } | undefined {
-  const fits = (value: unknown, range: { min: number; max: number }): value is number =>
-    typeof value === 'number' &&
-    Number.isInteger(value) &&
-    value >= range.min &&
-    value <= range.max;
-  return fits(cols, TERMINAL_LIMITS.cols) && fits(rows, TERMINAL_LIMITS.rows)
-    ? { cols, rows }
-    : undefined;
-}
-
-export function parseControl(text: string): ClientControl | undefined {
-  try {
-    const message = JSON.parse(text) as { type?: unknown; cols?: unknown; rows?: unknown };
-    const size = message.type === 'resize' ? checkSize(message.cols, message.rows) : undefined;
-    return size === undefined ? undefined : { type: 'resize', ...size };
-  } catch {
-    return undefined;
-  }
-}
+export {
+  TERMINAL_LIMITS,
+  checkSize,
+  parseControl,
+  type ClientControl,
+  type ServerControl,
+} from './protocol.js';
 
 export interface TerminalSession {
   readonly stream: Duplex;

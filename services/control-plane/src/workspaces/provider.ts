@@ -25,6 +25,21 @@ export interface WorkspaceProvider {
    * missing file, a .env file) come back as `{ ok: false }`; a ProviderError means it couldn't be asked.
    */
   agent(ref: string, request: AgentRequest): Promise<AgentResponse>;
+  /** A shell on a pty in a running workspace, as a WebSocket not yet accepted (ADR 0017). */
+  terminal(ref: string, size: { cols: number; rows: number }): Promise<TerminalSocket>;
+}
+
+/**
+ * The part of a Workers WebSocket the terminal relay uses, so tests can pass a fake. Binary frames are
+ * terminal bytes; text frames are JSON control messages (`@flowcanvas/workspace-host/protocol`).
+ */
+export interface TerminalSocket {
+  binaryType: string;
+  accept(): void;
+  send(data: string | ArrayBuffer): void;
+  close(code?: number, reason?: string): void;
+  addEventListener(type: 'message', listener: (event: { data: unknown }) => void): void;
+  addEventListener(type: 'close' | 'error', listener: () => void): void;
 }
 
 /** What the API says where nothing can run workspaces (staging, until a cloud provider is connected). */

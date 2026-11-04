@@ -9413,8 +9413,8 @@ browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0
 | 5 | File and process API (the agent in the container): typed, versioned, owner only | done (Claude, 4 Nov) |
 | 6 | Terminal (ADR 0017), in three parts: | |
 | 6.1 | Terminal sessions on the host: a pty through Docker's API, a WebSocket endpoint | done (Claude, 4 Nov) |
-| 6.2 | The Worker's WebSocket relay (owner, origin, running checks) and the adapter; Vite forwards WebSockets | *next* |
-| 6.3 | The terminal on the page: xterm.js, token colours, the CSP shim; a walkthrough under the deployed CSP | *planned* |
+| 6.2 | The Worker's WebSocket relay (owner, origin, running checks) and the adapter; Vite forwards WebSockets | done (Claude, 4 Nov) |
+| 6.3 | The terminal on the page: xterm.js, token colours, the CSP shim; a walkthrough under the deployed CSP | *next* |
 | 7 | Network rules: the egress proxy's full allowlist and address checks; limits; the isolation test | *planned* |
 | 8 | Sleep after 10 idle minutes and resume intact; usage metering writes workspace seconds | *planned* |
 | 8a | The resource guard: laptop pressure and Flowcanvas's budget checked every 30 s; refuse, sleep, stop, clean up (owner, 4 Nov) | *planned* |
@@ -9915,3 +9915,57 @@ Nothing to click until 6.3.
 - **Laptop:** unchanged (all ok); no containers left after the tests.
 
 **Commit:** `feat(workspace): terminal sessions on the host through the Docker Engine API`
+
+#### 6.2 — The Worker's WebSocket relay (done by Claude)
+
+**Goal:** the browser opens `wss://<app>/api/projects/:id/workspace/terminal`. The Worker checks who's asking, opens the terminal on the workspace host, and carries frames both ways.
+
+**Concepts:**
+- **WebSockets in Workers.** A Worker accepts a browser's WebSocket by creating a `WebSocketPair`. It returns one end in a `101 Switching Protocols` response and keeps the other. It opens a WebSocket *out* with an ordinary `fetch` and an `Upgrade: websocket` header, and the response's `webSocket` is the connection. Both ends need `accept()`. https://developers.cloudflare.com/workers/runtime-apis/websockets/
+- **`binaryType`.** With our compatibility date, a Worker receives binary frames as `Blob`s unless `binaryType` is `'arraybuffer'`. Sent on as is, a Blob becomes the text `[object Blob]`. The relay sets it on both ends, and a test checks it.
+- **Cross-site WebSocket hijacking.** WebSockets aren't covered by CORS: any site can open one to us, and the browser attaches the visitor's cookies. The only defence is checking `Origin` before accepting, which `requireSameOrigin` does here, exactly as for other changes. https://owasp.org/www-community/attacks/Cross-site_WebSocket_hijacking
+- **The relay only trusts one direction.** From the browser it passes byte frames of at most 64 KiB, and resize messages it re-checks and re-writes. Anything else gets an error message back and goes nowhere. From the workspace, everything comes back as it is.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `services/control-plane/src/workspaces/terminal-routes.ts` | `GET /api/projects/:id/workspace/terminal?cols=&rows=`: same origin, a WebSocket, a valid size, the owner, running, then `provider.terminal()`, `acceptWebSocket()` and `relay()`. Typing counts as activity at most every 30 s. Logs who opened it, never what's typed |
+| `services/control-plane/src/workspaces/provider.ts` | `terminal()` and the minimal `TerminalSocket` type, which both a Workers WebSocket and a test fake satisfy |
+| `services/control-plane/src/workspaces/local-host.ts` | The adapter's `terminal()`: an upgrade `fetch` with the token; the host's refusal passed on |
+| `services/control-plane/src/workspaces/routes.ts`, `src/api/app.ts` | The route mounted; `acceptWebSocket` injectable (`WebSocketPair` exists only in Workers) |
+| `workspace/host/src/protocol.ts` | `TERMINAL_LIMITS`, `checkSize`, `parseControl` moved here, so the Worker and the host apply the same rules |
+| `apps/web/vite.config.ts` | `ws: true`, so `pnpm dev` forwards the WebSocket to the Worker |
+| `services/control-plane/src/test/fake-provider.ts` | `FakeSocket`, and `terminal()` on the fake provider |
+| `services/control-plane/src/test/terminal-worker.ts`, `terminal-worker.wrangler.jsonc` | A test-only Worker with its own config, never deployed: the real relay and adapter in workerd, without sign-in |
+
+**Tests:**
+- **Relay (10, fake sockets):**
+  - connects at the right size, with both sides accepted and set to `arraybuffer`
+  - bytes both ways, and resizes re-checked and re-written
+  - nothing else from the browser goes on: plain text, bad sizes, other types, padded messages, frames over 64 KiB, non-frames
+  - either side closing closes both
+  - typing counts as activity at most every 30 s
+  - logs never include what's typed or shown (canary)
+  - the workspace's refusal is passed on
+  - refused before any WebSocket: not running, wrong origin, no session, not the owner, not a WebSocket, a bad size
+- **Adapter (2):** the upgrade request (path, size, token); refusals and an unreachable host.
+- **Docker (1 new, 29 in total):** the **real relay in workerd** (`wrangler dev` with the test Worker), against the real host and a real container: `relayed-42`, a resize seen by `stty` (`43 132`), and `exit 5` reported as code 5.
+
+**Run and check it:**
+```fish
+pnpm test          # 513 tests
+pnpm test:docker   # 29; includes the relay in workerd
+```
+The page part (6.3) comes next; then the terminal can be clicked.
+
+**Gotchas:**
+- **`wrangler dev` finds the nearest `wrangler.jsonc` by itself.** Started inside `services/control-plane` with a script path, it still used the repository's config. That config serves the app's files for everything outside `/api/*`, so the test's request got `index.html` and never reached the Worker. The test Worker has its own config now.
+- **Editing control-plane files reloads a running `pnpm dev`.** Wrangler watches them and restarts workerd (seen at 22:03, during this step). That's expected, and it doesn't affect the workspace host or Vite.
+
+**Risks:**
+- R6: the WebSocket is checked (origin, session, owner, running) before it's accepted.
+- R1 and R7: only bounded bytes and checked resizes reach the shell.
+- **Laptop:** unchanged; no test containers or processes left.
+
+**Commit:** `feat(control-plane): terminal WebSocket relay to the workspace host`

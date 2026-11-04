@@ -180,4 +180,35 @@ describe('localHostProvider', () => {
       expect(await rejection(other.agent(REF, { op: 'hello' }))).toMatchObject({ kind: 'failed' });
     }
   });
+
+  it('opens the terminal as a WebSocket upgrade, with the token, at its size', async () => {
+    const socket = { binaryType: 'blob' };
+    const { fetcher, provider } = host(
+      () => ({ status: 101, webSocket: socket }) as unknown as Response,
+    );
+    expect(await provider.terminal(REF, { cols: 100, rows: 30 })).toBe(socket);
+    const [url, init] = fetcher.mock.calls[0] ?? [];
+    expect(url).toBe(`${URL_}/v1/workspaces/${REF}/terminal?cols=100&rows=30`);
+    expect(init?.headers).toEqual({ upgrade: 'websocket', authorization: `Bearer ${TOKEN}` });
+  });
+
+  it("passes the host's refusal on when it won't upgrade", async () => {
+    const { provider } = host(() =>
+      json(409, {
+        error: { kind: 'refused', message: 'This workspace is asleep. Resume it first.' },
+      }),
+    );
+    expect(await rejection(provider.terminal(REF, { cols: 80, rows: 24 }))).toMatchObject({
+      kind: 'refused',
+      userMessage: 'This workspace is asleep. Resume it first.',
+    });
+    const down = localHostProvider({
+      url: URL_,
+      token: TOKEN,
+      fetch: () => Promise.reject(new TypeError('fetch failed')),
+    });
+    expect(await rejection(down.terminal(REF, { cols: 80, rows: 24 }))).toMatchObject({
+      kind: 'unavailable',
+    });
+  });
 });

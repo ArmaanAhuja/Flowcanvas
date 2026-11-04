@@ -4,6 +4,7 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -15,6 +16,7 @@ const prefix = `fc-test-${randomBytes(4).toString('hex')}`;
 const token = randomBytes(32).toString('hex');
 const hostDir = fileURLToPath(new URL('../../../../workspace/host/', import.meta.url));
 let child: ChildProcess;
+let hostUrl = '';
 let provider: WorkspaceProvider;
 let output = '';
 
@@ -49,8 +51,9 @@ beforeAll(async () => {
     if (Date.now() - started > 30_000) throw new Error(`host didn't start:\n${output}`);
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+  hostUrl = `http://127.0.0.1:${String(port)}`;
   const configured = localHostFromEnv(
-    { WORKSPACE_HOST_URL: `http://127.0.0.1:${String(port)}`, WORKSPACE_HOST_TOKEN: token },
+    { WORKSPACE_HOST_URL: hostUrl, WORKSPACE_HOST_TOKEN: token },
     (input, init) => fetch(input, init),
   );
   if (configured === undefined) throw new Error('no provider');
@@ -117,6 +120,78 @@ describe('the control plane driving the real workspace host', { timeout: 120_000
       kind: 'unavailable',
       userMessage: MESSAGES.noToken,
     });
+  });
+
+  it('relays a real shell through the Worker running in workerd', async () => {
+    const { ref } = await provider.create({ workspaceId: randomUUID(), repoUrl: null });
+    const port = await freePort();
+    const worker = spawn(
+      'pnpm',
+      [
+        'exec',
+        'wrangler',
+        'dev',
+        '--config',
+        'src/test/terminal-worker.wrangler.jsonc',
+        '--port',
+        String(port),
+        '--ip',
+        '127.0.0.1',
+        '--var',
+        `HOST_URL:${hostUrl}`,
+        '--var',
+        `HOST_TOKEN:${token}`,
+      ],
+      { cwd: fileURLToPath(new URL('../../', import.meta.url)), detached: true },
+    );
+    let log = '';
+    worker.stdout.on('data', (chunk: Buffer) => (log += chunk.toString()));
+    worker.stderr.on('data', (chunk: Buffer) => (log += chunk.toString()));
+    try {
+      const started = Date.now();
+      while (!log.includes('Ready on')) {
+        if (Date.now() - started > 60_000) throw new Error(`wrangler didn't start:\n${log}`);
+        await sleep(200);
+      }
+      const socket = new WebSocket(`ws://127.0.0.1:${String(port)}/?ref=${ref}`);
+      socket.binaryType = 'arraybuffer';
+      let output = '';
+      const controls: unknown[] = [];
+      socket.addEventListener('message', (event: MessageEvent) => {
+        if (typeof event.data === 'string') controls.push(JSON.parse(event.data));
+        else output += Buffer.from(event.data as ArrayBuffer).toString();
+      });
+      await new Promise((resolve, reject) => {
+        socket.addEventListener('open', resolve);
+        socket.addEventListener('error', () => {
+          reject(new Error(`the WebSocket didn't open; wrangler said:\n${log.slice(-2000)}`));
+        });
+      });
+      const until = async (text: string) => {
+        const begun = Date.now();
+        while (!output.includes(text)) {
+          if (Date.now() - begun > 15_000)
+            throw new Error(`no "${text}" in: ${output.slice(-300)}`);
+          await sleep(50);
+        }
+      };
+      // Bytes as a binary frame, the way xterm.js sends them; the reply comes back as bytes too.
+      socket.send(new TextEncoder().encode('echo relayed-$((40+2))\r'));
+      await until('relayed-42');
+      socket.send(JSON.stringify({ type: 'resize', cols: 132, rows: 43 }));
+      await sleep(200);
+      socket.send(new TextEncoder().encode('stty size\r'));
+      await until('43 132');
+      const closed = new Promise((resolve) => {
+        socket.addEventListener('close', resolve);
+      });
+      socket.send(new TextEncoder().encode('exit 5\r'));
+      await closed;
+      expect(controls).toContainEqual({ type: 'exit', code: 5 });
+    } finally {
+      if (worker.pid !== undefined) process.kill(-worker.pid, 'SIGTERM');
+      await provider.stop(ref).catch(() => undefined);
+    }
   });
 
   it('never printed the token', () => {

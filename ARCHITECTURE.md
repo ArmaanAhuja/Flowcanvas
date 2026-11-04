@@ -218,6 +218,17 @@ WorkspaceProvider.agent ──► host POST /v1/workspaces/:ref/agent ──► 
 - **Commands** run without a shell, from an argument list, in their own process group. They stop at their time limit, and each output is capped at 1 MiB. Long-running and interactive programs are the terminal's job (step 6).
 - **Logs** name the operation and the outcome only, never paths, content or commands.
 
+## Terminal (phase 1d, step 6, ADR 0017)
+
+```
+xterm.js ──wss /api/projects/:id/workspace/terminal?cols=&rows= (same origin; cookie)──► Worker relay
+         binary frames: bytes        text frames: JSON control (resize in; exit, error out)
+Worker   ──ws, bearer token──► host /v1/workspaces/:ref/terminal ──Engine API exec (Tty)──► bash -l (uid 1000)
+```
+
+- The Worker checks origin, session, owner and running before accepting, sets `binaryType = 'arraybuffer'` on both ends, passes only bounded bytes and re-checked resizes from the browser, and counts typing as activity (at most every 30 s).
+- The host opens the pty through the Docker Engine API on its Unix socket; at most 4 per workspace. Closing the WebSocket hangs up the shell. A Durable Object gateway (sessions that survive a reconnect) comes with the cloud provider (upgrade-later 36).
+
 ## Workspace lifecycle (phase 1d, step 3)
 
 ```

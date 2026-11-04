@@ -12,7 +12,7 @@ import {
   type AgentRequest,
   type AgentResponse,
 } from '@flowcanvas/workspace-agent/protocol';
-import { ProviderError, type WorkspaceProvider } from './provider.js';
+import { ProviderError, type TerminalSocket, type WorkspaceProvider } from './provider.js';
 
 export interface LocalHostBindings {
   readonly WORKSPACE_HOST_URL?: string;
@@ -58,6 +58,7 @@ function misconfigured(message: string): WorkspaceProvider {
     resume: refuse,
     stop: refuse,
     agent: refuse,
+    terminal: refuse,
   };
 }
 
@@ -131,6 +132,20 @@ export function localHostProvider(options: {
       // From inside the workspace: checked before anything is passed on.
       if (!isAgentResponse(body)) throw new ProviderError('failed', MESSAGES.unexpected);
       return body;
+    },
+    async terminal(ref, size) {
+      let response: Response;
+      try {
+        // Workers open an outgoing WebSocket with an ordinary fetch and an Upgrade header.
+        response = await options.fetch(`${base}${PATHS.terminal(ref, size.cols, size.rows)}`, {
+          headers: { upgrade: 'websocket', authorization: `Bearer ${options.token}` },
+        });
+      } catch {
+        throw new ProviderError('unavailable', MESSAGES.notRunning);
+      }
+      const socket = (response as Response & { webSocket?: TerminalSocket | null }).webSocket;
+      if (response.status === 101 && socket) return socket;
+      throw await hostError(response);
     },
   };
 }

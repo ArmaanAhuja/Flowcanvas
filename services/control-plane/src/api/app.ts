@@ -7,6 +7,7 @@ import { neonDatabase, type Database } from '../db/database.js';
 import { usageRoutes } from '../usage/routes.js';
 import { localHostFromEnv, type LocalHostBindings } from '../workspaces/local-host.js';
 import type { WorkspaceProvider } from '../workspaces/provider.js';
+import type { AcceptWebSocket } from '../workspaces/terminal-routes.js';
 import { describeError, redact } from './redact.js';
 
 /** Values Cloudflare passes to the Worker: Worker secrets and `vars` on Cloudflare, `.dev.vars` under `wrangler dev`. */
@@ -21,6 +22,8 @@ export interface ApiDependencies {
   readonly log: (message: string) => void;
   /** What runs workspaces here; undefined means none can run (staging for now, ADR 0016). */
   readonly workspaceProvider: (env: ApiBindings) => WorkspaceProvider | undefined;
+  /** Accepts a browser WebSocket (the terminal); tests pass a fake, since WebSocketPair exists only in Workers. */
+  readonly acceptWebSocket?: AcceptWebSocket;
 }
 
 const defaults: ApiDependencies = {

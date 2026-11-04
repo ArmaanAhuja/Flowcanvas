@@ -15,6 +15,7 @@ import {
 } from './lifecycle.js';
 import { WORKSPACES_UNAVAILABLE, type WorkspaceProvider } from './provider.js';
 import { fileRoutes } from './file-routes.js';
+import { terminalRoutes, workersAcceptWebSocket, type AcceptWebSocket } from './terminal-routes.js';
 
 export interface WorkspaceDependencies {
   readonly database: (databaseUrl: string) => Database;
@@ -22,6 +23,8 @@ export interface WorkspaceDependencies {
   readonly now: () => number;
   /** Undefined where nothing can run workspaces: staging, until a cloud provider is connected (ADR 0016). */
   readonly workspaceProvider: (env: SignedInEnv['Bindings']) => WorkspaceProvider | undefined;
+  /** Accepts a browser WebSocket; WebSocketPair on Workers, a fake in tests. */
+  readonly acceptWebSocket?: AcceptWebSocket;
 }
 
 export { WORKSPACES_UNAVAILABLE } from './provider.js';
@@ -102,6 +105,10 @@ export function workspaceRoutes(deps: WorkspaceDependencies) {
   }
 
   workspace.route('/', fileRoutes(deps));
+  workspace.route(
+    '/',
+    terminalRoutes({ ...deps, acceptWebSocket: deps.acceptWebSocket ?? workersAcceptWebSocket }),
+  );
 
   return workspace;
 }
