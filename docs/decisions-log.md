@@ -306,3 +306,13 @@ GitHub Actions never ran on `ArmaanAhuja-7777` because of the account billing lo
 5. **Done (2 Nov 2026):** `.dev.vars` now points at the `dev` branch (`ep-square-leaf…`), migrated with 0001 and 0002, owner allowed as admin. Local and staging no longer share a database.
 6. **Phase 1c accepted by the owner (2 Nov 2026).** The staging GitHub client secret wasn't rotated: the owner kept the stored one (upgrade-later 32).
 
+## 4 Nov 2026: phase 1d sandbox provider (owner decision)
+
+1. **E2B is the managed sandbox provider** for cloud workspaces. Compared: E2B, Modal, Daytona and Vercel Sandbox (phase 1d overview). E2B is the only free option that fits all three Done-when items as written: Firecracker microVMs (isolation), pause and resume that keep memory and disk ("resumes intact"), and egress allow and deny lists. Alternatives and why not:
+   - Modal: gVisor, and its snapshots restore disk only
+   - Daytona: containers, and custom network rules only at a $500 tier
+   - Vercel Sandbox: Hobby is non-commercial use only, with 45-minute sessions
+2. **Free first:** E2B Hobby's one-time $100 credit, with no payment method. Paid options and the trigger are in upgrade-later 33.
+3. **Contained:** everything goes through our own `WorkspaceProvider` interface, so a later switch (to another provider or our own fleet) doesn't touch the rest.
+4. **Risks R1–R7** of the phase plan (build-steps, phase 1d) are tracked at every step and closed in the phase report. The owner asked for them to be confirmed and kept in check.
+

@@ -9308,3 +9308,118 @@ pnpm --filter @flowcanvas/e2e report             # watch the recordings
    - Open the `GET /api/auth/callback/github` entry. If it shows `code=` or a `cookie` header, tell Claude: invocation logs get turned off in a follow-up PR.
 
 **Commit:** `chore: release 0.4.0, close phase 1c`
+
+## Phase 1d — Workspace sandbox
+
+**From the build plan:**
+- **Build:** one isolated virtual machine per project; clone a repo; file and process API; terminal in the browser; outbound network rules; resource limits; sleep when idle and resume.
+- **Done when:** a fork clones and opens in under 60 s; a workspace sleeps after 10 idle minutes and resumes intact; workspaces can't reach each other.
+- **Try it:** open Rallly from its GitHub URL, run a command in the terminal, wait for sleep, then resume.
+- **Also here:** the "Open demo project" button, moved from 1b (decisions log, 29 Oct 2026).
+
+**Owner decision (4 Nov 2026, decisions log):** the managed sandbox provider is **E2B**: Firecracker microVMs, pause and resume that keep memory and disk, and egress allow and deny lists. Its free tier is a one-time $100 credit with no card (upgrade-later 33).
+
+**Why this phase matters:** everything after it runs inside these machines: the editor's files (phase 3), the analysis engine, live frames and the agents. It's also the first time the product runs code it didn't write, so isolation and limits come before features.
+
+**Expected outcome:**
+- On staging (and locally), a project has an **Open** button. It starts the project's own cloud machine and clones its repository in under 60 seconds.
+- A **terminal** in the page runs commands inside that machine.
+- A status chip says Starting, Running, Sleeping or Resuming (Figma 29). After 10 idle minutes the machine sleeps. **Resume** brings it back with files and running processes intact.
+- **Open demo project** opens Rallly in one click.
+- Tests prove that two workspaces can't reach each other, and that secrets never reach logs.
+
+**Concepts this phase introduces** (each gets a primer in its step):
+- MicroVMs and Firecracker: https://firecracker-microvm.github.io/
+- E2B sandboxes, templates, pause and resume, internet access: https://e2b.dev/docs
+- Egress rules (allow and deny lists, private ranges, cloud metadata addresses)
+- WebSockets and Cloudflare Durable Objects: https://developers.cloudflare.com/durable-objects/
+- Terminals: ptys and xterm.js: https://xtermjs.org/
+
+**Design references:**
+- Figma 29, workspace status (chip, plus the Starting, Sleeping and Resuming cards).
+- Figma 18, terminal (minimal for now).
+- Design brief: "Cloud workspace screens (29–33)" and "18. Terminal and run manager".
+- They sit on the version page until the phase 2 app shell.
+
+**Scope:**
+- **In:**
+  - a provider behind our own `WorkspaceProvider` interface
+  - the lifecycle in the control plane
+  - clone; the file and process API; the terminal
+  - network rules; CPU, memory and time limits
+  - sleep after 10 idle minutes, and resume
+  - usage metering (`workspace_seconds`)
+  - the status chip and cards; Open demo project
+- **Out:**
+  - the editor (phase 3)
+  - the app's dev server as a live frame (stage 2)
+  - backups and restore history (18a)
+  - agents in the workspace (stage 3)
+  - project secrets as environment variables in the workspace: only if simple and safe here, otherwise a later phase, decided in step 5
+
+### Steps (planned)
+
+| # | Step | Status |
+| --- | --- | --- |
+| 0 | Owner: E2B account; API key in `.dev.vars` (staging's Worker secret comes at phase close) | *next* |
+| 1 | Spike: E2B from the Worker (SDK or HTTP), clone timing, pause and resume, egress rules, two-sandbox reachability; ADR 0016 | *planned* |
+| 2 | Workspace image (E2B template): Node 24, pnpm, git; CPU, memory and disk sizes | *planned* |
+| 3 | `WorkspaceProvider` interface; lifecycle and states in the control plane, tested with a fake provider | *planned* |
+| 4 | Open a project: create the machine and clone the repo; timed | *planned* |
+| 5 | File and process API: typed, versioned, owner only | *planned* |
+| 6 | Terminal: Durable Object WebSocket gateway and xterm.js | *planned* |
+| 7 | Network rules and limits; the isolation test | *planned* |
+| 8 | Sleep after 10 idle minutes and resume intact; usage metering writes workspace seconds | *planned* |
+| 9 | Status chip and cards (Figma 29); Open demo project (Rallly) | *planned* |
+| 10 | Security tests (canary secrets, isolation), walkthrough, performance timing | *planned* |
+| 11 | Close the phase (0.5.0): report, staging secrets and checks | *planned* |
+
+### How each Done-when item is proven
+
+| Item | Test |
+| --- | --- |
+| A fork clones and opens in under 60 s | A timed walkthrough opening Rallly on staging. Each real run records the time, and it fails above 60 s |
+| Sleeps after 10 idle minutes, resumes intact | Lifecycle tests with a fake clock and fake provider. A live test with a short idle limit: write a file, start a process, sleep, resume, check both. One real 10-minute run at phase close |
+| Workspaces can't reach each other | A live test starts two sandboxes. One tries the other's addresses and the private and metadata ranges, and every attempt must fail |
+
+### Risks and questions (checked at every step)
+
+Each step's write-up ends with a **Risks** line saying what changed. The phase report closes each one.
+
+| # | Risk or question | How we keep it in check | Status |
+| --- | --- | --- | --- |
+| R1 | **The free tier is a one-time $100 credit.** Careless tests could burn it | CI and unit tests use a fake provider. Real-machine tests run only on demand (`pnpm test:live`) and at phase close, with short timeouts and clean-up. Each live run prints the machine-seconds used. The owner glances at E2B's usage page at each step. Upgrade-later 33 holds the paid options | open: watched every step |
+| R2 | **Whether E2B's SDK runs inside a Cloudflare Worker** | The step 1 spike tries the SDK in `wrangler dev`. If it fails, we call E2B's HTTP API directly. Nothing is built on it before then | open: step 1 |
+| R3 | **"Can't reach each other" depends on E2B's network,** not only on our rules | Step 1 measures it with two real sandboxes. Step 7 adds deny rules for private and metadata ranges, and the live isolation test | open: steps 1 and 7 |
+| R4 | **The free plan limits sessions to 1 hour;** pause resets the clock | Workspaces sleep after 10 idle minutes anyway. Step 1 confirms that pause and resume reset the limit, and step 8 handles a machine that hit it (shown as "sleeping", never as lost) | open: steps 1 and 8 |
+| R5 | **Under 60 s for Rallly** depends on clone size and E2B's start time | Step 1 times a real clone. Shallow clones (`--depth 1`) and a prebuilt template keep it short. Dependencies install after "open", in the background, outside the 60 s | open: steps 1 and 4 |
+| R6 | **The E2B API key is powerful:** anyone with it can start machines on our credit | It lives only in Worker secrets and `.dev.vars`, never in the browser. The terminal goes through our gateway. Canary tests cover it like the other secrets | open: steps 0, 6, 10 |
+| R7 | **Untrusted code:** a cloned repo or a terminal user could mine crypto, or attack others | Resource and time limits (step 2), egress rules (step 7), sleep when idle (step 8), and only allowlisted people can open workspaces | open: steps 2, 7, 8 |
+
+### Step 1d.0 — E2B account and API key (owner)
+
+**Goal:** an E2B account on the free tier, and its API key in local `.dev.vars`, so step 1 can start real sandboxes from `pnpm dev`. Staging's copy of the key is added at phase close, like phase 1c's secrets.
+
+**Concepts:**
+- **An E2B team and API key.** The account belongs to a team; the key lets our server create and control sandboxes for that team, and uses its credit. It's a server-side secret, like the OAuth client secrets. https://e2b.dev/docs/api-key
+- **No card means no surprise bills.** Without a payment method, E2B stops when the free credit runs out instead of charging (R1).
+
+**Owner steps:**
+1. Go to https://e2b.dev and sign up. Signing in with GitHub (`ArmaanAhuja`) is simplest. Don't add a payment method.
+2. In the dashboard, check the plan says **Hobby**, and that the usage or billing page shows the **$100 credit**.
+3. Open **API Keys** and create a key named `flowcanvas-local`. Copy it once and save it in the password manager.
+4. Add it to `.dev.vars` in your editor, as a new line `E2B_API_KEY=<the key>`. Never in a terminal command, chat or file in the repo. `.dev.vars` is git-ignored.
+5. Check, without showing it:
+   ```fish
+   grep -c '^E2B_API_KEY=e2b_' .dev.vars        # 1
+   ```
+   E2B keys start with `e2b_`; if this prints 0, check the line.
+6. Tell Claude it's done. Claude never reads the value; step 1 uses it through `.dev.vars`.
+
+**Repo changes (Claude):** `.dev.vars.example` gains `E2B_API_KEY`. Upgrade-later 33: E2B's paid plan or our own fleet, with "credit low" as the trigger.
+
+**Gotchas:**
+- **One key per place.** Staging gets its own key at phase close (`flowcanvas-staging`), so either one can be revoked alone.
+- **The key can spend credit.** If it's ever pasted somewhere by mistake, delete it in the dashboard at once and make a new one.
+
+**Risks:** R1 and R6 start here; nothing else has changed.
