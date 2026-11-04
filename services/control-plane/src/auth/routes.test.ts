@@ -5,6 +5,7 @@ import { createApi } from '../api/app.js';
 import type { Database } from '../db/database.js';
 import { migratedDatabase } from '../test/database.js';
 import { pkceChallenge } from './crypto.js';
+import { maskEmail } from './routes.js';
 
 const APP = 'https://flowcanvas.example.workers.dev';
 const PREVIEW = 'https://phase-x-flowcanvas.example.workers.dev';
@@ -254,7 +255,10 @@ describe('GitHub sign-in', () => {
       `code=${CODE}&state=${state}`,
       `__Host-fc_oauth=${oauthCookie}`,
     );
-    expect(response.headers.get('location')).toBe('/?sign-in=not-allowed');
+    // Which account was refused, masked: the whole address never goes into a URL.
+    expect(response.headers.get('location')).toBe(
+      '/?sign-in=not-allowed&as=ma%E2%80%A6%40example.com',
+    );
     expect(cookies(response).values.has('__Host-fc_session')).toBe(false);
   });
 
@@ -357,7 +361,9 @@ describe('Google sign-in', () => {
 
   it('turns away a Google account whose email isn’t on the allowlist', async () => {
     googleUserinfo = { ...googleUserinfo, email: 'mallory@example.com' };
-    expect((await googleSignIn()).headers.get('location')).toBe('/?sign-in=not-allowed');
+    expect((await googleSignIn()).headers.get('location')).toBe(
+      '/?sign-in=not-allowed&as=ma%E2%80%A6%40example.com',
+    );
   });
 
   it('refuses a callback for a different provider than the one the sign-in started with', async () => {
@@ -402,5 +408,14 @@ describe('sign out', () => {
     expect(response.status).toBe(204);
     expect(cookies(response).raw[0]).toMatch(/^__Host-fc_session=; Max-Age=0/);
     expect((await me(session)).body.user).toBeNull();
+  });
+});
+
+describe('maskEmail', () => {
+  it('keeps two characters of the name and the whole domain', () => {
+    expect(maskEmail('mallory@example.com')).toBe('ma…@example.com');
+    expect(maskEmail('a@b.co')).toBe('a…@b.co');
+    expect(maskEmail('प्रिया@example.in')).toBe('प्…@example.in');
+    expect(maskEmail('not-an-email')).toBe('…');
   });
 });

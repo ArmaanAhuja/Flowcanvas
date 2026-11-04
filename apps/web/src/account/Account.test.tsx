@@ -110,6 +110,28 @@ describe('Account', () => {
     await screen.findByRole('link', { name: 'Sign in with GitHub' });
   });
 
+  it('says which account was refused, from the masked hint, and only a well-formed one', async () => {
+    window.history.replaceState(null, '', '/?sign-in=not-allowed&as=ex%E2%80%A6%40example.org');
+    const fake = api(() =>
+      Response.json({ user: null, signIn: 'available', providers: ['github'] }),
+    );
+    const { unmount } = renderAccount(fake);
+    expect(screen.getByRole('status').textContent).toMatch(
+      /allowlist yet\. Ask the admin to add it\. It was checked as ex…@example\.org\.$/,
+    );
+    expect(window.location.search).toBe('');
+    await screen.findByRole('link', { name: 'Sign in with GitHub' });
+    unmount();
+    window.history.replaceState(
+      null,
+      '',
+      '/?sign-in=not-allowed&as=Click%20here%3A%20evil.example',
+    );
+    renderAccount(fake);
+    expect(screen.getByRole('status').textContent).toMatch(/Ask the admin to add it\.$/);
+    await screen.findByRole('link', { name: 'Sign in with GitHub' });
+  });
+
   it('treats an unknown problem code as a generic failure, never echoing it', async () => {
     window.history.replaceState(null, '', '/?sign-in=%3Cscript%3E');
     renderAccount(

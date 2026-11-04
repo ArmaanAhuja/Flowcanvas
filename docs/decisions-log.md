@@ -338,3 +338,9 @@ GitHub Actions never ran on `ArmaanAhuja-7777` because of the account billing lo
 
    Under pressure it refuses new starts, then puts idle workspaces to sleep, then stops the least recently used ones (files kept), then removes unneeded Flowcanvas images, containers and orphaned volumes. It never touches anything that isn't Flowcanvas's.
 3. **Claude checks the laptop's resources at every step** and reports them in the step's Risks line (risk R9).
+
+## 4 Nov 2026: sign-in refused locally after the move to the dev database
+
+1. **What happened.** Signing in on `localhost:5173` said the account wasn't on the allowlist. The dev database's allowlist had one entry (the owner, as admin), and no account had ever signed in there. GitHub sign-in checks the GitHub account's **primary verified email**. The browser was signed in to a GitHub account whose primary email is a different one of the owner's addresses. On production both of the owner's addresses were allowed; when local development moved to the `dev` branch (2 Nov), only one was added.
+2. **Fix for the owner:** allow the other address on the dev database with `pnpm db:allow <email> --admin` (it prints the database host, which should be the `dev` branch's). Or sign in with Google, or with the GitHub account whose primary email is the allowed one.
+3. **So it can't be a mystery again:** the refusal now says which account was checked, masked (for example `It was checked as ma…@example.com.`). The API adds `as=<masked>` to the redirect, never the whole address; the page shows it only if it matches the masked pattern.
