@@ -13,7 +13,7 @@ The system as it is **today** (end of phase 1b). Kept current at the end of ever
 | `@flowcanvas/control-plane` | `services/control-plane` | Inside the app's Cloudflare Worker under `/api` (ADR 0013); Neon Postgres | Hono API (`src/api/`): health, database ping, GitHub and Google sign-in, sessions, sign-out and the user/admin/same-origin guards (`src/auth/`), projects list and create (`src/projects/`), the secrets vault (`src/vault/`, ADR 0015); schema migrations and runner (`migrations/`, `src/db/`, ADR 0014). The earlier Fastify server was retired in phase 1c step 3 |
 | `@flowcanvas/graph-model` | `packages/graph-model` | Shared library (browser and Node) | `BuildInfo` type and `formatBuildInfo()`; becomes the flow graph model in phase 6 |
 | `@flowcanvas/engine` | `packages/engine` | Inside each user workspace (later) | Wired-in placeholder package; indexer arrives in phase 4 |
-| `@flowcanvas/workspace-agent` | `workspace/agent` | Inside each user workspace VM (later) | Wired-in placeholder package; daemon arrives in phase 1d |
+| `@flowcanvas/workspace-agent` | `workspace/agent` | Inside each workspace (a local Docker container for now, ADR 0016) | Wired-in placeholder package; the agent arrives in phase 1d (step 5) |
 | `@flowcanvas/corpus` | `corpus` | Developer machine / CI | The test corpus: six public forks pinned in `manifest.json`; `pnpm corpus:check` verifies fork, commit, licence and stack through the GitHub API |
 | `@flowcanvas/e2e` | `e2e` | Developer machine / CI | Playwright: one recorded walkthrough per phase (`try-it/`, video and trace) against any URL; visual tests (catalogue baselines in both themes, axe) |
 
@@ -172,6 +172,24 @@ DELETE /api/admin/allowlist/:email   ──► remove, and end that person's ses
 ```
 
 Every route runs `requireUser` then `requireAdmin`; changes also need `requireSameOrigin`. An admin can't demote or remove themselves (409), so the allowlist can't be left without an admin by accident. Changes are logged by the acting admin's user ID, never by email. `pnpm db:allow` still works for the first admin, before anyone can sign in.
+
+## Workspaces (phase 1d, ADR 0016)
+
+For now, workspaces are local Docker containers. A cloud provider replaces the adapter later (upgrade-later 33).
+
+```
+browser ──► Worker /api ──HTTP 127.0.0.1 + token──► workspace host (workspace/host) ──► Docker
+                                                        │ docker exec -i (JSON lines)
+                                                        ▼
+                                  container: our image, non-root, no capabilities, limits
+                                  network: own --internal net, isolated gateway mode (Docker 28+)
+                                  internet: only via the egress proxy (allowlist)
+                                  files: one named volume per workspace
+```
+
+- The control plane sees only `WorkspaceProvider`. The workspace host is the only code that touches Docker, and it takes no image, mount or flag from a request.
+- Sleep is `docker pause`; resume is `docker unpause` (about 50 ms each way, processes intact).
+- Staging has no workspace host, so it shows "Workspaces run locally for now".
 
 ## Local development
 

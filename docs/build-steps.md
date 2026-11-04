@@ -9373,13 +9373,13 @@ browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0
 | # | Step | Status |
 | --- | --- | --- |
 | 0 | Docker on the dev machine: works without sudo (checked: Docker 29.9.2, cgroup v2, `hello-world` ran) | done (Claude, 4 Nov) |
-| 1 | Spike: the Worker in `wrangler dev` reaching a loopback host. Clone timing for Rallly; pause and resume intact; two containers on separate internal networks; how the host talks to the agent (`docker exec` stdio or the bridge address). ADR 0016 | *next* |
-| 2 | Workspace image (`workspace/image`): Node 24, pnpm, git, non-root user; CPU, memory, process and disk limits | *planned* |
+| 1 | Spike: the Worker in `wrangler dev` reaching a loopback host. Clone timing for Rallly; pause and resume intact; two containers on separate internal networks; how the host talks to the agent (`docker exec` stdio or the bridge address). ADR 0016 | done (Claude, 4 Nov) |
+| 2 | Workspace image (`workspace/image`): Node 24, pnpm, git, non-root user; CPU, memory, process and disk limits | *next* |
 | 3 | `WorkspaceProvider` interface; lifecycle and states in the control plane, tested with a fake provider | *planned* |
-| 4 | Local workspace host and Docker adapter; open a project: create the container and clone the repo; timed | *planned* |
+| 4 | Local workspace host and Docker adapter; a minimal egress proxy (GitHub only); open a project: create the container and clone the repo; timed | *planned* |
 | 5 | File and process API (the agent in the container): typed, versioned, owner only | *planned* |
 | 6 | Terminal: Durable Object WebSocket gateway and xterm.js | *planned* |
-| 7 | Network rules (internal network plus an egress proxy with an allowlist) and limits; the isolation test | *planned* |
+| 7 | Network rules: the egress proxy's full allowlist and address checks; limits; the isolation test | *planned* |
 | 8 | Sleep after 10 idle minutes and resume intact; usage metering writes workspace seconds | *planned* |
 | 9 | Status chip and cards (Figma 29); Open demo project (Rallly); staging's "Workspaces run locally for now" | *planned* |
 | 10 | Security tests (canary secrets, isolation), walkthrough, timing; Docker tests in CI if the runners allow | *planned* |
@@ -9399,12 +9399,12 @@ Each step's write-up ends with a **Risks** line saying what changed. The phase r
 
 | # | Risk or question | How we keep it in check | Status |
 | --- | --- | --- | --- |
-| R1 | **Containers aren't VMs:** they share the host's kernel, so a kernel bug could let code escape | Non-root user, all capabilities dropped, `no-new-privileges`, Docker's seccomp profile, no Docker socket inside, limits. Only the owner uses it. A gVisor runtime is an optional hardening (upgrade-later 34). Real VMs come with the cloud provider | open: steps 2 and 7 |
-| R2 | **The Worker in `wrangler dev` has to reach the local host** | The step 1 spike checks it before anything is built on it. The fallback is calling the host from Vite's proxy | open: step 1 |
-| R3 | **"Can't reach each other" is now our job,** not a provider's | Each workspace gets its own internal network with no route out. The internet goes only through an egress proxy with an allowlist. Measured in step 1; the test comes in step 7 | open: steps 1 and 7 |
-| R4 | **`docker pause` keeps memory in use,** and a host restart loses paused processes | It's fine for a few local workspaces. After a restart, a workspace shows as stopped with its files kept (in a volume), never as lost. The cloud provider brings real snapshots | open: step 8 |
-| R5 | **Under 60 s for Rallly** depends on the clone and the home connection | Step 1 times a real clone. A shallow clone (`--depth 1`) and a prebuilt image keep it short. Dependencies install after "open", in the background, outside the 60 s | open: steps 1 and 4 |
-| R6 | **The Docker socket is root-equivalent,** so whatever drives it is powerful | Only the host touches it. The host listens on 127.0.0.1 only and needs a token (`WORKSPACE_HOST_TOKEN` in `.dev.vars`). It takes no image names, mounts or flags from requests. Canary tests cover the token | open: steps 1, 4 and 10 |
+| R1 | **Containers aren't VMs:** they share the host's kernel, so a kernel bug could let code escape | Non-root user, all capabilities dropped, `no-new-privileges`, Docker's seccomp profile, no Docker socket inside, limits. Only the owner uses it. A gVisor runtime is an optional hardening (upgrade-later 34). Real VMs come with the cloud provider | open: steps 2 and 7. Step 1: the locked-down flags (`--cap-drop ALL`, `no-new-privileges`, `--pids-limit`) didn't get in the way of git |
+| R2 | **The Worker in `wrangler dev` has to reach the local host** | The step 1 spike checks it before anything is built on it. The fallback is calling the host from Vite's proxy | **closed (step 1):** works, 3–4 ms per call |
+| R3 | **"Can't reach each other" is now our job,** not a provider's | Each workspace gets its own internal network with no route out. The internet goes only through an egress proxy with an allowlist. Measured in step 1; the test comes in step 7 | open: step 7. **Step 1:** internal networks alone still let a container reach the host. The isolated gateway mode (Docker 28+) closes that, and is now required (ADR 0016) |
+| R4 | **`docker pause` keeps memory in use,** and a host restart loses paused processes | It's fine for a few local workspaces. After a restart, a workspace shows as stopped with its files kept (in a volume), never as lost. The cloud provider brings real snapshots | open: step 8. **Step 1:** pause and resume take about 50 ms each way; the same process carried on, and files were kept |
+| R5 | **Under 60 s for Rallly** depends on the clone and the home connection | Step 1 times a real clone. A shallow clone (`--depth 1`) and a prebuilt image keep it short. Dependencies install after "open", in the background, outside the 60 s | open: step 4. **Step 1:** 6.2–7.5 s for Rallly, without the proxy yet |
+| R6 | **The Docker socket is root-equivalent,** so whatever drives it is powerful | Only the host touches it. The host listens on 127.0.0.1 only and needs a token (`WORKSPACE_HOST_TOKEN` in `.dev.vars`). It takes no image names, mounts or flags from requests. Canary tests cover the token | open: steps 4 and 10. **Step 1:** loopback with a token works for the Worker |
 | R7 | **Untrusted code runs on the owner's laptop:** a cloned repo or a terminal command could mine crypto or attack the home network | Limits (step 2); egress only through the proxy, with the home network and metadata ranges blocked (step 7); sleep when idle (step 8); only allowlisted people can open workspaces | open: steps 2, 7 and 8 |
 | R8 | **The phase can't be fully accepted yet:** the *Done when* items are proven locally, not on staging | The phase is "in review" in STATUS. Upgrade-later 33 holds the provider step, and the phase report lists exactly which checks wait for it. Later phases that need workspaces on staging say so in their plans | open: until the provider is connected |
 
@@ -9424,3 +9424,63 @@ Each step's write-up ends with a **Risks** line saying what changed. The phase r
 **Earlier attempt:** the plan first used E2B, but creating an API key needed a $5 payment. The owner chose local Docker instead (decisions log, 4 Nov 2026). The `E2B_API_KEY` line was removed from `.dev.vars.example`. If one was added to `.dev.vars`, it can stay or go; nothing reads it.
 
 **Risks:** R1–R8 are set; nothing is built yet.
+
+### Step 1d.1 — Spike: Docker workspaces end to end (done by Claude)
+
+**Goal:** before building anything, check that the plan works on real containers: the clone time, pause and resume, isolation, and how the pieces talk. The answers shape ADR 0016.
+
+**Concepts:**
+- **Internal networks and the gateway mode.**
+  - A Docker `--internal` network has no route to the internet, but the host still has an address on it (the gateway), so a container can reach anything on the host that listens on all interfaces.
+  - Docker 28 added `gateway_mode_ipv4=isolated`. The host gets no address on the network, so the container's only neighbours are its own subnet.
+
+  https://docs.docker.com/engine/network/drivers/bridge/
+- **The cgroup freezer.** `docker pause` freezes every process in the container's cgroup. Nothing runs, but memory and open files stay as they were, so `docker unpause` carries on exactly where it stopped. https://docs.docker.com/reference/cli/docker/container/pause/
+- **Why stdio and not a port.** With the isolated gateway mode, even the host can't connect to the container's address. `docker exec -i` gives a pipe into the container without opening any port. One long-lived stream is fast (under a millisecond per message); a new `docker exec` per call costs about 105 ms.
+- **Testing reachability safely.** To learn whether packets reach the host, connect to a closed port. "Connection refused" means they arrive and the host's kernel answered; "Network is unreachable" means there's no route. No test service has to be exposed.
+
+**What was run** (throwaway files in the scratchpad, not in the repo):
+1. A spike image: `node:24-slim` plus git, curl, ping and netcat, running as the `node` user.
+2. **Clone:** a container with `--cap-drop ALL --security-opt no-new-privileges --cpus 2 --memory 2g --pids-limit 512`. It shallow-fetched the pinned Rallly commit from the owner's fork.
+3. **Pause and resume:** a counter process and a file. Pause for 5 s, resume, compare the PID, the counter and the file. Timed `pause` and `unpause`.
+4. **Isolation:** two containers, each on its own internal network. Each tried the other (TCP and ping), the internet, GitHub, the metadata address and the host. Then the same again with the isolated gateway mode.
+5. **Worker to host:** a throwaway Worker under `wrangler dev` called a token-checked Node server on 127.0.0.1.
+6. **Host to agent:** 200 messages over one `docker exec -i` stream.
+
+**Results:**
+
+| Check | Result |
+| --- | --- |
+| Clone Rallly (52 MB, 1,947 files) | 6.2 s (start 0.5 s, clone 5.8 s); 7.0 s and 7.5 s in two more runs |
+| Pause and resume | About 50 ms each way; same PID (38); the counter froze, then carried on; the file kept; 7 MiB while paused |
+| Internal networks: each other, internet, metadata | All blocked |
+| Internal networks: the host | **Reachable**. Fixed with the isolated gateway mode, where everything outside the container's own subnet is unreachable |
+| Worker → 127.0.0.1 with a token | 200, 3–4 ms |
+| One `docker exec -i` stream | p50 0.68 ms, p99 1.22 ms |
+
+**Decisions (ADR 0016):**
+- Every workspace network is `--internal` with the isolated gateway mode, so Docker 28 or newer is required.
+- The host talks to the agent over `docker exec -i` JSON lines.
+- The internet is reached only through an egress proxy. A minimal one moves into step 4, because the clone needs GitHub.
+
+**Run and check it:** there's nothing to run in the repo yet. To repeat the key isolation check:
+```fish
+docker network create --internal -o com.docker.network.bridge.gateway_mode_ipv4=isolated fc-try
+docker run --rm --network fc-try --cap-drop ALL node:24-slim node -e "require('net').connect(80,'172.17.0.1').on('error',e=>console.log(e.code))"
+# ENETUNREACH: no route to the host
+docker network rm fc-try
+```
+
+**Gotchas:**
+- Without the gateway mode, an internal network looks isolated but still reaches your laptop's services (databases, dev servers). The isolation test in step 7 checks the host, not only other workspaces.
+- The spike's first host-reachability attempt started a test listener on all interfaces. Claude Code's safety check blocked it, rightly. The closed-port probe gives the same answer without exposing anything.
+
+**Docs:** ADR 0016; ARCHITECTURE ("Workspaces"); this write-up; the risk statuses above.
+
+**Risks:**
+- R2 closed.
+- R3: the gap found (host reachable) is closed by the gateway mode; the test comes in step 7.
+- R4 and R5: measured, well within limits.
+- R1, R6, R7 and R8 unchanged.
+
+**Commit:** `docs: phase 1d spike results; ADR 0016 local Docker workspaces`
