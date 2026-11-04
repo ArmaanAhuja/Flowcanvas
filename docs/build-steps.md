@@ -9414,8 +9414,8 @@ browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0
 | 6 | Terminal (ADR 0017), in three parts: | |
 | 6.1 | Terminal sessions on the host: a pty through Docker's API, a WebSocket endpoint | done (Claude, 4 Nov) |
 | 6.2 | The Worker's WebSocket relay (owner, origin, running checks) and the adapter; Vite forwards WebSockets | done (Claude, 4 Nov) |
-| 6.3 | The terminal on the page: xterm.js, token colours, the CSP shim; a walkthrough under the deployed CSP | *next* |
-| 7 | Network rules: the egress proxy's full allowlist and address checks; limits; the isolation test | *planned* |
+| 6.3 | The terminal on the page: xterm.js, token colours, the CSP shim; a walkthrough under the deployed CSP | done (Claude, 4 Nov) |
+| 7 | Network rules: the egress proxy's full allowlist and address checks; limits; the isolation test | *next* |
 | 8 | Sleep after 10 idle minutes and resume intact; usage metering writes workspace seconds | *planned* |
 | 8a | The resource guard: laptop pressure and Flowcanvas's budget checked every 30 s; refuse, sleep, stop, clean up (owner, 4 Nov) | *planned* |
 | 9 | Status chip and cards (Figma 29); Open demo project (Rallly); staging's "Workspaces run locally for now" | *planned* |
@@ -9812,21 +9812,22 @@ Signed in locally, with a project open, the page itself can't use these yet (no 
 
 **Commit:** `feat(workspace): workspace agent with the file and process API`
 
-### Phase 1d so far — run and check it (after step 5)
+### Phase 1d so far — run and check it (after step 6)
 
 **1. Automated tests** (no sign-in needed):
 ```fish
 pnpm install
-pnpm test                 # 492 tests, no Docker needed (the same as CI's checks)
-pnpm test:docker          # 27 tests against real containers; needs Docker 28+ and the internet.
+pnpm test                 # 530 tests, no Docker needed (the same as CI's checks)
+pnpm test:e2e             # 7 recorded walkthroughs, including the terminal under the production CSP
+pnpm test:docker          # 29 tests against real containers; needs Docker 28+ and the internet.
                           # The first run builds the workspace image (about a minute).
                           # Look for "Rallly: opened in … ms" in the output.
 pnpm workspace:resources  # your laptop against the budget: five "ok" lines
 pnpm workspace:clean      # removes test leftovers and old images ("Nothing to remove." when clean)
 ```
 
-**2. The real thing, by hand.** There's no button yet (step 9 adds **Open**), so this uses the browser's developer console, signed in, on the app's own page. The browser sends your session cookie and the `Origin` header itself, so the API's checks apply exactly as they will for the page.
-1. Start everything: `pnpm dev`. The terminal should show `[workspace-host] Listening on http://127.0.0.1:8790 (Docker …)`. If it says `Not started: …`, it tells you what to fix: the token, Docker, or another `pnpm dev` already running.
+**2. The real thing, by hand.** There's no **Open** button yet (step 9), so opening, sleeping and the file API use the browser's developer console, signed in, on the app's own page. The browser sends your session cookie and the `Origin` header itself, so the API's checks apply exactly as they will for the page.
+1. Start everything: `pnpm dev` (restart it if it was already running before step 6: Vite's WebSocket forwarding is new). The terminal should show `[workspace-host] Listening on http://127.0.0.1:8790 (Docker …)`. If it says `Not started: …`, it tells you what to fix: the token, Docker, or another `pnpm dev` already running.
 2. Open http://localhost:5173, sign in, and create a project named `Rallly` with the repository `https://github.com/ArmaanAhuja-7777/rallly`.
 3. Open the developer console (F12 → Console) and paste:
    ```js
@@ -9850,6 +9851,7 @@ pnpm workspace:clean      # removes test leftovers and old images ("Nothing to r
    | `await ws('/exec', 'POST', { command: ['sh', '-c', 'echo SECRET=1 > .env'] })` | `exitCode: 0` (makes a test `.env`) |
    | `await ws('/file?path=.env')` | `status: 403`, "Secrets live in the project's vault…" (never the content) |
    | `await ws('/file?path=../.home/.bashrc')` | `status: 403`, "That path is outside the project." |
+   | Reload the page | Rallly says **Workspace running** and has a **Terminal** button (from step 6). Click it: "Connected to the workspace.", then a shell in `/workspace/project`. Try `ls`, `git log --oneline -3`, `node -v`; `exit` ends it, and **Start a new terminal** opens another |
    | `await ws('/sleep', 'POST')` | `state: 'sleeping'`; then `await ws('/files')` gives 409 "Open the workspace first." |
    | `await ws('/resume', 'POST')` | `state: 'running'` again, in well under a second |
    | `await ws('/stop', 'POST')` | `state: 'stopped'`; `await ws('/open', 'POST')` starts it again with the files kept |
@@ -9969,3 +9971,81 @@ The page part (6.3) comes next; then the terminal can be clicked.
 - **Laptop:** unchanged; no test containers or processes left.
 
 **Commit:** `feat(control-plane): terminal WebSocket relay to the workspace host`
+
+#### 6.3 — The terminal on the page (done by Claude)
+
+**Goal:** a project whose workspace is running has a **Terminal** button. It opens a real shell in the page, styled by the design tokens, under the production CSP with no violations.
+
+**Concepts:**
+- **xterm.js** is the terminal emulator VS Code uses. It draws a terminal from the bytes it's given, and hands back what's typed (`onData`) and size changes (`onResize`). The **fit** add-on works out how many columns and rows fit the box. https://xtermjs.org/docs/
+- **Why xterm and our CSP clashed, and the fix.** xterm puts some of its CSS in `<style>` elements, and `style-src 'self'` blocks those, with a violation for each. Loosening the CSP wasn't an option (ADR 0017). Instead:
+  1. xterm is given a stand-in `document` (`documentOverride`) whose `createElement('style')` returns an inert `<template>`.
+  2. A `MutationObserver` copies the text xterm writes into each one into a **constructed stylesheet** (`document.adoptedStyleSheets`), which CSP doesn't block. That's safe: only our scripts can make one, and `script-src 'self'` already limits scripts to ours.
+  3. **xterm 6.0.0 has a bug:** its scroll area always uses the real `document` (operator precedence in `this._document ?? typeof window … ? window.document : null`). So the real document's `createElement` is swapped for the duration of the one synchronous `terminal.open()` call, then put back.
+
+  https://developer.mozilla.org/en-US/docs/Web/API/Document/adoptedStyleSheets
+- **Colours from the tokens.** xterm needs colour values, not CSS variables, so `terminalTheme()` reads the tokens' computed values (background `surface/canvas`, text `text/primary`, selection `accent/tint`, ANSI red, green, yellow, magenta and blue from the state and accent text colours). The font comes from the mono text style.
+- **CSS containment.** xterm gives its screen a fixed pixel width. Without `contain: inline-size`, that width propped its box open, so the terminal could never get narrower, and the page grew a horizontal scroll. https://developer.mozilla.org/en-US/docs/Web/CSS/contain
+- **Loading on demand.** xterm is about 85 KB gzipped, so `React.lazy` loads it only when someone opens a terminal. The main bundle stays at 133 KB.
+- **Faking a WebSocket in Playwright.** `page.routeWebSocket` answers the page's WebSocket inside the test, the same way `page.route` answers HTTP, so the walkthrough can run on any deployed copy. https://playwright.dev/docs/api/class-websocketroute
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `apps/web/src/terminal/WorkspaceTerminal.tsx` | The terminal: xterm with the tokens' theme and font, the fit add-on and a `ResizeObserver`; the WebSocket (`terminalUrl`: `wss` on https, the page's own origin); bytes out as binary frames, resizes as JSON; output written; exit and notices shown as sentences (`role="status"`); **Start a new terminal**; everything closed on unmount |
+| `apps/web/src/terminal/adopt-styles.ts` | `styleFreeDocument()`, `withoutInlineStyles()`, `adoptInjectedStyles()` (above) |
+| `apps/web/src/terminal/theme.ts` | `terminalTheme()`, `terminalFont()` from the tokens; without a token, xterm keeps its own value |
+| `apps/web/src/terminal/WorkspaceTerminal.module.css` | Tokens only; `contain: inline-size`; the focus ring around the screen while typing |
+| `apps/web/src/projects/Projects.tsx` | **Terminal** / **Close terminal** next to **Secrets**, for running workspaces; the terminal loaded with `React.lazy` |
+| `apps/web/vite.config.ts` | `vite preview` sends the production headers from `public/_headers` (the CSP and the rest), so local walkthroughs match Cloudflare |
+| `apps/web/package.json`, `pnpm-workspace.yaml` | `@xterm/xterm` 6.0.0 and `@xterm/addon-fit` 0.11.0 (MIT, December 2025) |
+| `e2e/try-it/phase-1d.spec.ts` | The walkthrough (below) |
+
+**Tests:**
+- **Component (8):**
+  - the address (`ws`/`wss`, same origin, size)
+  - `arraybuffer` frames; the status line
+  - typing sent as bytes and resizes as JSON; output written
+  - the exit code shown, and a new terminal started
+  - a connection that never opened explained
+  - notices shown without ending
+  - colours and font from the tokens
+  - everything closed on unmount
+- **Shim (9):**
+  - existing, added and nested sources copied
+  - rewrites followed, removals dropped
+  - stopping restores the document's sheets and leaves others alone
+  - no `adoptedStyleSheets`: does nothing
+  - the stand-in document makes templates and is the real document for everything else
+  - `withoutInlineStyles` swaps only during its call, and restores even on a throw
+- **Walkthrough (`pnpm test:e2e`, recorded), under the production CSP:**
+  - the running project offers **Terminal**, connects, and shows the workspace's greeting
+  - `echo hello from the walkthrough` is typed and answered
+  - xterm's own rule applies (`.xterm-rows span` computes to `inline-block`), with no `<style>` element and at least one constructed sheet
+  - a narrower window sends a resize
+  - `exit` shows "The terminal ended (exit code 0)", and a new terminal starts
+  - **no page errors and no CSP violations**
+
+**Run and check it:**
+```fish
+pnpm test                # 530 tests
+pnpm test:e2e            # 7 walkthroughs; the terminal one is "phase 1d: a terminal in the workspace…"
+pnpm --filter @flowcanvas/e2e report      # the recordings
+```
+For real, follow "Phase 1d so far — run and check it" above: open the workspace, reload, click **Terminal**.
+
+**Gotchas:**
+- **A browser's `ArrayBuffer` from another realm.** In jsdom, the bytes in a `MessageEvent` failed `instanceof ArrayBuffer`. The check is now by tag (`[object ArrayBuffer]`), which is right in any realm.
+- **`vi.mock` is hoisted** above everything in the file, so the fake xterm class lives in `vi.hoisted()`.
+- **The temporary page is narrow** (about 400 px), so the terminal is too, until the phase 2 app shell. The walkthrough shrinks the window to 360 px to test resizing.
+- **xterm's scroll area bug** (above) meant `documentOverride` alone still left one `<style>`. The walkthrough's "no `<style>`" check is what caught it.
+
+**Docs:** this write-up and the run guide; ADR 0017; ARCHITECTURE ("Terminal"); STATUS.
+
+**Risks:**
+- The CSP is unchanged and has no violations.
+- R6: same-origin WebSocket only.
+- **Laptop:** all five checks ok (22.0 GiB memory available, 580.7 GiB disk free, load 4.8).
+
+**Commit:** `feat(web): terminal in the page with xterm.js under the strict CSP`

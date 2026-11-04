@@ -1,0 +1,42 @@
+/* A minimal terminal (Figma 18) on the version page, until the app shell's bottom panel (phase 2). */
+.terminal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
+/* The state is a sentence, never colour alone. */
+.status {
+  margin: 0;
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  font-weight: var(--text-small-font-weight);
+  line-height: var(--text-small-line-height);
+  color: var(--color-text-secondary);
+}
+
+.screen {
+  /* Its width comes from the page, never from xterm's fixed-width screen inside it, so it can get narrower
+     and the fit add-on can shrink the terminal to match. */
+  contain: inline-size;
+  /* Room for about 20 rows of the mono style. */
+  height: calc(var(--space-32) * 10);
+  padding: var(--space-8);
+  border: var(--border-width-default) solid var(--color-border-subtle);
+  border-radius: var(--radius-frame);
+  background: var(--color-surface-canvas);
+  overflow: hidden;
+}
+
+/* The same focus ring as everything else (packages/ui global.css), around the screen while typing. */
+.screen:focus-within {
+  outline: var(--border-width-focus) solid var(--color-accent-solid);
+  outline-offset: var(--space-2);
+}

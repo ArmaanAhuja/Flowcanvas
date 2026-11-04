@@ -1,5 +1,5 @@
 import { Button, Input } from '@flowcanvas/ui';
-import { useEffect, useId, useState, type SubmitEvent } from 'react';
+import { Suspense, lazy, useEffect, useId, useState, type SubmitEvent } from 'react';
 import {
   createProject,
   fetchProjects,
@@ -17,6 +17,11 @@ interface ProjectsProps {
 }
 
 const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
+
+// xterm.js is about 300 kB: loaded only when someone opens a terminal.
+const WorkspaceTerminal = lazy(async () => ({
+  default: (await import('../terminal/WorkspaceTerminal')).WorkspaceTerminal,
+}));
 
 /** Words for each workspace state; state is always written out, never shown by colour alone. */
 const WORKSPACE_STATES: Record<WorkspaceState, string> = {
@@ -87,7 +92,10 @@ function ProjectItem({
   readonly fetcher: typeof fetch;
 }) {
   const [showSecrets, setShowSecrets] = useState(false);
+  const [showTerminal, setShowTerminal] = useState(false);
   const secretsId = useId();
+  const terminalId = useId();
+  const running = project.workspace.state === 'running';
   return (
     <li className={styles.item}>
       <span className={styles.itemHeader}>
@@ -103,12 +111,32 @@ function ProjectItem({
         >
           {showSecrets ? 'Hide secrets' : 'Secrets'}
         </button>
+        {running && (
+          <button
+            type="button"
+            className={styles.toggle}
+            aria-expanded={showTerminal}
+            aria-controls={terminalId}
+            onClick={() => {
+              setShowTerminal((open) => !open);
+            }}
+          >
+            {showTerminal ? 'Close terminal' : 'Terminal'}
+          </button>
+        )}
       </span>
       {project.repoUrl !== null && <span className={styles.repo}>{project.repoUrl}</span>}
       <span className={styles.meta}>
         Created {dateFormat.format(new Date(project.createdAt))} ·{' '}
         {WORKSPACE_STATES[project.workspace.state]}
       </span>
+      <div id={terminalId} hidden={!showTerminal}>
+        {running && showTerminal && (
+          <Suspense fallback={<p className={styles.meta}>Loading the terminal…</p>}>
+            <WorkspaceTerminal projectId={project.id} projectName={project.name} />
+          </Suspense>
+        )}
+      </div>
       <div id={secretsId} hidden={!showSecrets}>
         {showSecrets && (
           <ProjectSecrets projectId={project.id} projectName={project.name} fetcher={fetcher} />

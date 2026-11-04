@@ -6,7 +6,7 @@ The system as it is **today** (end of phase 1b). Kept current at the end of ever
 
 | Package | Folder | Runs in | Today |
 | --- | --- | --- | --- |
-| `@flowcanvas/web` | `apps/web` | The user's browser (static files from Cloudflare) | Version page built from the design system: name, status, build line, account line (sign in with GitHub or Google, who is signed in, sign out; `src/account/`), projects list and create when signed in (`src/projects/`; a stand-in for the phase 2 start screen), each with a write-only Secrets panel (`src/secrets/`), What's new (from `CHANGELOG.md`, parsed at build time), Labs (switches for unfinished features, off by default; `src/labs/`), theme menu, link to the catalogue |
+| `@flowcanvas/web` | `apps/web` | The user's browser (static files from Cloudflare) | Version page built from the design system: name, status, build line, account line (sign in with GitHub or Google, who is signed in, sign out; `src/account/`), projects list and create when signed in (`src/projects/`; a stand-in for the phase 2 start screen), each with a write-only Secrets panel (`src/secrets/`) and, while its workspace runs, a terminal (`src/terminal/`, ADR 0017), What's new (from `CHANGELOG.md`, parsed at build time), Labs (switches for unfinished features, off by default; `src/labs/`), theme menu, link to the catalogue |
 | `@flowcanvas/ui` | `packages/ui` | The browser (consumed as source by Vite, ADR 0007) | Graphite components (Button, Tag, Input, Toggle, Tabs, Panel, Menu, Popover, Tooltip, Flow node), global styles, fonts, theme switching; Storybook catalogue |
 | `@flowcanvas/tokens` | `packages/tokens` | Shared (CSS and TypeScript) | Design tokens: DTCG source JSON → generated `css/tokens.css` and typed `vars` / `themeValues`; dark and light themes |
 | `@flowcanvas/figma-tokens` | `tools/figma-tokens` | Developer machine / build | Generator: DTCG token JSON (Figma variable export format) → CSS variables + TypeScript |
@@ -227,6 +227,7 @@ Worker   ──ws, bearer token──► host /v1/workspaces/:ref/terminal ─�
 ```
 
 - The Worker checks origin, session, owner and running before accepting, sets `binaryType = 'arraybuffer'` on both ends, passes only bounded bytes and re-checked resizes from the browser, and counts typing as activity (at most every 30 s).
+- The page (`apps/web/src/terminal/`) runs xterm.js, loaded on demand, with colours and font from the tokens. xterm's `<style>` elements become inert templates whose text goes into constructed stylesheets (`adopt-styles.ts`), so the CSP stays `style-src 'self'` with no violations. `vite preview` sends the production headers from `public/_headers`.
 - The host opens the pty through the Docker Engine API on its Unix socket; at most 4 per workspace. Closing the WebSocket hangs up the shell. A Durable Object gateway (sessions that survive a reconnect) comes with the cloud provider (upgrade-later 36).
 
 ## Workspace lifecycle (phase 1d, step 3)
