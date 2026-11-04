@@ -9374,8 +9374,8 @@ browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0
 | --- | --- | --- |
 | 0 | Docker on the dev machine: works without sudo (checked: Docker 29.9.2, cgroup v2, `hello-world` ran) | done (Claude, 4 Nov) |
 | 1 | Spike: the Worker in `wrangler dev` reaching a loopback host. Clone timing for Rallly; pause and resume intact; two containers on separate internal networks; how the host talks to the agent (`docker exec` stdio or the bridge address). ADR 0016 | done (Claude, 4 Nov) |
-| 2 | Workspace image (`workspace/image`): Node 24, pnpm, git, non-root user; CPU, memory, process and disk limits | *next* |
-| 3 | `WorkspaceProvider` interface; lifecycle and states in the control plane, tested with a fake provider | *planned* |
+| 2 | Workspace image (`workspace/image`): Node 24, pnpm, git, non-root user; CPU, memory, process and disk limits | done (Claude, 4 Nov) |
+| 3 | `WorkspaceProvider` interface; lifecycle and states in the control plane, tested with a fake provider | *next* |
 | 4 | Local workspace host and Docker adapter; a minimal egress proxy (GitHub only); open a project: create the container and clone the repo; timed | *planned* |
 | 5 | File and process API (the agent in the container): typed, versioned, owner only | *planned* |
 | 6 | Terminal: Durable Object WebSocket gateway and xterm.js | *planned* |
@@ -9399,13 +9399,13 @@ Each step's write-up ends with a **Risks** line saying what changed. The phase r
 
 | # | Risk or question | How we keep it in check | Status |
 | --- | --- | --- | --- |
-| R1 | **Containers aren't VMs:** they share the host's kernel, so a kernel bug could let code escape | Non-root user, all capabilities dropped, `no-new-privileges`, Docker's seccomp profile, no Docker socket inside, limits. Only the owner uses it. A gVisor runtime is an optional hardening (upgrade-later 34). Real VMs come with the cloud provider | open: steps 2 and 7. Step 1: the locked-down flags (`--cap-drop ALL`, `no-new-privileges`, `--pids-limit`) didn't get in the way of git |
+| R1 | **Containers aren't VMs:** they share the host's kernel, so a kernel bug could let code escape | Non-root user, all capabilities dropped, `no-new-privileges`, Docker's seccomp profile, no Docker socket inside, limits. Only the owner uses it. A gVisor runtime is an optional hardening (upgrade-later 34). Real VMs come with the cloud provider | open: step 7. Step 1: the locked-down flags didn't get in the way of git. **Step 2:** every flag is set in one place (`runArgs`) and checked from inside a real container (`pnpm test:docker`) |
 | R2 | **The Worker in `wrangler dev` has to reach the local host** | The step 1 spike checks it before anything is built on it. The fallback is calling the host from Vite's proxy | **closed (step 1):** works, 3–4 ms per call |
 | R3 | **"Can't reach each other" is now our job,** not a provider's | Each workspace gets its own internal network with no route out. The internet goes only through an egress proxy with an allowlist. Measured in step 1; the test comes in step 7 | open: step 7. **Step 1:** internal networks alone still let a container reach the host. The isolated gateway mode (Docker 28+) closes that, and is now required (ADR 0016) |
 | R4 | **`docker pause` keeps memory in use,** and a host restart loses paused processes | It's fine for a few local workspaces. After a restart, a workspace shows as stopped with its files kept (in a volume), never as lost. The cloud provider brings real snapshots | open: step 8. **Step 1:** pause and resume take about 50 ms each way; the same process carried on, and files were kept |
 | R5 | **Under 60 s for Rallly** depends on the clone and the home connection | Step 1 times a real clone. A shallow clone (`--depth 1`) and a prebuilt image keep it short. Dependencies install after "open", in the background, outside the 60 s | open: step 4. **Step 1:** 6.2–7.5 s for Rallly, without the proxy yet |
 | R6 | **The Docker socket is root-equivalent,** so whatever drives it is powerful | Only the host touches it. The host listens on 127.0.0.1 only and needs a token (`WORKSPACE_HOST_TOKEN` in `.dev.vars`). It takes no image names, mounts or flags from requests. Canary tests cover the token | open: steps 4 and 10. **Step 1:** loopback with a token works for the Worker |
-| R7 | **Untrusted code runs on the owner's laptop:** a cloned repo or a terminal command could mine crypto or attack the home network | Limits (step 2); egress only through the proxy, with the home network and metadata ranges blocked (step 7); sleep when idle (step 8); only allowlisted people can open workspaces | open: steps 2, 7 and 8 |
+| R7 | **Untrusted code runs on the owner's laptop:** a cloned repo or a terminal command could mine crypto or attack the home network | Limits (step 2); egress only through the proxy, with the home network and metadata ranges blocked (step 7); sleep when idle (step 8); only allowlisted people can open workspaces | open: steps 7 and 8. **Step 2:** CPU, memory, process and `/tmp` limits are enforced (tested). Disk is measured, not capped (upgrade-later 35) |
 | R8 | **The phase can't be fully accepted yet:** the *Done when* items are proven locally, not on staging | The phase is "in review" in STATUS. Upgrade-later 33 holds the provider step, and the phase report lists exactly which checks wait for it. Later phases that need workspaces on staging say so in their plans | open: until the provider is connected |
 
 ### Step 1d.0 — Docker on the dev machine (done)
@@ -9484,3 +9484,62 @@ docker network rm fc-try
 - R1, R6, R7 and R8 unchanged.
 
 **Commit:** `docs: phase 1d spike results; ADR 0016 local Docker workspaces`
+
+### Step 1d.2 — The workspace image and its limits (done by Claude)
+
+**Goal:** one image every workspace starts from, and one place that decides how its container is started and limited, proven from inside a real container.
+
+**Concepts:**
+- **Pinning by digest.** `node:24-slim` is a moving tag; `node:24-slim@sha256:…` is one exact image. Rebuilding gives the same base until we choose to move it. https://docs.docker.com/reference/cli/docker/image/pull/#pull-an-image-by-digest-immutable-identifier
+- **Content-addressed tags.** The image is tagged with a hash of its Dockerfile (`flowcanvas-workspace:b6722cf7e5d0`). Any change to the file means a new tag, so a stale image can never be mistaken for a current one, and there's no version number to forget to bump.
+- **Capabilities.** Linux splits root's powers into about 40 capabilities (changing file owners, binding low ports, tracing processes and so on). `--cap-drop ALL` removes all of them, and `no-new-privileges` stops a program from regaining them through setuid binaries. The test reads `CapEff` and `NoNewPrivs` from `/proc/self/status` to prove it. https://man7.org/linux/man-pages/man7/capabilities.7.html
+- **cgroup limits.** `--cpus`, `--memory` and `--pids-limit` become files in the container's cgroup (`cpu.max`, `memory.max`, `pids.max`). The kernel enforces them: a process over the memory limit is killed (exit 137), and a fork over the process limit fails. https://docs.kernel.org/admin-guide/cgroup-v2.html
+- **A read-only root.** With `--read-only`, the only writable places are the workspace volume (`/workspace`, home directory included) and a size-capped tmpfs `/tmp`. That shrinks what untrusted code can change, and it's why the disk limit only has to watch one volume.
+- **Unit tests vs Docker tests.** `pnpm test` must run anywhere, including CI's checks job, so it only tests the argument builder. Tests that need Docker are named `*.docker.test.ts` and run with `pnpm test:docker`.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `workspace/image/Dockerfile` | `node:24-slim` by digest; `git`, `ca-certificates`, `procps`; pnpm 12.15.0 with `--ignore-scripts`; `/workspace` owned by `node`, `HOME=/workspace/.home`; telemetry off (`DO_NOT_TRACK`, `NEXT_TELEMETRY_DISABLED`, npm notices); `USER node`; `CMD sleep infinity` (the agent comes in step 5) |
+| `workspace/image/.dockerignore` | `*`: the build needs nothing from the folder |
+| `workspace/image/src/spec.ts` | `imageTag()`; `WORKSPACE_LIMITS` (2 CPUs, 4 GiB with no swap, 1,024 processes, 1 GiB `/tmp`, 10 GiB disk); `networkCreateArgs()` (internal, isolated gateway); `runArgs()`. Names must match `^[a-z0-9][a-z0-9_.-]{0,62}$`, so none can be read as a flag. Limits must be positive and finite, the image must be ours, and the image goes last |
+| `workspace/image/src/docker.ts` | `imageExists()`, `buildImage()` (skips when the tag exists) |
+| `workspace/image/scripts/build-image.ts` | `pnpm workspace:image [--force]` |
+| `workspace/image/src/spec.test.ts` | 15 unit tests: the tag, the Dockerfile (digest, Node major from `.nvmrc`, pnpm from `packageManager`, user, telemetry), the network arguments, every flag, overrides, refusals |
+| `workspace/image/src/image.docker.test.ts` | 10 tests in real containers (below) |
+| `package.json`, `turbo.json` | `workspace:image` and `test:docker` |
+
+**What the Docker tests prove** (`pnpm test:docker`, 12 s once the image exists):
+- Node 24, pnpm 12.15.0 and git are installed.
+- The container runs as uid 1000, `CapEff` and `CapPrm` are 0, and `NoNewPrivs` is 1. There's no Docker socket inside.
+- `/etc` and `/usr` are read-only; `/workspace`, its home directory and `/tmp` are writable.
+- Files in the volume survive replacing the container.
+- `/tmp` stops at its size ("No space left on device").
+- Going over the memory limit kills the process (exit 137), and swap equals memory.
+- At the process limit, forks fail ("Cannot fork"), with at most the limit running.
+- `cpu.max` is `200000 100000` (2 CPUs).
+- No route to the host's Docker bridge, the internet or the metadata address (`ENETUNREACH`).
+
+**Run and check it:**
+```fish
+pnpm workspace:image          # "Built flowcanvas-workspace:<hash> in …" (about a minute the first time), then "up to date"
+pnpm test                     # includes the 15 unit tests; needs no Docker
+pnpm test:docker              # 10 passed; leaves no fc-test-* containers, volumes or networks
+docker run --rm (docker images -q flowcanvas-workspace | head -1) sh -c 'node -v; pnpm -v; id'
+```
+
+**Gotchas:**
+- **Zero-filled memory doesn't count.** The first memory test allocated a zeroed 256 MB buffer under a 64 MB limit, and it survived: Linux maps untouched zero pages lazily. Filling the buffer with 1s makes the pages real, and the kernel kills the process.
+- **At the process limit, the shell itself can't fork.** Counting with `pgrep` inside the same script fails, so the test counts from the host (`docker stats --format {{.PIDs}}`).
+- **Disk limits depend on the storage driver.** On this machine (overlayfs on btrfs), `--storage-opt size=200M` is accepted but a 400 MB write still succeeds, and local volumes have no quotas. The host measures the volume instead (step 8; upgrade-later 35).
+- **Apt packages aren't pinned to versions,** only the base image is. Rebuilding with `--force` may get newer git or procps from Debian's security updates, which is what we want for now.
+
+**Docs:** this write-up; ARCHITECTURE (parts table, "Workspaces", local commands); upgrade-later 35; STATUS; the risk statuses above.
+
+**Risks:**
+- R1: the lock-down is in one function and proven from inside a container.
+- R7: CPU, memory, process and `/tmp` limits are enforced; disk is measured, not capped (item 35).
+- The others are unchanged.
+
+**Commit:** `feat(workspace): workspace image, locked-down container settings and Docker tests`

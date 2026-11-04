@@ -36,6 +36,10 @@
       "cache": false,
       "env": ["E2E_BASE_URL", "E2E_EXPECTED_COMMIT", "CI"]
     },
+    "test:docker": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "build-storybook": {
       "dependsOn": ["^build"],
       "outputs": ["storybook-static/**"]

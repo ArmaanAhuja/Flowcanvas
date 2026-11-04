@@ -13,6 +13,7 @@ The system as it is **today** (end of phase 1b). Kept current at the end of ever
 | `@flowcanvas/control-plane` | `services/control-plane` | Inside the app's Cloudflare Worker under `/api` (ADR 0013); Neon Postgres | Hono API (`src/api/`): health, database ping, GitHub and Google sign-in, sessions, sign-out and the user/admin/same-origin guards (`src/auth/`), projects list and create (`src/projects/`), the secrets vault (`src/vault/`, ADR 0015); schema migrations and runner (`migrations/`, `src/db/`, ADR 0014). The earlier Fastify server was retired in phase 1c step 3 |
 | `@flowcanvas/graph-model` | `packages/graph-model` | Shared library (browser and Node) | `BuildInfo` type and `formatBuildInfo()`; becomes the flow graph model in phase 6 |
 | `@flowcanvas/engine` | `packages/engine` | Inside each user workspace (later) | Wired-in placeholder package; indexer arrives in phase 4 |
+| `@flowcanvas/workspace-image` | `workspace/image` | Developer machine (builds the image); used by the workspace host | The workspace image (`Dockerfile`: Node 24 by digest, pnpm, git, `node` user, telemetry off). Its tag is a hash of the Dockerfile. Also the locked-down `docker run` and network arguments, and the default limits (2 CPUs, 4 GiB, 1,024 processes, 1 GiB `/tmp`, 10 GiB disk measured) |
 | `@flowcanvas/workspace-agent` | `workspace/agent` | Inside each workspace (a local Docker container for now, ADR 0016) | Wired-in placeholder package; the agent arrives in phase 1d (step 5) |
 | `@flowcanvas/corpus` | `corpus` | Developer machine / CI | The test corpus: six public forks pinned in `manifest.json`; `pnpm corpus:check` verifies fork, commit, licence and stack through the GitHub API |
 | `@flowcanvas/e2e` | `e2e` | Developer machine / CI | Playwright: one recorded walkthrough per phase (`try-it/`, video and trace) against any URL; visual tests (catalogue baselines in both themes, axe) |
@@ -189,6 +190,7 @@ browser ──► Worker /api ──HTTP 127.0.0.1 + token──► workspace ho
 
 - The control plane sees only `WorkspaceProvider`. The workspace host is the only code that touches Docker, and it takes no image, mount or flag from a request.
 - Sleep is `docker pause`; resume is `docker unpause` (about 50 ms each way, processes intact).
+- Containers run as uid 1000 with no capabilities, `no-new-privileges`, a read-only root filesystem, a 1 GiB `/tmp`, no logs and `--init` (`workspace/image/src/spec.ts`). Only the workspace volume can grow, and Docker can't cap it on every storage driver (not on btrfs), so the host measures it (step 8; upgrade-later 35).
 - Staging has no workspace host, so it shows "Workspaces run locally for now".
 
 ## Local development
@@ -199,4 +201,6 @@ pnpm dev            # http://localhost:5173: Vite, with /api forwarded to the Wo
 pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e
 pnpm --filter @flowcanvas/ui storybook   # catalogue on http://localhost:6006
 pnpm test:visual                         # catalogue baselines in both themes, axe
+pnpm workspace:image                     # build the workspace image (phase 1d), skipped if up to date
+pnpm test:docker                         # tests against real containers; needs Docker 28+
 ```

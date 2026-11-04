@@ -22,7 +22,9 @@
     "corpus:check": "pnpm --filter @flowcanvas/corpus --fail-if-no-match check",
     "db:migrate": "pnpm --filter @flowcanvas/control-plane --fail-if-no-match db:migrate",
     "db:status": "pnpm --filter @flowcanvas/control-plane --fail-if-no-match db:status",
-    "db:allow": "pnpm --filter @flowcanvas/control-plane --fail-if-no-match db:allow"
+    "db:allow": "pnpm --filter @flowcanvas/control-plane --fail-if-no-match db:allow",
+    "workspace:image": "pnpm --filter @flowcanvas/workspace-image --fail-if-no-match image",
+    "test:docker": "turbo run test:docker"
   },
   "devDependencies": {
     "@eslint/js": "catalog:",
