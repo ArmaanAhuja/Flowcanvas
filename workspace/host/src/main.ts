@@ -43,6 +43,13 @@ if (Number(dockerVersion.split('.')[0]) < MIN_DOCKER_MAJOR) {
 }
 
 const host = new WorkspaceHost({ docker: dockerCli, prefix, image: () => buildImage(), log });
-createHostServer({ host, token, port, log }).listen(port, '127.0.0.1', () => {
+const server = createHostServer({ host, token, port, log });
+// Another `pnpm dev` already has the port: step aside instead of taking this one down with a crash.
+server.on('error', (error: NodeJS.ErrnoException) => {
+  if (error.code !== 'EADDRINUSE') throw error;
+  log(`Not started: port ${String(port)} is in use. Is pnpm dev already running in another terminal?`);
+  process.exit(0);
+});
+server.listen(port, '127.0.0.1', () => {
   log(`Listening on http://127.0.0.1:${String(port)} (Docker ${dockerVersion})`);
 });

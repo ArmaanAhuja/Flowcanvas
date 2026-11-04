@@ -9808,3 +9808,54 @@ Signed in locally, with a project open, the page itself can't use these yet (no 
 - **Laptop:** all five checks ok (24.3 GiB memory available, 580.8 GiB disk free, load 6.4 during tests). Flowcanvas uses 0.5 GiB; no containers or agent processes left behind.
 
 **Commit:** `feat(workspace): workspace agent with the file and process API`
+
+### Phase 1d so far — run and check it (after step 5)
+
+**1. Automated tests** (no sign-in needed):
+```fish
+pnpm install
+pnpm test                 # 492 tests, no Docker needed (the same as CI's checks)
+pnpm test:docker          # 27 tests against real containers; needs Docker 28+ and the internet.
+                          # The first run builds the workspace image (about a minute).
+                          # Look for "Rallly: opened in … ms" in the output.
+pnpm workspace:resources  # your laptop against the budget: five "ok" lines
+pnpm workspace:clean      # removes test leftovers and old images ("Nothing to remove." when clean)
+```
+
+**2. The real thing, by hand.** There's no button yet (step 9 adds **Open**), so this uses the browser's developer console, signed in, on the app's own page. The browser sends your session cookie and the `Origin` header itself, so the API's checks apply exactly as they will for the page.
+1. Start everything: `pnpm dev`. The terminal should show `[workspace-host] Listening on http://127.0.0.1:8790 (Docker …)`. If it says `Not started: …`, it tells you what to fix: the token, Docker, or another `pnpm dev` already running.
+2. Open http://localhost:5173, sign in, and create a project named `Rallly` with the repository `https://github.com/ArmaanAhuja-7777/rallly`.
+3. Open the developer console (F12 → Console) and paste:
+   ```js
+   const { projects } = await (await fetch('/api/projects')).json();
+   const id = projects.find((p) => p.name === 'Rallly').id;
+   const ws = (path, method = 'GET', body) =>
+     fetch(`/api/projects/${id}/workspace${path}`, {
+       method,
+       headers: body ? { 'content-type': 'application/json' } : {},
+       body: body && JSON.stringify(body),
+     }).then(async (r) => ({ status: r.status, ...(await r.json()) }));
+   ```
+4. Then try these one at a time, and compare with what you should see:
+
+   | Paste | You should see |
+   | --- | --- |
+   | `await ws('/open', 'POST')` | after about 10 s, `workspace: { state: 'running' }` (the first time ever, about a minute more for the image) |
+   | `await ws('/files')` | Rallly's top-level folders and files, folders first |
+   | `await ws('/file?path=package.json')` | the file's `content`, `encoding: 'utf8'` |
+   | `await ws('/exec', 'POST', { command: ['git', 'log', '--oneline', '-3'] })` | `exitCode: 0` and three commits in `stdout` |
+   | `await ws('/exec', 'POST', { command: ['sh', '-c', 'echo SECRET=1 > .env'] })` | `exitCode: 0` (makes a test `.env`) |
+   | `await ws('/file?path=.env')` | `status: 403`, "Secrets live in the project's vault…" (never the content) |
+   | `await ws('/file?path=../.home/.bashrc')` | `status: 403`, "That path is outside the project." |
+   | `await ws('/sleep', 'POST')` | `state: 'sleeping'`; then `await ws('/files')` gives 409 "Open the workspace first." |
+   | `await ws('/resume', 'POST')` | `state: 'running'` again, in well under a second |
+   | `await ws('/stop', 'POST')` | `state: 'stopped'`; `await ws('/open', 'POST')` starts it again with the files kept |
+   | `await (await fetch('/api/usage')).json()` | `workspaceSeconds` above 0 once it has slept or stopped |
+5. In a terminal, `docker ps --filter label=org.flowcanvas.workspace=1` shows `fc-ws-<id>` and `fc-egress`, and `pnpm workspace:resources` counts it.
+6. When you're done: `await ws('/stop', 'POST')`. `pnpm workspace:clean --all` lists everything of Flowcanvas's on the laptop; `--all --yes` removes it, **including the workspace's files**.
+
+**If something's off:**
+- `503 "The workspace host isn't running…"`: `pnpm dev` isn't running, or its host didn't start; its log line says why.
+- `503 "Add WORKSPACE_HOST_TOKEN…"`: the line is missing from `.dev.vars`, or `pnpm dev` was started before it was added. Restart `pnpm dev`.
+- `503 "Workspaces run locally for now"`: you're on staging; that's expected until a cloud provider is connected.
+- `503 "2 workspaces are already running…"`: put one to sleep or stop it (the laptop budget).
