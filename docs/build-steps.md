@@ -2046,6 +2046,39 @@ When phase 1a is done you can:
 - **Light theme isn't in Figma** (decision A1). This phase proposes light values for approval before they're used.
 - **Token source:** Figma's Variables REST API needs an Enterprise plan, so it isn't free. Free route: a hand-written seed JSON with the decided values (decision A3), checked against the Figma file and the generator scripts' `HEX` map. Reading Figma variables directly can use the Figma connector in Claude Code, or an export plugin.
 
+### On the owner's laptop: the footprint and the resource guard (owner, 4 Nov 2026)
+
+**Everything local workspaces put on the laptop is labelled and listed, and it all comes off when a cloud provider is connected** (upgrade-later 33):
+
+| What | Where | Removed by |
+| --- | --- | --- |
+| Workspace images `flowcanvas-workspace:<hash>` (about 560 MB each) | Docker images, label `org.flowcanvas.workspace=1` | `pnpm workspace:clean --all` (step 4) |
+| Workspace containers, networks and volumes (the projects' files) | Docker, same label | `pnpm workspace:clean --all` |
+| Test leftovers `fc-test-*` | Docker (the tests remove them; a crashed run might not) | `pnpm workspace:clean` |
+| The local workspace host (`workspace/host`) | A Node process, only while `pnpm dev` runs | Stops with `pnpm dev`; the code is retired with the switch |
+| `WORKSPACE_HOST_TOKEN` | `.dev.vars` | Delete the line |
+| The Docker adapter in the control plane | Code | Replaced by the provider's adapter |
+
+Not ours, and never touched: anything else in Docker (other projects' images, containers and volumes), `node:24-slim` (already on the laptop), and the Playwright image (ADR 0012, still used by the visual tests).
+
+**The resource guard** keeps Flowcanvas within a budget on this laptop (16 cores, 30.8 GiB memory, 950 GiB disk). It runs in the workspace host every 30 seconds.
+
+| Budget or threshold | Value |
+| --- | --- |
+| Workspaces running at once | 2 (each up to 2 CPUs and 4 GiB, so at most 4 CPUs and 8 GiB together) |
+| Flowcanvas's disk (our images plus workspace volumes) | 25 GiB; each workspace's volume 10 GiB |
+| Laptop under pressure (whatever causes it) | memory available below 4 GiB, or disk free below 50 GiB, or the 1-minute load above 14 (about 90% of 16 cores) for 2 minutes |
+
+**What it does, in order, until it's back within limits:**
+1. Refuse to start or resume a workspace while over budget or under pressure, with a clear message ("Your computer is low on memory, so this workspace can't start").
+2. Put idle workspaces to sleep, least recently used first.
+3. Stop the least recently used workspaces. Their files are kept in their volumes.
+4. Remove what isn't needed: old workspace image tags, stopped Flowcanvas containers, and volumes whose project no longer exists.
+
+It only ever acts on things labelled as Flowcanvas's. It never kills or removes anything else on the laptop. A runaway process inside a workspace is already held by that workspace's own limits. Every action is logged, and from step 9 it's shown on the workspace's card ("Put to sleep to free memory on this computer").
+
+`pnpm workspace:resources` prints the laptop's figures and Flowcanvas's usage against these numbers. Claude also checks them at every step: each step's Risks line includes a "Laptop" line.
+
 ### Steps (planned)
 
 | # | Step | Status |
@@ -9376,11 +9409,12 @@ browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0
 | 1 | Spike: the Worker in `wrangler dev` reaching a loopback host. Clone timing for Rallly; pause and resume intact; two containers on separate internal networks; how the host talks to the agent (`docker exec` stdio or the bridge address). ADR 0016 | done (Claude, 4 Nov) |
 | 2 | Workspace image (`workspace/image`): Node 24, pnpm, git, non-root user; CPU, memory, process and disk limits | done (Claude, 4 Nov) |
 | 3 | `WorkspaceProvider` interface; lifecycle and states in the control plane, tested with a fake provider | *next* |
-| 4 | Local workspace host and Docker adapter; a minimal egress proxy (GitHub only); open a project: create the container and clone the repo; timed | *planned* |
+| 4 | Local workspace host and Docker adapter; a minimal egress proxy (GitHub only); open a project: create the container and clone the repo; timed. Also the 2-workspace cap, `pnpm workspace:clean` and `pnpm workspace:resources` | *planned* |
 | 5 | File and process API (the agent in the container): typed, versioned, owner only | *planned* |
 | 6 | Terminal: Durable Object WebSocket gateway and xterm.js | *planned* |
 | 7 | Network rules: the egress proxy's full allowlist and address checks; limits; the isolation test | *planned* |
 | 8 | Sleep after 10 idle minutes and resume intact; usage metering writes workspace seconds | *planned* |
+| 8a | The resource guard: laptop pressure and Flowcanvas's budget checked every 30 s; refuse, sleep, stop, clean up (owner, 4 Nov) | *planned* |
 | 9 | Status chip and cards (Figma 29); Open demo project (Rallly); staging's "Workspaces run locally for now" | *planned* |
 | 10 | Security tests (canary secrets, isolation), walkthrough, timing; Docker tests in CI if the runners allow | *planned* |
 | 11 | Close the phase as **in review** (0.5.0): report, and what waits for the cloud provider | *planned* |
@@ -9406,6 +9440,7 @@ Each step's write-up ends with a **Risks** line saying what changed. The phase r
 | R5 | **Under 60 s for Rallly** depends on the clone and the home connection | Step 1 times a real clone. A shallow clone (`--depth 1`) and a prebuilt image keep it short. Dependencies install after "open", in the background, outside the 60 s | open: step 4. **Step 1:** 6.2–7.5 s for Rallly, without the proxy yet |
 | R6 | **The Docker socket is root-equivalent,** so whatever drives it is powerful | Only the host touches it. The host listens on 127.0.0.1 only and needs a token (`WORKSPACE_HOST_TOKEN` in `.dev.vars`). It takes no image names, mounts or flags from requests. Canary tests cover the token | open: steps 4 and 10. **Step 1:** loopback with a token works for the Worker |
 | R7 | **Untrusted code runs on the owner's laptop:** a cloned repo or a terminal command could mine crypto or attack the home network | Limits (step 2); egress only through the proxy, with the home network and metadata ranges blocked (step 7); sleep when idle (step 8); only allowlisted people can open workspaces | open: steps 7 and 8. **Step 2:** CPU, memory, process and `/tmp` limits are enforced (tested). Disk is measured, not capped (upgrade-later 35) |
+| R9 | **Workspaces could overload the owner's laptop** | The resource guard (step 8a): 2 workspaces at most, a 25 GiB disk budget, and pressure thresholds that refuse, sleep, stop and clean up, acting only on Flowcanvas's own things. `pnpm workspace:resources`, and a "Laptop" line in every step's Risks | open: steps 4 and 8a |
 | R8 | **The phase can't be fully accepted yet:** the *Done when* items are proven locally, not on staging | The phase is "in review" in STATUS. Upgrade-later 33 holds the provider step, and the phase report lists exactly which checks wait for it. Later phases that need workspaces on staging say so in their plans | open: until the provider is connected |
 
 ### Step 1d.0 — Docker on the dev machine (done)

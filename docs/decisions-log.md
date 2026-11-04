@@ -327,3 +327,14 @@ GitHub Actions never ran on `ArmaanAhuja-7777` because of the account billing lo
    - Staging can't reach a laptop, so workspaces work locally only. Staging says "Workspaces run locally for now".
 4. **Phase 1d closes as "in review", not "accepted",** and phase 2 goes ahead. This is the owner's exception to the one-phase-at-a-time rule (CLAUDE.md rule 1). The *Done when* items are proven locally and in CI with Docker. Phase 1d is accepted once a cloud provider is connected and the same checks pass on staging.
 5. **Risks:** R1–R7 were rewritten for Docker, and R8 (the phase can't be fully accepted yet) was added (build-steps, phase 1d).
+
+## 4 Nov 2026: the laptop's footprint and resource guard (owner request)
+
+1. **Everything local workspaces put on the owner's laptop is labelled and listed** (build-steps, phase 1d, "On the owner's laptop"). It's all removed when the cloud provider is connected: `pnpm workspace:clean --all`, then the `.dev.vars` line and the local-only code (upgrade-later 33).
+2. **A resource guard keeps Flowcanvas within a budget on the laptop** (step 8a). Claude chose the thresholds from the laptop's figures (16 cores, 30.8 GiB, 950 GiB):
+   - 2 workspaces at once
+   - 25 GiB of disk for Flowcanvas
+   - pressure when available memory is under 4 GiB, free disk under 50 GiB, or the load over 14 for 2 minutes
+
+   Under pressure it refuses new starts, then puts idle workspaces to sleep, then stops the least recently used ones (files kept), then removes unneeded Flowcanvas images, containers and orphaned volumes. It never touches anything that isn't Flowcanvas's.
+3. **Claude checks the laptop's resources at every step** and reports them in the step's Risks line (risk R9).
