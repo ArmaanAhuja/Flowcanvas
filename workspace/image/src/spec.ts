@@ -34,25 +34,67 @@ export function imageTag(dockerfile: string = readFileSync(DOCKERFILE_URL, 'utf8
 
 // Docker object names we create. Starting with a letter or digit also means a name can't be read as a flag.
 const NAME = /^[a-z0-9][a-z0-9_.-]{0,62}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 function checkName(kind: string, value: string): string {
   if (!NAME.test(value)) throw new Error(`Invalid ${kind} name: ${JSON.stringify(value)}`);
   return value;
 }
 
+function checkImage(image: string): string {
+  if (!/^flowcanvas-workspace:[0-9a-f]{12}$/.test(image)) {
+    throw new Error(`Invalid image: ${JSON.stringify(image)}`);
+  }
+  return image;
+}
+
+/** Every Docker object we create has these labels, so clean-up and the resource guard find exactly ours. */
+export const LABEL = {
+  ours: 'org.flowcanvas.workspace',
+  prefix: 'org.flowcanvas.prefix',
+  role: 'org.flowcanvas.role',
+  workspaceId: 'org.flowcanvas.workspace-id',
+} as const;
+
+function labels(prefix: string, role: 'workspace' | 'egress', workspaceId?: string): string[] {
+  return [
+    '--label',
+    `${LABEL.ours}=1`,
+    '--label',
+    `${LABEL.prefix}=${checkName('prefix', prefix)}`,
+    '--label',
+    `${LABEL.role}=${role}`,
+    ...(workspaceId === undefined ? [] : ['--label', `${LABEL.workspaceId}=${workspaceId}`]),
+  ];
+}
+
+/** The egress proxy: the only way out of a workspace (ADR 0016). Workspaces reach it by container name. */
+export const EGRESS_PORT = 3128;
+
 /**
  * `docker network create` arguments for a workspace's own network: no route out (`--internal`), and no
  * host address on it (isolated gateway mode, Docker 28+), so the host and other workspaces are unreachable.
  */
-export function networkCreateArgs(network: string): string[] {
+export function networkCreateArgs(network: string, prefix: string): string[] {
   return [
     'network',
     'create',
     '--internal',
     '--opt',
     'com.docker.network.bridge.gateway_mode_ipv4=isolated',
-    '--label',
-    'org.flowcanvas.workspace=1',
+    ...labels(prefix, 'workspace'),
+    checkName('network', network),
+  ];
+}
+
+/** The egress proxy's own way out: an ordinary bridge to the internet, with nothing else on it. */
+export function egressNetworkCreateArgs(network: string, prefix: string): string[] {
+  return [
+    'network',
+    'create',
+    '--opt',
+    'com.docker.network.bridge.enable_icc=false',
+    ...labels(prefix, 'egress'),
     checkName('network', network),
   ];
 }
@@ -60,9 +102,14 @@ export function networkCreateArgs(network: string): string[] {
 export interface RunOptions {
   /** Container name. */
   name: string;
+  /** Prefix of every name this workspace host creates (`fc`; tests use their own). */
+  prefix: string;
+  workspaceId: string;
   network: string;
   /** Named volume holding the workspace's files, mounted at /workspace. */
   volume: string;
+  /** Container name of the egress proxy, reachable on the workspace's network. */
+  egress: string;
   image: string;
   limits?: Partial<WorkspaceLimits>;
 }
@@ -74,9 +121,10 @@ export function runArgs(options: RunOptions): string[] {
     if (!Number.isFinite(value) || value <= 0)
       throw new Error(`Invalid limit ${key}: ${String(value)}`);
   }
-  const image = options.image;
-  if (!/^flowcanvas-workspace:[0-9a-f]{12}$/.test(image))
-    throw new Error(`Invalid image: ${JSON.stringify(image)}`);
+  if (!UUID.test(options.workspaceId)) {
+    throw new Error(`Invalid workspace ID: ${JSON.stringify(options.workspaceId)}`);
+  }
+  const proxy = `http://${checkName('egress', options.egress)}:${String(EGRESS_PORT)}`;
   return [
     'run',
     '--detach',
@@ -84,8 +132,7 @@ export function runArgs(options: RunOptions): string[] {
     checkName('container', options.name),
     '--hostname',
     'workspace',
-    '--label',
-    'org.flowcanvas.workspace=1',
+    ...labels(options.prefix, 'workspace', options.workspaceId),
     '--user',
     WORKSPACE_USER,
     '--cap-drop',
@@ -99,6 +146,14 @@ export function runArgs(options: RunOptions): string[] {
     `${checkName('volume', options.volume)}:${WORKSPACE_DIR}`,
     '--network',
     checkName('network', options.network),
+    // Tools that honour the usual proxy variables (git, npm, pnpm, curl) go out through the egress proxy.
+    '--env',
+    `HTTPS_PROXY=${proxy}`,
+    '--env',
+    `https_proxy=${proxy}`,
+    // A private repository fails at once instead of waiting for a password nobody can type.
+    '--env',
+    'GIT_TERMINAL_PROMPT=0',
     '--cpus',
     String(limits.cpus),
     '--memory',
@@ -115,6 +170,69 @@ export function runArgs(options: RunOptions): string[] {
     'none',
     '--restart',
     'no',
-    image,
+    checkImage(options.image),
+  ];
+}
+
+export interface EgressRunOptions {
+  name: string;
+  prefix: string;
+  /** Its own way out (egressNetworkCreateArgs); workspace networks are connected to it later. */
+  network: string;
+  image: string;
+  /** Absolute path of the proxy's script on this machine, mounted read-only. */
+  script: string;
+  /** Stored as a label, so a changed script or image means a new container. */
+  version: string;
+}
+
+/** `docker run` arguments for the egress proxy, as locked down as a workspace and much smaller. */
+export function egressRunArgs(options: EgressRunOptions): string[] {
+  if (!options.script.startsWith('/') || /[:,\n]/.test(options.script)) {
+    throw new Error(`Invalid script path: ${JSON.stringify(options.script)}`);
+  }
+  if (!/^[0-9a-f]{12}$/.test(options.version)) {
+    throw new Error(`Invalid version: ${JSON.stringify(options.version)}`);
+  }
+  return [
+    'run',
+    '--detach',
+    '--name',
+    checkName('container', options.name),
+    ...labels(options.prefix, 'egress'),
+    '--label',
+    `org.flowcanvas.egress-version=${options.version}`,
+    '--user',
+    WORKSPACE_USER,
+    '--cap-drop',
+    'ALL',
+    '--security-opt',
+    'no-new-privileges',
+    '--read-only',
+    '--network',
+    checkName('network', options.network),
+    // It's attached to every workspace's network; it must never pass packets between them.
+    '--sysctl',
+    'net.ipv4.ip_forward=0',
+    '--sysctl',
+    'net.ipv6.conf.all.forwarding=0',
+    '--volume',
+    `${options.script}:/opt/egress/proxy.ts:ro`,
+    '--cpus',
+    '0.5',
+    '--memory',
+    String(256 * 1024 ** 2),
+    '--memory-swap',
+    String(256 * 1024 ** 2),
+    '--pids-limit',
+    '64',
+    '--init',
+    '--log-driver',
+    'none',
+    '--restart',
+    'no',
+    checkImage(options.image),
+    'node',
+    '/opt/egress/proxy.ts',
   ];
 }

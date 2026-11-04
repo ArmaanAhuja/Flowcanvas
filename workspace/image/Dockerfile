@@ -5,9 +5,10 @@
 # Node 24 LTS (matches .nvmrc), pinned by digest so a rebuild gets the same base.
 FROM node:24-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c
 
-# git for clones; ca-certificates for HTTPS; procps (ps, pkill) for the process API and the terminal.
+# git for clones; ca-certificates for HTTPS; curl, which people expect in a terminal; procps (ps, pkill)
+# for the process API and the terminal.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates git procps \
+  && apt-get install -y --no-install-recommends ca-certificates curl git procps \
   && rm -rf /var/lib/apt/lists/*
 
 # The same pnpm as the repository's packageManager (checked by spec.test.ts). No install scripts.

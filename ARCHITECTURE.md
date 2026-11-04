@@ -13,6 +13,7 @@ The system as it is **today** (end of phase 1b). Kept current at the end of ever
 | `@flowcanvas/control-plane` | `services/control-plane` | Inside the app's Cloudflare Worker under `/api` (ADR 0013); Neon Postgres | Hono API (`src/api/`): health, database ping, GitHub and Google sign-in, sessions, sign-out and the user/admin/same-origin guards (`src/auth/`), projects list and create (`src/projects/`), the secrets vault (`src/vault/`, ADR 0015), the workspace lifecycle and `WorkspaceProvider` (`src/workspaces/`); schema migrations and runner (`migrations/`, `src/db/`, ADR 0014). The earlier Fastify server was retired in phase 1c step 3 |
 | `@flowcanvas/graph-model` | `packages/graph-model` | Shared library (browser and Node) | `BuildInfo` type and `formatBuildInfo()`; becomes the flow graph model in phase 6 |
 | `@flowcanvas/engine` | `packages/engine` | Inside each user workspace (later) | Wired-in placeholder package; indexer arrives in phase 4 |
+| `@flowcanvas/workspace-host` | `workspace/host` | Developer machine, started by `pnpm dev` (127.0.0.1:8790) | The local workspace host (ADR 0016): an HTTP API with a token (`src/server.ts`; protocol in `src/protocol.ts`, shared with the control plane), workspaces as Docker containers (`src/workspaces.ts`; the 2-running cap), the egress proxy (`src/egress/proxy.ts`), the laptop budget (`src/resources.ts`) and clean-up (`src/clean.ts`) |
 | `@flowcanvas/workspace-image` | `workspace/image` | Developer machine (builds the image); used by the workspace host | The workspace image (`Dockerfile`: Node 24 by digest, pnpm, git, `node` user, telemetry off). Its tag is a hash of the Dockerfile. Also the locked-down `docker run` and network arguments, and the default limits (2 CPUs, 4 GiB, 1,024 processes, 1 GiB `/tmp`, 10 GiB disk measured) |
 | `@flowcanvas/workspace-agent` | `workspace/agent` | Inside each workspace (a local Docker container for now, ADR 0016) | Wired-in placeholder package; the agent arrives in phase 1d (step 5) |
 | `@flowcanvas/corpus` | `corpus` | Developer machine / CI | The test corpus: six public forks pinned in `manifest.json`; `pnpm corpus:check` verifies fork, commit, licence and stack through the GitHub API |
@@ -192,6 +193,10 @@ browser ──► Worker /api ──HTTP 127.0.0.1 + token──► workspace ho
 - Sleep is `docker pause`; resume is `docker unpause` (about 50 ms each way, processes intact).
 - Containers run as uid 1000 with no capabilities, `no-new-privileges`, a read-only root filesystem, a 1 GiB `/tmp`, no logs and `--init` (`workspace/image/src/spec.ts`). Only the workspace volume can grow, and Docker can't cap it on every storage driver (not on btrfs), so the host measures it (step 8; upgrade-later 35).
 - Staging has no workspace host, so it shows "Workspaces run locally for now".
+- **The host's API** (`workspace/host/src/protocol.ts`, `v1`): `GET /v1/health`, `POST /v1/workspaces` `{ workspaceId, repoUrl }` → `{ ref, cloned, cloneMs }`, `POST /v1/workspaces/:ref/{start,pause,resume,stop}` → 204. Errors are `{ error: { kind, message } }` with the same kinds as `ProviderError`. It refuses requests without the token (401) and anything with an `Origin` header or a Host other than 127.0.0.1 or localhost (403), so web pages can't drive it.
+- **Names:** a workspace's container, network and volume are all `fc-ws-<workspace id>`. The proxy is `fc-egress` on `fc-egress-out`. Everything is labelled `org.flowcanvas.workspace=1`, with `org.flowcanvas.prefix` and `org.flowcanvas.role`; tests use their own `fc-test-<hex>` prefix.
+- **The egress proxy** allows only `CONNECT` to port 443 on `github.com` and `codeload.github.com` (step 7 adds more). It resolves the name itself and refuses non-public addresses. It runs with IP forwarding off, and is connected to each workspace's network.
+- **Opening a project:** create or wake the container, then a shallow clone (`--depth 1`, https only) into `/workspace/project`; opening again keeps the files. The adapter (`services/control-plane/src/workspaces/local-host.ts`) only talks to loopback addresses, and only passes known error kinds and bounded sentences through.
 
 ## Workspace lifecycle (phase 1d, step 3)
 
@@ -213,10 +218,13 @@ POST /api/projects/:id/workspace/{open,sleep,resume,stop}  (same origin) ──�
 
 ```fish
 pnpm install
-pnpm dev            # http://localhost:5173: Vite, with /api forwarded to the Worker in `wrangler dev` on 8787
+pnpm dev            # http://localhost:5173: Vite, with /api forwarded to the Worker in `wrangler dev` on 8787,
+                    # and the workspace host on 127.0.0.1:8790 (needs WORKSPACE_HOST_TOKEN and Docker)
 pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e
 pnpm --filter @flowcanvas/ui storybook   # catalogue on http://localhost:6006
 pnpm test:visual                         # catalogue baselines in both themes, axe
 pnpm workspace:image                     # build the workspace image (phase 1d), skipped if up to date
-pnpm test:docker                         # tests against real containers; needs Docker 28+
+pnpm test:docker                         # tests against real containers; needs Docker 28+ and the internet
+pnpm workspace:resources                 # the laptop's figures and Flowcanvas's share, against the budget
+pnpm workspace:clean                     # test leftovers and old images; --all --yes removes every workspace
 ```

@@ -5,11 +5,12 @@ import { authRoutes, type AuthBindings } from '../auth/routes.js';
 import { projectRoutes } from '../projects/routes.js';
 import { neonDatabase, type Database } from '../db/database.js';
 import { usageRoutes } from '../usage/routes.js';
+import { localHostFromEnv, type LocalHostBindings } from '../workspaces/local-host.js';
 import type { WorkspaceProvider } from '../workspaces/provider.js';
 import { describeError, redact } from './redact.js';
 
 /** Values Cloudflare passes to the Worker: Worker secrets and `vars` on Cloudflare, `.dev.vars` under `wrangler dev`. */
-export type ApiBindings = AuthBindings;
+export type ApiBindings = AuthBindings & LocalHostBindings;
 
 /** Outside effects the API needs, passed in so tests can replace them. */
 export interface ApiDependencies {
@@ -30,8 +31,8 @@ const defaults: ApiDependencies = {
   log: (message) => {
     console.error(message);
   },
-  // The local workspace host's adapter arrives in step 4; until then nothing runs workspaces.
-  workspaceProvider: () => undefined,
+  // The local workspace host when `pnpm dev` configures it (ADR 0016); nothing on staging.
+  workspaceProvider: (env) => localHostFromEnv(env, (input, init) => fetch(input, init)),
 };
 
 /** The control plane's HTTP API, mounted under /api in the app's Worker (decisions log, 30 Oct 2026). */

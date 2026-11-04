@@ -1,0 +1,114 @@
+// Both sides of the local workspace host's protocol together: the real host process (workspace/host, run as
+// `pnpm dev` runs it) and this adapter, with real Docker. Run with `pnpm test:docker`.
+// @vitest-environment node
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { createServer } from 'node:net';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { MESSAGES, localHostFromEnv } from './local-host.js';
+import type { WorkspaceProvider } from './provider.js';
+
+const run = promisify(execFile);
+const prefix = `fc-test-${randomBytes(4).toString('hex')}`;
+const token = randomBytes(32).toString('hex');
+const hostDir = fileURLToPath(new URL('../../../../workspace/host/', import.meta.url));
+let child: ChildProcess;
+let provider: WorkspaceProvider;
+let output = '';
+
+async function freePort(): Promise<number> {
+  return new Promise((resolve) => {
+    const server = createServer().listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      server.close(() => {
+        resolve(typeof address === 'object' && address !== null ? address.port : 0);
+      });
+    });
+  });
+}
+
+beforeAll(async () => {
+  const port = await freePort();
+  // Its own process group (detached), so afterAll can stop tsx and the node process it starts, not just one.
+  child = spawn('pnpm', ['exec', 'tsx', 'src/main.ts'], {
+    cwd: hostDir,
+    detached: true,
+    env: {
+      ...process.env,
+      WORKSPACE_HOST_TOKEN: token,
+      WORKSPACE_HOST_PORT: String(port),
+      WORKSPACE_HOST_PREFIX: prefix,
+    },
+  });
+  child.stdout?.on('data', (chunk: Buffer) => (output += chunk.toString()));
+  child.stderr?.on('data', (chunk: Buffer) => (output += chunk.toString()));
+  const started = Date.now();
+  while (!output.includes('Listening on')) {
+    if (Date.now() - started > 30_000) throw new Error(`host didn't start:\n${output}`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  const configured = localHostFromEnv(
+    { WORKSPACE_HOST_URL: `http://127.0.0.1:${String(port)}`, WORKSPACE_HOST_TOKEN: token },
+    (input, init) => fetch(input, init),
+  );
+  if (configured === undefined) throw new Error('no provider');
+  provider = configured;
+}, 60_000);
+
+afterAll(async () => {
+  if (child.pid !== undefined) process.kill(-child.pid, 'SIGTERM');
+  const list = async (args: string[]) =>
+    (
+      await run('docker', [...args, '--filter', `label=org.flowcanvas.prefix=${prefix}`, '-q'])
+    ).stdout
+      .split('\n')
+      .filter((id) => id !== '');
+  for (const id of await list(['ps', '--all'])) await run('docker', ['rm', '--force', id]);
+  for (const id of await list(['network', 'ls'])) await run('docker', ['network', 'rm', id]);
+  for (const id of await list(['volume', 'ls']))
+    await run('docker', ['volume', 'rm', '--force', id]);
+}, 60_000);
+
+describe('the control plane driving the real workspace host', { timeout: 120_000 }, () => {
+  it('creates, sleeps, resumes, stops and starts a workspace', async () => {
+    const { ref } = await provider.create({ workspaceId: randomUUID(), repoUrl: null });
+    expect(ref).toMatch(new RegExp(`^${prefix}-ws-`));
+    const status = async () =>
+      (await run('docker', ['inspect', '--format', '{{.State.Status}}', ref])).stdout.trim();
+    await provider.pause(ref);
+    expect(await status()).toBe('paused');
+    await provider.resume(ref);
+    expect(await status()).toBe('running');
+    await provider.stop(ref);
+    expect(await status()).toBe('exited');
+    await provider.start(ref);
+    expect(await status()).toBe('running');
+  });
+
+  it("passes the host's refusals through with their kind and sentence", async () => {
+    await expect(provider.resume(`${prefix}-ws-${randomUUID()}`)).rejects.toMatchObject({
+      kind: 'gone',
+      userMessage: 'This workspace no longer exists on this computer.',
+    });
+    await expect(
+      provider.create({ workspaceId: randomUUID(), repoUrl: 'https://gitlab.com/a/b' }),
+    ).rejects.toMatchObject({ kind: 'failed' });
+  });
+
+  it('is refused with the wrong token', async () => {
+    const url = /Listening on (http:\/\/127\.0\.0\.1:\d+)/.exec(output)?.[1] ?? '';
+    const wrong = localHostFromEnv(
+      { WORKSPACE_HOST_URL: url, WORKSPACE_HOST_TOKEN: 'f'.repeat(64) },
+      (input, init) => fetch(input, init),
+    );
+    await expect(wrong?.stop(`${prefix}-ws-${randomUUID()}`)).rejects.toMatchObject({
+      kind: 'unavailable',
+    });
+  });
+
+  it('never printed the token', () => {
+    expect(output).not.toContain(token);
+  });
+});

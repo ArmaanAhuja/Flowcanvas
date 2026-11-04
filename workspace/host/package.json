@@ -1,0 +1,35 @@
+{
+  "name": "@flowcanvas/workspace-host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "default": "./dist/protocol.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx --env-file-if-exists=../../.dev.vars src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --exclude '**/*.docker.test.ts'",
+    "test:docker": "vitest run docker.test",
+    "docker-clean": "tsx scripts/clean.ts",
+    "resources": "tsx scripts/resources.ts",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@flowcanvas/workspace-image": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -1,7 +1,7 @@
 // Real containers: the image and every lock-down flag, checked from inside. Needs Docker 28+.
 // Run with `pnpm test:docker` (not part of `pnpm test`, which must work without Docker).
 import { execFile } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildImage } from './docker.js';
@@ -10,7 +10,8 @@ import { WORKSPACE_LIMITS, networkCreateArgs, runArgs, type WorkspaceLimits } fr
 const run = promisify(execFile);
 const MiB = 1024 ** 2;
 const id = randomBytes(4).toString('hex');
-const network = `fc-test-net-${id}`;
+const prefix = `fc-test-${id}`;
+const network = `${prefix}-net`;
 const containers: string[] = [];
 const volumes: string[] = [];
 let image = '';
@@ -42,13 +43,24 @@ async function start(
   if (!volumes.includes(volume)) volumes.push(volume);
   const name = `fc-test-ws-${id}-${String(containers.length)}`;
   containers.push(name);
-  await docker(...runArgs({ name, network, volume, image, ...(limits ? { limits } : {}) }));
+  await docker(
+    ...runArgs({
+      name,
+      prefix,
+      workspaceId: randomUUID(),
+      network,
+      volume,
+      egress: `${prefix}-egress`,
+      image,
+      ...(limits ? { limits } : {}),
+    }),
+  );
   return { name, volume };
 }
 
 beforeAll(async () => {
   image = await buildImage();
-  await docker(...networkCreateArgs(network));
+  await docker(...networkCreateArgs(network, prefix));
 }, 300_000);
 
 afterAll(async () => {

@@ -2052,8 +2052,8 @@ When phase 1a is done you can:
 
 | What | Where | Removed by |
 | --- | --- | --- |
-| Workspace images `flowcanvas-workspace:<hash>` (about 560 MB each) | Docker images, label `org.flowcanvas.workspace=1` | `pnpm workspace:clean --all` (step 4) |
-| Workspace containers, networks and volumes (the projects' files) | Docker, same label | `pnpm workspace:clean --all` |
+| Workspace images `flowcanvas-workspace:<hash>` (about 560 MB each) | Docker images, label `org.flowcanvas.workspace=1` | Old ones: `pnpm workspace:clean`; all: `pnpm workspace:clean --all --yes` |
+| Workspace containers, networks and volumes (the projects' files), named `fc-ws-<id>`; the egress proxy `fc-egress` and its network `fc-egress-out` | Docker, same label | `pnpm workspace:clean --all --yes` |
 | Test leftovers `fc-test-*` | Docker (the tests remove them; a crashed run might not) | `pnpm workspace:clean` |
 | The local workspace host (`workspace/host`) | A Node process, only while `pnpm dev` runs | Stops with `pnpm dev`; the code is retired with the switch |
 | `WORKSPACE_HOST_TOKEN` | `.dev.vars` | Delete the line |
@@ -9409,8 +9409,8 @@ browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0
 | 1 | Spike: the Worker in `wrangler dev` reaching a loopback host. Clone timing for Rallly; pause and resume intact; two containers on separate internal networks; how the host talks to the agent (`docker exec` stdio or the bridge address). ADR 0016 | done (Claude, 4 Nov) |
 | 2 | Workspace image (`workspace/image`): Node 24, pnpm, git, non-root user; CPU, memory, process and disk limits | done (Claude, 4 Nov) |
 | 3 | `WorkspaceProvider` interface; lifecycle and states in the control plane, tested with a fake provider | done (Claude, 4 Nov) |
-| 4 | Local workspace host and Docker adapter; a minimal egress proxy (GitHub only); open a project: create the container and clone the repo; timed. Also the 2-workspace cap, `pnpm workspace:clean` and `pnpm workspace:resources` | *next* |
-| 5 | File and process API (the agent in the container): typed, versioned, owner only | *planned* |
+| 4 | Local workspace host and Docker adapter; a minimal egress proxy (GitHub only); open a project: create the container and clone the repo; timed. Also the 2-workspace cap, `pnpm workspace:clean` and `pnpm workspace:resources` | done (Claude, 4 Nov) |
+| 5 | File and process API (the agent in the container): typed, versioned, owner only | *next* |
 | 6 | Terminal: Durable Object WebSocket gateway and xterm.js | *planned* |
 | 7 | Network rules: the egress proxy's full allowlist and address checks; limits; the isolation test | *planned* |
 | 8 | Sleep after 10 idle minutes and resume intact; usage metering writes workspace seconds | *planned* |
@@ -9437,10 +9437,10 @@ Each step's write-up ends with a **Risks** line saying what changed. The phase r
 | R2 | **The Worker in `wrangler dev` has to reach the local host** | The step 1 spike checks it before anything is built on it. The fallback is calling the host from Vite's proxy | **closed (step 1):** works, 3–4 ms per call |
 | R3 | **"Can't reach each other" is now our job,** not a provider's | Each workspace gets its own internal network with no route out. The internet goes only through an egress proxy with an allowlist. Measured in step 1; the test comes in step 7 | open: step 7. **Step 1:** internal networks alone still let a container reach the host. The isolated gateway mode (Docker 28+) closes that, and is now required (ADR 0016) |
 | R4 | **`docker pause` keeps memory in use,** and a host restart loses paused processes | It's fine for a few local workspaces. After a restart, a workspace shows as stopped with its files kept (in a volume), never as lost. The cloud provider brings real snapshots | open: step 8. **Step 1:** pause and resume take about 50 ms each way; the same process carried on, and files were kept |
-| R5 | **Under 60 s for Rallly** depends on the clone and the home connection | Step 1 times a real clone. A shallow clone (`--depth 1`) and a prebuilt image keep it short. Dependencies install after "open", in the background, outside the 60 s | open: step 4. **Step 1:** 6.2–7.5 s for Rallly, without the proxy yet |
-| R6 | **The Docker socket is root-equivalent,** so whatever drives it is powerful | Only the host touches it. The host listens on 127.0.0.1 only and needs a token (`WORKSPACE_HOST_TOKEN` in `.dev.vars`). It takes no image names, mounts or flags from requests. Canary tests cover the token | open: steps 4 and 10. **Step 1:** loopback with a token works for the Worker |
+| R5 | **Under 60 s for Rallly** depends on the clone and the home connection | Step 1 times a real clone. A shallow clone (`--depth 1`) and a prebuilt image keep it short. Dependencies install after "open", in the background, outside the 60 s | **closed (step 4):** 8.9 s through the egress proxy (clone 7.0 s), checked by a Docker test that fails above 60 s. Repeated on the cloud provider later (R8) |
+| R6 | **The Docker socket is root-equivalent,** so whatever drives it is powerful | Only the host touches it. The host listens on 127.0.0.1 only and needs a token (`WORKSPACE_HOST_TOKEN` in `.dev.vars`). It takes no image names, mounts or flags from requests. Canary tests cover the token | open: step 10. **Step 4:** the host takes only fixed operations on checked names, needs the token (compared in constant time), refuses browsers (Origin, Host); the adapter sends the token only to loopback addresses; tests check it's never logged or shown |
 | R7 | **Untrusted code runs on the owner's laptop:** a cloned repo or a terminal command could mine crypto or attack the home network | Limits (step 2); egress only through the proxy, with the home network and metadata ranges blocked (step 7); sleep when idle (step 8); only allowlisted people can open workspaces | open: steps 7 and 8. **Step 2:** CPU, memory, process and `/tmp` limits are enforced (tested). Disk is measured, not capped (upgrade-later 35) |
-| R9 | **Workspaces could overload the owner's laptop** | The resource guard (step 8a): 2 workspaces at most, a 25 GiB disk budget, and pressure thresholds that refuse, sleep, stop and clean up, acting only on Flowcanvas's own things. `pnpm workspace:resources`, and a "Laptop" line in every step's Risks | open: steps 4 and 8a |
+| R9 | **Workspaces could overload the owner's laptop** | The resource guard (step 8a): 2 workspaces at most, a 25 GiB disk budget, and pressure thresholds that refuse, sleep, stop and clean up, acting only on Flowcanvas's own things. `pnpm workspace:resources`, and a "Laptop" line in every step's Risks | open: step 8a. **Step 4:** the 2-running cap is enforced by the host (tested), and `pnpm workspace:resources` and `pnpm workspace:clean` exist |
 | R8 | **The phase can't be fully accepted yet:** the *Done when* items are proven locally, not on staging | The phase is "in review" in STATUS. Upgrade-later 33 holds the provider step, and the phase report lists exactly which checks wait for it. Later phases that need workspaces on staging say so in their plans | open: until the provider is connected |
 
 ### Step 1d.0 — Docker on the dev machine (done)
@@ -9659,3 +9659,75 @@ There's nothing to click yet. With no provider configured, `POST /api/projects/<
 - **Laptop:** 22 of 30 GiB available, 581 GB disk free, load 6.2 (tests running). Flowcanvas has one 559 MB image and no containers, volumes or networks.
 
 **Commit:** `feat(control-plane): workspace lifecycle behind WorkspaceProvider, migration 0003`
+
+### Step 1d.4 — The local workspace host: opening a project for real (done by Claude)
+
+**Goal:** opening a project starts its own container and clones its repository through the egress proxy, driven by the control plane through the provider interface. Plus the two commands for the owner's laptop (`pnpm workspace:resources`, `pnpm workspace:clean`) and the 2-workspace cap.
+
+**Concepts:**
+- **A loopback service with a token.** The host listens on 127.0.0.1 only, so nothing else on the network can reach it. Every request needs `Authorization: Bearer <WORKSPACE_HOST_TOKEN>`, compared as SHA-256 digests with `timingSafeEqual`, so timing reveals nothing about the token. https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b
+- **Why the host also refuses browsers.** A web page you visit can send requests to `http://127.0.0.1:8790`. It can't read the answers (CORS), but a POST could still act. Browsers always add an `Origin` header to such requests, and a "DNS rebinding" page arrives with its own Host name. Refusing both, plus the token, closes that door. https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin
+- **An HTTP CONNECT proxy.** For HTTPS, git and curl ask the proxy to `CONNECT github.com:443`, then speak TLS straight through it. The proxy sees only the host name, never the content. It checks the name against the allowlist, resolves it itself, and connects to an address it checked, so a DNS answer pointing at `10.x` or `127.0.0.1` is refused (DNS rebinding again). https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/CONNECT
+- **`net.BlockList`.** Node's built-in list of address ranges. One surprise: it matches every IPv4 address against the IPv4-mapped IPv6 range `::ffff:0:0/96`, so that range blocked the whole IPv4 internet. IPv4-mapped addresses are now refused by a separate check. https://nodejs.org/api/net.html#class-netblocklist
+- **Node's type stripping.** The proxy runs inside its own container from the read-only mounted `proxy.ts`. Node 24 runs TypeScript directly by removing the types, so the file can't use TypeScript-only syntax (enums, parameter properties) or import our other files. https://nodejs.org/api/typescript.html
+- **A shared protocol module.** `workspace/host/src/protocol.ts` holds the paths, error kinds and limits. The host and the control plane's adapter both import it, so they can't drift apart. One Docker test runs the real host process and drives it through the real adapter.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `workspace/host/src/protocol.ts` | `v1` paths, error kinds, `CreateRequest`/`CreateResponse`, `MESSAGE_MAX` (300). Built to `dist` for the control plane |
+| `workspace/host/src/server.ts` | The HTTP API: health, create, the four actions. Token, Origin and Host checks; 4 KB body limit; errors as `{ error: { kind, message } }`; unexpected errors become a plain sentence |
+| `workspace/host/src/workspaces.ts` | `WorkspaceHost`: create (proxy, network, volume, container, clone), start, pause, resume, stop. One operation at a time per workspace. The 2-running cap. Public GitHub addresses only for now. The clone is https only, `--depth 1`, with a 120 s limit, and its failures are logged by exit code only |
+| `workspace/host/src/egress/proxy.ts` | The egress proxy: CONNECT to 443 on `github.com` and `codeload.github.com` only; public addresses only; plain HTTP refused |
+| `workspace/host/src/docker-cli.ts`, `errors.ts` | Running `docker` with argument arrays; "Docker isn't running" as `unavailable`; `HostError` and its statuses |
+| `workspace/host/src/resources.ts`, `scripts/resources.ts` | The laptop's figures (MemAvailable, free disk on Docker's root, load, cores, Flowcanvas's running and asleep workspaces, images and volumes) and `assess()` against the budget |
+| `workspace/host/src/clean.ts`, `scripts/clean.ts` | `planClean()`: by default test leftovers and old images; `--all --yes` everything of ours. Never anything else |
+| `workspace/host/src/main.ts` | Started by `pnpm dev`. Without a token, or without Docker 28+, it says what to fix and exits quietly, so the rest of `pnpm dev` still runs |
+| `workspace/image/src/spec.ts` | Now also labels, the proxy variables (`HTTPS_PROXY`, `GIT_TERMINAL_PROMPT=0`), `egressNetworkCreateArgs()`, `egressRunArgs()` (locked down, 256 MB, IP forwarding off) |
+| `workspace/image/Dockerfile` | `curl` added (new tag `c728f54c03be`) |
+| `services/control-plane/src/workspaces/local-host.ts` | The `docker-local` provider: talks only to loopback URLs; 180 s for create, 30 s for the rest; maps "can't connect" to "The workspace host isn't running…" and 401 to "Add WORKSPACE_HOST_TOKEN…"; passes only known kinds and bounded sentences |
+| `services/control-plane/src/api/app.ts`, `src/auth/guards.ts`, `package.json` | The provider comes from the bindings. `pnpm dev` passes `WORKSPACE_HOST_URL=http://127.0.0.1:8790`; staging has none |
+| `.dev.vars.example` | `WORKSPACE_HOST_TOKEN` and how to make one |
+| `package.json` | `workspace:clean`, `workspace:resources`; every `workspace:*` script uses `run` (see Gotchas) |
+
+**Tests:**
+- **Host unit tests (41):**
+  - `workspaces.test.ts` (15, against a fake Docker): the create sequence and the exact clone command; idempotent create; GitHub-only refusals before any Docker call; the cap; clean-up after a failed clone; the clone's timeout; replacing a changed proxy and reattaching networks; every action's states; "gone" answers; foreign names refused; one operation at a time
+  - `server.test.ts` (11): token, Origin, Host, routes, body limits, error mapping, the token never logged
+  - `egress/proxy.test.ts` (8): public and special addresses, targets, refusals without resolving, DNS rebinding, plain HTTP
+  - `resources.test.ts` (5), `clean.test.ts` (3)
+- **Control-plane adapter (12):** loopback only, the missing token, paths and headers, unreachable host, error pass-through and refusals, the token never in errors.
+- **Docker tests (`pnpm test:docker`, 23 in total):**
+  - workspace-image (10)
+  - workspace-host (9): **Rallly opens in 8.9 s (clone 7.0 s), and the test fails above 60 s**; opening again keeps the clone; through the proxy only GitHub works, example.com gets 403, going around the proxy has no route, plain HTTP gets 403; the proxy's IP forwarding is 0; pause and resume keep a running process; stop and start keep the files; the cap refuses a third; no route to another workspace, the host, the home router or the metadata address; the log has the clone time and no addresses
+  - control-plane (4): the real host process driven through the adapter (create, sleep, resume, stop, start), its refusals passed through, a wrong token explained, the token never printed
+
+**Run and check it:**
+```fish
+grep -c '^WORKSPACE_HOST_TOKEN=' .dev.vars      # 1 (Claude added it; to make your own, see .dev.vars.example)
+pnpm test                                       # 455 tests, no Docker needed
+pnpm test:docker                                # 23 Docker tests; needs the internet; prints "Rallly: opened in … ms"
+pnpm workspace:resources                        # five "ok" lines with your laptop's figures
+pnpm workspace:clean                            # removes test leftovers and old images; "Nothing to remove." when clean
+pnpm dev                                        # the log shows "[workspace-host] Listening on http://127.0.0.1:8790"
+```
+There's still no button: the page gets **Open** in step 9. Signed in locally, `POST /api/projects/<id>/workspace/open` now opens a real workspace.
+
+**Gotchas:**
+- **pnpm 12 has a built-in `clean` command.** The first version of the script was called `clean`, and `pnpm --filter … clean` ran pnpm's own command, which deletes every `node_modules` folder. No code or data was lost: `pnpm install --frozen-lockfile` restored them from the lockfile in a second. The script is now `docker-clean`, and every root `workspace:*` script says `run` explicitly, so a script name can never be mistaken for a pnpm command.
+- **Killing `pnpm` doesn't kill what it started.** The first control-plane Docker test stopped only `pnpm`, and left `tsx` and the host running. The test now starts the host in its own process group (`detached`) and stops the whole group. (A `pkill -f` during the live check also matched the shell running it; processes are now stopped by PID.)
+- **A well-formed error isn't always the right one to show.** With a wrong token, the host's answer was "Wrong or missing token." The adapter now turns any 401 into the actionable "Add WORKSPACE_HOST_TOKEN to .dev.vars…". The end-to-end Docker test caught it; the unit test hadn't, because its fake answered differently.
+- **Docker containers have IP forwarding on.** The proxy is attached to every workspace network, so it runs with `net.ipv4.ip_forward=0` (and IPv6 forwarding off), and a test checks it.
+
+**Docs:** this write-up; ADR 0016 (browser refusals, the shared proxy's forwarding); ARCHITECTURE (parts, "Workspaces", local commands); the laptop table; STATUS; `.dev.vars.example`; the risk statuses above.
+
+**Risks:**
+- R5 closed: 8.9 s.
+- R3: isolation checked again through the real host (the full test comes in step 7).
+- R6: the host's and the adapter's checks are in place.
+- R9: the cap and the two commands exist.
+- R1, R4, R7 and R8 unchanged.
+- **Laptop:** 24.2 of 30.8 GiB memory available, 580.7 GiB disk free, load 6.5 during tests. Flowcanvas uses 0.5 GiB (one image); no containers, networks or volumes left.
+
+**Commit:** `feat(workspace): local workspace host, egress proxy and the Docker provider`

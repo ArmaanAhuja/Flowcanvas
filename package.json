@@ -23,7 +23,9 @@
     "db:migrate": "pnpm --filter @flowcanvas/control-plane --fail-if-no-match db:migrate",
     "db:status": "pnpm --filter @flowcanvas/control-plane --fail-if-no-match db:status",
     "db:allow": "pnpm --filter @flowcanvas/control-plane --fail-if-no-match db:allow",
-    "workspace:image": "pnpm --filter @flowcanvas/workspace-image --fail-if-no-match image",
+    "workspace:image": "pnpm --filter @flowcanvas/workspace-image --fail-if-no-match run image",
+    "workspace:clean": "pnpm --filter @flowcanvas/workspace-host --fail-if-no-match run docker-clean",
+    "workspace:resources": "pnpm --filter @flowcanvas/workspace-host --fail-if-no-match run resources",
     "test:docker": "turbo run test:docker"
   },
   "devDependencies": {

@@ -51,7 +51,7 @@ browser ──► Worker /api (wrangler dev) ──HTTP, 127.0.0.1, bearer token
 ```
 
 - **`WorkspaceProvider` interface in the control plane.** The Docker adapter calls the local workspace host. A cloud adapter replaces it later; nothing else changes.
-- **The workspace host is the only thing that touches Docker.** It listens on 127.0.0.1 only and needs `WORKSPACE_HOST_TOKEN` (`.dev.vars`). It runs a fixed set of operations (create, start, pause, resume, stop, remove, exec the agent, open a terminal). Image, mounts, networks, limits and flags are its own constants, never taken from a request.
+- **The workspace host is the only thing that touches Docker.** It listens on 127.0.0.1 only and needs `WORKSPACE_HOST_TOKEN` (`.dev.vars`). It also refuses any request with an `Origin` header or a Host that isn't 127.0.0.1 or localhost, so a web page in the browser can't drive it: a page can reach 127.0.0.1, but can't drop Origin or fake Host (added in step 4). It runs a fixed set of operations (create, start, pause, resume, stop, remove, exec the agent, open a terminal). Image, mounts, networks, limits and flags are its own constants, never taken from a request.
 - **Each workspace:**
   - a container from our image (step 2)
   - non-root, `--cap-drop ALL`, `no-new-privileges`, Docker's default seccomp profile
@@ -59,7 +59,7 @@ browser ──► Worker /api (wrangler dev) ──HTTP, 127.0.0.1, bearer token
   - no Docker socket inside
   - its own internal network in isolated gateway mode (the host refuses to start on Docker older than 28)
   - a named volume for its files
-- **Internet only through an egress proxy** on the workspace's network, with an allowlist (GitHub for clones and the npm registry to start). It resolves names itself and refuses private, loopback and link-local addresses. A minimal proxy comes with the clone (step 4); the rules and the isolation test, in step 7.
+- **Internet only through an egress proxy** on the workspace's network. It's one shared proxy container, connected to every workspace network with IP forwarding turned off (`net.ipv4.ip_forward=0`; Docker had it on), so it can't route between them, with an allowlist (GitHub for clones and the npm registry to start). It resolves names itself and refuses private, loopback and link-local addresses. A minimal proxy comes with the clone (step 4); the rules and the isolation test, in step 7.
 - **Host ↔ agent:** typed, versioned JSON-lines messages over one `docker exec -i` stream per workspace. No ports are opened on the container.
 - **Sleep is `docker pause`** (the cgroup freezer): memory and processes stay frozen in place, so "resumes intact" holds. After a host restart a workspace comes back stopped, with its volume kept.
 - **Staging has no workspace host,** so its API answers "Workspaces run locally for now" and the UI says the same.
