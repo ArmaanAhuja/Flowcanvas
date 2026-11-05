@@ -8,6 +8,12 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createScheduled } from '../api/scheduled.js';
+import { createProject } from '../projects/projects.js';
+import { migratedDatabase } from '../test/database.js';
+import { signedInAs } from '../test/sessions.js';
+import { usageSummary } from '../usage/usage.js';
+import { IDLE_SLEEP_MS, loadWorkspace, openWorkspace, resumeWorkspace } from './lifecycle.js';
 import { MESSAGES, localHostFromEnv } from './local-host.js';
 import type { WorkspaceProvider } from './provider.js';
 
@@ -192,6 +198,66 @@ describe('the control plane driving the real workspace host', { timeout: 120_000
       if (worker.pid !== undefined) process.kill(-worker.pid, 'SIGTERM');
       await provider.stop(ref).catch(() => undefined);
     }
+  });
+
+  it('sleeps after 10 idle minutes and resumes intact: files and processes (Done when)', async () => {
+    // The real lifecycle and the scheduled tick on a clock the test moves; the real host and Docker underneath.
+    const db = await migratedDatabase();
+    const { userId } = await signedInAs(db, 'ada@example.com');
+    const project = await createProject(db, userId, { name: 'Idle', repoUrl: null });
+    if (project === 'duplicate-name') throw new Error('unexpected duplicate');
+    let now = Date.UTC(2026, 10, 5, 9, 0, 0);
+    const lines: string[] = [];
+    const ctx = { db, provider, now: () => now, log: (line: string) => lines.push(line) };
+    const load = async () => {
+      const row = await loadWorkspace(db, project.id, userId);
+      if (row === undefined) throw new Error('no workspace');
+      return row;
+    };
+    expect(await openWorkspace(ctx, await load())).toMatchObject({ ok: true });
+    const ref = (await load()).provider_ref ?? '';
+    const status = async () =>
+      (await run('docker', ['inspect', '--format', '{{.State.Status}}', ref])).stdout.trim();
+    const shell = async (script: string) =>
+      (await run('docker', ['exec', ref, 'sh', '-c', script])).stdout.trim();
+
+    // Something to keep: a file, and a process with state in memory (a counter it keeps writing).
+    await shell('mkdir -p /workspace/project && echo kept > /workspace/project/note.txt');
+    const pid = await shell(
+      "nohup sh -c 'i=0; while true; do i=$((i+1)); echo $i > /tmp/count; sleep 0.2; done' >/dev/null 2>&1 & echo $!",
+    );
+    await sleep(500);
+
+    const tick = createScheduled({
+      database: () => db,
+      now: () => now,
+      log: (line) => lines.push(line),
+      workspaceProvider: () => provider,
+    });
+    const run1 = { cron: '* * * * *', scheduledTime: now };
+    now += IDLE_SLEEP_MS - 1_000;
+    await tick(run1, { DATABASE_URL: 'postgresql://unused' });
+    expect(await status()).toBe('running');
+    now += 1_000;
+    await tick(run1, { DATABASE_URL: 'postgresql://unused' });
+    expect((await load()).state).toBe('sleeping');
+    expect(await status()).toBe('paused');
+    expect((await usageSummary(db, userId, now)).workspaceSeconds).toBe(IDLE_SLEEP_MS / 1000);
+
+    now += 3_600_000;
+    expect(await resumeWorkspace(ctx, await load())).toMatchObject({
+      ok: true,
+      workspace: { state: 'running' },
+    });
+    expect(await status()).toBe('running');
+    expect(await shell('cat /workspace/project/note.txt')).toBe('kept');
+    expect(await shell(`kill -0 ${pid} && echo alive`)).toBe('alive');
+    const before = Number(await shell('cat /tmp/count'));
+    await sleep(1_000);
+    expect(Number(await shell('cat /tmp/count'))).toBeGreaterThan(before);
+    // Asleep for an hour cost nothing.
+    expect((await usageSummary(db, userId, now)).workspaceSeconds).toBe(IDLE_SLEEP_MS / 1000);
+    await provider.stop(ref);
   });
 
   it('never printed the token', () => {

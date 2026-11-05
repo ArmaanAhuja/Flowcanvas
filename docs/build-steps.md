@@ -9416,8 +9416,8 @@ browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0
 | 6.2 | The Worker's WebSocket relay (owner, origin, running checks) and the adapter; Vite forwards WebSockets | done (Claude, 4 Nov) |
 | 6.3 | The terminal on the page: xterm.js, token colours, the CSP shim; a walkthrough under the deployed CSP | done (Claude, 4 Nov) |
 | 7 | Network rules: the egress proxy's full allowlist and address checks; limits; the isolation test | done (Claude, 5 Nov) |
-| 8 | Sleep after 10 idle minutes and resume intact; usage metering writes workspace seconds | *next* |
-| 8a | The resource guard: laptop pressure and Flowcanvas's budget checked every 30 s; refuse, sleep, stop, clean up (owner, 4 Nov) | *planned* |
+| 8 | Sleep after 10 idle minutes and resume intact; usage metering writes workspace seconds | done (Claude, 5 Nov) |
+| 8a | The resource guard: laptop pressure and Flowcanvas's budget checked every 30 s; refuse, sleep, stop, clean up (owner, 4 Nov) | *next* |
 | 9 | Status chip and cards (Figma 29); Open demo project (Rallly); staging's "Workspaces run locally for now" | *planned* |
 | 10 | Security tests (canary secrets, isolation), walkthrough, timing; Docker tests in CI if the runners allow | *planned* |
 | 11 | Close the phase as **in review** (0.5.0): report, and what waits for the cloud provider | *planned* |
@@ -9439,10 +9439,10 @@ Each step's write-up ends with a **Risks** line saying what changed. The phase r
 | R1 | **Containers aren't VMs:** they share the host's kernel, so a kernel bug could let code escape | Non-root user, all capabilities dropped, `no-new-privileges`, Docker's seccomp profile, no Docker socket inside, limits. Only the owner uses it. A gVisor runtime is an optional hardening (upgrade-later 34). Real VMs come with the cloud provider | open until real VMs (the cloud provider, R8) or gVisor (upgrade-later 34). **Step 7:** the network side is proven by the isolation test; the kernel is still shared. Step 1: the locked-down flags didn't get in the way of git. **Step 2:** every flag is set in one place (`runArgs`) and checked from inside a real container (`pnpm test:docker`) |
 | R2 | **The Worker in `wrangler dev` has to reach the local host** | The step 1 spike checks it before anything is built on it. The fallback is calling the host from Vite's proxy | **closed (step 1):** works, 3–4 ms per call |
 | R3 | **"Can't reach each other" is now our job,** not a provider's | Each workspace gets its own internal network with no route out. The internet goes only through an egress proxy with an allowlist. Measured in step 1; the test comes in step 7 | **closed locally (step 7):** the isolation test tries the other workspace (both ways), the proxy's other sides, this computer's own addresses, the metadata address, DNS and IPv6, directly and through the proxy, and fails when the gateway isolation is removed. Repeated on the cloud provider (R8). **Step 1:** internal networks alone still let a container reach the host. The isolated gateway mode (Docker 28+) closes that, and is now required (ADR 0016) |
-| R4 | **`docker pause` keeps memory in use,** and a host restart loses paused processes | It's fine for a few local workspaces. After a restart, a workspace shows as stopped with its files kept (in a volume), never as lost. The cloud provider brings real snapshots | open: step 8. **Step 1:** pause and resume take about 50 ms each way; the same process carried on, and files were kept |
+| R4 | **`docker pause` keeps memory in use,** and a host restart loses paused processes | It's fine for a few local workspaces. After a restart, a workspace shows as stopped with its files kept (in a volume), never as lost. The cloud provider brings real snapshots | open: step 8a (the memory a paused workspace holds; the guard stops one under pressure). **Step 8:** the real tick put a workspace to sleep after 10 idle minutes; after resume its file was there and the same process was still counting (Docker test). **Step 1:** pause and resume take about 50 ms each way; the same process carried on, and files were kept |
 | R5 | **Under 60 s for Rallly** depends on the clone and the home connection | Step 1 times a real clone. A shallow clone (`--depth 1`) and a prebuilt image keep it short. Dependencies install after "open", in the background, outside the 60 s | **closed (step 4):** 8.9 s through the egress proxy (clone 7.0 s), checked by a Docker test that fails above 60 s. Repeated on the cloud provider later (R8) |
 | R6 | **The Docker socket is root-equivalent,** so whatever drives it is powerful | Only the host touches it. The host listens on 127.0.0.1 only and needs a token (`WORKSPACE_HOST_TOKEN` in `.dev.vars`). It takes no image names, mounts or flags from requests. Canary tests cover the token | open: step 10. **Step 4:** the host takes only fixed operations on checked names, needs the token (compared in constant time), refuses browsers (Origin, Host); the adapter sends the token only to loopback addresses; tests check it's never logged or shown |
-| R7 | **Untrusted code runs on the owner's laptop:** a cloned repo or a terminal command could mine crypto or attack the home network | Limits (step 2); egress only through the proxy, with the home network and metadata ranges blocked (step 7); sleep when idle (step 8); only allowlisted people can open workspaces | open: step 8. **Step 7:** egress only through the proxy, to five allowlisted hosts, with tunnel limits; the home network and metadata address unreachable (tested). **Step 2:** CPU, memory, process and `/tmp` limits are enforced (tested). Disk is measured, not capped (upgrade-later 35) |
+| R7 | **Untrusted code runs on the owner's laptop:** a cloned repo or a terminal command could mine crypto or attack the home network | Limits (step 2); egress only through the proxy, with the home network and metadata ranges blocked (step 7); sleep when idle (step 8); only allowlisted people can open workspaces | **closed locally (step 8):** idle workspaces sleep after 10 minutes (the tick), and time nobody could use isn't metered. Abuse detection is phase 43. **Step 7:** egress only through the proxy, to five allowlisted hosts, with tunnel limits; the home network and metadata address unreachable (tested). **Step 2:** CPU, memory, process and `/tmp` limits are enforced (tested). Disk is measured, not capped (upgrade-later 35) |
 | R9 | **Workspaces could overload the owner's laptop** | The resource guard (step 8a): 2 workspaces at most, a 25 GiB disk budget, and pressure thresholds that refuse, sleep, stop and clean up, acting only on Flowcanvas's own things. `pnpm workspace:resources`, and a "Laptop" line in every step's Risks | open: step 8a. **Step 4:** the 2-running cap is enforced by the host (tested), and `pnpm workspace:resources` and `pnpm workspace:clean` exist |
 | R8 | **The phase can't be fully accepted yet:** the *Done when* items are proven locally, not on staging | The phase is "in review" in STATUS. Upgrade-later 33 holds the provider step, and the phase report lists exactly which checks wait for it. Later phases that need workspaces on staging say so in their plans | open: until the provider is connected |
 
@@ -9812,14 +9812,14 @@ Signed in locally, with a project open, the page itself can't use these yet (no 
 
 **Commit:** `feat(workspace): workspace agent with the file and process API`
 
-### Phase 1d so far — run and check it (after step 7)
+### Phase 1d so far — run and check it (after step 8)
 
 **1. Automated tests** (no sign-in needed):
 ```fish
 pnpm install
-pnpm test                 # 539 tests, no Docker needed (the same as CI's checks)
+pnpm test                 # 548 tests, no Docker needed (the same as CI's checks)
 pnpm test:e2e             # 7 recorded walkthroughs, including the terminal under the production CSP
-pnpm test:docker          # 33 tests against real containers; needs Docker 28+ and the internet.
+pnpm test:docker          # 34 tests against real containers; needs Docker 28+ and the internet.
                           # The first run builds the workspace image (about a minute).
                           # Look for "Rallly: opened in … ms" in the output.
 pnpm workspace:resources  # your laptop against the budget: five "ok" lines
@@ -9856,7 +9856,8 @@ pnpm workspace:clean      # removes test leftovers and old images ("Nothing to r
    | `await ws('/sleep', 'POST')` | `state: 'sleeping'`; then `await ws('/files')` gives 409 "Open the workspace first." |
    | `await ws('/resume', 'POST')` | `state: 'running'` again, in well under a second |
    | `await ws('/stop', 'POST')` | `state: 'stopped'`; `await ws('/open', 'POST')` starts it again with the files kept |
-   | `await (await fetch('/api/usage')).json()` | `workspaceSeconds` above 0 once it has slept or stopped |
+   | `await (await fetch('/api/usage')).json()` | `workspaceSeconds` above 0, and rising while a workspace runs (live, step 8) |
+   | Open it (`await ws('/open', 'POST')`), type in its terminal, then leave it alone for 11 minutes and reload | **Workspace sleeping** (`docker ps --filter label=org.flowcanvas.workspace=1` says `Paused`). The tick runs once a minute, so it sleeps 10 to 11 minutes after your last typing. `await ws('/resume', 'POST')` brings it back with the terminal's files and processes as they were. Usage counts the time up to the sleep, not the time asleep |
 5. In a terminal, `docker ps --filter label=org.flowcanvas.workspace=1` shows `fc-ws-<id>` and `fc-egress`, and `pnpm workspace:resources` counts it.
 6. When you're done: `await ws('/stop', 'POST')`. `pnpm workspace:clean --all` lists everything of Flowcanvas's on the laptop; `--all --yes` removes it, **including the workspace's files**.
 
@@ -10147,3 +10148,82 @@ By hand, in a workspace's **Terminal** (see "Phase 1d so far — run and check i
 - **Laptop:** all five checks ok (22.2 GiB memory available, 581.3 GiB disk free, load 0.96). The install spike used 2.4 GiB of the 25 GiB budget and was removed afterwards.
 
 **Commit:** `feat(workspace): egress allowlist for installs, proxy limits and the isolation test`
+
+### Step 1d.8 — Sleep after 10 idle minutes, resume intact; metering (done by Claude, ADR 0018)
+
+**Goal:** a running workspace that nobody has used for 10 minutes goes to sleep by itself, and comes back exactly as it was. Its time is metered fairly: running counts, asleep doesn't, and time nobody could use isn't charged. This is the second *Done when* item.
+
+**What was already there (step 3), and what this step adds:**
+- **Already there:**
+  - `sleepIdleWorkspaces()`
+  - `touchWorkspace()`, called on terminal typing (at most every 30 s) and on file and command requests
+  - usage records written on sleep and stop
+- **New:**
+  - **something that runs the check every minute**
+  - a fair rule for time that nothing put to sleep
+  - a usage total that's current while a workspace runs
+
+**Concepts:**
+- **Cron Triggers.** A Worker can have a `scheduled` handler, which Cloudflare runs on a cron schedule (`* * * * *` is every minute). The free plan allows 5 triggers per account, at 10 ms of CPU per run. Waiting for the database isn't CPU. https://developers.cloudflare.com/workers/configuration/cron-triggers/
+- **Why `pnpm dev` needs a ticker.** `wrangler dev` never runs Cron Triggers by itself (it says so when it starts). It runs the handler when you request `/cdn-cgi/local/scheduled`. So `services/control-plane/scripts/dev.ts` starts `wrangler dev` with the same arguments as before, and requests that address once a minute. It passes Ctrl-C on to Wrangler, and exits when Wrangler does.
+- **"Idle" means the person isn't doing anything,** not that the computer isn't. Output alone (a dev server printing logs) doesn't keep a workspace awake, because anything that keeps one awake costs money and has to justify it. A long `pnpm install` left alone is frozen by sleep and carries on after resume, so nothing is lost. More signals come with live frames and agents (upgrade-later 38).
+- **Metering, and why there are no extra writes.**
+  - Records are written only when a workspace sleeps or stops, as before.
+  - `/api/usage` adds the **live** seconds of workspaces running now.
+  - The alternative, a tick that writes records for long-running workspaces, races a person pressing Sleep and can count the same seconds twice.
+- **Metered until it sleeps, or would have** (`meteredUntil` in `src/workspaces/policy.ts`): the earlier of now and the last activity + 10 minutes. If you shut the laptop with a workspace running, nothing could put it to sleep. With this rule the night isn't counted, only the 10 minutes after you last typed.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `services/control-plane/src/workspaces/policy.ts` | `IDLE_SLEEP_MS` (moved from the lifecycle, which re-exports it) and `meteredUntil()`; shared by the lifecycle and the meter without an import cycle |
+| `services/control-plane/src/workspaces/lifecycle.ts` | Rows carry `last_active_at`; sleep and stop record run time up to `meteredUntil` |
+| `services/control-plane/src/usage/usage.ts` | `usageSummary()` adds live seconds (one query; from the later of the start and the month's start, up to `meteredUntil`) |
+| `services/control-plane/src/api/scheduled.ts` | The `scheduled` handler: no provider, nothing done; otherwise `sleepIdleWorkspaces()`, with failures logged redacted |
+| `services/control-plane/src/api/app.ts` | `resolveDependencies()`, so the API and the tick share defaults and the redacting log |
+| `services/control-plane/src/api/worker.ts` | Exports `fetch` and `scheduled` |
+| `wrangler.jsonc` | `triggers.crons: ["* * * * *"]` |
+| `services/control-plane/scripts/dev.ts`, `package.json` | The ticker around `wrangler dev`; the `dev` script runs it |
+| `docs/adr/0018-idle-sleep-tick-and-metering.md` | The choices above and the ones rejected |
+
+**Tests:**
+- **Lifecycle and meter (5 new, PGlite, a clock the tests move):**
+  - live seconds while running, then the same seconds once asleep, never double
+  - capped at the last activity + 10 minutes when nothing put it to sleep
+  - a workspace lost while "running" is recorded the same way
+  - running since last month counts only this month's part
+  - another person's workspace isn't counted
+- **The tick (4 new):**
+  - sleeps an idle workspace, and leaves one that's 1 s short
+  - does nothing at all where no provider is configured (not even open the database)
+  - says so when `DATABASE_URL` is missing
+  - logs a failure without throwing, and never the connection string
+- **Docker, the *Done when* (1 new, `local-host.docker.test.ts`):**
+  - the real workspace host and Docker, with the real lifecycle and tick
+  - a file written, and a process counting in memory
+  - 9 min 59 s on: still running; 10 min: asleep (Docker says `paused`), 600 s metered
+  - an hour later, resume: the file is there, the same process is alive and still counting, and the hour asleep cost nothing
+- **By hand:** the ticker ran for 70 s on a spare port. Wrangler logged `GET /cdn-cgi/local/scheduled 200 OK` at the minute, and Ctrl-C stopped Wrangler with it (the port was free afterwards).
+
+**Run and check it:**
+```fish
+pnpm test            # 548 tests
+pnpm test:docker     # 34 tests; look for "sleeps after 10 idle minutes and resumes intact"
+```
+For real: restart `pnpm dev` (its control-plane script changed). Then, in "Phase 1d so far — run and check it", follow the new row about waiting 10 minutes.
+
+**Gotchas:**
+- **`pkill -f` matches its own shell** when the pattern is in the same command line, and kills the command. It happened again in this step. It only stopped a probe on a spare port, but the rule stands: stop processes by PID, or let `timeout` end them.
+- **Wrangler's debug log** (`WRANGLER_LOG=debug`) can print local variables, so its output was deleted unread apart from the line that was needed.
+- **You can't `docker exec` into a paused container,** so "frozen while asleep" can't be read from inside. The test proves the process kept its memory by its counter carrying on after resume.
+
+**Docs:** this write-up; the run guide; risks R4 and R7; ADR 0018; ARCHITECTURE ("Workspace lifecycle"); upgrade-later 38; STATUS.
+
+**Risks:**
+- R4: pause and resume are proven with the real tick (memory kept, process intact). The cost of a paused workspace's memory is still open, and step 8a's guard handles it.
+- R7: closed locally.
+- New, watch at phase close: Cloudflare's branch previews with a `triggers` block. Triggers apply on deploy, so the PR's preview build shows whether `versions upload` warns.
+- **Laptop:** all five checks ok (21.6 GiB memory available, 579 GiB disk free, load 0.93). The tests' workspaces were removed afterwards.
+
+**Commit:** `feat(control-plane): idle workspaces sleep after 10 minutes (scheduled tick); fair, live metering`

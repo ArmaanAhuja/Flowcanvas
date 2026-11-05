@@ -21,6 +21,11 @@
   "vars": {
     "APP_ORIGIN": "https://flowcanvas.ahujaarmaan7777.workers.dev",
   },
+  // Every minute: put idle workspaces to sleep (phase 1d step 8; src/api/scheduled.ts). Where nothing runs
+  // workspaces (staging, for now) it returns at once. `wrangler dev` doesn't run it: scripts/dev.ts does.
+  "triggers": {
+    "crons": ["* * * * *"],
+  },
   "preview_urls": true,
   "workers_dev": true,
   "send_metrics": false,

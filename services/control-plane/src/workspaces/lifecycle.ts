@@ -2,7 +2,10 @@ import { describeError } from '../api/redact.js';
 import type { Database } from '../db/database.js';
 import { isUuid, type WorkspaceState } from '../projects/projects.js';
 import { monthPeriod, recordUsage } from '../usage/usage.js';
+import { IDLE_SLEEP_MS, meteredUntil } from './policy.js';
 import { ProviderError, type WorkspaceProvider } from './provider.js';
+
+export { IDLE_SLEEP_MS } from './policy.js';
 
 /**
  * The workspace lifecycle (phase 1d step 3):
@@ -14,8 +17,6 @@ import { ProviderError, type WorkspaceProvider } from './provider.js';
  * outside the database statement; a request that loses the race says so instead of acting twice.
  */
 
-/** A running workspace with no activity for this long is put to sleep (build plan, phase 1d). */
-export const IDLE_SLEEP_MS = 10 * 60_000;
 /** A start that hasn't finished in this long crashed part-way, so opening it again is allowed. */
 export const STUCK_MS = 5 * 60_000;
 
@@ -56,12 +57,14 @@ interface Row {
   readonly version: number;
   readonly state_changed_ms: number;
   readonly running_since_ms: number | null;
+  readonly last_active_ms: number | null;
   readonly failure: string | null;
 }
 
 const COLUMNS = `w.id, p.owner_id, p.repo_url, w.state, w.provider_ref, w.version,
   (extract(epoch from w.state_changed_at) * 1000)::float8 as state_changed_ms,
-  (extract(epoch from w.running_since) * 1000)::float8 as running_since_ms, w.failure`;
+  (extract(epoch from w.running_since) * 1000)::float8 as running_since_ms,
+  (extract(epoch from w.last_active_at) * 1000)::float8 as last_active_ms, w.failure`;
 
 const MESSAGES = {
   busy: 'This workspace is already starting. Wait a moment.',
@@ -163,9 +166,13 @@ const conflict = (row: Row, message: string) => problem(row, 'conflict', message
 /** The result of a change that lost the race: the state as someone else left it. */
 const lostRace = (row: Row) => conflict(row, MESSAGES.changed);
 
-/** Records the time it was running, split at month boundaries (each usage record sits within one month). */
-async function recordRunTime(ctx: LifecycleContext, row: Row, endMs: number): Promise<void> {
+/**
+ * Records the time it was running, up to `meteredUntil` (policy.ts), split at month boundaries (each usage
+ * record sits within one month).
+ */
+async function recordRunTime(ctx: LifecycleContext, row: Row): Promise<void> {
   if (row.running_since_ms === null) return;
+  const endMs = meteredUntil(row.last_active_ms, ctx.now());
   let start = row.running_since_ms;
   while (start < endMs) {
     const end = Math.min(endMs, monthPeriod(start).end.getTime());
@@ -249,7 +256,7 @@ export async function sleepWorkspace(ctx: LifecycleContext, row: Row): Promise<L
   const to = failure === undefined ? 'sleeping' : 'stopped';
   const after = await change(ctx, row, to, { failure: failure?.userMessage ?? null });
   if (after === undefined) return lostRace(row);
-  await recordRunTime(ctx, row, ctx.now());
+  await recordRunTime(ctx, row);
   return failure === undefined ? ok(after) : problem(after, 'gone', failure.userMessage);
 }
 
@@ -293,7 +300,7 @@ export async function stopWorkspace(ctx: LifecycleContext, row: Row): Promise<Li
   }
   const after = await change(ctx, row, 'stopped');
   if (after === undefined) return lostRace(row);
-  await recordRunTime(ctx, row, ctx.now());
+  await recordRunTime(ctx, row);
   return ok(after);
 }
 
@@ -310,7 +317,10 @@ export async function touchWorkspace(
   );
 }
 
-/** Puts every running workspace idle for `idleMs` or more to sleep. Returns how many went to sleep. */
+/**
+ * Puts every running workspace idle for `idleMs` or more to sleep. Returns how many went to sleep. The
+ * scheduled tick calls it every minute (scheduled.ts).
+ */
 export async function sleepIdleWorkspaces(
   ctx: LifecycleContext,
   idleMs: number = IDLE_SLEEP_MS,

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --config ../../wrangler.jsonc --port 8787 --var APP_ORIGIN:http://localhost:5173 --var WORKSPACE_HOST_URL:http://127.0.0.1:8790",
+    "dev": "tsx scripts/dev.ts --config ../../wrangler.jsonc --port 8787 --var APP_ORIGIN:http://localhost:5173 --var WORKSPACE_HOST_URL:http://127.0.0.1:8790",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --exclude '**/*.docker.test.ts'",
     "test:docker": "vitest run docker.test",

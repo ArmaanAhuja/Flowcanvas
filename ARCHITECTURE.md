@@ -243,8 +243,14 @@ POST /api/projects/:id/workspace/{open,sleep,resume,stop}  (same origin) ──�
 - `src/workspaces/lifecycle.ts` drives every change. Each one is a compare-and-set on `version`, so two requests at once can't both act; the loser gets 409 "changed in the meantime". The provider is called between two such statements.
 - `WorkspaceProvider` (`src/workspaces/provider.ts`): `create`, `start`, `pause`, `resume`, `stop`. Failures are `ProviderError`s whose kind maps to a status: `unavailable` and `refused` → 503 (left as it was), `failed` → 502 (state `failed`), `gone` → 409 (state `stopped`). Any other error becomes a plain sentence, and only a redacted description is logged.
 - The provider comes from `ApiDependencies.workspaceProvider(env)`. Undefined means none can run here (staging for now), and `open` answers "Workspaces run locally for now".
-- Usage: the time between `running_since` and sleep or stop is written to `usage_records`, split at month boundaries. Asleep costs nothing.
-- `sleepIdleWorkspaces()` puts workspaces idle for 10 minutes to sleep; `touchWorkspace()` records activity. Step 8 schedules them.
+- **Usage** (ADR 0018):
+  - The time between `running_since` and sleep or stop is written to `usage_records`, split at month boundaries. Asleep costs nothing.
+  - A workspace is metered only until `meteredUntil` (`src/workspaces/policy.ts`): now, or its last activity + 10 minutes, whichever is earlier.
+  - `/api/usage` adds the live seconds of workspaces running now, so the total is current without extra writes.
+- **Idle sleep** (ADR 0018):
+  - `touchWorkspace()` records activity: typing in a terminal (at most every 30 s), and file and command requests.
+  - The Worker's `scheduled` handler (`src/api/scheduled.ts`) runs `sleepIdleWorkspaces()` every minute: a Cron Trigger in `wrangler.jsonc`, and `scripts/dev.ts` under `pnpm dev`, since Wrangler doesn't run Cron Triggers locally.
+  - With no provider (staging) it does nothing.
 - The page never sees the provider's own name for a workspace.
 
 ## Local development

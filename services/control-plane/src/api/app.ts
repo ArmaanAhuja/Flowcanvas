@@ -38,16 +38,20 @@ const defaults: ApiDependencies = {
   workspaceProvider: (env) => localHostFromEnv(env, (input, init) => fetch(input, init)),
 };
 
-/** The control plane's HTTP API, mounted under /api in the app's Worker (decisions log, 30 Oct 2026). */
-export function createApi(overrides: Partial<ApiDependencies> = {}) {
+/** The defaults with `overrides` applied, and every log line redacted on its way out (see redact.ts). */
+export function resolveDependencies(overrides: Partial<ApiDependencies> = {}): ApiDependencies {
   const given = { ...defaults, ...overrides };
-  // Every log line is redacted on its way out, whatever the caller passed in (see redact.ts).
-  const deps: ApiDependencies = {
+  return {
     ...given,
     log: (message) => {
       given.log(redact(message));
     },
   };
+}
+
+/** The control plane's HTTP API, mounted under /api in the app's Worker (decisions log, 30 Oct 2026). */
+export function createApi(overrides: Partial<ApiDependencies> = {}) {
+  const deps = resolveDependencies(overrides);
   const api = new Hono<{ Bindings: ApiBindings }>().basePath('/api');
 
   // Answers are per person and may name them: never stored by the browser or any cache in between.

@@ -319,6 +319,60 @@ describe('idle sleep', () => {
   });
 });
 
+describe('metering', () => {
+  beforeEach(async () => {
+    await openWorkspace(ctx, await current());
+  });
+
+  it('counts a running workspace as it runs, and the same seconds once it sleeps (no double count)', async () => {
+    now += 5 * 60_000;
+    expect(await seconds()).toBe(300);
+    await sleepWorkspace(ctx, await current());
+    expect(await seconds()).toBe(300);
+    now += 60 * 60_000;
+    expect(await seconds()).toBe(300);
+  });
+
+  it('counts only until it would have slept, when nothing put it to sleep (laptop shut, pnpm dev stopped)', async () => {
+    now += 2 * 60_000;
+    await touchWorkspace(db, (await current()).id, now);
+    now += 5 * 3_600_000;
+    // 2 minutes, then 10 idle minutes after the last activity: 12 minutes, not 5 hours.
+    expect(await seconds()).toBe(12 * 60);
+    expect(await sleepIdleWorkspaces(ctx)).toBe(1);
+    expect(await seconds()).toBe(12 * 60);
+  });
+
+  it('records no more than that when a lost workspace is found later', async () => {
+    provider.lose(String((await current()).provider_ref));
+    now += 3 * 3_600_000;
+    expect(await sleepIdleWorkspaces(ctx)).toBe(0);
+    expect((await current()).state).toBe('stopped');
+    expect(await seconds()).toBe(IDLE_SLEEP_MS / 1000);
+  });
+
+  it("counts a workspace that's been running since last month from this month's start only", async () => {
+    now = Date.UTC(2026, 10, 30, 23, 58, 0);
+    const fresh = await migratedDatabase();
+    const user = (await signedInAs(fresh, 'ada@example.com')).userId;
+    const project = await createProject(fresh, user, { name: 'Rallly', repoUrl: null });
+    if (project === 'duplicate-name') throw new Error('unexpected duplicate');
+    const local = { ...ctx, db: fresh };
+    const row = await loadWorkspace(fresh, project.id, user);
+    if (row === undefined) throw new Error('no workspace');
+    await openWorkspace(local, row);
+    now = Date.UTC(2026, 11, 1, 0, 3, 0);
+    await touchWorkspace(fresh, row.id, now);
+    expect((await usageSummary(fresh, user, now)).workspaceSeconds).toBe(180);
+  });
+
+  it("counts only the person's own workspaces", async () => {
+    now += 60_000;
+    const grace = (await signedInAs(db, 'grace@example.com')).userId;
+    expect((await usageSummary(db, grace, now)).workspaceSeconds).toBe(0);
+  });
+});
+
 describe('the database backstop', () => {
   it('refuses a running workspace without a start time, and the reverse', async () => {
     await expect(db.query("update workspaces set state = 'running'")).rejects.toThrow(
