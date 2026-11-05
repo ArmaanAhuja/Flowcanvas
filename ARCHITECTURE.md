@@ -251,6 +251,11 @@ POST /api/projects/:id/workspace/{open,sleep,resume,stop}  (same origin) ──�
   - `touchWorkspace()` records activity: typing in a terminal (at most every 30 s), and file and command requests.
   - The Worker's `scheduled` handler (`src/api/scheduled.ts`) runs `sleepIdleWorkspaces()` every minute: a Cron Trigger in `wrangler.jsonc`, and `scripts/dev.ts` under `pnpm dev`, since Wrangler doesn't run Cron Triggers locally.
   - With no provider (staging) it does nothing.
+- **The resource guard** (ADR 0019, local only):
+  - The host's `ResourceGuard` (`workspace/host/src/guard.ts`) samples memory, free disk and load every 30 s, and Flowcanvas's own disk every 5 minutes, against `BUDGET`.
+  - Under pressure the host refuses to create or start a workspace, and refuses to resume one only when the laptop is busy. It removes old workspace images when disk is short, and answers `GET /v1/pressure`.
+  - After the idle check, the tick runs `relievePressure()`, one workspace per tick: memory stops the least recently used (asleep first); load sleeps the least recently used running one. A notice is stored in `failure`.
+  - A cloud provider has no `pressure()`.
 - The page never sees the provider's own name for a workspace.
 
 ## Local development

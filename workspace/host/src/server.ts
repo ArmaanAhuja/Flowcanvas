@@ -14,6 +14,7 @@ import {
   PROTOCOL_VERSION,
   type HostAction,
   type HostErrorBody,
+  type PressureResponse,
 } from './protocol.js';
 import { TERMINAL_LIMITS, checkSize, relayTerminal } from './terminal.js';
 import type { WorkspaceHost } from './workspaces.js';
@@ -21,7 +22,7 @@ import type { WorkspaceHost } from './workspaces.js';
 /** The part of WorkspaceHost the server calls, so tests can pass a fake. */
 export type HostOperations = Pick<
   WorkspaceHost,
-  'create' | 'start' | 'pause' | 'resume' | 'stop' | 'agent' | 'terminal'
+  'create' | 'start' | 'pause' | 'resume' | 'stop' | 'agent' | 'terminal' | 'pressure'
 >;
 
 export interface ServerOptions {
@@ -103,6 +104,11 @@ export function createHostServer(options: ServerOptions): Server {
     const path = new URL(request.url ?? '/', 'http://127.0.0.1').pathname;
     if (request.method === 'GET' && path === PATHS.health) {
       send(response, 200, { ok: true, protocol: PROTOCOL_VERSION });
+      return;
+    }
+    if (request.method === 'GET' && path === PATHS.pressure) {
+      const body: PressureResponse = { pressure: options.host.pressure() };
+      send(response, 200, body);
       return;
     }
     if (request.method === 'POST' && path === PATHS.create) {

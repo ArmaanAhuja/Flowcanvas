@@ -29,8 +29,31 @@ export interface HostErrorBody {
   readonly error: { readonly kind: HostErrorKind; readonly message: string };
 }
 
+/**
+ * Why this computer can't take more right now (the resource guard, phase 1d step 8a): little memory or disk
+ * left, busy for 2 minutes, or Flowcanvas over its own disk budget.
+ */
+export const PRESSURE_KINDS = ['memory', 'disk', 'load', 'budget'] as const;
+export type PressureKind = (typeof PRESSURE_KINDS)[number];
+
+export interface Pressure {
+  readonly kind: PressureKind;
+  /** A sentence that's safe to show the person. */
+  readonly message: string;
+}
+
+/** `GET PATHS.pressure`: empty when the computer has room. */
+export interface PressureResponse {
+  readonly pressure: readonly Pressure[];
+}
+
+export function isPressureKind(value: unknown): value is PressureKind {
+  return typeof value === 'string' && (PRESSURE_KINDS as readonly string[]).includes(value);
+}
+
 export const PATHS = {
   health: `/${PROTOCOL_VERSION}/health`,
+  pressure: `/${PROTOCOL_VERSION}/pressure`,
   create: `/${PROTOCOL_VERSION}/workspaces`,
   action: (ref: string, action: HostAction) =>
     `/${PROTOCOL_VERSION}/workspaces/${encodeURIComponent(ref)}/${action}`,

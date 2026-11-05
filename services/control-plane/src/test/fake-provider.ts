@@ -2,6 +2,7 @@
 import type { AgentRequest, AgentResponse } from '@flowcanvas/workspace-agent/protocol';
 import {
   ProviderError,
+  type PressureKind,
   type TerminalSocket,
   type WorkspaceProvider,
 } from '../workspaces/provider.js';
@@ -21,6 +22,8 @@ export class FakeProvider implements WorkspaceProvider {
   /** The workspace's side of each terminal opened, newest last. */
   readonly terminals: { ref: string; size: { cols: number; rows: number }; socket: FakeSocket }[] =
     [];
+  /** What the "machine" is short of; the resource guard's answer (step 8a). Not recorded in `calls`. */
+  pressureNow: PressureKind[] = [];
   private readonly failures = new Map<Method, Error>();
   private readonly holds = new Map<Method, Promise<void>>();
 
@@ -41,6 +44,10 @@ export class FakeProvider implements WorkspaceProvider {
     return () => {
       release?.();
     };
+  }
+
+  pressure(): Promise<readonly PressureKind[]> {
+    return Promise.resolve(this.pressureNow);
   }
 
   /** The provider forgets a workspace, as if it was removed by hand or lost in a restart. */

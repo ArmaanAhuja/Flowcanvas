@@ -11,7 +11,9 @@ import {
   IDLE_SLEEP_MS,
   STUCK_MS,
   loadWorkspace,
+  RELIEF_NOTICES,
   openWorkspace,
+  relievePressure,
   resumeWorkspace,
   sleepIdleWorkspaces,
   sleepWorkspace,
@@ -19,7 +21,7 @@ import {
   touchWorkspace,
   type LifecycleContext,
 } from './lifecycle.js';
-import { ProviderError } from './provider.js';
+import { ProviderError, type WorkspaceProvider } from './provider.js';
 
 const REPO = 'https://github.com/ArmaanAhuja-7777/rallly';
 const NOV_4 = Date.UTC(2026, 10, 4, 12, 0, 0);
@@ -370,6 +372,105 @@ describe('metering', () => {
     now += 60_000;
     const grace = (await signedInAs(db, 'grace@example.com')).userId;
     expect((await usageSummary(db, grace, now)).workspaceSeconds).toBe(0);
+  });
+});
+
+describe('the resource guard (relievePressure)', () => {
+  let second: string;
+  const stateOf = async (id: string) =>
+    (
+      await db.query<{ state: string; failure: string | null }>(
+        'select state, failure from workspaces where project_id = $1',
+        [id],
+      )
+    )[0];
+
+  beforeEach(async () => {
+    const other = await createProject(db, userId, { name: 'Documenso', repoUrl: null });
+    if (other === 'duplicate-name') throw new Error('unexpected duplicate');
+    second = other.id;
+    await openWorkspace(ctx, await current());
+    now += 60_000;
+    const row = await loadWorkspace(db, second, userId);
+    if (row === undefined) throw new Error('no workspace');
+    await openWorkspace(ctx, row);
+    now += 60_000;
+  });
+
+  it('does nothing without pressure, or when only disk is short (that is the host’s job)', async () => {
+    expect(await relievePressure(ctx)).toEqual({ action: 'none' });
+    provider.pressureNow = ['disk', 'budget'];
+    expect(await relievePressure(ctx)).toEqual({ action: 'none' });
+    expect(provider.calls.filter((c) => /^(pause|stop)/.test(c))).toEqual([]);
+  });
+
+  it('under memory pressure, stops the least recently used workspace, with a notice', async () => {
+    provider.pressureNow = ['memory'];
+    // Rallly was opened first, so it was used least recently.
+    expect(await relievePressure(ctx)).toMatchObject({ action: 'stopped' });
+    expect(await stateOf(projectId)).toEqual({
+      state: 'stopped',
+      failure: RELIEF_NOTICES.stoppedForMemory,
+    });
+    expect((await stateOf(second))?.state).toBe('running');
+    // Its time was recorded when it stopped.
+    expect(await seconds()).toBeGreaterThan(0);
+  });
+
+  it('stops an asleep workspace before a running one: pausing keeps memory, only stopping frees it', async () => {
+    const row = await loadWorkspace(db, second, userId);
+    if (row === undefined) throw new Error('no workspace');
+    await sleepWorkspace(ctx, row);
+    provider.pressureNow = ['memory'];
+    await relievePressure(ctx);
+    expect((await stateOf(second))?.state).toBe('stopped');
+    expect((await stateOf(projectId))?.state).toBe('running');
+  });
+
+  it('when the computer is busy, puts the least recently used running workspace to sleep', async () => {
+    await touchWorkspace(db, (await current()).id, now);
+    provider.pressureNow = ['load'];
+    expect(await relievePressure(ctx)).toMatchObject({ action: 'slept' });
+    expect(await stateOf(second)).toEqual({
+      state: 'sleeping',
+      failure: RELIEF_NOTICES.sleptForLoad,
+    });
+    // One per tick: the next tick acts only if that wasn't enough.
+    expect((await stateOf(projectId))?.state).toBe('running');
+    expect(await relievePressure(ctx)).toMatchObject({ action: 'slept' });
+    expect(await relievePressure(ctx)).toEqual({ action: 'none' });
+  });
+
+  it('logs a workspace it could not change, and carries on', async () => {
+    provider.pressureNow = ['memory'];
+    provider.failNext('stop', new ProviderError('unavailable', 'The host isn’t running.'));
+    expect(await relievePressure(ctx)).toEqual({ action: 'none' });
+    expect(log).toHaveBeenCalledWith(
+      expect.stringMatching(/^guard: workspace .* wasn't stopped: unavailable$/),
+    );
+  });
+
+  it('does nothing with a provider that has no guard (a cloud one)', async () => {
+    provider.pressureNow = ['memory'];
+    const cloud: WorkspaceProvider = {
+      name: 'cloud',
+      create: (input) => provider.create(input),
+      start: (ref) => provider.start(ref),
+      pause: (ref) => provider.pause(ref),
+      resume: (ref) => provider.resume(ref),
+      stop: (ref) => provider.stop(ref),
+      agent: (ref, request) => provider.agent(ref, request),
+      terminal: (ref, size) => provider.terminal(ref, size),
+    };
+    expect(await relievePressure({ ...ctx, provider: cloud })).toEqual({ action: 'none' });
+  });
+
+  it('a person opening it again clears the notice', async () => {
+    provider.pressureNow = ['memory'];
+    await relievePressure(ctx);
+    provider.pressureNow = [];
+    await openWorkspace(ctx, await current());
+    expect(await stateOf(projectId)).toEqual({ state: 'running', failure: null });
   });
 });
 

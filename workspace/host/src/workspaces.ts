@@ -16,7 +16,7 @@ import { DockerFailure, type Docker } from './docker-cli.js';
 import { socketEngine, type Engine } from './engine.js';
 import { openTerminal, type TerminalSession } from './terminal.js';
 import { HostError } from './errors.js';
-import type { CreateRequest, CreateResponse } from './protocol.js';
+import type { CreateRequest, CreateResponse, Pressure } from './protocol.js';
 
 /** At most this many workspaces run (not asleep) at once on this computer (owner, 4 Nov 2026). */
 export const MAX_RUNNING = 2;
@@ -60,6 +60,8 @@ export interface WorkspaceHostOptions {
   readonly agents?: Agents;
   /** The Docker Engine API, for terminals (ADR 0017); by default, Docker's own socket. */
   readonly engine?: Engine;
+  /** What the resource guard last found (guard.ts); none by default. */
+  readonly pressure?: () => readonly Pressure[];
 }
 
 export class WorkspaceHost {
@@ -102,7 +104,7 @@ export class WorkspaceHost {
     const ref = this.refFor(request.workspaceId);
     return this.#locked(ref, async () => {
       const state = await this.#state(ref);
-      if (state !== 'running') await this.#checkRoom(ref);
+      if (state !== 'running') await this.#checkRoom(ref, state === 'paused' ? 'resume' : 'start');
       const image = await this.#options.image();
       await this.#ready(ref, image);
       if (state === 'missing') {
@@ -129,7 +131,7 @@ export class WorkspaceHost {
     await this.#locked(ref, async () => {
       const state = await this.#known(ref);
       if (state === 'running') return;
-      await this.#checkRoom(ref);
+      await this.#checkRoom(ref, state === 'paused' ? 'resume' : 'start');
       await this.#ready(ref, await this.#options.image());
       await this.#wake(ref, state);
     });
@@ -151,7 +153,7 @@ export class WorkspaceHost {
       if (state === 'running') return;
       // Lost while asleep (the computer restarted, or Docker did).
       if (state !== 'paused') throw new HostError('gone', MESSAGES.gone);
-      await this.#checkRoom(ref);
+      await this.#checkRoom(ref, 'resume');
       await this.#ready(ref, await this.#options.image());
       await this.#docker(['unpause', ref]);
     });
@@ -249,8 +251,19 @@ export class WorkspaceHost {
     return state;
   }
 
-  /** Refuses to start another workspace when MAX_RUNNING already run (asleep ones don't count). */
-  async #checkRoom(ref: string): Promise<void> {
+  /** What the resource guard last found; empty when the computer has room. */
+  pressure(): readonly Pressure[] {
+    return this.#options.pressure?.() ?? [];
+  }
+
+  /**
+   * Refuses to start another workspace when MAX_RUNNING already run (asleep ones don't count), or when the
+   * resource guard reports pressure. Resuming holds no new memory or disk (a paused workspace keeps both), so
+   * only a busy computer refuses it.
+   */
+  async #checkRoom(ref: string, waking: 'start' | 'resume'): Promise<void> {
+    const blocking = this.pressure().find((p) => waking === 'start' || p.kind === 'load');
+    if (blocking !== undefined) throw new HostError('refused', blocking.message);
     const running = (
       await this.#docker([
         'ps',

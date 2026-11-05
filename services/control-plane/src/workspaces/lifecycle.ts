@@ -241,8 +241,17 @@ export async function openWorkspace(ctx: LifecycleContext, row: Row): Promise<Li
   return problem(after ?? creating, error.kind, error.userMessage);
 }
 
+/** Why a workspace changed without the person asking: shown with it (from step 9), as its `failure`. */
+export interface ChangeOptions {
+  readonly notice?: string;
+}
+
 /** Puts a running workspace to sleep, and records how long it ran. */
-export async function sleepWorkspace(ctx: LifecycleContext, row: Row): Promise<LifecycleResult> {
+export async function sleepWorkspace(
+  ctx: LifecycleContext,
+  row: Row,
+  options: ChangeOptions = {},
+): Promise<LifecycleResult> {
   if (row.state === 'sleeping') return ok(row);
   if (row.state !== 'running' || row.provider_ref === null) {
     return conflict(row, 'Only a running workspace can sleep.');
@@ -254,7 +263,9 @@ export async function sleepWorkspace(ctx: LifecycleContext, row: Row): Promise<L
     return problem(row, failure.kind, failure.userMessage);
   }
   const to = failure === undefined ? 'sleeping' : 'stopped';
-  const after = await change(ctx, row, to, { failure: failure?.userMessage ?? null });
+  const after = await change(ctx, row, to, {
+    failure: failure?.userMessage ?? options.notice ?? null,
+  });
   if (after === undefined) return lostRace(row);
   await recordRunTime(ctx, row);
   return failure === undefined ? ok(after) : problem(after, 'gone', failure.userMessage);
@@ -286,7 +297,11 @@ export async function resumeWorkspace(ctx: LifecycleContext, row: Row): Promise<
 }
 
 /** Stops a running or sleeping workspace. Its files are kept, and opening it starts it again. */
-export async function stopWorkspace(ctx: LifecycleContext, row: Row): Promise<LifecycleResult> {
+export async function stopWorkspace(
+  ctx: LifecycleContext,
+  row: Row,
+  options: ChangeOptions = {},
+): Promise<LifecycleResult> {
   if (row.state === 'stopped') return ok(row);
   if ((row.state !== 'running' && row.state !== 'sleeping') || row.provider_ref === null) {
     return conflict(row, 'Only a running or sleeping workspace can be stopped.');
@@ -298,7 +313,7 @@ export async function stopWorkspace(ctx: LifecycleContext, row: Row): Promise<Li
   if (failure !== undefined && failure.kind !== 'gone') {
     return problem(row, failure.kind, failure.userMessage);
   }
-  const after = await change(ctx, row, 'stopped');
+  const after = await change(ctx, row, 'stopped', { failure: options.notice ?? null });
   if (after === undefined) return lostRace(row);
   await recordRunTime(ctx, row);
   return ok(after);
@@ -337,4 +352,47 @@ export async function sleepIdleWorkspaces(
     else ctx.log(`idle workspace ${row.id} didn't sleep: ${result.problem}`);
   }
   return slept;
+}
+
+/** What the page says about a workspace the resource guard changed (ADR 0019). */
+export const RELIEF_NOTICES = {
+  stoppedForMemory:
+    'Stopped to free memory on this computer. Its files are kept: open it to start it again.',
+  sleptForLoad: 'Put to sleep because this computer was very busy. Resume it when you need it.',
+} as const;
+
+export type Relief =
+  | { readonly action: 'stopped' | 'slept'; readonly workspaceId: string }
+  | { readonly action: 'none' };
+
+/**
+ * The resource guard's half in the control plane (step 8a, ADR 0019): when the provider's machine is short of
+ * memory, stop the least recently used workspace (asleep ones first: pausing keeps memory, so only stopping
+ * frees it); when it's busy, put the least recently used running one to sleep. One workspace per tick: the
+ * host measures again every 30 s, so the next tick acts only if that wasn't enough. Disk is the host's own job
+ * (old images) and its refusals; nothing here deletes anyone's files.
+ */
+export async function relievePressure(ctx: LifecycleContext): Promise<Relief> {
+  if (ctx.provider.pressure === undefined) return { action: 'none' };
+  const kinds = await ctx.provider.pressure();
+  const memory = kinds.includes('memory');
+  if (!memory && !kinds.includes('load')) return { action: 'none' };
+  const [row] = await ctx.db.query<Row>(
+    `select ${COLUMNS} from workspaces w join projects p on p.id = w.project_id
+     where w.provider_ref is not null and w.state = any($1::text[])
+     order by (w.state = 'running'), w.last_active_at nulls first, w.id
+     limit 1`,
+    [memory ? ['sleeping', 'running'] : ['running']],
+  );
+  if (row === undefined) return { action: 'none' };
+  const result = memory
+    ? await stopWorkspace(ctx, row, { notice: RELIEF_NOTICES.stoppedForMemory })
+    : await sleepWorkspace(ctx, row, { notice: RELIEF_NOTICES.sleptForLoad });
+  const action = memory ? 'stopped' : 'slept';
+  if (!result.ok) {
+    ctx.log(`guard: workspace ${row.id} wasn't ${action}: ${result.problem}`);
+    return { action: 'none' };
+  }
+  ctx.log(`guard: workspace ${row.id} ${action} (${memory ? 'memory' : 'load'})`);
+  return { action, workspaceId: row.id };
 }

@@ -2075,6 +2075,12 @@ Not ours, and never touched: anything else in Docker (other projects' images, co
 3. Stop the least recently used workspaces. Their files are kept in their volumes.
 4. Remove what isn't needed: old workspace image tags, stopped Flowcanvas containers, and volumes whose project no longer exists.
 
+**Corrected in step 8a (5 Nov 2026, ADR 0019):**
+- Sleeping frees CPU, not memory (a paused workspace keeps its memory). So memory pressure **stops** a workspace, asleep ones first, and load **sleeps** one.
+- The host measures and refuses; the control plane's minute tick sleeps and stops, through the lifecycle, so the page and the meter stay right.
+- Only old images are removed automatically. Stopped containers and volumes hold people's work, and no volume can be orphaned yet: projects can't be deleted (upgrade-later 39).
+- Step 8a's write-up has the table.
+
 It only ever acts on things labelled as Flowcanvas's. It never kills or removes anything else on the laptop. A runaway process inside a workspace is already held by that workspace's own limits. Every action is logged, and from step 9 it's shown on the workspace's card ("Put to sleep to free memory on this computer").
 
 `pnpm workspace:resources` prints the laptop's figures and Flowcanvas's usage against these numbers. Claude also checks them at every step: each step's Risks line includes a "Laptop" line.
@@ -9417,8 +9423,8 @@ browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0
 | 6.3 | The terminal on the page: xterm.js, token colours, the CSP shim; a walkthrough under the deployed CSP | done (Claude, 4 Nov) |
 | 7 | Network rules: the egress proxy's full allowlist and address checks; limits; the isolation test | done (Claude, 5 Nov) |
 | 8 | Sleep after 10 idle minutes and resume intact; usage metering writes workspace seconds | done (Claude, 5 Nov) |
-| 8a | The resource guard: laptop pressure and Flowcanvas's budget checked every 30 s; refuse, sleep, stop, clean up (owner, 4 Nov) | *next* |
-| 9 | Status chip and cards (Figma 29); Open demo project (Rallly); staging's "Workspaces run locally for now" | *planned* |
+| 8a | The resource guard: laptop pressure and Flowcanvas's budget checked every 30 s; refuse, sleep, stop, clean up (owner, 4 Nov) | done (Claude, 5 Nov) |
+| 9 | Status chip and cards (Figma 29); Open demo project (Rallly); staging's "Workspaces run locally for now" | *next* |
 | 10 | Security tests (canary secrets, isolation), walkthrough, timing; Docker tests in CI if the runners allow | *planned* |
 | 11 | Close the phase as **in review** (0.5.0): report, and what waits for the cloud provider | *planned* |
 
@@ -9443,7 +9449,7 @@ Each step's write-up ends with a **Risks** line saying what changed. The phase r
 | R5 | **Under 60 s for Rallly** depends on the clone and the home connection | Step 1 times a real clone. A shallow clone (`--depth 1`) and a prebuilt image keep it short. Dependencies install after "open", in the background, outside the 60 s | **closed (step 4):** 8.9 s through the egress proxy (clone 7.0 s), checked by a Docker test that fails above 60 s. Repeated on the cloud provider later (R8) |
 | R6 | **The Docker socket is root-equivalent,** so whatever drives it is powerful | Only the host touches it. The host listens on 127.0.0.1 only and needs a token (`WORKSPACE_HOST_TOKEN` in `.dev.vars`). It takes no image names, mounts or flags from requests. Canary tests cover the token | open: step 10. **Step 4:** the host takes only fixed operations on checked names, needs the token (compared in constant time), refuses browsers (Origin, Host); the adapter sends the token only to loopback addresses; tests check it's never logged or shown |
 | R7 | **Untrusted code runs on the owner's laptop:** a cloned repo or a terminal command could mine crypto or attack the home network | Limits (step 2); egress only through the proxy, with the home network and metadata ranges blocked (step 7); sleep when idle (step 8); only allowlisted people can open workspaces | **closed locally (step 8):** idle workspaces sleep after 10 minutes (the tick), and time nobody could use isn't metered. Abuse detection is phase 43. **Step 7:** egress only through the proxy, to five allowlisted hosts, with tunnel limits; the home network and metadata address unreachable (tested). **Step 2:** CPU, memory, process and `/tmp` limits are enforced (tested). Disk is measured, not capped (upgrade-later 35) |
-| R9 | **Workspaces could overload the owner's laptop** | The resource guard (step 8a): 2 workspaces at most, a 25 GiB disk budget, and pressure thresholds that refuse, sleep, stop and clean up, acting only on Flowcanvas's own things. `pnpm workspace:resources`, and a "Laptop" line in every step's Risks | open: step 8a. **Step 4:** the 2-running cap is enforced by the host (tested), and `pnpm workspace:resources` and `pnpm workspace:clean` exist |
+| R9 | **Workspaces could overload the owner's laptop** | The resource guard (step 8a): 2 workspaces at most, a 25 GiB disk budget, and pressure thresholds that refuse, sleep, stop and clean up, acting only on Flowcanvas's own things. `pnpm workspace:resources`, and a "Laptop" line in every step's Risks | **closed locally (step 8a):** the guard refuses under pressure, and the tick stops (memory) or sleeps (load) the least recently used workspace; only Flowcanvas's own things are touched (tested, ADR 0019). **Step 4:** the 2-running cap is enforced by the host (tested), and `pnpm workspace:resources` and `pnpm workspace:clean` exist |
 | R8 | **The phase can't be fully accepted yet:** the *Done when* items are proven locally, not on staging | The phase is "in review" in STATUS. Upgrade-later 33 holds the provider step, and the phase report lists exactly which checks wait for it. Later phases that need workspaces on staging say so in their plans | open: until the provider is connected |
 
 ### Step 1d.0 — Docker on the dev machine (done)
@@ -9812,14 +9818,14 @@ Signed in locally, with a project open, the page itself can't use these yet (no 
 
 **Commit:** `feat(workspace): workspace agent with the file and process API`
 
-### Phase 1d so far — run and check it (after step 8)
+### Phase 1d so far — run and check it (after step 8a)
 
 **1. Automated tests** (no sign-in needed):
 ```fish
 pnpm install
-pnpm test                 # 548 tests, no Docker needed (the same as CI's checks)
+pnpm test                 # 573 tests, no Docker needed (the same as CI's checks)
 pnpm test:e2e             # 7 recorded walkthroughs, including the terminal under the production CSP
-pnpm test:docker          # 34 tests against real containers; needs Docker 28+ and the internet.
+pnpm test:docker          # 36 tests against real containers; needs Docker 28+ and the internet.
                           # The first run builds the workspace image (about a minute).
                           # Look for "Rallly: opened in … ms" in the output.
 pnpm workspace:resources  # your laptop against the budget: five "ok" lines
@@ -10227,3 +10233,93 @@ For real: restart `pnpm dev` (its control-plane script changed). Then, in "Phase
 - **Laptop:** all five checks ok (21.6 GiB memory available, 579 GiB disk free, load 0.93). The tests' workspaces were removed afterwards.
 
 **Commit:** `feat(control-plane): idle workspaces sleep after 10 minutes (scheduled tick); fair, live metering`
+
+### Step 1d.8a — The resource guard (done by Claude, ADR 0019)
+
+**Goal:** Flowcanvas stays within its budget on your laptop, whatever else is running. When the laptop is short of memory or disk, or busy for minutes, Flowcanvas refuses new workspaces with a clear sentence, and stops or sleeps its own to make room. It never touches anything else on the laptop.
+
+**Two corrections to the plan** (in "On the owner's laptop", written before steps 3 to 8):
+1. **Sleeping doesn't free memory.** `docker pause` freezes processes *with* their memory; that's why resume is intact. So:
+   - under memory pressure, the guard **stops** a workspace (files kept), asleep ones first, since they hold memory nobody's using
+   - under load, it **sleeps** one
+   - under disk pressure, only clean-up helps
+2. **The host measures; the control plane acts.** The database holds each workspace's state and usage. If the host paused or stopped containers itself, the page and the meter would disagree with Docker. So:
+   - the host refuses starts, and removes old images
+   - the control plane's minute tick (step 8) changes workspaces through the lifecycle, with a reason the person will see
+
+**Concepts:**
+- **Load average** is roughly how many processes want a CPU, averaged over a minute. Above the number of cores, work is queuing. It lags: after something stops, it falls over a minute or two. So the guard waits for 2 minutes of high readings before acting, and one low reading starts the wait again. https://man7.org/linux/man-pages/man5/proc_loadavg.5.html
+- **`MemAvailable`** (`/proc/meminfo`) is what can be used without swapping, including cache the kernel can drop. It's the honest "free memory" figure. https://man7.org/linux/man-pages/man5/proc_meminfo.5.html
+- **Measure cheaply, often; expensively, rarely.** Memory, free disk and load are file reads, taken every 30 s. Flowcanvas's own disk use needs `docker system df --verbose`, which sizes every volume (about 4 s here), so it's measured every 5 minutes, and again right after a clean-up.
+- **One change per tick.** Stopping one workspace may be enough. The host measures again within 30 s, so the next tick acts only if it wasn't.
+- **A test hook that can't leak into real use.** Real memory pressure can't be made safely on your laptop. With a test prefix only, `WORKSPACE_HOST_TEST_PRESSURE=memory` makes the host *report* pressure, and under the real `fc` prefix the host refuses to start with it.
+
+**What happens, by pressure:**
+
+| Pressure | Host (every 30 s) | Control plane (every minute) |
+| --- | --- | --- |
+| Memory under 4 GiB available | Refuses to create or start; still lets a sleeping one resume (it holds its memory already) | Stops the least recently used workspace, asleep ones first: "Stopped to free memory on this computer. Its files are kept: open it to start it again." |
+| Load above 14.4 for 2 minutes | Refuses to create, start or resume | Puts the least recently used running workspace to sleep: "Put to sleep because this computer was very busy. Resume it when you need it." |
+| Disk under 50 GiB free | Refuses to create or start; removes old workspace images | Nothing (no one's files are deleted) |
+| Flowcanvas over 25 GiB | The same | Nothing |
+
+The notice is cleared when you next open the workspace. Step 9 shows it on the workspace's card.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `workspace/host/src/guard.ts` | `ResourceGuard` (samples, sustained load, disk every 5 min, logs only changes, keeps its last answer if measuring fails); `evaluate()`; the sentences; `removeOldImages()` |
+| `workspace/host/src/resources.ts` | Readings split into `readSystem()` (cheap) and `readFlowcanvasDisk()` (slow); `BUDGET.loadSustainedMs` |
+| `workspace/host/src/protocol.ts` | `Pressure`, `PRESSURE_KINDS`, `PATHS.pressure` |
+| `workspace/host/src/workspaces.ts`, `server.ts`, `main.ts` | Refusals in `#checkRoom`; `GET /v1/pressure`; the guard started with the host; the test hook (test prefixes only) |
+| `services/control-plane/src/workspaces/provider.ts`, `local-host.ts` | Optional `pressure()`: only known kinds pass |
+| `services/control-plane/src/workspaces/lifecycle.ts` | Sleep and stop take a notice; `relievePressure()`; `RELIEF_NOTICES` |
+| `services/control-plane/src/api/scheduled.ts` | The tick: idle sleep, then the guard |
+| `docs/adr/0019-resource-guard.md` | The split, and the options rejected |
+
+**Tests:**
+- **Host (unit, 15 new):**
+  - each limit and its sentence
+  - load counted only after 2 minutes, and forgotten when it drops
+  - disk measured every 5 minutes, and again after a clean-up
+  - clean-up on disk or budget pressure
+  - logging only changes
+  - the last answer kept when measuring fails
+  - only old images removed (current kept, one in use skipped, never a container or volume)
+  - refusals per kind for create, start and resume
+  - sleep and stop still allowed under pressure
+  - `GET /v1/pressure` behind the token
+- **Control plane (unit, 10 new):**
+  - nothing without pressure, or for disk alone
+  - memory stops the least recently used, asleep first, with the notice and usage recorded
+  - load sleeps one per tick
+  - a failed change is logged
+  - a provider without a guard does nothing
+  - opening clears the notice
+  - the tick runs the guard
+  - the adapter keeps only known kinds, and says when the host is down
+- **Docker (2 new):**
+  - a real host told it's short of memory refuses to open a workspace with its sentence, and nothing is created in Docker; the tick then stops a running workspace with the notice (Docker: `exited`), and its volume is kept
+  - the test hook is refused for real workspaces
+- **By hand:** the real guard on this laptop reported no pressure (first check 4.4 s, because of the disk measurement).
+
+**Run and check it:**
+```fish
+pnpm test               # 573 tests
+pnpm test:docker        # 36 tests; look for "under memory pressure"
+pnpm workspace:resources  # the same numbers the guard uses
+```
+Restart `pnpm dev` (the host changed). Under real pressure its log says `[workspace-host] guard: under pressure: memory`, then `guard: back within limits`.
+
+**Gotchas:**
+- **The control plane uses the host's protocol from `dist`.** After changing `workspace/host/src/protocol.ts`, run `pnpm --filter @flowcanvas/workspace-host build`, or the control plane doesn't see the new types. `pnpm test` and `pnpm dev` build it first, through turbo.
+- **A text pattern can match more than you meant.** A clean-up script's "remove the `let output` line" matched one inside a test too; it stopped because it checks each replacement matches once.
+
+**Docs:** this write-up; the corrections in "On the owner's laptop"; risk R9; ADR 0019; ARCHITECTURE; upgrade-later 39; STATUS.
+
+**Risks:**
+- R9: closed locally (the guard, tested). The numbers can be tuned in `BUDGET`.
+- **Laptop:** all five checks ok (22.7 GiB memory available, 579 GiB disk free, load under 4). The tests' workspaces were removed.
+
+**Commit:** `feat(workspace): resource guard keeps Flowcanvas within its laptop budget`

@@ -4,8 +4,10 @@ import {
   MESSAGE_MAX,
   PATHS,
   isHostErrorKind,
+  isPressureKind,
   type CreateResponse,
   type HostAction,
+  type PressureResponse,
 } from '@flowcanvas/workspace-host/protocol';
 import {
   isAgentResponse,
@@ -132,6 +134,29 @@ export function localHostProvider(options: {
       // From inside the workspace: checked before anything is passed on.
       if (!isAgentResponse(body)) throw new ProviderError('failed', MESSAGES.unexpected);
       return body;
+    },
+    async pressure() {
+      let response: Response;
+      try {
+        response = await options.fetch(`${base}${PATHS.pressure}`, {
+          headers: { authorization: `Bearer ${options.token}` },
+          signal: AbortSignal.timeout(ACTION_TIMEOUT_MS),
+        });
+      } catch {
+        throw new ProviderError('unavailable', MESSAGES.notRunning);
+      }
+      if (!response.ok) throw await hostError(response);
+      const body = (await response.json().catch(() => undefined)) as
+        Partial<PressureResponse> | undefined;
+      // Only the kinds are needed here; the host's own sentences are for its refusals.
+      if (!Array.isArray(body?.pressure)) throw new ProviderError('failed', MESSAGES.unexpected);
+      return body.pressure
+        .map((entry: unknown) =>
+          typeof entry === 'object' && entry !== null
+            ? (entry as { kind?: unknown }).kind
+            : undefined,
+        )
+        .filter(isPressureKind);
     },
     async terminal(ref, size) {
       let response: Response;

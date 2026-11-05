@@ -4,7 +4,7 @@ import { Duplex } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import { HostError } from './errors.js';
-import { PATHS } from './protocol.js';
+import { PATHS, type Pressure } from './protocol.js';
 import { BODY_MAX_BYTES, createHostServer, type HostOperations } from './server.js';
 
 const TOKEN = 'a'.repeat(64);
@@ -17,6 +17,7 @@ let log: ReturnType<typeof vi.fn<(line: string) => void>>;
 let failWith: Error | undefined;
 let resizes: string[];
 let shell: Duplex | undefined;
+let pressure: Pressure[];
 
 /** A fake shell that echoes what it's sent, and ends when sent 'exit'. */
 function echoShell(): Duplex {
@@ -74,6 +75,7 @@ const fake: HostOperations = {
     if (failWith !== undefined) throw failWith;
     return Promise.resolve({ ok: true, result: { protocol: 1, node: 'v24' } });
   },
+  pressure: () => pressure,
 };
 
 beforeEach(async () => {
@@ -81,6 +83,7 @@ beforeEach(async () => {
   failWith = undefined;
   resizes = [];
   shell = undefined;
+  pressure = [];
   log = vi.fn<(line: string) => void>();
   // Port 0 picks a free one; the server needs to know it to check the Host header, so it's started twice.
   const probe = createHostServer({ host: fake, token: TOKEN, port: 0, log });
@@ -180,6 +183,15 @@ describe('routes', () => {
       expect((await call('POST', PATHS.action(REF, action))).status).toBe(204);
     }
     expect(calls).toEqual([`start ${REF}`, `pause ${REF}`, `resume ${REF}`, `stop ${REF}`]);
+  });
+
+  it("says whether the computer is under pressure (the resource guard's last check)", async () => {
+    expect(await call('GET', PATHS.pressure)).toEqual({ status: 200, body: '{"pressure":[]}' });
+    pressure = [{ kind: 'memory', message: 'Low on memory.' }];
+    expect(JSON.parse((await call('GET', PATHS.pressure)).body)).toEqual({ pressure });
+    expect((await call('GET', PATHS.pressure, { headers: { authorization: '' } })).status).toBe(
+      401,
+    );
   });
 
   it('knows nothing else', async () => {

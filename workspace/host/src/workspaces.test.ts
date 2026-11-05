@@ -2,6 +2,8 @@ import { PassThrough } from 'node:stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Agents, type StartAgent } from './agents.js';
 import { HostError } from './errors.js';
+import { MESSAGES as GUARD_MESSAGES } from './guard.js';
+import type { Pressure } from './protocol.js';
 import { FakeDocker } from './test/fake-docker.js';
 import type { Engine } from './engine.js';
 import { CLONE_TIMEOUT_MS, MAX_TERMINALS, MESSAGES, WorkspaceHost } from './workspaces.js';
@@ -224,6 +226,60 @@ describe('create', () => {
     expect(docker.containers.get('fc-egress')?.networks).toEqual(
       new Set(['fc-egress-out', ref(1), ref(2)]),
     );
+  });
+});
+
+describe("the resource guard's pressure", () => {
+  let pressure: Pressure[];
+  beforeEach(() => {
+    pressure = [];
+    host = new WorkspaceHost({
+      docker: docker.run,
+      prefix: 'fc',
+      image: () => Promise.resolve(IMAGE),
+      log,
+      agents: new Agents(fakeAgent),
+      engine: fakeEngine,
+      pressure: () => pressure,
+    });
+  });
+
+  it('refuses new and stopped workspaces under any pressure, with its sentence', async () => {
+    await host.create({ workspaceId: id(1), repoUrl: null });
+    await host.stop(ref(1));
+    for (const kind of ['memory', 'disk', 'load', 'budget'] as const) {
+      pressure = [{ kind, message: GUARD_MESSAGES[kind] }];
+      await expectHostError(
+        host.create({ workspaceId: id(2), repoUrl: null }),
+        'refused',
+        GUARD_MESSAGES[kind],
+      );
+      await expectHostError(host.start(ref(1)), 'refused', GUARD_MESSAGES[kind]);
+    }
+    expect(docker.containers.has(ref(2))).toBe(false);
+    expect(docker.containers.get(ref(1))?.status).toBe('exited');
+  });
+
+  it('lets a sleeping workspace resume unless the computer is busy (it already holds its memory)', async () => {
+    await host.create({ workspaceId: id(1), repoUrl: null });
+    await host.pause(ref(1));
+    pressure = [{ kind: 'load', message: GUARD_MESSAGES.load }];
+    await expectHostError(host.resume(ref(1)), 'refused', GUARD_MESSAGES.load);
+    pressure = [
+      { kind: 'memory', message: GUARD_MESSAGES.memory },
+      { kind: 'disk', message: GUARD_MESSAGES.disk },
+    ];
+    await host.resume(ref(1));
+    expect(docker.containers.get(ref(1))?.status).toBe('running');
+  });
+
+  it('still lets running workspaces sleep and stop under pressure', async () => {
+    await host.create({ workspaceId: id(1), repoUrl: null });
+    pressure = [{ kind: 'memory', message: GUARD_MESSAGES.memory }];
+    await host.pause(ref(1));
+    await host.stop(ref(1));
+    expect(docker.containers.get(ref(1))?.status).toBe('exited');
+    expect(host.pressure()).toEqual(pressure);
   });
 });
 

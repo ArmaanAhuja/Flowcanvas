@@ -211,4 +211,37 @@ describe('localHostProvider', () => {
       kind: 'unavailable',
     });
   });
+
+  it("reads the resource guard's pressure, with the token, keeping only kinds it knows", async () => {
+    const { provider, fetcher } = host(() =>
+      json(200, {
+        pressure: [
+          { kind: 'memory', message: 'Low on memory.' },
+          { kind: 'gpu', message: 'Not a kind.' },
+          'junk',
+          { kind: 'load', message: 'Busy.' },
+        ],
+      }),
+    );
+    expect(await provider.pressure?.()).toEqual(['memory', 'load']);
+    const [url, init] = fetcher.mock.calls[0] ?? [];
+    expect(url instanceof Request ? url.url : url?.toString()).toBe(`${URL_}/v1/pressure`);
+    expect(new Headers(init?.headers).get('authorization')).toBe(`Bearer ${TOKEN}`);
+  });
+
+  it('refuses a pressure answer it does not recognise, and says when the host is down', async () => {
+    const { provider } = host(() => json(200, { nothing: true }));
+    expect(await rejection(provider.pressure?.() ?? Promise.resolve())).toMatchObject({
+      kind: 'failed',
+    });
+    const down = localHostProvider({
+      url: URL_,
+      token: TOKEN,
+      fetch: () => Promise.reject(new TypeError('fetch failed')),
+    });
+    expect(await rejection(down.pressure?.() ?? Promise.resolve())).toMatchObject({
+      kind: 'unavailable',
+      userMessage: MESSAGES.notRunning,
+    });
+  });
 });

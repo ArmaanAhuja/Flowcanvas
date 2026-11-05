@@ -51,6 +51,15 @@ describe('the scheduled tick', () => {
     expect(log).toHaveBeenCalledWith('scheduled: 1 idle workspace(s) put to sleep');
   });
 
+  it('then relieves pressure: under memory pressure it stops a workspace, with its notice', async () => {
+    provider.pressureNow = ['memory'];
+    await tick()(RUN, { DATABASE_URL });
+    expect(await workspaceOf()).toBe('stopped');
+    expect(log).toHaveBeenCalledWith(
+      expect.stringMatching(/^guard: workspace .* stopped \(memory\)$/),
+    );
+  });
+
   it('does nothing at all where nothing runs workspaces (staging), not even open the database', async () => {
     const database = vi.fn(() => db);
     now += IDLE_SLEEP_MS;
@@ -72,7 +81,7 @@ describe('the scheduled tick', () => {
     });
     await expect(tick({ database: broken })(RUN, { DATABASE_URL })).resolves.toBeUndefined();
     const lines = log.mock.calls.map(([line]) => line).join('\n');
-    expect(lines).toMatch(/checking idle workspaces failed/);
+    expect(lines).toMatch(/scheduled: the checks failed/);
     expect(lines).not.toContain('hunter2');
   });
 });

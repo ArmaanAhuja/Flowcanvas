@@ -48,6 +48,7 @@ describe('assess', () => {
       minAvailableMemoryBytes: 4 * GiB,
       minFreeDiskBytes: 50 * GiB,
       maxLoadPerCore: 0.9,
+      loadSustainedMs: 120_000,
     });
   });
 });

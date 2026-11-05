@@ -15,6 +15,8 @@ export const BUDGET = {
   minFreeDiskBytes: 50 * GiB,
   /** The 1-minute load per core above which the laptop counts as busy (sustained for 2 minutes, step 8a). */
   maxLoadPerCore: 0.9,
+  /** How long the load has to stay above that before the guard acts. */
+  loadSustainedMs: 2 * 60_000,
 } as const;
 
 export interface Figures {
@@ -60,9 +62,52 @@ interface SystemDf {
   readonly Volumes?: readonly { readonly Labels: string; readonly Size: string }[];
 }
 
-export async function readFigures(docker: Docker, prefix = 'fc'): Promise<Figures> {
+/** The laptop's own figures, cheap to read (the guard reads them every 30 s). */
+export interface SystemFigures {
+  readonly memoryTotalBytes: number;
+  readonly memoryAvailableBytes: number;
+  readonly diskFreeBytes: number;
+  readonly load1: number;
+  readonly cores: number;
+}
+
+/** Memory, free disk where Docker keeps its data, and load. */
+export async function readSystem(docker: Docker): Promise<SystemFigures> {
   const root = (await docker(['info', '--format', '{{.DockerRootDir}}'])).stdout || '/';
   const disk = await statfs(root).catch(() => statfs('/'));
+  return {
+    memoryTotalBytes: totalmem(),
+    memoryAvailableBytes: await availableMemory(),
+    diskFreeBytes: disk.bavail * disk.bsize,
+    load1: loadavg()[0] ?? 0,
+    cores: availableParallelism(),
+  };
+}
+
+/** Flowcanvas's disk: our images and this prefix's volumes. Slow (Docker sizes every volume; about 4 s here). */
+export async function readFlowcanvasDisk(
+  docker: Docker,
+  prefix = 'fc',
+): Promise<{ imagesBytes: number; volumesBytes: number }> {
+  const df = JSON.parse(
+    (await docker(['system', 'df', '--verbose', '--format', '{{json .}}'], { timeoutMs: 120_000 }))
+      .stdout,
+  ) as SystemDf;
+  const sum = (sizes: readonly string[]) =>
+    sizes.reduce((total, size) => total + parseDockerSize(size), 0);
+  return {
+    imagesBytes: sum(
+      (df.Images ?? []).filter((i) => i.Repository === 'flowcanvas-workspace').map((i) => i.Size),
+    ),
+    volumesBytes: sum(
+      (df.Volumes ?? [])
+        .filter((v) => v.Labels.split(',').includes(`${LABEL.prefix}=${prefix}`))
+        .map((v) => v.Size),
+    ),
+  };
+}
+
+export async function readFigures(docker: Docker, prefix = 'fc'): Promise<Figures> {
   const states = (
     await docker([
       'ps',
@@ -75,28 +120,11 @@ export async function readFigures(docker: Docker, prefix = 'fc'): Promise<Figure
       '{{.State}}',
     ])
   ).stdout.split('\n');
-  const df = JSON.parse(
-    (await docker(['system', 'df', '--verbose', '--format', '{{json .}}'], { timeoutMs: 120_000 }))
-      .stdout,
-  ) as SystemDf;
-  const sum = (sizes: readonly string[]) =>
-    sizes.reduce((total, size) => total + parseDockerSize(size), 0);
   return {
-    memoryTotalBytes: totalmem(),
-    memoryAvailableBytes: await availableMemory(),
-    diskFreeBytes: disk.bavail * disk.bsize,
-    load1: loadavg()[0] ?? 0,
-    cores: availableParallelism(),
+    ...(await readSystem(docker)),
     running: states.filter((state) => state === 'running').length,
     asleep: states.filter((state) => state === 'paused').length,
-    imagesBytes: sum(
-      (df.Images ?? []).filter((i) => i.Repository === 'flowcanvas-workspace').map((i) => i.Size),
-    ),
-    volumesBytes: sum(
-      (df.Volumes ?? [])
-        .filter((v) => v.Labels.split(',').includes(`${LABEL.prefix}=${prefix}`))
-        .map((v) => v.Size),
-    ),
+    ...(await readFlowcanvasDisk(docker, prefix)),
   };
 }
 

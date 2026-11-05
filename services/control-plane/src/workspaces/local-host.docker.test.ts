@@ -13,18 +13,24 @@ import { createProject } from '../projects/projects.js';
 import { migratedDatabase } from '../test/database.js';
 import { signedInAs } from '../test/sessions.js';
 import { usageSummary } from '../usage/usage.js';
-import { IDLE_SLEEP_MS, loadWorkspace, openWorkspace, resumeWorkspace } from './lifecycle.js';
+import {
+  IDLE_SLEEP_MS,
+  RELIEF_NOTICES,
+  loadWorkspace,
+  openWorkspace,
+  resumeWorkspace,
+} from './lifecycle.js';
 import { MESSAGES, localHostFromEnv } from './local-host.js';
 import type { WorkspaceProvider } from './provider.js';
 
 const run = promisify(execFile);
 const prefix = `fc-test-${randomBytes(4).toString('hex')}`;
+// A second host that reports (simulated) memory pressure; real pressure can't be made safely on a laptop.
+const pressuredPrefix = `fc-test-${randomBytes(4).toString('hex')}`;
 const token = randomBytes(32).toString('hex');
 const hostDir = fileURLToPath(new URL('../../../../workspace/host/', import.meta.url));
-let child: ChildProcess;
 let hostUrl = '';
 let provider: WorkspaceProvider;
-let output = '';
 
 async function freePort(): Promise<number> {
   return new Promise((resolve) => {
@@ -37,47 +43,73 @@ async function freePort(): Promise<number> {
   });
 }
 
-beforeAll(async () => {
+interface RunningHost {
+  readonly child: ChildProcess;
+  readonly url: string;
+  readonly provider: WorkspaceProvider;
+  readonly output: () => string;
+}
+
+/** Starts the real host process as `pnpm dev` does, with its own prefix and token. */
+async function startHost(
+  hostPrefix: string,
+  extraEnv: Record<string, string> = {},
+): Promise<RunningHost> {
   const port = await freePort();
+  let text = '';
   // Its own process group (detached), so afterAll can stop tsx and the node process it starts, not just one.
-  child = spawn('pnpm', ['exec', 'tsx', 'src/main.ts'], {
+  const started = spawn('pnpm', ['exec', 'tsx', 'src/main.ts'], {
     cwd: hostDir,
     detached: true,
     env: {
       ...process.env,
       WORKSPACE_HOST_TOKEN: token,
       WORKSPACE_HOST_PORT: String(port),
-      WORKSPACE_HOST_PREFIX: prefix,
+      WORKSPACE_HOST_PREFIX: hostPrefix,
+      ...extraEnv,
     },
   });
-  child.stdout?.on('data', (chunk: Buffer) => (output += chunk.toString()));
-  child.stderr?.on('data', (chunk: Buffer) => (output += chunk.toString()));
-  const started = Date.now();
-  while (!output.includes('Listening on')) {
-    if (Date.now() - started > 30_000) throw new Error(`host didn't start:\n${output}`);
+  started.stdout.on('data', (chunk: Buffer) => (text += chunk.toString()));
+  started.stderr.on('data', (chunk: Buffer) => (text += chunk.toString()));
+  const since = Date.now();
+  while (!text.includes('Listening on')) {
+    if (Date.now() - since > 30_000) throw new Error(`host didn't start:\n${text}`);
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  hostUrl = `http://127.0.0.1:${String(port)}`;
+  const url = `http://127.0.0.1:${String(port)}`;
   const configured = localHostFromEnv(
-    { WORKSPACE_HOST_URL: hostUrl, WORKSPACE_HOST_TOKEN: token },
+    { WORKSPACE_HOST_URL: url, WORKSPACE_HOST_TOKEN: token },
     (input, init) => fetch(input, init),
   );
   if (configured === undefined) throw new Error('no provider');
-  provider = configured;
+  return { child: started, url, provider: configured, output: () => text };
+}
+
+let main: RunningHost;
+let pressured: RunningHost | undefined;
+
+beforeAll(async () => {
+  main = await startHost(prefix);
+  hostUrl = main.url;
+  provider = main.provider;
 }, 60_000);
 
 afterAll(async () => {
-  if (child.pid !== undefined) process.kill(-child.pid, 'SIGTERM');
-  const list = async (args: string[]) =>
-    (
-      await run('docker', [...args, '--filter', `label=org.flowcanvas.prefix=${prefix}`, '-q'])
-    ).stdout
-      .split('\n')
-      .filter((id) => id !== '');
-  for (const id of await list(['ps', '--all'])) await run('docker', ['rm', '--force', id]);
-  for (const id of await list(['network', 'ls'])) await run('docker', ['network', 'rm', id]);
-  for (const id of await list(['volume', 'ls']))
-    await run('docker', ['volume', 'rm', '--force', id]);
+  for (const running of [main, pressured]) {
+    if (running?.child.pid !== undefined) process.kill(-running.child.pid, 'SIGTERM');
+  }
+  for (const ours of [prefix, pressuredPrefix]) {
+    const list = async (args: string[]) =>
+      (
+        await run('docker', [...args, '--filter', `label=org.flowcanvas.prefix=${ours}`, '-q'])
+      ).stdout
+        .split('\n')
+        .filter((id) => id !== '');
+    for (const id of await list(['ps', '--all'])) await run('docker', ['rm', '--force', id]);
+    for (const id of await list(['network', 'ls'])) await run('docker', ['network', 'rm', id]);
+    for (const id of await list(['volume', 'ls']))
+      await run('docker', ['volume', 'rm', '--force', id]);
+  }
 }, 60_000);
 
 describe('the control plane driving the real workspace host', { timeout: 120_000 }, () => {
@@ -117,7 +149,7 @@ describe('the control plane driving the real workspace host', { timeout: 120_000
   });
 
   it('is refused with the wrong token', async () => {
-    const url = /Listening on (http:\/\/127\.0\.0\.1:\d+)/.exec(output)?.[1] ?? '';
+    const url = /Listening on (http:\/\/127\.0\.0\.1:\d+)/.exec(main.output())?.[1] ?? '';
     const wrong = localHostFromEnv(
       { WORKSPACE_HOST_URL: url, WORKSPACE_HOST_TOKEN: 'f'.repeat(64) },
       (input, init) => fetch(input, init),
@@ -260,7 +292,92 @@ describe('the control plane driving the real workspace host', { timeout: 120_000
     await provider.stop(ref);
   });
 
+  it('under memory pressure: the host refuses a new workspace with its sentence, and the tick stops one', async () => {
+    // A workspace running on a host with room, then the same laptop reported short of memory.
+    const db = await migratedDatabase();
+    const { userId } = await signedInAs(db, 'ada@example.com');
+    const project = await createProject(db, userId, { name: 'Busy', repoUrl: null });
+    if (project === 'duplicate-name') throw new Error('unexpected duplicate');
+    pressured = await startHost(pressuredPrefix, { WORKSPACE_HOST_TEST_PRESSURE: 'memory' });
+    const short = pressured.provider;
+    expect(await short.pressure?.()).toEqual(['memory']);
+
+    const ctx = { db, provider: short, now: () => Date.now(), log: () => undefined };
+    const load = async () => {
+      const row = await loadWorkspace(db, project.id, userId);
+      if (row === undefined) throw new Error('no workspace');
+      return row;
+    };
+    // Refused, with the guard's own sentence, and nothing created in Docker.
+    expect(await openWorkspace(ctx, await load())).toMatchObject({
+      ok: false,
+      problem: 'refused',
+      message: expect.stringMatching(/^This computer is low on memory/) as unknown,
+    });
+    const created = await run('docker', [
+      'ps',
+      '--all',
+      '--filter',
+      `label=org.flowcanvas.prefix=${pressuredPrefix}`,
+      '--filter',
+      'label=org.flowcanvas.role=workspace',
+      '-q',
+    ]);
+    expect(created.stdout.trim()).toBe('');
+
+    // Opened through the host with room (same Docker), then the tick on the short one stops it.
+    const roomy = { ...ctx, provider };
+    expect(await openWorkspace(roomy, await load())).toMatchObject({ ok: true });
+    const ref = (await load()).provider_ref ?? '';
+    const tick = createScheduled({
+      database: () => db,
+      log: () => undefined,
+      workspaceProvider: () => ({
+        ...provider,
+        pressure: () => short.pressure?.() ?? Promise.resolve([]),
+      }),
+    });
+    await tick(
+      { cron: '* * * * *', scheduledTime: Date.now() },
+      { DATABASE_URL: 'postgresql://unused' },
+    );
+    expect(await load()).toMatchObject({
+      state: 'stopped',
+      failure: RELIEF_NOTICES.stoppedForMemory,
+    });
+    expect(
+      (await run('docker', ['inspect', '--format', '{{.State.Status}}', ref])).stdout.trim(),
+    ).toBe('exited');
+    // Its files are kept: the volume is still there.
+    expect(
+      (await run('docker', ['volume', 'inspect', '--format', '{{.Name}}', ref])).stdout.trim(),
+    ).toBe(ref);
+  });
+
+  it('refuses the test pressure hook for real workspaces', async () => {
+    const port = await freePort();
+    const refused = await run('pnpm', ['exec', 'tsx', 'src/main.ts'], {
+      cwd: hostDir,
+      env: {
+        ...process.env,
+        WORKSPACE_HOST_TOKEN: token,
+        WORKSPACE_HOST_PORT: String(port),
+        WORKSPACE_HOST_PREFIX: 'fc',
+        WORKSPACE_HOST_TEST_PRESSURE: 'memory',
+      },
+    }).then(
+      () => ({ code: 0, out: '' }),
+      (error: unknown) => {
+        const failed = error as { code?: number; stdout?: string };
+        return { code: failed.code ?? -1, out: failed.stdout ?? '' };
+      },
+    );
+    expect(refused.code).toBe(1);
+    expect(refused.out).toContain('WORKSPACE_HOST_TEST_PRESSURE is for tests only');
+  });
+
   it('never printed the token', () => {
-    expect(output).not.toContain(token);
+    expect(main.output()).not.toContain(token);
+    expect(pressured?.output() ?? '').not.toContain(token);
   });
 });

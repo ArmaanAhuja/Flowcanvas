@@ -27,7 +27,15 @@ export interface WorkspaceProvider {
   agent(ref: string, request: AgentRequest): Promise<AgentResponse>;
   /** A shell on a pty in a running workspace, as a WebSocket not yet accepted (ADR 0017). */
   terminal(ref: string, size: { cols: number; rows: number }): Promise<TerminalSocket>;
+  /**
+   * Whether the machine running the workspaces is short of something (the local resource guard, step 8a). A
+   * provider without it (a cloud one, whose own limits apply) leaves it out, and nothing is relieved.
+   */
+  pressure?(): Promise<readonly PressureKind[]>;
 }
+
+/** Short of memory, of disk, busy for minutes, or over Flowcanvas's own disk budget (ADR 0019). */
+export type PressureKind = 'memory' | 'disk' | 'load' | 'budget';
 
 /**
  * The part of a Workers WebSocket the terminal relay uses, so tests can pass a fake. Binary frames are
