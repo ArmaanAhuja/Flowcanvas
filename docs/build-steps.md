@@ -9426,8 +9426,8 @@ browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0
 | 8a | The resource guard: laptop pressure and Flowcanvas's budget checked every 30 s; refuse, sleep, stop, clean up (owner, 4 Nov) | done (Claude, 5 Nov) |
 | 9 | Status chip and cards (Figma 29); Open demo project (Rallly); staging's "Workspaces run locally for now". In three parts: | |
 | 9.1 | Pinned clones (migration 0004) and the demo endpoint | done (Claude, 5 Nov) |
-| 9.2 | `WorkspaceStatus` chip in the design system, with catalogue stories and baselines | *next* |
-| 9.3 | The project's workspace panel: chip, actions, starting and sleeping cards, notices, staging; Open demo project; walkthrough | *planned* |
+| 9.2 | `WorkspaceStatus` chip in the design system, with catalogue stories and baselines | done (Claude, 5 Nov) |
+| 9.3 | The project's workspace panel: chip, actions, starting and sleeping cards, notices, staging; Open demo project; walkthrough | *next* |
 | 10 | Security tests (canary secrets, isolation), walkthrough, timing; Docker tests in CI if the runners allow | *planned* |
 | 11 | Close the phase as **in review** (0.5.0): report, and what waits for the cloud provider | *planned* |
 
@@ -10376,4 +10376,41 @@ Split into three parts: the demo needs the corpus pin to be honoured, which noth
 - **A migration the code needs must reach the dev database before `pnpm dev` restarts,** or listing projects fails on the missing column. `pnpm db:status` shows the target host first.
 
 **Commit:** `feat(workspace): pinned clones and the Open demo project endpoint`
+
+#### 9.2 — The workspace status chip (done by Claude)
+
+**Goal:** the top-bar chip from the design brief ("a small dot plus text"), built once in the design system with every state, before any screen uses it (components first).
+
+**What it looks like** (`packages/ui/src/components/workspace-status/`):
+- The Figma top bar's status: a 6 px dot, a 6 px gap, Mono small text in `text/secondary`.
+- `detail` adds "· 2 cores".
+
+| State | Words | Dot |
+| --- | --- | --- |
+| `not_created`, `sleeping`, `stopped` | Not started, Sleeping, Stopped | neutral (`text/tertiary`, Figma's sleeping dot) |
+| `creating`, `resuming` | Starting…, Resuming… | an open ring (`text/secondary`) |
+| `running` | Running | green (`state/added/solid`): Graphite's runtime "pass" |
+| `failed` | Couldn't start | coral red (`state/removed/solid`): Graphite's "fail" |
+
+**Deviation from Figma, for review:** Figma colours *Starting…* with `accent/solid`. Graphite keeps the accent for selection and focus only, and Graphite outranks Figma (CLAUDE.md, sources), so a changing state is an open ring instead. It differs from idle by shape as well as by its words.
+
+**Concepts:**
+- **State never by colour alone** (WCAG 1.4.1). The words always say the state, so the dot is `aria-hidden` and only repeats them. https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html
+- **Tokens only, even for a circle.** Stylelint refuses `50%` for a radius. A radius of half the size or more makes a circle, so the smallest radius token (4 px) draws a 6 px dot exactly.
+
+**Tests:**
+- **Unit (4):**
+  - every state in words
+  - the detail
+  - each state's tone, with the dot hidden from screen readers
+  - attributes and `data-state` passed through
+- **Visual:** 4 new baselines (`Default`, `AllStates`, both themes), checked by eye, with axe. No existing baseline changed.
+
+```fish
+pnpm --filter @flowcanvas/ui test     # 70 tests
+pnpm test:visual                      # 68 checks; the chip's are "components-workspacestatus--…"
+pnpm --filter @flowcanvas/ui storybook  # Components → WorkspaceStatus
+```
+
+**Commit:** `feat(ui): WorkspaceStatus chip with every workspace state`
 
