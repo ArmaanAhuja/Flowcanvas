@@ -124,6 +124,54 @@ describe('create', () => {
     );
   });
 
+  it('checks out a pinned commit exactly, shallow and detached, with the same https-only rules', async () => {
+    const pin = '8e67a2161a2d2211c04ef60d3a40ec365b50149c';
+    expect(await host.create({ workspaceId: id(1), repoUrl: REPO, commit: pin })).toMatchObject({
+      cloned: true,
+    });
+    const git = docker.calls
+      .filter((args) => args[0] === 'exec' && args[2] === 'git')
+      .map((args) => args.slice(3));
+    const rules = ['-c', 'protocol.allow=never', '-c', 'protocol.https.allow=always'];
+    expect(git).toEqual([
+      [...rules, 'init', '--quiet', '--', '/workspace/project'],
+      [...rules, '-C', '/workspace/project', 'remote', 'add', 'origin', '--', REPO],
+      [
+        ...rules,
+        '-C',
+        '/workspace/project',
+        'fetch',
+        '--depth',
+        '1',
+        '--no-tags',
+        '--quiet',
+        'origin',
+        pin,
+      ],
+      [...rules, '-C', '/workspace/project', 'checkout', '--quiet', '--detach', pin],
+    ]);
+  });
+
+  it('refuses a commit that is not a full SHA, or one without a repository, before touching Docker', async () => {
+    for (const commit of [
+      '8e67a21',
+      'main',
+      '--upload-pack=evil',
+      '8E67A2161A2D2211C04EF60D3A40EC365B50149C',
+    ]) {
+      await expectHostError(host.create({ workspaceId: id(1), repoUrl: REPO, commit }), 'failed');
+    }
+    await expectHostError(
+      host.create({
+        workspaceId: id(1),
+        repoUrl: null,
+        commit: '8e67a2161a2d2211c04ef60d3a40ec365b50149c',
+      }),
+      'failed',
+    );
+    expect(docker.calls).toEqual([]);
+  });
+
   it('works without a repository', async () => {
     expect(await host.create({ workspaceId: id(1), repoUrl: null })).toEqual({
       ref: ref(1),

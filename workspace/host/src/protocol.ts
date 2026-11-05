@@ -14,7 +14,12 @@ export type HostAction = (typeof ACTIONS)[number];
 export interface CreateRequest {
   readonly workspaceId: string;
   readonly repoUrl: string | null;
+  /** A full commit SHA to check out instead of the default branch's head (corpus forks are pinned, rule 8). */
+  readonly commit?: string | null;
 }
+
+/** A full 40-character commit SHA, lower case. */
+export const COMMIT = /^[0-9a-f]{40}$/;
 
 export interface CreateResponse {
   /** The host's name for the workspace (its container name). */

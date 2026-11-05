@@ -52,6 +52,7 @@ interface Row {
   readonly id: string;
   readonly owner_id: string;
   readonly repo_url: string | null;
+  readonly repo_commit: string | null;
   readonly state: WorkspaceState;
   readonly provider_ref: string | null;
   readonly version: number;
@@ -61,7 +62,7 @@ interface Row {
   readonly failure: string | null;
 }
 
-const COLUMNS = `w.id, p.owner_id, p.repo_url, w.state, w.provider_ref, w.version,
+const COLUMNS = `w.id, p.owner_id, p.repo_url, p.repo_commit, w.state, w.provider_ref, w.version,
   (extract(epoch from w.state_changed_at) * 1000)::float8 as state_changed_ms,
   (extract(epoch from w.running_since) * 1000)::float8 as running_since_ms,
   (extract(epoch from w.last_active_at) * 1000)::float8 as last_active_ms, w.failure`;
@@ -216,7 +217,7 @@ export async function openWorkspace(ctx: LifecycleContext, row: Row): Promise<Li
   }
   if (ref === null) {
     const created = await attempt(ctx, 'create', () =>
-      ctx.provider.create({ workspaceId: row.id, repoUrl: row.repo_url }),
+      ctx.provider.create({ workspaceId: row.id, repoUrl: row.repo_url, commit: row.repo_commit }),
     );
     if (created instanceof ProviderError) failure = created;
     else {

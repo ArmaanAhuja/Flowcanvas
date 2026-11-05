@@ -8,10 +8,14 @@ import type { AgentRequest, AgentResponse } from '@flowcanvas/workspace-agent/pr
 export interface WorkspaceProvider {
   /** Stored with the workspace, e.g. `docker-local`. */
   readonly name: string;
-  /** Creates and starts the workspace, and clones the repository into it if there is one. */
+  /**
+   * Creates and starts the workspace, and clones the repository into it if there is one: at `commit` when
+   * given (a pinned corpus fork), else the default branch's head.
+   */
   create(input: {
     readonly workspaceId: string;
     readonly repoUrl: string | null;
+    readonly commit?: string | null;
   }): Promise<{ readonly ref: string }>;
   /** Starts a stopped workspace again, with its files. */
   start(ref: string): Promise<void>;

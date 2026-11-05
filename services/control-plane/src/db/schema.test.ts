@@ -48,7 +48,12 @@ const bytes = (length: number) => new Uint8Array(length).fill(7);
 describe('migration runner', () => {
   it('applies every migration once, in order, and records checksums', async () => {
     const first = await migrate(db, loadMigrations());
-    const all = ['0001_initial', '0002_workspace_for_every_project', '0003_workspace_lifecycle'];
+    const all = [
+      '0001_initial',
+      '0002_workspace_for_every_project',
+      '0003_workspace_lifecycle',
+      '0004_pinned_commit',
+    ];
     expect(first.applied).toEqual(all);
     const second = await migrate(db, loadMigrations());
     expect(second).toEqual({ applied: [], alreadyApplied: all });

@@ -59,7 +59,7 @@ Defined by `services/control-plane/migrations/*.sql` (ADR 0014); applied with `p
 | `users` | Email (lower case, unique), name, avatar, role | Deleting a user cascades to everything they own |
 | `identities` | GitHub or Google account linked to a user | Unique per (provider, provider user id) |
 | `sessions` | SHA-256 hash of the session token, expiry | The token itself is never stored |
-| `projects` | Owner, trimmed name (unique per owner), optional repo URL | |
+| `projects` | Owner, trimmed name (unique per owner), optional repo URL, optional pinned commit (`repo_commit`, 0004: a full SHA, only with a URL) | The demo project is the corpus's Rallly fork at its pin (`src/projects/demo.ts`; `POST /api/projects/demo`) |
 | `workspaces` | One per project, created in the same statement as the project; state, provider and its name for the workspace, `version`, when the state changed, running since, last active, failure sentence | Migration 0002 backfilled older projects; 0003 added the lifecycle columns. `running_since` is set exactly while running (a check constraint) |
 | `project_keys` | Each project's data key, encrypted by a master key held in a Worker secret | Envelope encryption |
 | `project_secrets` | Secret values as AES-GCM ciphertext and IV; environment-variable-style names | Write-only; never returned |

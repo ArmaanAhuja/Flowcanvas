@@ -112,7 +112,7 @@ export function localHostProvider(options: {
     async create(input) {
       const response = await call(
         PATHS.create,
-        { workspaceId: input.workspaceId, repoUrl: input.repoUrl },
+        { workspaceId: input.workspaceId, repoUrl: input.repoUrl, commit: input.commit ?? null },
         CREATE_TIMEOUT_MS,
       );
       const body = (await response.json().catch(() => undefined)) as

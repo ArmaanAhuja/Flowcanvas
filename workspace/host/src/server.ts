@@ -116,10 +116,18 @@ export function createHostServer(options: ServerOptions): Server {
       const fields =
         typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
       const { workspaceId, repoUrl } = fields;
-      if (typeof workspaceId !== 'string' || (repoUrl !== null && typeof repoUrl !== 'string')) {
-        throw new HostError('failed', 'Send a workspaceId and a repoUrl (or null).');
+      const commit = fields.commit ?? null;
+      if (
+        typeof workspaceId !== 'string' ||
+        (repoUrl !== null && typeof repoUrl !== 'string') ||
+        (commit !== null && typeof commit !== 'string')
+      ) {
+        throw new HostError(
+          'failed',
+          'Send a workspaceId, a repoUrl (or null) and optionally a commit.',
+        );
       }
-      send(response, 200, await options.host.create({ workspaceId, repoUrl }));
+      send(response, 200, await options.host.create({ workspaceId, repoUrl, commit }));
       return;
     }
     const agentMatch = request.method === 'POST' ? AGENT_PATH.exec(path) : null;

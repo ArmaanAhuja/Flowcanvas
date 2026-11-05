@@ -9424,7 +9424,10 @@ browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0
 | 7 | Network rules: the egress proxy's full allowlist and address checks; limits; the isolation test | done (Claude, 5 Nov) |
 | 8 | Sleep after 10 idle minutes and resume intact; usage metering writes workspace seconds | done (Claude, 5 Nov) |
 | 8a | The resource guard: laptop pressure and Flowcanvas's budget checked every 30 s; refuse, sleep, stop, clean up (owner, 4 Nov) | done (Claude, 5 Nov) |
-| 9 | Status chip and cards (Figma 29); Open demo project (Rallly); staging's "Workspaces run locally for now" | *next* |
+| 9 | Status chip and cards (Figma 29); Open demo project (Rallly); staging's "Workspaces run locally for now". In three parts: | |
+| 9.1 | Pinned clones (migration 0004) and the demo endpoint | done (Claude, 5 Nov) |
+| 9.2 | `WorkspaceStatus` chip in the design system, with catalogue stories and baselines | *next* |
+| 9.3 | The project's workspace panel: chip, actions, starting and sleeping cards, notices, staging; Open demo project; walkthrough | *planned* |
 | 10 | Security tests (canary secrets, isolation), walkthrough, timing; Docker tests in CI if the runners allow | *planned* |
 | 11 | Close the phase as **in review** (0.5.0): report, and what waits for the cloud provider | *planned* |
 
@@ -10323,3 +10326,54 @@ Restart `pnpm dev` (the host changed). Under real pressure its log says `[worksp
 - **Laptop:** all five checks ok (22.7 GiB memory available, 579 GiB disk free, load under 4). The tests' workspaces were removed.
 
 **Commit:** `feat(workspace): resource guard keeps Flowcanvas within its laptop budget`
+
+### Step 1d.9 — Workspace status on the page, and Open demo project
+
+Split into three parts: the demo needs the corpus pin to be honoured, which nothing did yet.
+
+#### 9.1 — Pinned clones and the demo endpoint (done by Claude)
+
+**Goal:** **Open demo project** opens Rallly at the commit the corpus pins (rule 8), with one click, and never the fork's moving head.
+
+**Why this came first:** the fork's `main` had moved on to `10b90ef`, while the corpus pins `8e67a21`. Every clone so far took the branch head, so the demo would have opened code the corpus doesn't describe.
+
+**Concepts:**
+- **Fetching one commit by its SHA.** `git clone` follows a branch. To get exactly one commit, shallow:
+  1. `git init`
+  2. `git remote add origin <url>`
+  3. `git fetch --depth 1 origin <sha>`
+  4. `git checkout --detach <sha>`
+
+  GitHub serves any commit reachable from the repository this way. It ends **detached** (on a commit, not a branch), which is honest: it isn't any branch's head. https://git-scm.com/docs/git-fetch
+- **One source for the pin.** The control plane reads Rallly's fork and commit from `corpus/manifest.json` (bundled into the Worker as JSON). The corpus tests and the demo can't disagree.
+- **Find or create, then open.** `POST /api/projects/demo` makes the demo project the first time (`Rallly (demo)`, pinned) and finds the same one after. The page then opens it through the usual `/workspace/open`, so there's one open path. Where workspaces can't run (staging), it refuses before making anything.
+
+**Files:**
+
+| File | What changed |
+| --- | --- |
+| `services/control-plane/migrations/0004_pinned_commit.sql` | `projects.repo_commit`: a full lower-case SHA, and only with an address (both checked by the database). **Applied to the dev database** (`ep-square-leaf…`); staging at phase close |
+| `services/control-plane/src/projects/demo.ts` | `demoProject()` from the manifest; `ensureDemoProject()` |
+| `services/control-plane/src/projects/projects.ts` | `repoCommit`; each project's workspace now has `stateChangedAt` and `failure` (for the cards); `findPinnedProject()` |
+| `services/control-plane/src/projects/routes.ts` | `POST /api/projects/demo`; `GET /api/projects` adds `workspacesAvailable` |
+| `services/control-plane/src/workspaces/{provider,local-host,lifecycle}.ts` | The commit is passed to `create`, so a lost workspace is made again at the same commit |
+| `workspace/host/src/{protocol,workspaces,server}.ts` | `CreateRequest.commit` (checked: 40 lower-case hex, with a repository); the pinned clone |
+
+**Tests:**
+- **Host:** the pinned clone's exact git commands (https-only rules on each); short, branch-name, upper-case, flag-like and repository-less commits refused before Docker; the server refuses a non-string commit
+- **Control plane:**
+  - the demo is the manifest's fork and pin
+  - made once (201), then found (200, same project)
+  - another project with its name: 409
+  - staging: 503, nothing made
+  - another origin: 403
+  - the database refuses a bad SHA, and a pin without an address
+  - the lifecycle passes the pin to the provider
+- **Docker:** the *Done when* timing test now opens Rallly at its pin. `HEAD` is `8e67a21`, with one commit of history. **7.0 s** (clone 5.6 s), faster than the branch head.
+
+**Gotchas:**
+- **A fork's branch moves; a pin doesn't.** Anything that claims to be "the corpus" has to use the commit, not the branch.
+- **A migration the code needs must reach the dev database before `pnpm dev` restarts,** or listing projects fails on the missing column. `pnpm db:status` shows the target host first.
+
+**Commit:** `feat(workspace): pinned clones and the Open demo project endpoint`
+

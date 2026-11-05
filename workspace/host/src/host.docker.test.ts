@@ -19,6 +19,8 @@ import { createHostServer } from './server.js';
 
 const run = promisify(execFile);
 const RALLLY = 'https://github.com/ArmaanAhuja-7777/rallly';
+// The corpus pin (corpus/manifest.json): the demo project opens exactly this commit, not the fork's head.
+const PIN = '8e67a2161a2d2211c04ef60d3a40ec365b50149c';
 const prefix = `fc-test-${randomBytes(4).toString('hex')}`;
 const lines: string[] = [];
 const host = new WorkspaceHost({
@@ -52,9 +54,9 @@ afterAll(async () => {
 }, 120_000);
 
 describe('workspace host with Docker', { timeout: 120_000 }, () => {
-  it('opens Rallly from its GitHub address in under 60 seconds', async () => {
+  it('opens Rallly from its GitHub address, at its pinned commit, in under 60 seconds', async () => {
     const started = Date.now();
-    const result = await host.create({ workspaceId: rallly, repoUrl: RALLLY });
+    const result = await host.create({ workspaceId: rallly, repoUrl: RALLLY, commit: PIN });
     const total = Date.now() - started;
     console.log(`Rallly: opened in ${String(total)} ms (clone ${String(result.cloneMs)} ms)`);
     expect(result).toMatchObject({ ref, cloned: true });
@@ -67,6 +69,9 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
         )
       ).code,
     ).toBe(0);
+    expect((await sh(ref, 'git -C /workspace/project rev-parse HEAD')).out).toBe(PIN);
+    // Shallow: one commit, not the fork's history.
+    expect((await sh(ref, 'git -C /workspace/project rev-list --count HEAD')).out).toBe('1');
   });
 
   it('keeps the clone when opened again', async () => {

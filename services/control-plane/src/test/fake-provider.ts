@@ -71,7 +71,11 @@ export class FakeProvider implements WorkspaceProvider {
     return state;
   }
 
-  async create(input: { workspaceId: string; repoUrl: string | null }) {
+  /** Every create's input, in order. */
+  readonly created: { workspaceId: string; repoUrl: string | null; commit?: string | null }[] = [];
+
+  async create(input: { workspaceId: string; repoUrl: string | null; commit?: string | null }) {
+    this.created.push(input);
     await this.enter('create', input.workspaceId);
     const ref = `fake-${input.workspaceId}`;
     this.workspaces.set(ref, 'running');

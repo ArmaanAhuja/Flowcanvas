@@ -83,7 +83,7 @@ describe('localHostProvider', () => {
     expect(init).toMatchObject({
       method: 'POST',
       headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
-      body: '{"workspaceId":"w-1","repoUrl":"https://github.com/a/b"}',
+      body: '{"workspaceId":"w-1","repoUrl":"https://github.com/a/b","commit":null}',
     });
     expect(init?.signal).toBeInstanceOf(AbortSignal);
   });

@@ -74,6 +74,23 @@ describe('open', () => {
     expect(stored?.provider).toBe('fake');
   });
 
+  it('passes a pinned commit on to the provider, so a lost workspace is made again at the same commit', async () => {
+    const pinned = await createProject(db, userId, {
+      name: 'Pinned',
+      repoUrl: REPO,
+      repoCommit: '8e67a2161a2d2211c04ef60d3a40ec365b50149c',
+    });
+    if (pinned === 'duplicate-name') throw new Error('unexpected duplicate');
+    const row = await loadWorkspace(db, pinned.id, userId);
+    if (row === undefined) throw new Error('no workspace');
+    await openWorkspace(ctx, row);
+    expect(provider.created.at(-1)).toEqual({
+      workspaceId: row.id,
+      repoUrl: REPO,
+      commit: '8e67a2161a2d2211c04ef60d3a40ec365b50149c',
+    });
+  });
+
   it('does nothing more when it is already running', async () => {
     await openWorkspace(ctx, await current());
     expect(await openWorkspace(ctx, await current())).toMatchObject({ ok: true });

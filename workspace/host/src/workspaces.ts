@@ -16,7 +16,7 @@ import { DockerFailure, type Docker } from './docker-cli.js';
 import { socketEngine, type Engine } from './engine.js';
 import { openTerminal, type TerminalSession } from './terminal.js';
 import { HostError } from './errors.js';
-import type { CreateRequest, CreateResponse, Pressure } from './protocol.js';
+import { COMMIT, type CreateRequest, type CreateResponse, type Pressure } from './protocol.js';
 
 /** At most this many workspaces run (not asleep) at once on this computer (owner, 4 Nov 2026). */
 export const MAX_RUNNING = 2;
@@ -101,6 +101,10 @@ export class WorkspaceHost {
     if (request.repoUrl !== null && !GITHUB_REPO.test(request.repoUrl)) {
       throw new HostError('failed', MESSAGES.notGitHub);
     }
+    const commit = request.commit ?? null;
+    if (commit !== null && (request.repoUrl === null || !COMMIT.test(commit))) {
+      throw new HostError('failed', 'Invalid commit: give a full commit SHA with a repository.');
+    }
     const ref = this.refFor(request.workspaceId);
     return this.#locked(ref, async () => {
       const state = await this.#state(ref);
@@ -123,7 +127,7 @@ export class WorkspaceHost {
       } else {
         await this.#wake(ref, state);
       }
-      return this.#clone(ref, request.repoUrl);
+      return this.#clone(ref, request.repoUrl, commit);
     });
   }
 
@@ -376,7 +380,11 @@ export class WorkspaceHost {
   }
 
   /** Clones the repository on first open; a workspace that already has it keeps its files as they are. */
-  async #clone(ref: string, repoUrl: string | null): Promise<CreateResponse> {
+  async #clone(
+    ref: string,
+    repoUrl: string | null,
+    commit: string | null,
+  ): Promise<CreateResponse> {
     if (repoUrl === null) return { ref, cloned: false, cloneMs: null };
     try {
       await this.#docker(['exec', ref, 'test', '-d', `${PROJECT_DIR}/.git`]);
@@ -387,16 +395,23 @@ export class WorkspaceHost {
     const now = this.#options.now ?? Date.now;
     const started = now();
     try {
-      await this.#docker(
-        [
-          'exec',
-          ref,
-          'git',
-          // https only, including for submodules; no local file or ssh transports.
-          '-c',
-          'protocol.allow=never',
-          '-c',
-          'protocol.https.allow=always',
+      // https only, including for submodules; no local file or ssh transports.
+      const git = (...args: string[]) =>
+        this.#docker(
+          [
+            'exec',
+            ref,
+            'git',
+            '-c',
+            'protocol.allow=never',
+            '-c',
+            'protocol.https.allow=always',
+            ...args,
+          ],
+          { timeoutMs: CLONE_TIMEOUT_MS },
+        );
+      if (commit === null) {
+        await git(
           'clone',
           '--depth',
           '1',
@@ -405,9 +420,25 @@ export class WorkspaceHost {
           '--',
           repoUrl,
           PROJECT_DIR,
-        ],
-        { timeoutMs: CLONE_TIMEOUT_MS },
-      );
+        );
+      } else {
+        // Exactly that commit, shallow: GitHub serves a reachable commit by its SHA. Checked out detached,
+        // since it isn't any branch's head.
+        await git('init', '--quiet', '--', PROJECT_DIR);
+        await git('-C', PROJECT_DIR, 'remote', 'add', 'origin', '--', repoUrl);
+        await git(
+          '-C',
+          PROJECT_DIR,
+          'fetch',
+          '--depth',
+          '1',
+          '--no-tags',
+          '--quiet',
+          'origin',
+          commit,
+        );
+        await git('-C', PROJECT_DIR, 'checkout', '--quiet', '--detach', commit);
+      }
     } catch (error) {
       // Only the exit code: git's output could include the address and the proxy's answers.
       this.#options.log(

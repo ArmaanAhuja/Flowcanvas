@@ -166,11 +166,16 @@ describe('routes', () => {
       status: 200,
       body: JSON.stringify({ ref: REF, cloned: true, cloneMs: 6200 }),
     });
-    expect(calls).toEqual(['create {"workspaceId":"w","repoUrl":null}']);
+    expect(calls).toEqual(['create {"workspaceId":"w","repoUrl":null,"commit":null}']);
   });
 
   it('refuses a malformed or oversized create', async () => {
-    for (const body of ['not json', '{"workspaceId":1}', '{"workspaceId":"w","repoUrl":5}']) {
+    for (const body of [
+      'not json',
+      '{"workspaceId":1}',
+      '{"workspaceId":"w","repoUrl":5}',
+      '{"workspaceId":"w","repoUrl":null,"commit":7}',
+    ]) {
       expect((await call('POST', PATHS.create, { body })).status).toBe(422);
     }
     const huge = JSON.stringify({ workspaceId: 'w', repoUrl: 'x'.repeat(BODY_MAX_BYTES) });

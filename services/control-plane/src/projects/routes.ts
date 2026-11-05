@@ -5,6 +5,8 @@ import { requireSameOrigin, requireUser, type SignedInEnv } from '../auth/guards
 import type { Database } from '../db/database.js';
 import { secretRoutes } from '../vault/routes.js';
 import { workspaceRoutes, type WorkspaceDependencies } from '../workspaces/routes.js';
+import { WORKSPACES_UNAVAILABLE } from '../workspaces/provider.js';
+import { demoProject, ensureDemoProject } from './demo.js';
 import { createProject, listProjects, parseNewProject } from './projects.js';
 
 interface ProjectDependencies extends WorkspaceDependencies {
@@ -20,7 +22,11 @@ export function projectRoutes(deps: ProjectDependencies) {
   projects.get('/', async (c) => {
     try {
       const db = deps.database(c.env.DATABASE_URL ?? '');
-      return c.json({ projects: await listProjects(db, c.get('user').id) });
+      return c.json({
+        projects: await listProjects(db, c.get('user').id),
+        // Whether workspaces can run here at all: not on staging until a cloud provider is connected.
+        workspacesAvailable: deps.workspaceProvider(c.env) !== undefined,
+      });
     } catch (error) {
       deps.log(`listing projects failed: ${describeError(error)}`);
       return c.json({ error: 'Could not load your projects. Try again in a moment.' }, 503);
@@ -64,6 +70,30 @@ export function projectRoutes(deps: ProjectDependencies) {
       }
     },
   );
+
+  // "Open demo project" (build plan): the stage's corpus fork at its pinned commit, made the first time. The
+  // page then opens its workspace as for any project. Where workspaces can't run, nothing is made.
+  projects.post('/demo', requireSameOrigin, async (c) => {
+    if (deps.workspaceProvider(c.env) === undefined) {
+      return c.json({ error: WORKSPACES_UNAVAILABLE, code: 'unavailable' }, 503);
+    }
+    try {
+      const db = deps.database(c.env.DATABASE_URL ?? '');
+      const demo = await ensureDemoProject(db, c.get('user').id);
+      if (demo === 'duplicate-name') {
+        return c.json(
+          {
+            error: `You already have another project named ${demoProject().name}. Rename it, then try again.`,
+          },
+          409,
+        );
+      }
+      return c.json({ project: demo.project }, demo.created ? 201 : 200);
+    } catch (error) {
+      deps.log(`opening the demo project failed: ${describeError(error)}`);
+      return c.json({ error: 'Could not open the demo project. Try again in a moment.' }, 503);
+    }
+  });
 
   projects.route('/:projectId/secrets', secretRoutes(deps));
   projects.route('/:projectId/workspace', workspaceRoutes(deps));

@@ -4,7 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApi } from '../api/app.js';
 import type { Database } from '../db/database.js';
 import { migratedDatabase } from '../test/database.js';
+import { FakeProvider } from '../test/fake-provider.js';
 import { signedInAs } from '../test/sessions.js';
+import { WORKSPACES_UNAVAILABLE } from '../workspaces/provider.js';
+import { demoProject } from './demo.js';
 
 const APP = 'https://flowcanvas.example.workers.dev';
 const env = { DATABASE_URL: 'postgresql://unused-by-the-fake-database', APP_ORIGIN: APP };
@@ -44,7 +47,7 @@ describe('/api/projects', () => {
   });
 
   it('starts empty, then lists what was created', async () => {
-    expect(await (await list()).json()).toEqual({ projects: [] });
+    expect(await (await list()).json()).toEqual({ projects: [], workspacesAvailable: false });
 
     const response = await create({
       name: 'Rallly',
@@ -57,13 +60,16 @@ describe('/api/projects', () => {
       repoUrl: 'https://github.com/lukevella/rallly',
     });
 
-    expect(await (await list()).json()).toEqual({ projects: [project] });
+    expect(await (await list()).json()).toEqual({
+      projects: [project],
+      workspacesAvailable: false,
+    });
   });
 
   it('shows each person only their own projects', async () => {
     await create({ name: 'Rallly' });
     const grace = (await signedInAs(db, 'grace@example.com')).cookie;
-    expect(await (await list(grace)).json()).toEqual({ projects: [] });
+    expect(await (await list(grace)).json()).toEqual({ projects: [], workspacesAvailable: false });
   });
 
   it('explains a bad field, naming it', async () => {
@@ -85,7 +91,7 @@ describe('/api/projects', () => {
   it('accepts creation only from Flowcanvas itself', async () => {
     const response = await create({ name: 'Rallly' }, { origin: 'https://evil.example' });
     expect(response.status).toBe(403);
-    expect(await (await list()).json()).toEqual({ projects: [] });
+    expect(await (await list()).json()).toEqual({ projects: [], workspacesAvailable: false });
   });
 
   it('accepts only JSON, and only small bodies', async () => {
@@ -117,5 +123,82 @@ describe('/api/projects', () => {
     );
     expect(response.status).toBe(503);
     expect(log.mock.calls.flat().join('\n')).not.toContain('CANARY');
+  });
+});
+
+describe('/api/projects/demo (Open demo project)', () => {
+  const withProvider = () =>
+    createApi({ database: () => db, log, workspaceProvider: () => new FakeProvider() });
+  const openDemo = (options: { origin?: string; app?: ReturnType<typeof createApi> } = {}) =>
+    (options.app ?? withProvider()).request(
+      `${APP}/api/projects/demo`,
+      { method: 'POST', headers: { cookie: ada, origin: options.origin ?? APP } },
+      env,
+    );
+
+  it("is the corpus's Rallly fork at its pinned commit, never the fork's head", () => {
+    expect(demoProject()).toEqual({
+      name: 'Rallly (demo)',
+      repoUrl: 'https://github.com/ArmaanAhuja-7777/rallly',
+      commit: '8e67a2161a2d2211c04ef60d3a40ec365b50149c',
+    });
+  });
+
+  it('makes the demo project the first time, and finds the same one after', async () => {
+    const first = await openDemo();
+    expect(first.status).toBe(201);
+    const { project } = (await first.json()) as { project: Record<string, unknown> };
+    expect(project).toMatchObject({
+      name: 'Rallly (demo)',
+      repoUrl: 'https://github.com/ArmaanAhuja-7777/rallly',
+      repoCommit: '8e67a2161a2d2211c04ef60d3a40ec365b50149c',
+      workspace: { state: 'not_created', failure: null },
+    });
+    const again = await openDemo();
+    expect(again.status).toBe(200);
+    expect(((await again.json()) as { project: { id: string } }).project.id).toBe(project.id);
+    const listed = await withProvider().request(
+      `${APP}/api/projects`,
+      { headers: { cookie: ada } },
+      env,
+    );
+    expect(await listed.json()).toMatchObject({ projects: [project], workspacesAvailable: true });
+  });
+
+  it('explains when another project already has its name', async () => {
+    await create({ name: 'Rallly (demo)' });
+    const response = await openDemo();
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: 'You already have another project named Rallly (demo). Rename it, then try again.',
+    });
+  });
+
+  it('makes nothing where workspaces can’t run (staging), and says so', async () => {
+    const response = await openDemo({ app: api() });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: WORKSPACES_UNAVAILABLE, code: 'unavailable' });
+    expect(await (await list()).json()).toEqual({ projects: [], workspacesAvailable: false });
+  });
+
+  it('accepts the click only from Flowcanvas itself', async () => {
+    expect((await openDemo({ origin: 'https://evil.example' })).status).toBe(403);
+    expect(await (await list()).json()).toEqual({ projects: [], workspacesAvailable: false });
+  });
+
+  it("refuses a commit that isn't a full SHA, or a pin without an address (the database's own check)", async () => {
+    const { userId } = await signedInAs(db, 'grace@example.com');
+    await expect(
+      db.query(
+        "insert into projects (owner_id, name, repo_url, repo_commit) values ($1, 'a', 'https://github.com/a/b', 'main')",
+        [userId],
+      ),
+    ).rejects.toThrow();
+    await expect(
+      db.query(
+        `insert into projects (owner_id, name, repo_commit) values ($1, 'b', '${'a'.repeat(40)}')`,
+        [userId],
+      ),
+    ).rejects.toThrow(/projects_repo_commit_needs_url/);
   });
 });
