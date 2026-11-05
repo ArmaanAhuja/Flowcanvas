@@ -3,11 +3,13 @@
 // Run with `pnpm test:docker`. Everything it creates has its own prefix and is removed afterwards.
 import { execFile } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { networkInterfaces } from 'node:os';
 import { promisify } from 'node:util';
 import { buildImage } from '@flowcanvas/workspace-image';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { findObjects, remove } from './clean.js';
 import { dockerCli } from './docker-cli.js';
+import { ALLOWED_HOSTS } from './egress/proxy.js';
 import { HostError } from './errors.js';
 import { WorkspaceHost } from './workspaces.js';
 import type { AddressInfo } from 'node:net';
@@ -180,9 +182,18 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
     }
   });
 
-  it('reaches GitHub only through the proxy, and nothing else at all', async () => {
+  it('reaches the allowlisted hosts only through the proxy, and nothing else at all', async () => {
     const through = await sh(ref, 'curl -sS -o /dev/null -w "%{http_code}" https://github.com');
     expect(through.out).toBe('200');
+    // Every allowlisted host is reachable through it (any HTTP answer means the tunnel and TLS worked).
+    for (const allowed of ALLOWED_HOSTS) {
+      const answer = await sh(
+        ref,
+        `curl -sS -m 20 -o /dev/null -w "%{http_code}" https://${allowed}/`,
+      );
+      expect(answer.code, allowed).toBe(0);
+      expect(answer.out, allowed).toMatch(/^[1-5]\d\d$/);
+    }
     // Not on the allowlist: the proxy says no.
     const other = await sh(ref, 'curl -sS -o /dev/null https://example.com');
     expect(other.code).not.toBe(0);
@@ -232,21 +243,123 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
     await expect(third).rejects.toMatchObject({ kind: 'refused' });
   });
 
-  it("can't reach another workspace, the host or the home network", async () => {
-    const address = (
-      await run('docker', [
+  describe("workspaces can't reach each other, the host or the home network (Done when)", () => {
+    const other = () => host.refFor(second);
+    // Run inside a workspace: tries each host|port and prints what happened. ECONNREFUSED means something
+    // answered, so it counts as reached: only no route, no host or silence counts as unreachable.
+    const PROBE = `
+      const net = require('net');
+      Promise.all(process.argv.slice(1).map((t) => new Promise((done) => {
+        const [host, port] = t.split('|');
+        const s = net.connect({ host, port: Number(port), timeout: 3000 });
+        s.on('connect', () => { s.destroy(); done(t + ' CONNECTED'); });
+        s.on('timeout', () => { s.destroy(); done(t + ' TIMEOUT'); });
+        s.on('error', (e) => done(t + ' ' + e.code));
+      }))).then((r) => console.log(r.join('\\n')));`;
+    const UNREACHABLE = /^(ENETUNREACH|EHOSTUNREACH|TIMEOUT)$/;
+
+    async function probe(from: string, targets: string[]): Promise<Map<string, string>> {
+      const { stdout } = await run('docker', ['exec', from, 'node', '-e', PROBE, ...targets]);
+      return new Map(
+        stdout
+          .trim()
+          .split('\n')
+          .map((line) => line.split(' ') as [string, string]),
+      );
+    }
+
+    /** Each network a container is on, with its address there. */
+    async function addresses(container: string): Promise<Map<string, string>> {
+      const { stdout } = await run('docker', [
         'inspect',
         '--format',
-        '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',
-        host.refFor(second),
-      ])
-    ).stdout.trim();
-    expect(address).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
-    const probe = (target: string) =>
-      `node -e "require('net').connect(80,'${target}').on('connect',()=>console.log('CONNECTED')).on('error',e=>console.log(e.code))"`;
-    for (const target of [address, '172.17.0.1', '192.168.1.1', '169.254.169.254']) {
-      expect((await sh(ref, probe(target))).out, target).toBe('ENETUNREACH');
+        '{{range $name, $net := .NetworkSettings.Networks}}{{$name}} {{$net.IPAddress}}\n{{end}}',
+        container,
+      ]);
+      return new Map(
+        stdout
+          .trim()
+          .split('\n')
+          .map((line) => line.split(' ') as [string, string]),
+      );
     }
+
+    /** This computer's own IPv4 addresses: the home network, Docker's bridges, VPNs. */
+    function hostAddresses(): string[] {
+      return Object.values(networkInterfaces())
+        .flatMap((list) => list ?? [])
+        .filter((i) => i.family === 'IPv4' && !i.internal)
+        .map((i) => i.address);
+    }
+
+    it('one workspace reaches nothing of the other, in either direction', async () => {
+      for (const [from, to] of [
+        [ref, other()],
+        [other(), ref],
+      ] as const) {
+        const address = [...(await addresses(to)).values()][0] ?? '';
+        expect(address).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
+        const results = await probe(
+          from,
+          ['22', '80', '443', '3000', '5173', '8080'].map((port) => `${address}|${port}`),
+        );
+        for (const [target, result] of results) expect(result, target).toMatch(UNREACHABLE);
+        // Not even its name: each workspace's DNS knows only its own network.
+        expect((await sh(from, `getent hosts ${to}`)).code, to).not.toBe(0);
+      }
+    });
+
+    it('reaches the proxy on its own network on the proxy port only, and none of its other sides', async () => {
+      const egress = await addresses(`${prefix}-egress`);
+      const own = egress.get(ref) ?? '';
+      expect(own).not.toBe('');
+      const others = [...egress].filter(([network]) => network !== ref).map(([, a]) => a);
+      // The other workspace's network and the proxy's own way out.
+      expect(others.length).toBeGreaterThanOrEqual(2);
+      const results = await probe(ref, [
+        `${own}|3128`,
+        `${own}|22`,
+        ...others.map((a) => `${a}|3128`),
+      ]);
+      expect(results.get(`${own}|3128`)).toBe('CONNECTED');
+      expect(results.get(`${own}|22`)).toBe('ECONNREFUSED');
+      for (const address of others) {
+        expect(results.get(`${address}|3128`), address).toMatch(UNREACHABLE);
+      }
+    });
+
+    it("reaches none of this computer's addresses, the cloud metadata address or the internet directly", async () => {
+      const targets = [
+        ...hostAddresses().flatMap((a) => [`${a}|22`, `${a}|8790`, `${a}|5173`]),
+        '172.17.0.1|80',
+        '169.254.169.254|80',
+        '1.1.1.1|443',
+        '140.82.112.3|443',
+      ];
+      for (const [target, result] of await probe(ref, targets)) {
+        expect(result, target).toMatch(UNREACHABLE);
+      }
+    });
+
+    it('has no way to look names up outside, and no IPv6 apart from loopback', async () => {
+      // DNS would be a way out (tunnelling data through lookups); an internal network doesn't forward it.
+      expect((await sh(ref, 'getent hosts github.com')).code).not.toBe(0);
+      expect((await sh(ref, 'getent hosts example.com')).code).not.toBe(0);
+      const v6 = (await sh(ref, 'cat /proc/net/if_inet6')).out.split('\n').filter((l) => l !== '');
+      expect(
+        v6.every((line) => line.trim().endsWith(' lo')),
+        v6.join('; '),
+      ).toBe(true);
+    });
+
+    it("can't use the proxy to reach the other workspace or the host", async () => {
+      const otherAddress = [...(await addresses(other())).values()][0] ?? '';
+      for (const target of [otherAddress, other(), '172.17.0.1', 'localhost', `${prefix}-egress`]) {
+        const result = await sh(ref, `curl -sS -m 10 -o /dev/null https://${target}/`);
+        expect(result.code, target).not.toBe(0);
+        expect(result.out, target).toMatch(/CONNECT tunnel failed, response 403/);
+      }
+    });
   });
 
   it('logged the clone time, and no addresses', () => {

@@ -2,7 +2,8 @@
 // types, so this file uses Node's built-in modules only and no TypeScript-only syntax such as enums).
 //
 // - HTTPS only: `CONNECT host:443`. Plain HTTP and every other port are refused.
-// - Allowlisted hosts only (GitHub for clones now; the npm registry and more in step 7).
+// - Allowlisted hosts only: what cloning and installing need, each for a reason measured in phase 1d step 7.
+// - Limits: open tunnels per workspace and in total, a deadline for the CONNECT line, an idle timeout.
 // - It resolves the name itself and connects to the address it checked, refusing private, loopback, link-local
 //   and other non-public addresses, so a DNS answer can't point a workspace at the home network or the host.
 import { lookup } from 'node:dns/promises';
@@ -12,8 +13,37 @@ import type { Duplex } from 'node:stream';
 
 export const PORT = 3128;
 
-/** Hosts a workspace may reach, exactly (no wildcards). */
-export const ALLOWED_HOSTS: ReadonlySet<string> = new Set(['github.com', 'codeload.github.com']);
+/**
+ * Hosts a workspace may reach, exactly (no wildcards), and why. Each was needed by a corpus repository
+ * (phase 1d step 7). A project's own APIs at run time are a per-project choice, later (upgrade-later 37).
+ */
+export const ALLOWED = Object.freeze({
+  'github.com': 'cloning public repositories, and git dependencies',
+  'codeload.github.com': 'GitHub tarball dependencies (github: specifiers)',
+  'registry.npmjs.org': 'installing packages with npm and pnpm',
+  'registry.yarnpkg.com':
+    'installing packages with Yarn (its lockfiles and default registry name it)',
+  'binaries.prisma.sh': "Prisma's engines, downloaded by prisma generate and migrate",
+});
+export const ALLOWED_HOSTS: ReadonlySet<string> = new Set(Object.keys(ALLOWED));
+
+export interface ProxyLimits {
+  tunnelsPerClient: number;
+  tunnels: number;
+  headersMs: number;
+  idleMs: number;
+}
+
+export const LIMITS: Readonly<ProxyLimits> = Object.freeze({
+  /** Tunnels open at once from one workspace; pnpm opens about 16. */
+  tunnelsPerClient: 64,
+  /** Tunnels open at once in all. */
+  tunnels: 256,
+  /** Time to send the CONNECT request, so half-open connections can't pile up. */
+  headersMs: 10_000,
+  /** A tunnel with nothing sent either way for this long is closed. */
+  idleMs: 60_000,
+});
 
 // Every range that isn't the public internet (IANA special-purpose registries).
 const blocked = new BlockList();
@@ -70,6 +100,10 @@ export function checkTarget(target: string): { host: string; port: number } | { 
 }
 
 export type Resolve = (host: string) => Promise<string[]>;
+/** Opens the upstream connection to an address the proxy checked. */
+export type Dial = (address: string, port: number) => Socket;
+
+const dialDirect: Dial = (host, port) => connect({ host, port });
 
 const resolveAll: Resolve = async (host) =>
   (await lookup(host, { all: true, order: 'verbatim' })).map((entry) => entry.address);
@@ -78,21 +112,52 @@ function refuse(socket: Duplex, status: string): void {
   socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
 }
 
-/** The proxy server. `resolve` and `log` are replaceable for tests. */
-export function createProxy(
-  options: { resolve?: Resolve; log?: (line: string) => void } = {},
-): Server {
+export interface ProxyOptions {
+  resolve?: Resolve;
+  dial?: Dial;
+  log?: (line: string) => void;
+  limits?: Partial<ProxyLimits>;
+}
+
+/** The proxy server. Everything but the rules is replaceable for tests. */
+export function createProxy(options: ProxyOptions = {}): Server {
   const resolve = options.resolve ?? resolveAll;
+  const dial = options.dial ?? dialDirect;
+  const limits = { ...LIMITS, ...options.limits };
   const log =
     options.log ??
     ((line: string) => {
       console.log(line);
     });
-  const server = createServer((request: IncomingMessage, response) => {
-    // Plain HTTP would let a workspace talk to anything without TLS; only CONNECT is offered.
-    log(`refused ${request.method ?? '?'} (plain HTTP)`);
-    response.writeHead(403, { connection: 'close' }).end();
-  });
+  // Node checks the header deadline only this often (30 s by default), so check well within it.
+  const checkEvery = Math.max(50, Math.min(1_000, Math.floor(limits.headersMs / 4)));
+  const server = createServer(
+    { connectionsCheckingInterval: checkEvery },
+    (request: IncomingMessage, response) => {
+      // Plain HTTP would let a workspace talk to anything without TLS; only CONNECT is offered.
+      log(`refused ${request.method ?? '?'} (plain HTTP)`);
+      response.writeHead(403, { connection: 'close' }).end();
+    },
+  );
+  server.headersTimeout = limits.headersMs;
+  server.requestTimeout = limits.headersMs;
+
+  // Open tunnels (and ones being set up) per workspace address.
+  const open = new Map<string, number>();
+  let total = 0;
+  function take(client: string): boolean {
+    const mine = open.get(client) ?? 0;
+    if (mine >= limits.tunnelsPerClient || total >= limits.tunnels) return false;
+    open.set(client, mine + 1);
+    total += 1;
+    return true;
+  }
+  function give(client: string): void {
+    const mine = (open.get(client) ?? 1) - 1;
+    if (mine <= 0) open.delete(client);
+    else open.set(client, mine);
+    total -= 1;
+  }
 
   server.on('connect', (request: IncomingMessage, client: Duplex, head: Buffer) => {
     client.on('error', () => client.destroy());
@@ -102,6 +167,20 @@ export function createProxy(
       refuse(client, '403 Forbidden');
       return;
     }
+    // Typed as a Duplex, but for a TCP server it is the client's net.Socket.
+    const from = (client as Socket).remoteAddress ?? '?';
+    if (!take(from)) {
+      log(`refused CONNECT ${target.host}: too many tunnels`);
+      refuse(client, '429 Too Many Requests');
+      return;
+    }
+    let given = false;
+    const release = () => {
+      if (given) return;
+      given = true;
+      give(from);
+    };
+    client.on('close', release);
     void (async () => {
       let addresses: string[];
       try {
@@ -117,12 +196,15 @@ export function createProxy(
         refuse(client, '403 Forbidden');
         return;
       }
-      const upstream: Socket = connect({ host: address, port: target.port, timeout: 30_000 });
+      if (client.destroyed) return;
+      const upstream = dial(address, target.port);
+      upstream.setTimeout(limits.idleMs);
       upstream.on('timeout', () => upstream.destroy());
-      upstream.on('error', () => {
-        refuse(client, '502 Bad Gateway');
-      });
+      // 'close' follows every error; it decides what the client hears.
+      upstream.on('error', () => undefined);
+      let connected = false;
       upstream.on('connect', () => {
+        connected = true;
         log(`allowed CONNECT ${target.host}`);
         client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
         if (head.length > 0) upstream.write(head);
@@ -130,7 +212,11 @@ export function createProxy(
         client.pipe(upstream);
       });
       client.on('close', () => upstream.destroy());
-      upstream.on('close', () => client.destroy());
+      upstream.on('close', () => {
+        // Inside a tunnel, the bytes are TLS: an HTTP answer there would corrupt them, so just close.
+        if (connected) client.destroy();
+        else refuse(client, '502 Bad Gateway');
+      });
     })();
   });
   return server;

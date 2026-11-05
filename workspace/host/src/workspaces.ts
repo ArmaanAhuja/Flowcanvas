@@ -26,7 +26,7 @@ export const PROJECT_DIR = '/workspace/project';
 export const MAX_TERMINALS = 4;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-// Public GitHub repositories only for now: the egress proxy allows nothing else (step 7 widens it).
+// Clones come from public GitHub repositories only for now (the egress proxy also allows package registries).
 const GITHUB_REPO =
   /^https:\/\/github\.com\/[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}?(\.git)?\/?$/;
 

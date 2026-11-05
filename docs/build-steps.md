@@ -9415,8 +9415,8 @@ browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0
 | 6.1 | Terminal sessions on the host: a pty through Docker's API, a WebSocket endpoint | done (Claude, 4 Nov) |
 | 6.2 | The Worker's WebSocket relay (owner, origin, running checks) and the adapter; Vite forwards WebSockets | done (Claude, 4 Nov) |
 | 6.3 | The terminal on the page: xterm.js, token colours, the CSP shim; a walkthrough under the deployed CSP | done (Claude, 4 Nov) |
-| 7 | Network rules: the egress proxy's full allowlist and address checks; limits; the isolation test | *next* |
-| 8 | Sleep after 10 idle minutes and resume intact; usage metering writes workspace seconds | *planned* |
+| 7 | Network rules: the egress proxy's full allowlist and address checks; limits; the isolation test | done (Claude, 5 Nov) |
+| 8 | Sleep after 10 idle minutes and resume intact; usage metering writes workspace seconds | *next* |
 | 8a | The resource guard: laptop pressure and Flowcanvas's budget checked every 30 s; refuse, sleep, stop, clean up (owner, 4 Nov) | *planned* |
 | 9 | Status chip and cards (Figma 29); Open demo project (Rallly); staging's "Workspaces run locally for now" | *planned* |
 | 10 | Security tests (canary secrets, isolation), walkthrough, timing; Docker tests in CI if the runners allow | *planned* |
@@ -9436,13 +9436,13 @@ Each step's write-up ends with a **Risks** line saying what changed. The phase r
 
 | # | Risk or question | How we keep it in check | Status |
 | --- | --- | --- | --- |
-| R1 | **Containers aren't VMs:** they share the host's kernel, so a kernel bug could let code escape | Non-root user, all capabilities dropped, `no-new-privileges`, Docker's seccomp profile, no Docker socket inside, limits. Only the owner uses it. A gVisor runtime is an optional hardening (upgrade-later 34). Real VMs come with the cloud provider | open: step 7. Step 1: the locked-down flags didn't get in the way of git. **Step 2:** every flag is set in one place (`runArgs`) and checked from inside a real container (`pnpm test:docker`) |
+| R1 | **Containers aren't VMs:** they share the host's kernel, so a kernel bug could let code escape | Non-root user, all capabilities dropped, `no-new-privileges`, Docker's seccomp profile, no Docker socket inside, limits. Only the owner uses it. A gVisor runtime is an optional hardening (upgrade-later 34). Real VMs come with the cloud provider | open until real VMs (the cloud provider, R8) or gVisor (upgrade-later 34). **Step 7:** the network side is proven by the isolation test; the kernel is still shared. Step 1: the locked-down flags didn't get in the way of git. **Step 2:** every flag is set in one place (`runArgs`) and checked from inside a real container (`pnpm test:docker`) |
 | R2 | **The Worker in `wrangler dev` has to reach the local host** | The step 1 spike checks it before anything is built on it. The fallback is calling the host from Vite's proxy | **closed (step 1):** works, 3–4 ms per call |
-| R3 | **"Can't reach each other" is now our job,** not a provider's | Each workspace gets its own internal network with no route out. The internet goes only through an egress proxy with an allowlist. Measured in step 1; the test comes in step 7 | open: step 7. **Step 1:** internal networks alone still let a container reach the host. The isolated gateway mode (Docker 28+) closes that, and is now required (ADR 0016) |
+| R3 | **"Can't reach each other" is now our job,** not a provider's | Each workspace gets its own internal network with no route out. The internet goes only through an egress proxy with an allowlist. Measured in step 1; the test comes in step 7 | **closed locally (step 7):** the isolation test tries the other workspace (both ways), the proxy's other sides, this computer's own addresses, the metadata address, DNS and IPv6, directly and through the proxy, and fails when the gateway isolation is removed. Repeated on the cloud provider (R8). **Step 1:** internal networks alone still let a container reach the host. The isolated gateway mode (Docker 28+) closes that, and is now required (ADR 0016) |
 | R4 | **`docker pause` keeps memory in use,** and a host restart loses paused processes | It's fine for a few local workspaces. After a restart, a workspace shows as stopped with its files kept (in a volume), never as lost. The cloud provider brings real snapshots | open: step 8. **Step 1:** pause and resume take about 50 ms each way; the same process carried on, and files were kept |
 | R5 | **Under 60 s for Rallly** depends on the clone and the home connection | Step 1 times a real clone. A shallow clone (`--depth 1`) and a prebuilt image keep it short. Dependencies install after "open", in the background, outside the 60 s | **closed (step 4):** 8.9 s through the egress proxy (clone 7.0 s), checked by a Docker test that fails above 60 s. Repeated on the cloud provider later (R8) |
 | R6 | **The Docker socket is root-equivalent,** so whatever drives it is powerful | Only the host touches it. The host listens on 127.0.0.1 only and needs a token (`WORKSPACE_HOST_TOKEN` in `.dev.vars`). It takes no image names, mounts or flags from requests. Canary tests cover the token | open: step 10. **Step 4:** the host takes only fixed operations on checked names, needs the token (compared in constant time), refuses browsers (Origin, Host); the adapter sends the token only to loopback addresses; tests check it's never logged or shown |
-| R7 | **Untrusted code runs on the owner's laptop:** a cloned repo or a terminal command could mine crypto or attack the home network | Limits (step 2); egress only through the proxy, with the home network and metadata ranges blocked (step 7); sleep when idle (step 8); only allowlisted people can open workspaces | open: steps 7 and 8. **Step 2:** CPU, memory, process and `/tmp` limits are enforced (tested). Disk is measured, not capped (upgrade-later 35) |
+| R7 | **Untrusted code runs on the owner's laptop:** a cloned repo or a terminal command could mine crypto or attack the home network | Limits (step 2); egress only through the proxy, with the home network and metadata ranges blocked (step 7); sleep when idle (step 8); only allowlisted people can open workspaces | open: step 8. **Step 7:** egress only through the proxy, to five allowlisted hosts, with tunnel limits; the home network and metadata address unreachable (tested). **Step 2:** CPU, memory, process and `/tmp` limits are enforced (tested). Disk is measured, not capped (upgrade-later 35) |
 | R9 | **Workspaces could overload the owner's laptop** | The resource guard (step 8a): 2 workspaces at most, a 25 GiB disk budget, and pressure thresholds that refuse, sleep, stop and clean up, acting only on Flowcanvas's own things. `pnpm workspace:resources`, and a "Laptop" line in every step's Risks | open: step 8a. **Step 4:** the 2-running cap is enforced by the host (tested), and `pnpm workspace:resources` and `pnpm workspace:clean` exist |
 | R8 | **The phase can't be fully accepted yet:** the *Done when* items are proven locally, not on staging | The phase is "in review" in STATUS. Upgrade-later 33 holds the provider step, and the phase report lists exactly which checks wait for it. Later phases that need workspaces on staging say so in their plans | open: until the provider is connected |
 
@@ -9812,14 +9812,14 @@ Signed in locally, with a project open, the page itself can't use these yet (no 
 
 **Commit:** `feat(workspace): workspace agent with the file and process API`
 
-### Phase 1d so far — run and check it (after step 6)
+### Phase 1d so far — run and check it (after step 7)
 
 **1. Automated tests** (no sign-in needed):
 ```fish
 pnpm install
-pnpm test                 # 530 tests, no Docker needed (the same as CI's checks)
+pnpm test                 # 539 tests, no Docker needed (the same as CI's checks)
 pnpm test:e2e             # 7 recorded walkthroughs, including the terminal under the production CSP
-pnpm test:docker          # 29 tests against real containers; needs Docker 28+ and the internet.
+pnpm test:docker          # 33 tests against real containers; needs Docker 28+ and the internet.
                           # The first run builds the workspace image (about a minute).
                           # Look for "Rallly: opened in … ms" in the output.
 pnpm workspace:resources  # your laptop against the budget: five "ok" lines
@@ -9852,6 +9852,7 @@ pnpm workspace:clean      # removes test leftovers and old images ("Nothing to r
    | `await ws('/file?path=.env')` | `status: 403`, "Secrets live in the project's vault…" (never the content) |
    | `await ws('/file?path=../.home/.bashrc')` | `status: 403`, "That path is outside the project." |
    | Reload the page | Rallly says **Workspace running** and has a **Terminal** button (from step 6). Click it: "Connected to the workspace.", then a shell in `/workspace/project`. Try `ls`, `git log --oneline -3`, `node -v`; `exit` ends it, and **Start a new terminal** opens another |
+   | In the terminal: `curl -sS https://example.com`, then `getent hosts github.com; echo $?` | `CONNECT tunnel failed, response 403`, then `2`: only the allowlisted hosts, and no DNS out (step 7 has more to try, including `pnpm install`) |
    | `await ws('/sleep', 'POST')` | `state: 'sleeping'`; then `await ws('/files')` gives 409 "Open the workspace first." |
    | `await ws('/resume', 'POST')` | `state: 'running'` again, in well under a second |
    | `await ws('/stop', 'POST')` | `state: 'stopped'`; `await ws('/open', 'POST')` starts it again with the files kept |
@@ -10049,3 +10050,100 @@ For real, follow "Phase 1d so far — run and check it" above: open the workspac
 - **Laptop:** all five checks ok (22.0 GiB memory available, 580.7 GiB disk free, load 4.8).
 
 **Commit:** `feat(web): terminal in the page with xterm.js under the strict CSP`
+
+### Step 1d.7 — Network rules and the isolation test (done by Claude)
+
+**Goal:** a workspace can reach exactly what cloning and installing need, through the egress proxy, and nothing else. In particular it can't reach another workspace, this computer or the home network, and that's proven by a test that fails when isolation breaks. This is the third *Done when* item.
+
+**What a workspace can reach (measured, not guessed):**
+- **The allowlist** (`ALLOWED` in `workspace/host/src/egress/proxy.ts`, each host with its reason):
+
+  | Host | Why | Evidence |
+  | --- | --- | --- |
+  | `github.com` | cloning, git dependencies | step 4 |
+  | `codeload.github.com` | GitHub tarball dependencies (`github:` specifiers) | step 4 |
+  | `registry.npmjs.org` | npm and pnpm installs | Rallly's `pnpm install`: 2,163 packages in 2 min 7 s through the proxy, nothing else needed. Documenso's and LibreChat's lockfiles |
+  | `registry.yarnpkg.com` | Yarn installs | Excalidraw's `yarn.lock` names it 1,444 times; it's Yarn Berry's default registry (Twenty, Medusa) |
+  | `binaries.prisma.sh` | Prisma's schema engine, for `prisma generate` and `migrate` | Rallly's `pnpm db:generate` failed with `403` from the proxy until it was added |
+
+  Twenty and Medusa ship their own Yarn release (`yarnPath`), so Yarn itself needs no extra host.
+- **Not allowed, on purpose:**
+  - Google Fonts. Rallly's web app uses `next/font/google`, which only matters once the app's dev server runs (stage 2).
+  - Telemetry endpoints, such as Next.js telemetry (rule 5: telemetry off).
+  - Anything a project's own code calls at run time. That's a per-project choice for later (upgrade-later 37).
+
+**Concepts:**
+- **Why an allowlist and not a blocklist.** A blocklist has to name every bad place, and you can never finish the list. An allowlist names the few good ones, so a new trick still lands on "refused". Code from a repository we don't control runs in the workspace, so it gets the second.
+- **Why DNS matters.** If a workspace could look names up on the internet, it could leak data inside the lookups themselves (DNS tunnelling), even with no TCP route out. A Docker `--internal` network's DNS answers only for containers on that network and forwards nothing. The test checks `getent hosts github.com` fails inside the workspace. https://docs.docker.com/engine/network/#dns-services
+- **Reading connection errors.**
+  - `ENETUNREACH` (no route) and `EHOSTUNREACH` (nobody at that address) mean the packet went nowhere.
+  - `ECONNREFUSED` means a machine answered "nothing on that port". So it counts as **reached**: the address is reachable.
+  - The isolation test passes only on no route, no host or a timeout.
+- **Proxy limits.** These keep one workspace from starving the proxy, which every workspace shares:
+  - 64 open tunnels per workspace and 256 in total; past that, `429`
+  - 10 s to send the `CONNECT` request (a slow-loris defence)
+  - 60 s idle timeout on a tunnel
+- **A test that can't fail proves nothing (mutation check).** After the isolation test passed, its key protection (the network's isolated gateway mode) was removed for one run. The test then failed exactly where it should: this computer's address on the workspace's network answered (`ECONNREFUSED`). Then the code was put back.
+
+**What the isolation test checks** (`workspace/host/src/host.docker.test.ts`, "workspaces can't reach each other…"):
+1. **Workspace to workspace, both directions,** on ports 22, 80, 443, 3000, 5173 and 8080: unreachable. Not even the other's name resolves.
+2. **The proxy:** reachable on its own network on port 3128 only (port 22 refuses). Its addresses on other workspaces' networks, and on its way out, are unreachable.
+3. **This computer:**
+   - every one of its own IPv4 addresses (home network, Docker bridges, VPN) on ports 22, 8790 (the workspace host) and 5173 (Vite)
+   - Docker's default bridge
+   - the cloud metadata address
+   - the internet directly
+
+   All unreachable.
+4. **No DNS out, and no IPv6** apart from loopback.
+5. **Through the proxy:** the other workspace (by address and by name), the host's bridge, `localhost` and the proxy itself are all `403`.
+6. **Allowed hosts:** each one answers through the proxy, and `example.com` is `403`. Plain HTTP is `403`, and going around the proxy has no route.
+
+**Files:**
+
+| File | What changed |
+| --- | --- |
+| `workspace/host/src/egress/proxy.ts` | `ALLOWED` (host → reason); `LIMITS`; per-workspace and total tunnel counts; the header deadline, checked every `headersMs / 4` (Node checks only every 30 s by default); an idle timeout; an injectable `dial` for tests. Fixed: if the upstream failed after the tunnel opened, the proxy wrote an HTTP `502` into the TLS stream; now it closes the connection |
+| `workspace/host/src/egress/proxy.test.ts` | +7 tests (below) |
+| `workspace/host/src/host.docker.test.ts` | The isolation test above (5 tests in place of 1); every allowed host checked through the proxy |
+| `workspace/host/src/workspaces.ts` | A comment brought up to date |
+
+**Tests:**
+- **Unit (16 in the proxy, 7 new):**
+  - the allowlist is exactly these five hosts, each with a reason, on 443 only
+  - a real tunnel both ways, to the public address after skipping a private one
+  - `502` when the upstream refuses
+  - the 3rd tunnel from one workspace is `429`, and a slot frees when one closes
+  - a connection that never finishes its `CONNECT` is closed (`408`)
+  - an idle tunnel is closed
+- **Docker:** 33 in all, 4 new.
+
+**Run and check it:**
+```fish
+pnpm test            # 539 tests
+pnpm test:docker     # 33 tests; look for "workspaces can't reach each other, the host or the home network"
+```
+By hand, in a workspace's **Terminal** (see "Phase 1d so far — run and check it"):
+
+| Type | You should see |
+| --- | --- |
+| `curl -sI https://registry.npmjs.org/ \| head -1` | `HTTP/2 200` |
+| `curl -sS https://example.com` | `CONNECT tunnel failed, response 403` |
+| `curl -sS --noproxy '*' -m 5 https://github.com` | fails: no route out except the proxy |
+| `getent hosts github.com; echo $?` | `2`: no DNS out |
+| `pnpm install` in `/workspace/project` (Rallly) | about 2 minutes, then `Done`. It needs about 2.4 GiB in the workspace's volume |
+
+**Gotchas:**
+- **The host loads `@flowcanvas/workspace-image` from `dist`, not `src`.** The first mutation check edited the source, so the test ran against unchanged code and "passed". Editing the built file made it fail as it should. Rebuilding (`pnpm --filter @flowcanvas/workspace-image build`) restored it. `pnpm test:docker` builds first, through turbo.
+- **A paused socket never closes.** In a test, a client socket with no `data` listener never reads the server's `408` and end, so it never emits `close`. Add `socket.resume()`.
+- **A workspace's root is read-only,** so `docker cp` into it fails ("rootfs is marked read-only"). Write into `/tmp` through `docker exec -i … sh -c 'cat > /tmp/file'` instead.
+
+**Docs:** this write-up; the run guide; risks R1, R3 and R7; ADR 0016; ARCHITECTURE ("Workspaces"); upgrade-later 37; STATUS.
+
+**Risks:**
+- **R3 closed** locally: proven by the isolation test, and checked by the mutation run. It's repeated on the cloud provider (R8).
+- R7: the network half is done; sleep when idle is step 8.
+- R1 unchanged.
+- **Laptop:** all five checks ok (22.2 GiB memory available, 581.3 GiB disk free, load 0.96). The install spike used 2.4 GiB of the 25 GiB budget and was removed afterwards.
+
+**Commit:** `feat(workspace): egress allowlist for installs, proxy limits and the isolation test`
