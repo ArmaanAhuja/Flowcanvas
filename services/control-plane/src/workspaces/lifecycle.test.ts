@@ -326,6 +326,13 @@ describe('idle sleep', () => {
     expect(await sleepIdleWorkspaces(ctx)).toBe(1);
     expect((await current()).state).toBe('sleeping');
     expect(await seconds()).toBe(IDLE_SLEEP_MS / 1000);
+    // Says why, so the page never claims idleness for a sleep the person asked for.
+    expect((await current()).failure).toBe(RELIEF_NOTICES.sleptWhenIdle);
+  });
+
+  it('leaves no notice on a sleep the person asked for', async () => {
+    await sleepWorkspace(ctx, await current());
+    expect((await current()).failure).toBeNull();
   });
 
   it('counts the 10 minutes from the last activity', async () => {

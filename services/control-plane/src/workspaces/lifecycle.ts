@@ -348,15 +348,19 @@ export async function sleepIdleWorkspaces(
   );
   let slept = 0;
   for (const row of rows) {
-    const result = await sleepWorkspace(ctx, row);
+    const result = await sleepWorkspace(ctx, row, { notice: RELIEF_NOTICES.sleptWhenIdle });
     if (result.ok) slept += 1;
     else ctx.log(`idle workspace ${row.id} didn't sleep: ${result.problem}`);
   }
   return slept;
 }
 
-/** What the page says about a workspace the resource guard changed (ADR 0019). */
+/**
+ * What the page says about a workspace that changed without the person asking: the idle sleep (step 8) or the
+ * resource guard (ADR 0019). A sleep the person asked for has none, so the page never claims it was idle.
+ */
 export const RELIEF_NOTICES = {
+  sleptWhenIdle: 'Put to sleep after 10 minutes without activity.',
   stoppedForMemory:
     'Stopped to free memory on this computer. Its files are kept: open it to start it again.',
   sleptForLoad: 'Put to sleep because this computer was very busy. Resume it when you need it.',

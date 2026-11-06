@@ -9427,8 +9427,8 @@ browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0
 | 9 | Status chip and cards (Figma 29); Open demo project (Rallly); staging's "Workspaces run locally for now". In three parts: | |
 | 9.1 | Pinned clones (migration 0004) and the demo endpoint | done (Claude, 5 Nov) |
 | 9.2 | `WorkspaceStatus` chip in the design system, with catalogue stories and baselines | done (Claude, 5 Nov) |
-| 9.3 | The project's workspace panel: chip, actions, starting and sleeping cards, notices, staging; Open demo project; walkthrough | *next* |
-| 10 | Security tests (canary secrets, isolation), walkthrough, timing; Docker tests in CI if the runners allow | *planned* |
+| 9.3 | The project's workspace panel: chip, actions, starting and sleeping cards, notices, staging; Open demo project; walkthrough | done (Claude, 6 Nov) |
+| 10 | Security tests (canary secrets, isolation), walkthrough, timing; Docker tests in CI if the runners allow | *next* |
 | 11 | Close the phase as **in review** (0.5.0): report, and what waits for the cloud provider | *planned* |
 
 ### How each Done-when item is proven
@@ -9821,13 +9821,14 @@ Signed in locally, with a project open, the page itself can't use these yet (no 
 
 **Commit:** `feat(workspace): workspace agent with the file and process API`
 
-### Phase 1d so far — run and check it (after step 8a)
+### Phase 1d so far — run and check it (after step 9)
 
 **1. Automated tests** (no sign-in needed):
 ```fish
 pnpm install
-pnpm test                 # 573 tests, no Docker needed (the same as CI's checks)
-pnpm test:e2e             # 7 recorded walkthroughs, including the terminal under the production CSP
+pnpm test                 # 586 tests, no Docker needed (the same as CI's checks)
+pnpm test:e2e             # 9 recorded walkthroughs: the terminal under the production CSP, the demo project,
+                          # sleep and resume, and staging's "Workspaces run locally for now"
 pnpm test:docker          # 36 tests against real containers; needs Docker 28+ and the internet.
                           # The first run builds the workspace image (about a minute).
                           # Look for "Rallly: opened in … ms" in the output.
@@ -9835,7 +9836,18 @@ pnpm workspace:resources  # your laptop against the budget: five "ok" lines
 pnpm workspace:clean      # removes test leftovers and old images ("Nothing to remove." when clean)
 ```
 
-**2. The real thing, by hand.** There's no **Open** button yet (step 9), so opening, sleeping and the file API use the browser's developer console, signed in, on the app's own page. The browser sends your session cookie and the `Origin` header itself, so the API's checks apply exactly as they will for the page.
+**2. The real thing, with the buttons (step 9).**
+1. Restart `pnpm dev` (the host, the Worker's script and the page all changed). The dev database already has migration 0004.
+2. Open http://localhost:5173 and sign in. Under **Projects**, click **Open demo project**.
+3. **Rallly (demo)** appears first, with "https://github.com/ArmaanAhuja-7777/rallly · pinned at 8e67a21":
+   - The chip says **Starting…**, and a card says "Cloning github.com/ArmaanAhuja-7777/rallly at 8e67a21. Usually under 15 seconds." The first time ever, building the image adds about a minute.
+   - Within about 10 s the chip says **Running · 2 cores**, with **Sleep**, **Stop** and **Terminal**.
+4. **Terminal** opens a shell. Try `git log --oneline -1`: it's `8e67a21`, not the fork's newer head.
+5. **Sleep** shows the asleep card: since when, the machine, the resume time, and no claim that it was idle. **Resume** brings it back.
+6. Leave it running and don't type for 11 minutes (the page checks every 30 s). It goes to sleep by itself, and the card says "Put to sleep after 10 minutes without activity."
+7. **Stop**, then **Open**: it starts again with its files ("Starting it again with its files").
+
+**3. The file and process API, from the console.** These have no buttons yet (the editor is phase 3). In the browser's developer console, signed in, on the app's own page. The browser sends your session cookie and the `Origin` header itself, so the API's checks apply exactly as they will for the page.
 1. Start everything: `pnpm dev` (restart it if it was already running before step 6: Vite's WebSocket forwarding is new). The terminal should show `[workspace-host] Listening on http://127.0.0.1:8790 (Docker …)`. If it says `Not started: …`, it tells you what to fix: the token, Docker, or another `pnpm dev` already running.
 2. Open http://localhost:5173, sign in, and create a project named `Rallly` with the repository `https://github.com/ArmaanAhuja-7777/rallly`.
 3. Open the developer console (F12 → Console) and paste:
@@ -10413,4 +10425,77 @@ pnpm --filter @flowcanvas/ui storybook  # Components → WorkspaceStatus
 ```
 
 **Commit:** `feat(ui): WorkspaceStatus chip with every workspace state`
+
+#### 9.3 — The workspace on the page, and Open demo project (done by Claude)
+
+**Goal:** every project shows where its workspace is and what you can do with it, and **Open demo project** opens Rallly at its pin in one click. Staging says plainly that workspaces run locally for now, and offers nothing that can't work.
+
+**What each project row shows** (`apps/web/src/projects/ProjectWorkspace.tsx`, until the phase 2 top bar):
+
+| Workspace | Chip | Actions | Card or line |
+| --- | --- | --- | --- |
+| Not started | Not started | **Open** | — |
+| Starting | Starting… | — | "Starting *name*": "Cloning github.com/… at 8e67a21. Usually under 15 seconds." (or "Starting it again with its files" after a stop), with an indeterminate strip |
+| Running | Running · 2 cores | **Sleep**, **Stop**; **Terminal** | — |
+| Asleep | Sleeping | **Stop**, **Resume** | "This workspace is asleep": the reason if it wasn't asked for, then "Its files and running processes are kept as they were, and asleep costs nothing." Facts: asleep since, machine, resume time |
+| Resuming | Resuming… | — | "Resuming *name*": "Waking it with its files and running processes as they were." |
+| Stopped | Stopped | **Open** | the guard's reason, if it stopped it |
+| Couldn't start | Couldn't start | **Try again** | the failure, in words |
+
+A refusal (the 2-workspace cap, the guard's pressure) is shown as the API said it, and the workspace stays as it was.
+
+**Concepts:**
+- **Polling, and why it isn't activity.** While a workspace is starting or resuming, the page asks every 3 s; while it runs, every 30 s. So an idle sleep or the guard's stop shows without a reload. It's a `GET`, and only typing and file or command requests count as activity. So watching the page doesn't keep a workspace awake.
+- **Showing a request in flight truthfully.** "Starting…" appears from the click, because we did ask for it. The answer then replaces it with what the control plane recorded.
+- **No made-up progress.** The host doesn't report progress during a clone, so the strip is indeterminate (`role="progressbar"` with no value). Under reduce-motion it's only the track: a still segment would read as a percentage.
+- **Never claim what isn't known.** A sleep can be idle, the guard's, or the person's own. The page can't tell them apart from the state alone, so the idle check and the guard leave a notice (`failure`), and the card says why only when there's a notice. The brief's "went to sleep after 10 minutes idle" would be false after pressing **Sleep**.
+
+**Deviations from Figma 32 and 33, for the owner's review:**
+- **Left out, because the system doesn't have it yet:** the starting card's step list ("Restoring snapshot", "Installing dependencies…") and progress meter; the asleep card's "Last backup" and "Last checkpoint"; "Everything is saved: …checkpoints, canvas layout and the agent session" (backups are phase 18a, agents stage 3).
+- **Resume is a secondary button,** not primary: several projects can be asleep at once, and Graphite allows one primary per view (the form's **Create project**).
+- **Placement:** the cards sit inside each project's row on the version page, not centred on a dimmed canvas. The canvas and top bar come in phase 2, and the chip's popover (machine, uptime, Sleep now) with the top bar.
+- **Starting dot:** see 9.2 (a ring, not the accent).
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `apps/web/src/projects/ProjectWorkspace.tsx`, `.module.css` | `useWorkspace()` (record, action in flight, the API's sentence, polling) and `ProjectWorkspace` (chip, actions, cards); tokens only |
+| `apps/web/src/projects/Projects.tsx`, `.module.css` | **Open demo project** (or staging's sentence), one panel per row, the pinned commit after the address, toggles grouped on the right |
+| `apps/web/src/projects/api.ts` | `Workspace`, `ProjectList` (`workspacesAvailable`), `workspaceAction()`, `fetchWorkspace()`, `fetchDemoProject()` |
+| `services/control-plane/src/workspaces/lifecycle.ts` | The idle check leaves "Put to sleep after 10 minutes without activity."; a sleep the person asks for leaves none |
+| `e2e/try-it/phase-1d.spec.ts`, `phase-1c.spec.ts` | Two new walkthroughs (below); 1c's fake API and step brought up to date |
+
+**Tests:**
+- **Component (16, of which 10 new):**
+  - staging: one sentence and no buttons
+  - Open: Starting… with the clone line and an indeterminate bar, then Running with Terminal, Sleep and Stop
+  - a guard refusal shown as said, with the workspace left as it was
+  - asleep: the reason, real facts only (no "backup" or "checkpoint"), and Resume
+  - a requested sleep never called idle
+  - stopped and failed, with their reasons, Open and Try again
+  - the demo made, listed first, pinned, and opened in one click (exactly three requests)
+  - the demo's 409 explained
+  - polling at 3 s and 30 s, and not while asleep (fake timers)
+- **Control plane (1 new):** the idle sleep's notice, and none for a requested sleep
+- **Walkthroughs (2 new, recorded, under the production CSP, no page errors):**
+  - *Open demo project*: listed first and pinned, starting, running with a terminal, Sleep (no idle, backup or checkpoint claims), Resume
+  - *Staging*: the sentence, and no demo or Open buttons
+- **By eye:** screenshots of every state in both themes, checked against Figma 32 and 33 (layout and copy differences above).
+
+**Run and check it:** "Phase 1d so far — run and check it", section 2, now uses the buttons.
+```fish
+pnpm test        # 586 tests
+pnpm test:e2e    # 9 walkthroughs
+```
+
+**Known issue:** one full `pnpm test` run of six had one failing task. Five reruns of the whole suite, and five of the web and host suites alone, all passed, and that first run's output didn't record which test failed. Most likely a 1-second `findBy…` wait in the new page tests, under the full parallel run. To watch in CI at phase close, and to fix as soon as it's caught.
+
+**Docs:** this write-up; the run guide; ARCHITECTURE ("Workspaces on the page"); STATUS.
+
+**Risks:**
+- R8 unchanged: on staging, the page now says so instead of offering buttons that fail.
+- **Laptop:** all five checks ok (21.7 GiB memory available, 578 GiB disk free, load 8.1 from this step's own test runs, under the 14.4 limit); no test workspaces left.
+
+**Commit:** `feat(web): workspace status, starting and asleep cards, and Open demo project`
 

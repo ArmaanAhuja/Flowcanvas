@@ -1,0 +1,119 @@
+/* A project's workspace on the version page (design brief 29; Figma 32, 33), until the phase 2 top bar. */
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin-block-start: var(--space-4);
+}
+
+.row {
+  display: flex;
+  gap: var(--space-12);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.actions,
+.cardActions {
+  display: flex;
+  gap: var(--space-8);
+}
+
+.cardActions {
+  justify-content: flex-end;
+}
+
+/* Figma's centred card (radius 10, border/subtle), made to fit inside a project row. */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-16);
+  border: var(--border-width-default) solid var(--color-border-subtle);
+  border-radius: var(--radius-frame);
+  background: var(--color-surface-panel);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--text-heading-font-family);
+  font-size: var(--text-heading-font-size);
+  font-weight: var(--text-heading-font-weight);
+  line-height: var(--text-heading-line-height);
+  letter-spacing: var(--text-heading-letter-spacing);
+  color: var(--color-text-primary);
+}
+
+.text {
+  margin: 0;
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  font-weight: var(--text-small-font-weight);
+  line-height: var(--text-small-line-height);
+  color: var(--color-text-secondary);
+}
+
+.problem {
+  composes: text;
+  color: var(--color-state-removed-text);
+}
+
+/* Figma's facts box: surface/raised, radius 6, 10/12 padding, label column of 110 px. */
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-4) var(--space-12);
+  margin: 0;
+  padding: calc(var(--space-8) + var(--space-2)) var(--space-12);
+  border-radius: var(--radius-node);
+  background: var(--color-surface-raised);
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  font-weight: var(--text-small-font-weight);
+  line-height: var(--text-small-line-height);
+}
+
+.facts dt {
+  color: var(--color-text-muted);
+}
+
+.facts dd {
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+/* Indeterminate: a segment sweeps along the track; no figure, because the host reports none. */
+.strip {
+  position: relative;
+  overflow: hidden;
+  block-size: var(--space-2);
+  border-radius: var(--radius-control);
+  background: var(--color-border-subtle);
+}
+
+.strip::after {
+  position: absolute;
+  inset-block: 0;
+  inline-size: 30%;
+  border-radius: inherit;
+  background: var(--color-text-secondary);
+  content: '';
+  animation: sweep var(--duration-shimmer) ease-in-out infinite;
+}
+
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(340%);
+  }
+}
+
+/* Under reduced motion, no segment at all: a still one would read as a percentage. */
+@media (prefers-reduced-motion: reduce) {
+  .strip::after {
+    display: none;
+  }
+}

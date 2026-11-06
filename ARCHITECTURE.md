@@ -258,6 +258,13 @@ POST /api/projects/:id/workspace/{open,sleep,resume,stop}  (same origin) ──�
   - A cloud provider has no `pressure()`.
 - The page never sees the provider's own name for a workspace.
 
+## Workspaces on the page (phase 1d, step 9)
+
+- `GET /api/projects` returns `{ projects, workspacesAvailable }`. Each project carries `repoCommit` and its workspace's `state`, `stateChangedAt` and `failure`.
+- `apps/web/src/projects/ProjectWorkspace.tsx`: `useWorkspace()` holds the record, sends `open | sleep | resume | stop`, and polls `GET …/workspace` every 3 s while starting or resuming and every 30 s while running (a GET is not activity). `ProjectWorkspace` shows the `WorkspaceStatus` chip (`packages/ui`), the actions, and the starting and asleep cards. Only recorded facts appear: no backups, checkpoints or progress figures until they exist.
+- `failure` is the person-facing reason for any change they didn't ask for: a failed start, the guard (ADR 0019), or the idle sleep (ADR 0018). A requested sleep has none.
+- **Open demo project:** `POST /api/projects/demo` (find or make the corpus fork at its pin), then the usual `…/workspace/open`. Where `workspacesAvailable` is false (staging), the page shows one sentence and no workspace buttons.
+
 ## Local development
 
 ```fish
