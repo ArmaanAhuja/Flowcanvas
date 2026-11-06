@@ -9,5 +9,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     maxWorkers: Math.max(1, Math.min(6, availableParallelism() - 1)),
+    // Closes each test's in-process databases when it ends (src/test/database.ts).
+    setupFiles: ['./src/test/setup.ts'],
   },
 });
