@@ -9429,7 +9429,7 @@ browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0
 | 9.2 | `WorkspaceStatus` chip in the design system, with catalogue stories and baselines | done (Claude, 5 Nov) |
 | 9.3 | The project's workspace panel: chip, actions, starting and sleeping cards, notices, staging; Open demo project; walkthrough | done (Claude, 6 Nov) |
 | 10 | Security tests (canary secrets, isolation), walkthrough, timing; Docker tests in CI if the runners allow | done (Claude, 6 Nov) |
-| 11 | Close the phase as **in review** (0.5.0): report, and what waits for the cloud provider | *next* |
+| 11 | Close the phase as **in review** (0.5.0): report, and what waits for the cloud provider | done (Claude, 6 Nov; staging migration by the owner) |
 
 ### How each Done-when item is proven
 
@@ -10576,4 +10576,15 @@ pnpm --filter @flowcanvas/control-plane test:idle-real  # about 12 minutes, in r
 - **Laptop:** all five checks ok after the step (23.0 GiB memory available, 578 GiB disk free); the test objects were removed. Your own workspace (`fc-ws-2f78…`) was left as your `pnpm dev` put it: asleep.
 
 **Commit:** `test(workspace): no secret kept anywhere, Try it walkthrough, real-time idle run, Docker tests in CI`
+
+### Step 1d.11 — Close the phase as in review (done by Claude)
+
+- **Release:** version `0.5.0`. The CHANGELOG entry is also the in-app What's new: what was added, the security work, and the test change.
+- **Report:** `docs/reports/phase-1d.md`, with each *Done when* item's evidence, the deviations, the ADRs, known issues and what waits for the cloud provider.
+- **Status:** `docs/STATUS.md` says **in review**.
+- **Upgrade-later review:** 33–39 are this phase's, each with a trigger; none is due before phase 2; 32 is still open.
+- **Staging's database** (owner): migrations 0003 and 0004, *before* the merge. They only add columns and tables, so the code staging runs now keeps working, and the new code finds what it reads.
+- **The PR:** CI includes the new `docker` job, which shows whether GitHub's runners have Docker 28 or newer. Merge only when everything is green.
+
+**Commit:** `docs: phase 1d report, 0.5.0, in review`
 
