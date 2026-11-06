@@ -22,13 +22,19 @@ if (!/^fc(-test-[0-9a-f]{4,16})?$/.test(prefix)) {
   process.exit(1);
 }
 
-// Tests only (a fc-test- prefix): report this pressure instead of measuring, since real pressure can't be made
-// safely on the laptop. Refused for real workspaces.
-const simulated = (process.env.WORKSPACE_HOST_TEST_PRESSURE ?? '')
-  .split(',')
-  .filter((kind) => kind !== '');
-if (simulated.length > 0 && (prefix === 'fc' || !simulated.every(isPressureKind))) {
-  log('Not started: WORKSPACE_HOST_TEST_PRESSURE is for tests only, with known kinds.');
+// Tests only (a fc-test- prefix): report this pressure instead of what the guard measures, since real pressure
+// can't be made safely on the laptop; `none` reports none (a CI runner isn't the owner's laptop, whose budget
+// the guard enforces). Refused for real workspaces.
+const testPressureSetting = process.env.WORKSPACE_HOST_TEST_PRESSURE ?? '';
+const simulated = testPressureSetting.split(',').filter((kind) => kind !== '' && kind !== 'none');
+const testHook = testPressureSetting !== '';
+if (
+  testHook &&
+  (prefix === 'fc' ||
+    !simulated.every(isPressureKind) ||
+    (testPressureSetting.includes('none') && testPressureSetting !== 'none'))
+) {
+  log('Not started: WORKSPACE_HOST_TEST_PRESSURE is for tests only, with known kinds or none.');
   process.exit(1);
 }
 const testPressure: Pressure[] = simulated
@@ -72,7 +78,7 @@ const host = new WorkspaceHost({
   prefix,
   image: () => buildImage(),
   log,
-  pressure: () => (testPressure.length > 0 ? testPressure : guard.current()),
+  pressure: () => (testHook ? testPressure : guard.current()),
 });
 const server = createHostServer({ host, token, port, log });
 // Another `pnpm dev` already has the port: step aside instead of taking this one down with a crash.

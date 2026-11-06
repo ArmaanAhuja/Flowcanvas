@@ -374,6 +374,21 @@ describe('the control plane driving the real workspace host', { timeout: 120_000
     );
     expect(refused.code).toBe(1);
     expect(refused.out).toContain('WORKSPACE_HOST_TEST_PRESSURE is for tests only');
+    // Not even `none`: the real laptop's budget always applies to real workspaces.
+    const none = await run('pnpm', ['exec', 'tsx', 'src/main.ts'], {
+      cwd: hostDir,
+      env: {
+        ...process.env,
+        WORKSPACE_HOST_TOKEN: token,
+        WORKSPACE_HOST_PORT: String(await freePort()),
+        WORKSPACE_HOST_PREFIX: 'fc',
+        WORKSPACE_HOST_TEST_PRESSURE: 'none',
+      },
+    }).then(
+      () => 0,
+      (error: unknown) => (error as { code?: number }).code ?? -1,
+    );
+    expect(none).toBe(1);
   });
 
   it('never printed the token', () => {

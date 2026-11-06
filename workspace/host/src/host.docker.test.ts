@@ -335,7 +335,8 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
 
     it("reaches none of this computer's addresses, the cloud metadata address or the internet directly", async () => {
       const targets = [
-        ...hostAddresses().flatMap((a) => [`${a}|22`, `${a}|8790`, `${a}|5173`]),
+        // ssh, Vite, the Worker under wrangler dev, and the workspace host itself.
+        ...hostAddresses().flatMap((a) => [`${a}|22`, `${a}|5173`, `${a}|8787`, `${a}|8790`]),
         '172.17.0.1|80',
         '169.254.169.254|80',
         '1.1.1.1|443',

@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --exclude '**/*.docker.test.ts'",
     "test:docker": "vitest run docker.test",
+    "test:idle-real": "tsx scripts/idle-real.ts",
     "lint": "eslint .",
     "db:migrate": "tsx --env-file-if-exists=../../.dev.vars scripts/db.ts migrate",
     "db:status": "tsx --env-file-if-exists=../../.dev.vars scripts/db.ts status",

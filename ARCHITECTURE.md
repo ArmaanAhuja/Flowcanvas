@@ -265,6 +265,13 @@ POST /api/projects/:id/workspace/{open,sleep,resume,stop}  (same origin) ──�
 - `failure` is the person-facing reason for any change they didn't ask for: a failed start, the guard (ADR 0019), or the idle sleep (ADR 0018). A requested sleep has none.
 - **Open demo project:** `POST /api/projects/demo` (find or make the corpus fork at its pin), then the usual `…/workspace/open`. Where `workspacesAvailable` is false (staging), the page shows one sentence and no workspace buttons.
 
+## Security checks for workspaces (phase 1d, step 10)
+
+- **Canaries, never kept:** `workspace/host/src/no-leaks.docker.test.ts` (host logs, other answers, Docker's logs, `docker inspect`, process environments in the workspace) and `services/control-plane/src/api/no-leaks.test.ts` (the API, including a host that echoes its token).
+- **Host sentences:** the adapter (`local-host.ts`) drops any host sentence containing the token.
+- **Isolation:** `workspace/host/src/host.docker.test.ts`: the other workspace, the proxy's other sides, this computer's addresses (ports 22, 5173, 8787, 8790), metadata, DNS, IPv6, directly and through the proxy.
+- **In CI:** job `docker` runs `pnpm test:docker` with `WORKSPACE_HOST_TEST_PRESSURE=none`, which only test hosts accept. The real 10-minute run is `test:idle-real`, run by hand.
+
 ## Local development
 
 ```fish

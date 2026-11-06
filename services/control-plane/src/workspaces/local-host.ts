@@ -100,7 +100,7 @@ export function localHostProvider(options: {
       throw new ProviderError('unavailable', MESSAGES.notRunning);
     }
     if (response.ok) return response;
-    throw await hostError(response);
+    throw await hostError(response, options.token);
   }
 
   async function action(ref: string, name: HostAction): Promise<void> {
@@ -145,7 +145,7 @@ export function localHostProvider(options: {
       } catch {
         throw new ProviderError('unavailable', MESSAGES.notRunning);
       }
-      if (!response.ok) throw await hostError(response);
+      if (!response.ok) throw await hostError(response, options.token);
       const body = (await response.json().catch(() => undefined)) as
         Partial<PressureResponse> | undefined;
       // Only the kinds are needed here; the host's own sentences are for its refusals.
@@ -170,13 +170,16 @@ export function localHostProvider(options: {
       }
       const socket = (response as Response & { webSocket?: TerminalSocket | null }).webSocket;
       if (response.status === 101 && socket) return socket;
-      throw await hostError(response);
+      throw await hostError(response, options.token);
     },
   };
 }
 
-/** The host's error as a ProviderError, checked: only known kinds and a bounded sentence pass through. */
-async function hostError(response: Response): Promise<ProviderError> {
+/**
+ * The host's error as a ProviderError, checked: only known kinds and a bounded sentence pass through, and never
+ * one that contains the token.
+ */
+async function hostError(response: Response, token: string): Promise<ProviderError> {
   // Different tokens on the two sides: say how to fix it, whatever the host's own words were.
   if (response.status === 401) return new ProviderError('unavailable', MESSAGES.noToken);
   const body = (await response.json().catch(() => undefined)) as
@@ -187,7 +190,9 @@ async function hostError(response: Response): Promise<ProviderError> {
     isHostErrorKind(kind) &&
     typeof message === 'string' &&
     message !== '' &&
-    message.length <= MESSAGE_MAX
+    message.length <= MESSAGE_MAX &&
+    // Shown to the person: a host that echoed its request must not show them the token.
+    !message.includes(token)
   ) {
     return new ProviderError(kind, message);
   }

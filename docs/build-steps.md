@@ -9428,8 +9428,8 @@ browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0
 | 9.1 | Pinned clones (migration 0004) and the demo endpoint | done (Claude, 5 Nov) |
 | 9.2 | `WorkspaceStatus` chip in the design system, with catalogue stories and baselines | done (Claude, 5 Nov) |
 | 9.3 | The project's workspace panel: chip, actions, starting and sleeping cards, notices, staging; Open demo project; walkthrough | done (Claude, 6 Nov) |
-| 10 | Security tests (canary secrets, isolation), walkthrough, timing; Docker tests in CI if the runners allow | *next* |
-| 11 | Close the phase as **in review** (0.5.0): report, and what waits for the cloud provider | *planned* |
+| 10 | Security tests (canary secrets, isolation), walkthrough, timing; Docker tests in CI if the runners allow | done (Claude, 6 Nov) |
+| 11 | Close the phase as **in review** (0.5.0): report, and what waits for the cloud provider | *next* |
 
 ### How each Done-when item is proven
 
@@ -9826,10 +9826,10 @@ Signed in locally, with a project open, the page itself can't use these yet (no 
 **1. Automated tests** (no sign-in needed):
 ```fish
 pnpm install
-pnpm test                 # 586 tests, no Docker needed (the same as CI's checks)
-pnpm test:e2e             # 9 recorded walkthroughs: the terminal under the production CSP, the demo project,
-                          # sleep and resume, and staging's "Workspaces run locally for now"
-pnpm test:docker          # 36 tests against real containers; needs Docker 28+ and the internet.
+pnpm test                 # 597 tests, no Docker needed (the same as CI's checks); about 75 s
+pnpm test:e2e             # 10 recorded walkthroughs: the phase's Try it, the terminal under the production
+                          # CSP, the demo project, sleep and resume, and staging's "Workspaces run locally"
+pnpm test:docker          # 42 tests against real containers; needs Docker 28+ and the internet.
                           # The first run builds the workspace image (about a minute).
                           # Look for "Rallly: opened in … ms" in the output.
 pnpm workspace:resources  # your laptop against the budget: five "ok" lines
@@ -10485,11 +10485,11 @@ A refusal (the 2-workspace cap, the guard's pressure) is shown as the API said i
 
 **Run and check it:** "Phase 1d so far — run and check it", section 2, now uses the buttons.
 ```fish
-pnpm test        # 586 tests
+pnpm test        # 596 tests (corrected in step 10: the run this figure came from was the one where the corpus task failed)
 pnpm test:e2e    # 9 walkthroughs
 ```
 
-**Known issue:** one full `pnpm test` run of six had one failing task. Five reruns of the whole suite, and five of the web and host suites alone, all passed, and that first run's output didn't record which test failed. Most likely a 1-second `findBy…` wait in the new page tests, under the full parallel run. To watch in CI at phase close, and to fix as soon as it's caught.
+**Known issue:** one full `pnpm test` run of six had one failing task. Five reruns of the whole suite, and five of the web and host suites alone, all passed. That run's output didn't record which test failed. *Step 10 narrowed it down:* that run counted 586 tests against 596 in every clean run, and the only package with exactly 10 tests is the corpus. Its tests are pure, so the likely cause is Vitest's worker failing to start under the full parallel load. To watch in CI.
 
 **Docs:** this write-up; the run guide; ARCHITECTURE ("Workspaces on the page"); STATUS.
 
@@ -10498,4 +10498,82 @@ pnpm test:e2e    # 9 walkthroughs
 - **Laptop:** all five checks ok (21.7 GiB memory available, 578 GiB disk free, load 8.1 from this step's own test runs, under the 14.4 limit); no test workspaces left.
 
 **Commit:** `feat(web): workspace status, starting and asleep cards, and Open demo project`
+
+### Step 1d.10 — Security tests, the Try it, the real 10-minute run, Docker in CI (done by Claude)
+
+**Goal:** prove the phase's promises the way a skeptic would. Secrets planted everywhere they could pass are kept nowhere. One workspace reaches nothing else. The *Try it* works as written. Idle sleep works in real time. And the Docker tests run in CI, not only on your laptop.
+
+**Concepts:**
+- **Canaries.** A canary is a made-up secret with an unmistakable marker (`CANARY-…`), planted where a real one could be. The test then searches every place a secret could end up. Finding nothing proves something only if the canary demonstrably passed through, so each test also checks that it did (for example, the owner's own shell does show their own `.env`).
+- **"Kept nowhere," for a workspace,** means not in:
+  - the host's log lines
+  - Docker's stored logs (turned off: `--log-driver none`)
+  - a container's settings and environment (`docker inspect`)
+  - any process environment the workspace can read
+  - the answers to other requests
+
+  The owner's own command output and shell are theirs: they come back to them and are kept nowhere else.
+- **Defence in depth for the host's sentences.** The control plane shows the host's error sentences to the person. A buggy host that echoed its request would have shown the token. Now any sentence containing the token is replaced with "an answer we didn't expect". A mutation check confirmed it: with the filter off, the test fails on `hostToken in responses`.
+- **Faking time in a walkthrough.** Playwright's `page.clock` replaces the page's timers, so "wait for sleep" takes no time: the page's 30-second check runs when the test says. The real wait is proven separately. https://playwright.dev/docs/clock
+- **CI isn't the laptop.** GitHub's runners have far less than 50 GiB free, so the guard would read disk pressure and refuse every workspace. The CI job sets `WORKSPACE_HOST_TEST_PRESSURE=none`, which only test hosts (`fc-test-` prefixes) accept; the real prefix refuses it, which is tested. Turbo hides undeclared variables from tasks, so `test:docker` now passes it through. A run with `memory` proved it arrives (5 tests failed, as they should).
+
+**What's new:**
+
+| Where | What it proves |
+| --- | --- |
+| `workspace/host/src/no-leaks.docker.test.ts` (6, real Docker) | The host's token, a `.env`, a command's argument and output, and terminal input: none kept in the host's logs, other answers, Docker's logs (workspace and proxy), `docker inspect`, or any process environment in the workspace |
+| `services/control-plane/src/api/no-leaks.test.ts` (+1) | Through the workspace routes, the demo and the minute check, including a host that echoes everything it's sent, token included: nothing reaches logs, the console or answers |
+| `services/control-plane/src/workspaces/local-host.ts` | The token filter on the host's sentences |
+| `workspace/host/src/host.docker.test.ts` | The probe of this computer's own addresses now includes the Worker's port 8787 (with 22, 5173 and 8790) |
+| `e2e/try-it/phase-1d.spec.ts` (+1) | **Try it, as written:** create Rallly from its GitHub address, Open, run a command in the terminal, wait for sleep (the page notices by itself), Resume |
+| `services/control-plane/scripts/idle-real.ts` (`pnpm --filter @flowcanvas/control-plane test:idle-real`) | The 10-minute idle sleep in **real time**, nothing faked: the real host, lifecycle and minute check, Rallly at its pin, a file and a counting process |
+| `.github/workflows/ci.yml` (job `docker`), `turbo.json` | `pnpm test:docker` on every PR and every push to `main`, after checking Docker is 28 or newer |
+| `workspace/host/src/main.ts` | The test hook takes `none` (test prefixes only) |
+| `services/control-plane/vitest.config.ts`, `tsconfig.json` | At most 6 test workers (the finding below) |
+
+**The real 10-minute run** (`test:idle-real`, alone on the laptop, 6 Nov): **passed.**
+- Asleep after **10.02** idle minutes (the check runs once a minute), and Docker says `paused`.
+- **600 s** metered.
+- After 30 s asleep it resumed: the file was there, the same process was alive and still counting.
+- The host never printed its token.
+
+The first attempt was spoiled by my own load. With the full unit suite running alongside, the test host's guard saw memory below 4 GiB at 7.2 minutes and correctly **stopped** the workspace for memory (422 s metered: the time it actually ran). That led to the next finding.
+
+**Finding: our own `pnpm test` starved the laptop.** Measured with a sampler reading `MemAvailable` every 0.5 s:
+
+| Run | Lowest memory available | Time |
+| --- | --- | --- |
+| `pnpm test`, before | **1.3 GiB** (from 18.8: about 17.5 GiB used at once) | — |
+| control-plane tests alone, Vitest's default (15 workers) | 6.1 to 4.0 GiB | 83 s |
+| control-plane tests alone, 4 workers | 13.9 GiB | 86 s |
+| control-plane tests alone, **6 workers** | 12.3 GiB | **68 s** |
+| `pnpm test`, after (control plane at 6 workers) | **11.4 GiB** | 75 s |
+
+Most control-plane tests start their own in-process Postgres (PGlite). With a worker per core, that's about 18 GiB at once, and it's slower too, because the workers fight over cores. `services/control-plane/vitest.config.ts` now sets `maxWorkers: 6`.
+
+**Also seen:** your own workspace (`fc-ws-2f78…`), opened with **Open demo project**, went to sleep by itself under your `pnpm dev`. That's the real minute check end to end.
+
+**Run and check it:**
+```fish
+pnpm test                                             # 597 tests
+pnpm test:docker                                      # 42 tests, including "no secret is kept anywhere"
+pnpm test:e2e                                         # 10 walkthroughs, including "phase 1d · Try it"
+pnpm --filter @flowcanvas/control-plane test:idle-real  # about 12 minutes, in real time
+```
+
+**Gotchas:**
+- **Check that a mutation actually breaks something.** My first mutation (`token !== token`) is always false, so it rejected every message, and the test rightly passed. The useful one lets everything through (`token === token`).
+- **`vitest -t` skips the tests a later one depends on.** Filtering to one isolation test skipped the test that creates the workspace, so it "failed" with no container to probe from. Run the file.
+- **The flaky task, narrowed down:** the run that reported 586 tests was missing exactly the corpus package's 10 (596 in every clean run). The 586 in the step 9 docs is corrected.
+
+**Docs:** this write-up; the run guide's counts; the step 9.3 known issue; ARCHITECTURE ("Security checks"); STATUS.
+
+**Risks:**
+- R6 (the Docker socket is root-equivalent): closed locally. The token is checked and never kept or shown, even when a host echoes it, and nothing from requests reaches Docker's arguments.
+- R1 unchanged (the kernel is shared until real VMs).
+- New: whether GitHub's runners have Docker 28 or newer. The `docker` job checks it first, and the PR at phase close shows the answer.
+- R9, now covering our own tools too: the test suite's peak memory is capped (above).
+- **Laptop:** all five checks ok after the step (23.0 GiB memory available, 578 GiB disk free); the test objects were removed. Your own workspace (`fc-ws-2f78…`) was left as your `pnpm dev` put it: asleep.
+
+**Commit:** `test(workspace): no secret kept anywhere, Try it walkthrough, real-time idle run, Docker tests in CI`
 

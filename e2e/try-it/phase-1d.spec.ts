@@ -241,3 +241,83 @@ test('phase 1d: where workspaces can’t run (staging), the page says so and off
   await expect(page.getByRole('button', { name: 'Open', exact: true })).toHaveCount(0);
   expect(watch.problems()).toEqual([]);
 });
+
+test('phase 1d · Try it: open Rallly from its GitHub URL, run a command, wait for sleep, then resume', async ({
+  page,
+}) => {
+  const watch = watchForPageProblems(page);
+  // The page's clock is the test's: the 30 s check for a sleep happens when the test says so.
+  await page.clock.install();
+  const project = {
+    ...PROJECT,
+    id: '3f1c0d2e-0000-4000-8000-0000000000aa',
+    workspace: workspace('not_created'),
+  };
+  let state = workspace('not_created');
+  let created = false;
+  await fakeApi(page, { projects: [] });
+  await page.route('**/api/projects', (route) => {
+    if (route.request().method() !== 'POST') {
+      return reply(route, {
+        projects: created ? [{ ...project, workspace: state }] : [],
+        workspacesAvailable: true,
+      });
+    }
+    created = true;
+    return reply(route, { project: { ...project, workspace: state } }, 201);
+  });
+  await page.route(`**/api/projects/${project.id}/workspace`, (route) =>
+    reply(route, { workspace: state, available: true }),
+  );
+  await page.route(`**/api/projects/${project.id}/workspace/*`, (route) => {
+    const action = new URL(route.request().url()).pathname.split('/').pop() ?? '';
+    if (action === 'open' || action === 'resume') state = workspace('running');
+    return reply(route, { workspace: state });
+  });
+  let typed = '';
+  await page.routeWebSocket(/\/workspace\/terminal/, (socket) => {
+    socket.send(Buffer.from('$ '));
+    socket.onMessage((message) => {
+      if (typeof message === 'string') return;
+      const text = message.toString();
+      typed += text;
+      socket.send(Buffer.from(text.replace('\r', '\r\n')));
+      if (typed.endsWith('\r')) socket.send(Buffer.from('8e67a21 Pinned commit\r\n$ '));
+    });
+  });
+
+  await test.step('Create Rallly from its GitHub address and open it', async () => {
+    await page.goto('/');
+    await page.getByLabel('Project name').fill('Rallly');
+    await page.getByLabel('Repository address (optional)').fill(PROJECT.repoUrl);
+    await page.getByRole('button', { name: 'Create project' }).click();
+    await page.getByRole('button', { name: 'Open', exact: true }).click();
+    await expect(page.getByText('Running · 2 cores')).toBeVisible();
+  });
+
+  await test.step('Run a command in the terminal', async () => {
+    await page.getByRole('button', { name: 'Terminal' }).click();
+    await page.getByLabel('Terminal for Rallly').click();
+    await page.keyboard.type('git log --oneline -1');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.xterm-rows')).toContainText('8e67a21 Pinned commit');
+  });
+
+  await test.step('Wait for sleep: the page notices the idle sleep by itself', async () => {
+    // The control plane's minute check puts it to sleep after 10 idle minutes (proven for real by
+    // pnpm test:idle-real); the page sees it at its next check, within 30 s, without a reload.
+    state = workspace('sleeping', 'Put to sleep after 10 minutes without activity.');
+    await page.clock.runFor(31_000);
+    const card = page.getByRole('region', { name: 'Rallly workspace asleep' });
+    await expect(card).toBeVisible();
+    await expect(card).toContainText('Put to sleep after 10 minutes without activity.');
+    await expect(page.getByRole('button', { name: 'Terminal' })).toBeHidden();
+  });
+
+  await test.step('Resume: running again', async () => {
+    await page.getByRole('button', { name: 'Resume' }).click();
+    await expect(page.getByText('Running · 2 cores')).toBeVisible();
+  });
+
+  expect(watch.problems()).toEqual([]);
+});
