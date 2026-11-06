@@ -10597,5 +10597,7 @@ pnpm --filter @flowcanvas/control-plane test:idle-real  # about 12 minutes, in r
 
 **Staging's database (owner, 6 Nov):** `pnpm db:migrate` on the production branch (`ep-raspy-frost…`, not the dev branch) applied `0003_workspace_lifecycle` and `0004_pinned_commit`.
 
+**Also found by the PR: my test-worker cap was too high for CI.** The step 10 cap (6 workers) is right for the laptop's 16 cores, but CI's runner has 4. Six workers there made each in-process Postgres start too slowly, and 21 setup hooks timed out (10 s). Every failure was a timeout, and all in the control plane. The cap is now *at most 6, and never more than the cores minus one* (`availableParallelism()`, which follows the CPUs a process may use). Checked pinned to 4 cores (233 pass, 68 s) and to 2 (233 pass, 157 s); the laptop still gets 6.
+
 **CI's Docker job, first run:** GitHub's `ubuntu-24.04` runner has **Docker 28.0.4**. All 42 Docker tests ran and passed (Rallly opened in 3.1 s there).
 

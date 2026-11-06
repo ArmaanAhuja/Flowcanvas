@@ -95,6 +95,7 @@ The full guide is in `docs/build-steps.md`, "Phase 1d so far — run and check i
 - **Per-project network rules** for running apps (Google Fonts, an app's own APIs): upgrade-later 37.
 - **Deleting a project's workspace** arrives with project deletion (upgrade-later 39).
 - **One flaky `pnpm test` run** (step 9) was narrowed to the corpus package. It's likely a worker start under memory pressure, which the new worker cap should prevent. To watch in CI.
+- **Test workers:** capped at 6 and at the cores minus one. Six on CI's 4 cores timed out (fixed at the PR).
 - **CI's Docker job:** GitHub's runners have Docker 28.0.4, and all 42 Docker tests pass there.
 - **Fixed at the PR:** Cloudflare's preview build had failed since step 4. The Worker bundles the host's and the agent's protocol from `dist/`, which Cloudflare's build command didn't build. `turbo.json` now builds them with the web app, and CI runs Cloudflare's exact build on a fresh checkout so it can't fail unseen again.
 
