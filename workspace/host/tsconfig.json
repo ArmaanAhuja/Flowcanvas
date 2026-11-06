@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true
+  },
+  // The host runs from source with tsx; tsconfig.build.json emits only what the control plane imports.
+  "include": ["src", "scripts"]
+}

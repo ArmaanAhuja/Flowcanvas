@@ -2046,6 +2046,45 @@ When phase 1a is done you can:
 - **Light theme isn't in Figma** (decision A1). This phase proposes light values for approval before they're used.
 - **Token source:** Figma's Variables REST API needs an Enterprise plan, so it isn't free. Free route: a hand-written seed JSON with the decided values (decision A3), checked against the Figma file and the generator scripts' `HEX` map. Reading Figma variables directly can use the Figma connector in Claude Code, or an export plugin.
 
+### On the owner's laptop: the footprint and the resource guard (owner, 4 Nov 2026)
+
+**Everything local workspaces put on the laptop is labelled and listed, and it all comes off when a cloud provider is connected** (upgrade-later 33):
+
+| What | Where | Removed by |
+| --- | --- | --- |
+| Workspace images `flowcanvas-workspace:<hash>` (about 560 MB each) | Docker images, label `org.flowcanvas.workspace=1` | Old ones: `pnpm workspace:clean`; all: `pnpm workspace:clean --all --yes` |
+| Workspace containers, networks and volumes (the projects' files), named `fc-ws-<id>`; the egress proxy `fc-egress` and its network `fc-egress-out` | Docker, same label | `pnpm workspace:clean --all --yes` |
+| Test leftovers `fc-test-*` | Docker (the tests remove them; a crashed run might not) | `pnpm workspace:clean` |
+| The local workspace host (`workspace/host`) | A Node process, only while `pnpm dev` runs | Stops with `pnpm dev`; the code is retired with the switch |
+| `WORKSPACE_HOST_TOKEN` | `.dev.vars` | Delete the line |
+| The Docker adapter in the control plane | Code | Replaced by the provider's adapter |
+
+Not ours, and never touched: anything else in Docker (other projects' images, containers and volumes), `node:24-slim` (already on the laptop), and the Playwright image (ADR 0012, still used by the visual tests).
+
+**The resource guard** keeps Flowcanvas within a budget on this laptop (16 cores, 30.8 GiB memory, 950 GiB disk). It runs in the workspace host every 30 seconds.
+
+| Budget or threshold | Value |
+| --- | --- |
+| Workspaces running at once | 2 (each up to 2 CPUs and 4 GiB, so at most 4 CPUs and 8 GiB together) |
+| Flowcanvas's disk (our images plus workspace volumes) | 25 GiB; each workspace's volume 10 GiB |
+| Laptop under pressure (whatever causes it) | memory available below 4 GiB, or disk free below 50 GiB, or the 1-minute load above 14 (about 90% of 16 cores) for 2 minutes |
+
+**What it does, in order, until it's back within limits:**
+1. Refuse to start or resume a workspace while over budget or under pressure, with a clear message ("Your computer is low on memory, so this workspace can't start").
+2. Put idle workspaces to sleep, least recently used first.
+3. Stop the least recently used workspaces. Their files are kept in their volumes.
+4. Remove what isn't needed: old workspace image tags, stopped Flowcanvas containers, and volumes whose project no longer exists.
+
+**Corrected in step 8a (5 Nov 2026, ADR 0019):**
+- Sleeping frees CPU, not memory (a paused workspace keeps its memory). So memory pressure **stops** a workspace, asleep ones first, and load **sleeps** one.
+- The host measures and refuses; the control plane's minute tick sleeps and stops, through the lifecycle, so the page and the meter stay right.
+- Only old images are removed automatically. Stopped containers and volumes hold people's work, and no volume can be orphaned yet: projects can't be deleted (upgrade-later 39).
+- Step 8a's write-up has the table.
+
+It only ever acts on things labelled as Flowcanvas's. It never kills or removes anything else on the laptop. A runaway process inside a workspace is already held by that workspace's own limits. Every action is logged, and from step 9 it's shown on the workspace's card ("Put to sleep to free memory on this computer").
+
+`pnpm workspace:resources` prints the laptop's figures and Flowcanvas's usage against these numbers. Claude also checks them at every step: each step's Risks line includes a "Laptop" line.
+
 ### Steps (planned)
 
 | # | Step | Status |
@@ -9308,3 +9347,1257 @@ pnpm --filter @flowcanvas/e2e report             # watch the recordings
    - Open the `GET /api/auth/callback/github` entry. If it shows `code=` or a `cookie` header, tell Claude: invocation logs get turned off in a follow-up PR.
 
 **Commit:** `chore: release 0.4.0, close phase 1c`
+
+## Phase 1d — Workspace sandbox
+
+**From the build plan:**
+- **Build:** one isolated virtual machine per project; clone a repo; file and process API; terminal in the browser; outbound network rules; resource limits; sleep when idle and resume.
+- **Done when:** a fork clones and opens in under 60 s; a workspace sleeps after 10 idle minutes and resumes intact; workspaces can't reach each other.
+- **Try it:** open Rallly from its GitHub URL, run a command in the terminal, wait for sleep, then resume.
+- **Also here:** the "Open demo project" button, moved from 1b (decisions log, 29 Oct 2026).
+
+**Owner decisions (4 Nov 2026, decisions log):**
+- **Workspaces run in local Docker containers for now.** The chosen cloud provider, E2B, turned out to need a $5 payment before it would issue an API key, so the cloud provider will be chosen and connected later (upgrade-later 33).
+- **When it closes, this phase goes to "in review", not "accepted",** and phase 2 goes ahead. The phase is accepted once a cloud provider is connected and the *Done when* checks pass on staging.
+
+**Why this phase matters:** everything after it runs inside these machines: the editor's files (phase 3), the analysis engine, live frames and the agents. It's also the first time the product runs code it didn't write, so isolation and limits come before features.
+
+**Why containers are only a stand-in:** a container shares the host's kernel, so it isolates less than a VM does. The build plan asks for VMs. Everything goes through our own `WorkspaceProvider` interface, so connecting a cloud provider later replaces one adapter and nothing else. Until then, the local setup gets as close as containers allow: a non-root user, dropped capabilities, Docker's seccomp profile, a network of its own for each workspace, and limits.
+
+**Expected outcome (locally, with `pnpm dev`):**
+- A project has an **Open** button. It starts the project's own container and clones its repository in under 60 seconds.
+- A **terminal** in the page runs commands inside that container.
+- A status chip says Starting, Running, Sleeping or Resuming (Figma 29). After 10 idle minutes the workspace sleeps (it's paused, with memory and processes frozen). **Resume** brings it back with files and running processes intact.
+- **Open demo project** opens Rallly in one click.
+- Tests prove that two workspaces can't reach each other, and that secrets never reach logs.
+- **On staging,** projects honestly say "Workspaces run locally for now" until a cloud provider is connected. Nothing is faked.
+
+**Concepts this phase introduces** (each gets a primer in its step):
+- Containers vs VMs: namespaces, cgroups, seccomp, capabilities: https://docs.docker.com/engine/security/
+- The Docker Engine API, and why its socket is root-equivalent: https://docs.docker.com/engine/api/
+- `docker pause` and the cgroup freezer: https://docs.docker.com/reference/cli/docker/container/pause/
+- Internal networks and an egress proxy: https://docs.docker.com/engine/network/drivers/bridge/
+- WebSockets and Cloudflare Durable Objects: https://developers.cloudflare.com/durable-objects/
+- Terminals: ptys and xterm.js: https://xtermjs.org/
+
+**Design references:**
+- Figma 29, workspace status (chip, plus the Starting, Sleeping and Resuming cards).
+- Figma 18, terminal (minimal for now).
+- Design brief: "Cloud workspace screens (29–33)" and "18. Terminal and run manager".
+- They sit on the version page until the phase 2 app shell.
+
+**Scope:**
+- **In:**
+  - our own `WorkspaceProvider` interface, with a Docker adapter
+  - a **local workspace host** (`workspace/host`): a small Node service on 127.0.0.1, protected by a token, and the only thing that talks to Docker
+  - the lifecycle in the control plane
+  - clone; the file and process API; the terminal
+  - network rules; CPU, memory, process-count and time limits
+  - sleep after 10 idle minutes, and resume
+  - usage metering (`workspace_seconds`)
+  - the status chip and cards; Open demo project
+- **Out:**
+  - a cloud sandbox provider (later, upgrade-later 33)
+  - the editor (phase 3)
+  - the app's dev server as a live frame (stage 2)
+  - backups and restore history (18a)
+  - agents in the workspace (stage 3)
+  - project secrets as environment variables in the workspace: only if simple and safe here, otherwise a later phase, decided in step 5
+
+**How the pieces talk:**
+browser → Worker (`/api`, in `wrangler dev`) → local workspace host (127.0.0.1, token) → Docker → workspace container (runs `workspace/agent`). The Worker never touches the Docker socket. The host accepts only a fixed set of operations: no image names, mounts or flags come from requests.
+
+### Steps (planned)
+
+| # | Step | Status |
+| --- | --- | --- |
+| 0 | Docker on the dev machine: works without sudo (checked: Docker 29.9.2, cgroup v2, `hello-world` ran) | done (Claude, 4 Nov) |
+| 1 | Spike: the Worker in `wrangler dev` reaching a loopback host. Clone timing for Rallly; pause and resume intact; two containers on separate internal networks; how the host talks to the agent (`docker exec` stdio or the bridge address). ADR 0016 | done (Claude, 4 Nov) |
+| 2 | Workspace image (`workspace/image`): Node 24, pnpm, git, non-root user; CPU, memory, process and disk limits | done (Claude, 4 Nov) |
+| 3 | `WorkspaceProvider` interface; lifecycle and states in the control plane, tested with a fake provider | done (Claude, 4 Nov) |
+| 4 | Local workspace host and Docker adapter; a minimal egress proxy (GitHub only); open a project: create the container and clone the repo; timed. Also the 2-workspace cap, `pnpm workspace:clean` and `pnpm workspace:resources` | done (Claude, 4 Nov) |
+| 5 | File and process API (the agent in the container): typed, versioned, owner only | done (Claude, 4 Nov) |
+| 6 | Terminal (ADR 0017), in three parts: | |
+| 6.1 | Terminal sessions on the host: a pty through Docker's API, a WebSocket endpoint | done (Claude, 4 Nov) |
+| 6.2 | The Worker's WebSocket relay (owner, origin, running checks) and the adapter; Vite forwards WebSockets | done (Claude, 4 Nov) |
+| 6.3 | The terminal on the page: xterm.js, token colours, the CSP shim; a walkthrough under the deployed CSP | done (Claude, 4 Nov) |
+| 7 | Network rules: the egress proxy's full allowlist and address checks; limits; the isolation test | done (Claude, 5 Nov) |
+| 8 | Sleep after 10 idle minutes and resume intact; usage metering writes workspace seconds | done (Claude, 5 Nov) |
+| 8a | The resource guard: laptop pressure and Flowcanvas's budget checked every 30 s; refuse, sleep, stop, clean up (owner, 4 Nov) | done (Claude, 5 Nov) |
+| 9 | Status chip and cards (Figma 29); Open demo project (Rallly); staging's "Workspaces run locally for now". In three parts: | |
+| 9.1 | Pinned clones (migration 0004) and the demo endpoint | done (Claude, 5 Nov) |
+| 9.2 | `WorkspaceStatus` chip in the design system, with catalogue stories and baselines | done (Claude, 5 Nov) |
+| 9.3 | The project's workspace panel: chip, actions, starting and sleeping cards, notices, staging; Open demo project; walkthrough | done (Claude, 6 Nov) |
+| 10 | Security tests (canary secrets, isolation), walkthrough, timing; Docker tests in CI if the runners allow | done (Claude, 6 Nov) |
+| 11 | Close the phase as **in review** (0.5.0): report, and what waits for the cloud provider | done (Claude, 6 Nov; staging migration by the owner) |
+
+### How each Done-when item is proven
+
+| Item | Now (Docker, locally and in CI) | Waits for the cloud provider |
+| --- | --- | --- |
+| A fork clones and opens in under 60 s | A timed test opens Rallly. It records the time and fails above 60 s | The same test against staging |
+| Sleeps after 10 idle minutes, resumes intact | Lifecycle tests with a fake clock and fake provider. A Docker test with a short idle limit: write a file, start a process, sleep, resume, check both. One real 10-minute run at phase close | The same live test on the provider |
+| Workspaces can't reach each other | A Docker test starts two workspaces. One tries the other's address, the host and the private and metadata ranges, and every attempt must fail | Repeated on the provider, whose network differs |
+
+### Risks and questions (checked at every step)
+
+Each step's write-up ends with a **Risks** line saying what changed. The phase report closes each one, or hands it to the provider step.
+
+| # | Risk or question | How we keep it in check | Status |
+| --- | --- | --- | --- |
+| R1 | **Containers aren't VMs:** they share the host's kernel, so a kernel bug could let code escape | Non-root user, all capabilities dropped, `no-new-privileges`, Docker's seccomp profile, no Docker socket inside, limits. Only the owner uses it. A gVisor runtime is an optional hardening (upgrade-later 34). Real VMs come with the cloud provider | open until real VMs (the cloud provider, R8) or gVisor (upgrade-later 34). **Step 7:** the network side is proven by the isolation test; the kernel is still shared. Step 1: the locked-down flags didn't get in the way of git. **Step 2:** every flag is set in one place (`runArgs`) and checked from inside a real container (`pnpm test:docker`) |
+| R2 | **The Worker in `wrangler dev` has to reach the local host** | The step 1 spike checks it before anything is built on it. The fallback is calling the host from Vite's proxy | **closed (step 1):** works, 3–4 ms per call |
+| R3 | **"Can't reach each other" is now our job,** not a provider's | Each workspace gets its own internal network with no route out. The internet goes only through an egress proxy with an allowlist. Measured in step 1; the test comes in step 7 | **closed locally (step 7):** the isolation test tries the other workspace (both ways), the proxy's other sides, this computer's own addresses, the metadata address, DNS and IPv6, directly and through the proxy, and fails when the gateway isolation is removed. Repeated on the cloud provider (R8). **Step 1:** internal networks alone still let a container reach the host. The isolated gateway mode (Docker 28+) closes that, and is now required (ADR 0016) |
+| R4 | **`docker pause` keeps memory in use,** and a host restart loses paused processes | It's fine for a few local workspaces. After a restart, a workspace shows as stopped with its files kept (in a volume), never as lost. The cloud provider brings real snapshots | open: step 8a (the memory a paused workspace holds; the guard stops one under pressure). **Step 8:** the real tick put a workspace to sleep after 10 idle minutes; after resume its file was there and the same process was still counting (Docker test). **Step 1:** pause and resume take about 50 ms each way; the same process carried on, and files were kept |
+| R5 | **Under 60 s for Rallly** depends on the clone and the home connection | Step 1 times a real clone. A shallow clone (`--depth 1`) and a prebuilt image keep it short. Dependencies install after "open", in the background, outside the 60 s | **closed (step 4):** 8.9 s through the egress proxy (clone 7.0 s), checked by a Docker test that fails above 60 s. Repeated on the cloud provider later (R8) |
+| R6 | **The Docker socket is root-equivalent,** so whatever drives it is powerful | Only the host touches it. The host listens on 127.0.0.1 only and needs a token (`WORKSPACE_HOST_TOKEN` in `.dev.vars`). It takes no image names, mounts or flags from requests. Canary tests cover the token | open: step 10. **Step 4:** the host takes only fixed operations on checked names, needs the token (compared in constant time), refuses browsers (Origin, Host); the adapter sends the token only to loopback addresses; tests check it's never logged or shown |
+| R7 | **Untrusted code runs on the owner's laptop:** a cloned repo or a terminal command could mine crypto or attack the home network | Limits (step 2); egress only through the proxy, with the home network and metadata ranges blocked (step 7); sleep when idle (step 8); only allowlisted people can open workspaces | **closed locally (step 8):** idle workspaces sleep after 10 minutes (the tick), and time nobody could use isn't metered. Abuse detection is phase 43. **Step 7:** egress only through the proxy, to five allowlisted hosts, with tunnel limits; the home network and metadata address unreachable (tested). **Step 2:** CPU, memory, process and `/tmp` limits are enforced (tested). Disk is measured, not capped (upgrade-later 35) |
+| R9 | **Workspaces could overload the owner's laptop** | The resource guard (step 8a): 2 workspaces at most, a 25 GiB disk budget, and pressure thresholds that refuse, sleep, stop and clean up, acting only on Flowcanvas's own things. `pnpm workspace:resources`, and a "Laptop" line in every step's Risks | **closed locally (step 8a):** the guard refuses under pressure, and the tick stops (memory) or sleeps (load) the least recently used workspace; only Flowcanvas's own things are touched (tested, ADR 0019). **Step 4:** the 2-running cap is enforced by the host (tested), and `pnpm workspace:resources` and `pnpm workspace:clean` exist |
+| R8 | **The phase can't be fully accepted yet:** the *Done when* items are proven locally, not on staging | The phase is "in review" in STATUS. Upgrade-later 33 holds the provider step, and the phase report lists exactly which checks wait for it. Later phases that need workspaces on staging say so in their plans | open: until the provider is connected |
+
+### Step 1d.0 — Docker on the dev machine (done)
+
+**Goal:** Docker runs containers for the owner's user without sudo, so the local workspace host can use it.
+
+**Checked by Claude (4 Nov 2026):**
+- `docker version`: server 29.9.2
+- cgroup v2, with Docker's built-in seccomp profile
+- `docker run --rm hello-world`: printed "Hello from Docker!"
+- the user is in the `docker` group
+
+**Concepts:**
+- **The `docker` group is root-equivalent.** Anyone who can use the Docker socket can start a container that mounts `/` and so control the machine. That's why only our host process talks to Docker, never the Worker or the browser (R6). https://docs.docker.com/engine/security/#docker-daemon-attack-surface
+
+**Earlier attempt:** the plan first used E2B, but creating an API key needed a $5 payment. The owner chose local Docker instead (decisions log, 4 Nov 2026). The `E2B_API_KEY` line was removed from `.dev.vars.example`. If one was added to `.dev.vars`, it can stay or go; nothing reads it.
+
+**Risks:** R1–R8 are set; nothing is built yet.
+
+### Step 1d.1 — Spike: Docker workspaces end to end (done by Claude)
+
+**Goal:** before building anything, check that the plan works on real containers: the clone time, pause and resume, isolation, and how the pieces talk. The answers shape ADR 0016.
+
+**Concepts:**
+- **Internal networks and the gateway mode.**
+  - A Docker `--internal` network has no route to the internet, but the host still has an address on it (the gateway), so a container can reach anything on the host that listens on all interfaces.
+  - Docker 28 added `gateway_mode_ipv4=isolated`. The host gets no address on the network, so the container's only neighbours are its own subnet.
+
+  https://docs.docker.com/engine/network/drivers/bridge/
+- **The cgroup freezer.** `docker pause` freezes every process in the container's cgroup. Nothing runs, but memory and open files stay as they were, so `docker unpause` carries on exactly where it stopped. https://docs.docker.com/reference/cli/docker/container/pause/
+- **Why stdio and not a port.** With the isolated gateway mode, even the host can't connect to the container's address. `docker exec -i` gives a pipe into the container without opening any port. One long-lived stream is fast (under a millisecond per message); a new `docker exec` per call costs about 105 ms.
+- **Testing reachability safely.** To learn whether packets reach the host, connect to a closed port. "Connection refused" means they arrive and the host's kernel answered; "Network is unreachable" means there's no route. No test service has to be exposed.
+
+**What was run** (throwaway files in the scratchpad, not in the repo):
+1. A spike image: `node:24-slim` plus git, curl, ping and netcat, running as the `node` user.
+2. **Clone:** a container with `--cap-drop ALL --security-opt no-new-privileges --cpus 2 --memory 2g --pids-limit 512`. It shallow-fetched the pinned Rallly commit from the owner's fork.
+3. **Pause and resume:** a counter process and a file. Pause for 5 s, resume, compare the PID, the counter and the file. Timed `pause` and `unpause`.
+4. **Isolation:** two containers, each on its own internal network. Each tried the other (TCP and ping), the internet, GitHub, the metadata address and the host. Then the same again with the isolated gateway mode.
+5. **Worker to host:** a throwaway Worker under `wrangler dev` called a token-checked Node server on 127.0.0.1.
+6. **Host to agent:** 200 messages over one `docker exec -i` stream.
+
+**Results:**
+
+| Check | Result |
+| --- | --- |
+| Clone Rallly (52 MB, 1,947 files) | 6.2 s (start 0.5 s, clone 5.8 s); 7.0 s and 7.5 s in two more runs |
+| Pause and resume | About 50 ms each way; same PID (38); the counter froze, then carried on; the file kept; 7 MiB while paused |
+| Internal networks: each other, internet, metadata | All blocked |
+| Internal networks: the host | **Reachable**. Fixed with the isolated gateway mode, where everything outside the container's own subnet is unreachable |
+| Worker → 127.0.0.1 with a token | 200, 3–4 ms |
+| One `docker exec -i` stream | p50 0.68 ms, p99 1.22 ms |
+
+**Decisions (ADR 0016):**
+- Every workspace network is `--internal` with the isolated gateway mode, so Docker 28 or newer is required.
+- The host talks to the agent over `docker exec -i` JSON lines.
+- The internet is reached only through an egress proxy. A minimal one moves into step 4, because the clone needs GitHub.
+
+**Run and check it:** there's nothing to run in the repo yet. To repeat the key isolation check:
+```fish
+docker network create --internal -o com.docker.network.bridge.gateway_mode_ipv4=isolated fc-try
+docker run --rm --network fc-try --cap-drop ALL node:24-slim node -e "require('net').connect(80,'172.17.0.1').on('error',e=>console.log(e.code))"
+# ENETUNREACH: no route to the host
+docker network rm fc-try
+```
+
+**Gotchas:**
+- Without the gateway mode, an internal network looks isolated but still reaches your laptop's services (databases, dev servers). The isolation test in step 7 checks the host, not only other workspaces.
+- The spike's first host-reachability attempt started a test listener on all interfaces. Claude Code's safety check blocked it, rightly. The closed-port probe gives the same answer without exposing anything.
+
+**Docs:** ADR 0016; ARCHITECTURE ("Workspaces"); this write-up; the risk statuses above.
+
+**Risks:**
+- R2 closed.
+- R3: the gap found (host reachable) is closed by the gateway mode; the test comes in step 7.
+- R4 and R5: measured, well within limits.
+- R1, R6, R7 and R8 unchanged.
+
+**Commit:** `docs: phase 1d spike results; ADR 0016 local Docker workspaces`
+
+### Step 1d.2 — The workspace image and its limits (done by Claude)
+
+**Goal:** one image every workspace starts from, and one place that decides how its container is started and limited, proven from inside a real container.
+
+**Concepts:**
+- **Pinning by digest.** `node:24-slim` is a moving tag; `node:24-slim@sha256:…` is one exact image. Rebuilding gives the same base until we choose to move it. https://docs.docker.com/reference/cli/docker/image/pull/#pull-an-image-by-digest-immutable-identifier
+- **Content-addressed tags.** The image is tagged with a hash of its Dockerfile (`flowcanvas-workspace:b6722cf7e5d0`). Any change to the file means a new tag, so a stale image can never be mistaken for a current one, and there's no version number to forget to bump.
+- **Capabilities.** Linux splits root's powers into about 40 capabilities (changing file owners, binding low ports, tracing processes and so on). `--cap-drop ALL` removes all of them, and `no-new-privileges` stops a program from regaining them through setuid binaries. The test reads `CapEff` and `NoNewPrivs` from `/proc/self/status` to prove it. https://man7.org/linux/man-pages/man7/capabilities.7.html
+- **cgroup limits.** `--cpus`, `--memory` and `--pids-limit` become files in the container's cgroup (`cpu.max`, `memory.max`, `pids.max`). The kernel enforces them: a process over the memory limit is killed (exit 137), and a fork over the process limit fails. https://docs.kernel.org/admin-guide/cgroup-v2.html
+- **A read-only root.** With `--read-only`, the only writable places are the workspace volume (`/workspace`, home directory included) and a size-capped tmpfs `/tmp`. That shrinks what untrusted code can change, and it's why the disk limit only has to watch one volume.
+- **Unit tests vs Docker tests.** `pnpm test` must run anywhere, including CI's checks job, so it only tests the argument builder. Tests that need Docker are named `*.docker.test.ts` and run with `pnpm test:docker`.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `workspace/image/Dockerfile` | `node:24-slim` by digest; `git`, `ca-certificates`, `procps`; pnpm 12.15.0 with `--ignore-scripts`; `/workspace` owned by `node`, `HOME=/workspace/.home`; telemetry off (`DO_NOT_TRACK`, `NEXT_TELEMETRY_DISABLED`, npm notices); `USER node`; `CMD sleep infinity` (the agent comes in step 5) |
+| `workspace/image/.dockerignore` | `*`: the build needs nothing from the folder |
+| `workspace/image/src/spec.ts` | `imageTag()`; `WORKSPACE_LIMITS` (2 CPUs, 4 GiB with no swap, 1,024 processes, 1 GiB `/tmp`, 10 GiB disk); `networkCreateArgs()` (internal, isolated gateway); `runArgs()`. Names must match `^[a-z0-9][a-z0-9_.-]{0,62}$`, so none can be read as a flag. Limits must be positive and finite, the image must be ours, and the image goes last |
+| `workspace/image/src/docker.ts` | `imageExists()`, `buildImage()` (skips when the tag exists) |
+| `workspace/image/scripts/build-image.ts` | `pnpm workspace:image [--force]` |
+| `workspace/image/src/spec.test.ts` | 15 unit tests: the tag, the Dockerfile (digest, Node major from `.nvmrc`, pnpm from `packageManager`, user, telemetry), the network arguments, every flag, overrides, refusals |
+| `workspace/image/src/image.docker.test.ts` | 10 tests in real containers (below) |
+| `package.json`, `turbo.json` | `workspace:image` and `test:docker` |
+
+**What the Docker tests prove** (`pnpm test:docker`, 12 s once the image exists):
+- Node 24, pnpm 12.15.0 and git are installed.
+- The container runs as uid 1000, `CapEff` and `CapPrm` are 0, and `NoNewPrivs` is 1. There's no Docker socket inside.
+- `/etc` and `/usr` are read-only; `/workspace`, its home directory and `/tmp` are writable.
+- Files in the volume survive replacing the container.
+- `/tmp` stops at its size ("No space left on device").
+- Going over the memory limit kills the process (exit 137), and swap equals memory.
+- At the process limit, forks fail ("Cannot fork"), with at most the limit running.
+- `cpu.max` is `200000 100000` (2 CPUs).
+- No route to the host's Docker bridge, the internet or the metadata address (`ENETUNREACH`).
+
+**Run and check it:**
+```fish
+pnpm workspace:image          # "Built flowcanvas-workspace:<hash> in …" (about a minute the first time), then "up to date"
+pnpm test                     # includes the 15 unit tests; needs no Docker
+pnpm test:docker              # 10 passed; leaves no fc-test-* containers, volumes or networks
+docker run --rm (docker images -q flowcanvas-workspace | head -1) sh -c 'node -v; pnpm -v; id'
+```
+
+**Gotchas:**
+- **Zero-filled memory doesn't count.** The first memory test allocated a zeroed 256 MB buffer under a 64 MB limit, and it survived: Linux maps untouched zero pages lazily. Filling the buffer with 1s makes the pages real, and the kernel kills the process.
+- **At the process limit, the shell itself can't fork.** Counting with `pgrep` inside the same script fails, so the test counts from the host (`docker stats --format {{.PIDs}}`).
+- **Disk limits depend on the storage driver.** On this machine (overlayfs on btrfs), `--storage-opt size=200M` is accepted but a 400 MB write still succeeds, and local volumes have no quotas. The host measures the volume instead (step 8; upgrade-later 35).
+- **Apt packages aren't pinned to versions,** only the base image is. Rebuilding with `--force` may get newer git or procps from Debian's security updates, which is what we want for now.
+
+**Docs:** this write-up; ARCHITECTURE (parts table, "Workspaces", local commands); upgrade-later 35; STATUS; the risk statuses above.
+
+**Risks:**
+- R1: the lock-down is in one function and proven from inside a container.
+- R7: CPU, memory, process and `/tmp` limits are enforced; disk is measured, not capped (item 35).
+- The others are unchanged.
+
+**Commit:** `feat(workspace): workspace image, locked-down container settings and Docker tests`
+
+### Step 1d.3 — `WorkspaceProvider` and the lifecycle (done by Claude)
+
+**Goal:** the control plane knows each workspace's state and moves it safely between states. It does that through one interface that a Docker adapter (step 4) and, later, a cloud provider plug into. Tested with a fake provider, so no Docker is needed.
+
+**Concepts:**
+- **A state machine in the database.** The workspace's state lives in Postgres, and only a fixed set of moves is allowed (diagram in ARCHITECTURE, "Workspace lifecycle"). The page reads it, so it always shows the control plane's view, never a guess.
+- **Compare-and-set with a version number** (optimistic concurrency). Every change is `update … set state = $new, version = version + 1 where id = $id and version = $versionWeRead`. If two requests race, only one matches the version; the other gets no row back and answers 409. Neon's HTTP driver has no multi-statement transactions, so one-statement changes are how we stay correct. https://www.postgresql.org/docs/current/sql-update.html
+- **Calling something slow between two statements.** `open` first moves to `creating` (which claims the workspace), then calls the provider (seconds), then moves to `running`. A request that arrives in between sees `creating` and is told to wait. If the first request dies part-way, `creating` would stay forever, so after 5 minutes (`STUCK_MS`) opening again is allowed.
+- **Errors with a safe sentence.** A provider throws `ProviderError(kind, userMessage)`. The kind decides what happens to the state, and the message is what the page shows and the database stores. Anything else, such as a raw error that could quote a token or path, is replaced with a plain sentence. Only a redacted description goes to the log.
+- **Dependency injection for the provider.** `ApiDependencies.workspaceProvider(env)` decides what runs workspaces. Tests pass the fake; step 4 passes the Docker adapter when the local host is configured; staging passes nothing, and the API honestly says so.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `services/control-plane/migrations/0003_workspace_lifecycle.sql` | `provider`, `provider_ref`, `version`, `state_changed_at`, `running_since`, `last_active_at`, `failure` (≤ 300 characters); a check that `running_since` is set exactly while running; an index on running workspaces by last activity |
+| `src/workspaces/provider.ts` | `WorkspaceProvider` (`create`, `start`, `pause`, `resume`, `stop`; every method safe to call twice); `ProviderError` with kinds `unavailable`, `gone`, `refused`, `failed` |
+| `src/workspaces/lifecycle.ts` | `loadWorkspace`, `openWorkspace` (create, start again, or resume), `sleepWorkspace`, `resumeWorkspace`, `stopWorkspace`, `touchWorkspace`, `sleepIdleWorkspaces`; usage recorded on sleep and stop, split at month ends |
+| `src/workspaces/routes.ts` | `GET /api/projects/:id/workspace`; `POST …/open`, `/sleep`, `/resume`, `/stop` (same origin); statuses 409, 502 and 503 with the sentence to show; logs by IDs only |
+| `src/test/fake-provider.ts` | In-memory provider for tests: `failNext`, `holdNext` (to create races), `lose` |
+| `src/workspaces/lifecycle.test.ts` | 24 tests against real SQL (PGlite) with a test clock |
+| `src/workspaces/routes.test.ts` | 9 tests through the whole API |
+| `src/api/app.ts`, `src/projects/routes.ts`, `src/projects/projects.ts` | `workspaceProvider` dependency (none by default); routes mounted; `isUuid` shared |
+
+**What the tests prove:**
+- **Open:**
+  - first time: create with the repository
+  - already running: nothing more happens
+  - asleep: resume instead of creating another
+  - stopped: start again, same files
+  - stopped but lost by the provider: create again
+- **Failures:**
+  - a failed clone shows "failed" with its sentence, and can be tried again
+  - "host down" or "laptop busy" leaves the state as it was
+  - an unexpected error never reaches the page or the database (canary)
+- **Races:**
+  - a second open while the first is starting is refused, and only one create happens
+  - a crashed start can be taken over after 5 minutes
+  - two sleeps with the same stale view record usage only once
+- **Usage:**
+  - only running time counts (60 s, an hour asleep, then 30 s is 90 s)
+  - a run across midnight on 31 October is two records (60 s and 60 s)
+- **Sleep and resume:**
+  - resume when lost while asleep: "stopped", with a message saying the files are kept
+  - resume refused: stays asleep with the reason
+  - pause fails: stays running
+  - stop works from running or sleeping, and a lost one counts as stopped
+  - moves that make no sense are refused
+- **Idle:** asleep at exactly 10 idle minutes, counted from the last activity.
+- **Database:** the check constraint refuses "running" without a start time, and the reverse.
+- **Routes:**
+  - the whole cycle works
+  - with no provider, "Workspaces run locally for now"
+  - problems map to statuses
+  - checks for same origin, signed in and own project
+  - only the four actions exist
+  - the provider's name for the workspace never appears in a response
+  - log lines use IDs only
+
+**Run and check it:**
+```fish
+pnpm test                                                   # 395 tests; control-plane 171
+pnpm --filter @flowcanvas/control-plane exec vitest run src/workspaces   # the 33 new ones
+pnpm db:status                                              # dev branch: 0001–0003 applied
+```
+There's nothing to click yet. With no provider configured, `POST /api/projects/<id>/workspace/open` answers 503 "Workspaces run locally for now". Step 4 connects the local host.
+
+**Gotchas:**
+- **Hono's regex route parameters aren't anchored when mounted.** `/:action{open|sleep|resume|stop}` also matched `/open/extra` inside the full API (alone, it didn't). It's now four explicit routes, and the test checks `/open/extra` and `/xopen` are 404 with no provider call.
+- **Usage is written when a workspace stops running.** If the server died between the state change and the usage insert, that run would go uncounted (never overcounted). A very long active session is only counted when it sleeps; step 8 adds periodic records.
+- **Migration 0003 is on the dev branch only.** Staging's database gets it at phase close (after-merge checks).
+
+**Docs:** this write-up; ARCHITECTURE (data model, "Workspace lifecycle", the control plane's row); STATUS.
+
+**Risks:**
+- R8: the lifecycle is provider-neutral, so the cloud provider only adds an adapter.
+- The others are unchanged.
+- **Laptop:** 22 of 30 GiB available, 581 GB disk free, load 6.2 (tests running). Flowcanvas has one 559 MB image and no containers, volumes or networks.
+
+**Commit:** `feat(control-plane): workspace lifecycle behind WorkspaceProvider, migration 0003`
+
+### Step 1d.4 — The local workspace host: opening a project for real (done by Claude)
+
+**Goal:** opening a project starts its own container and clones its repository through the egress proxy, driven by the control plane through the provider interface. Plus the two commands for the owner's laptop (`pnpm workspace:resources`, `pnpm workspace:clean`) and the 2-workspace cap.
+
+**Concepts:**
+- **A loopback service with a token.** The host listens on 127.0.0.1 only, so nothing else on the network can reach it. Every request needs `Authorization: Bearer <WORKSPACE_HOST_TOKEN>`, compared as SHA-256 digests with `timingSafeEqual`, so timing reveals nothing about the token. https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b
+- **Why the host also refuses browsers.** A web page you visit can send requests to `http://127.0.0.1:8790`. It can't read the answers (CORS), but a POST could still act. Browsers always add an `Origin` header to such requests, and a "DNS rebinding" page arrives with its own Host name. Refusing both, plus the token, closes that door. https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin
+- **An HTTP CONNECT proxy.** For HTTPS, git and curl ask the proxy to `CONNECT github.com:443`, then speak TLS straight through it. The proxy sees only the host name, never the content. It checks the name against the allowlist, resolves it itself, and connects to an address it checked, so a DNS answer pointing at `10.x` or `127.0.0.1` is refused (DNS rebinding again). https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/CONNECT
+- **`net.BlockList`.** Node's built-in list of address ranges. One surprise: it matches every IPv4 address against the IPv4-mapped IPv6 range `::ffff:0:0/96`, so that range blocked the whole IPv4 internet. IPv4-mapped addresses are now refused by a separate check. https://nodejs.org/api/net.html#class-netblocklist
+- **Node's type stripping.** The proxy runs inside its own container from the read-only mounted `proxy.ts`. Node 24 runs TypeScript directly by removing the types, so the file can't use TypeScript-only syntax (enums, parameter properties) or import our other files. https://nodejs.org/api/typescript.html
+- **A shared protocol module.** `workspace/host/src/protocol.ts` holds the paths, error kinds and limits. The host and the control plane's adapter both import it, so they can't drift apart. One Docker test runs the real host process and drives it through the real adapter.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `workspace/host/src/protocol.ts` | `v1` paths, error kinds, `CreateRequest`/`CreateResponse`, `MESSAGE_MAX` (300). Built to `dist` for the control plane |
+| `workspace/host/src/server.ts` | The HTTP API: health, create, the four actions. Token, Origin and Host checks; 4 KB body limit; errors as `{ error: { kind, message } }`; unexpected errors become a plain sentence |
+| `workspace/host/src/workspaces.ts` | `WorkspaceHost`: create (proxy, network, volume, container, clone), start, pause, resume, stop. One operation at a time per workspace. The 2-running cap. Public GitHub addresses only for now. The clone is https only, `--depth 1`, with a 120 s limit, and its failures are logged by exit code only |
+| `workspace/host/src/egress/proxy.ts` | The egress proxy: CONNECT to 443 on `github.com` and `codeload.github.com` only; public addresses only; plain HTTP refused |
+| `workspace/host/src/docker-cli.ts`, `errors.ts` | Running `docker` with argument arrays; "Docker isn't running" as `unavailable`; `HostError` and its statuses |
+| `workspace/host/src/resources.ts`, `scripts/resources.ts` | The laptop's figures (MemAvailable, free disk on Docker's root, load, cores, Flowcanvas's running and asleep workspaces, images and volumes) and `assess()` against the budget |
+| `workspace/host/src/clean.ts`, `scripts/clean.ts` | `planClean()`: by default test leftovers and old images; `--all --yes` everything of ours. Never anything else |
+| `workspace/host/src/main.ts` | Started by `pnpm dev`. Without a token, or without Docker 28+, it says what to fix and exits quietly, so the rest of `pnpm dev` still runs |
+| `workspace/image/src/spec.ts` | Now also labels, the proxy variables (`HTTPS_PROXY`, `GIT_TERMINAL_PROMPT=0`), `egressNetworkCreateArgs()`, `egressRunArgs()` (locked down, 256 MB, IP forwarding off) |
+| `workspace/image/Dockerfile` | `curl` added (new tag `c728f54c03be`) |
+| `services/control-plane/src/workspaces/local-host.ts` | The `docker-local` provider: talks only to loopback URLs; 180 s for create, 30 s for the rest; maps "can't connect" to "The workspace host isn't running…" and 401 to "Add WORKSPACE_HOST_TOKEN…"; passes only known kinds and bounded sentences |
+| `services/control-plane/src/api/app.ts`, `src/auth/guards.ts`, `package.json` | The provider comes from the bindings. `pnpm dev` passes `WORKSPACE_HOST_URL=http://127.0.0.1:8790`; staging has none |
+| `.dev.vars.example` | `WORKSPACE_HOST_TOKEN` and how to make one |
+| `package.json` | `workspace:clean`, `workspace:resources`; every `workspace:*` script uses `run` (see Gotchas) |
+
+**Tests:**
+- **Host unit tests (41):**
+  - `workspaces.test.ts` (15, against a fake Docker): the create sequence and the exact clone command; idempotent create; GitHub-only refusals before any Docker call; the cap; clean-up after a failed clone; the clone's timeout; replacing a changed proxy and reattaching networks; every action's states; "gone" answers; foreign names refused; one operation at a time
+  - `server.test.ts` (11): token, Origin, Host, routes, body limits, error mapping, the token never logged
+  - `egress/proxy.test.ts` (8): public and special addresses, targets, refusals without resolving, DNS rebinding, plain HTTP
+  - `resources.test.ts` (5), `clean.test.ts` (3)
+- **Control-plane adapter (12):** loopback only, the missing token, paths and headers, unreachable host, error pass-through and refusals, the token never in errors.
+- **Docker tests (`pnpm test:docker`, 23 in total):**
+  - workspace-image (10)
+  - workspace-host (9): **Rallly opens in 8.9 s (clone 7.0 s), and the test fails above 60 s**; opening again keeps the clone; through the proxy only GitHub works, example.com gets 403, going around the proxy has no route, plain HTTP gets 403; the proxy's IP forwarding is 0; pause and resume keep a running process; stop and start keep the files; the cap refuses a third; no route to another workspace, the host, the home router or the metadata address; the log has the clone time and no addresses
+  - control-plane (4): the real host process driven through the adapter (create, sleep, resume, stop, start), its refusals passed through, a wrong token explained, the token never printed
+
+**Run and check it:**
+```fish
+grep -c '^WORKSPACE_HOST_TOKEN=' .dev.vars      # 1 (Claude added it; to make your own, see .dev.vars.example)
+pnpm test                                       # 455 tests, no Docker needed
+pnpm test:docker                                # 23 Docker tests; needs the internet; prints "Rallly: opened in … ms"
+pnpm workspace:resources                        # five "ok" lines with your laptop's figures
+pnpm workspace:clean                            # removes test leftovers and old images; "Nothing to remove." when clean
+pnpm dev                                        # the log shows "[workspace-host] Listening on http://127.0.0.1:8790"
+```
+There's still no button: the page gets **Open** in step 9. Signed in locally, `POST /api/projects/<id>/workspace/open` now opens a real workspace.
+
+**Gotchas:**
+- **pnpm 12 has a built-in `clean` command.** The first version of the script was called `clean`, and `pnpm --filter … clean` ran pnpm's own command, which deletes every `node_modules` folder. No code or data was lost: `pnpm install --frozen-lockfile` restored them from the lockfile in a second. The script is now `docker-clean`, and every root `workspace:*` script says `run` explicitly, so a script name can never be mistaken for a pnpm command.
+- **Killing `pnpm` doesn't kill what it started.** The first control-plane Docker test stopped only `pnpm`, and left `tsx` and the host running. The test now starts the host in its own process group (`detached`) and stops the whole group. (A `pkill -f` during the live check also matched the shell running it; processes are now stopped by PID.)
+- **A well-formed error isn't always the right one to show.** With a wrong token, the host's answer was "Wrong or missing token." The adapter now turns any 401 into the actionable "Add WORKSPACE_HOST_TOKEN to .dev.vars…". The end-to-end Docker test caught it; the unit test hadn't, because its fake answered differently.
+- **Docker containers have IP forwarding on.** The proxy is attached to every workspace network, so it runs with `net.ipv4.ip_forward=0` (and IPv6 forwarding off), and a test checks it.
+
+**Docs:** this write-up; ADR 0016 (browser refusals, the shared proxy's forwarding); ARCHITECTURE (parts, "Workspaces", local commands); the laptop table; STATUS; `.dev.vars.example`; the risk statuses above.
+
+**Risks:**
+- R5 closed: 8.9 s.
+- R3: isolation checked again through the real host (the full test comes in step 7).
+- R6: the host's and the adapter's checks are in place.
+- R9: the cap and the two commands exist.
+- R1, R4, R7 and R8 unchanged.
+- **Laptop:** 24.2 of 30.8 GiB memory available, 580.7 GiB disk free, load 6.5 during tests. Flowcanvas uses 0.5 GiB (one image); no containers, networks or volumes left.
+
+**Commit:** `feat(workspace): local workspace host, egress proxy and the Docker provider`
+
+### Step 1d.5 — The file and process API (done by Claude)
+
+**Goal:** the control plane can list, read and write a project's files and run commands in its workspace. It does this through a small agent inside the workspace, over a typed, versioned protocol, for the project's owner only.
+
+**Concepts:**
+- **An agent inside the sandbox.** The control plane can't touch files in a container directly, and it shouldn't. The agent is a small Node program running *inside* the workspace, as the workspace's own user, so it can only do what that user can. Everything it answers is checked again outside, because code in the workspace could tamper with it.
+- **JSON lines over stdio.** Each message is one line of JSON: `{ "v": 1, "id": 7, "body": {...} }`. The `id` matches each answer to its question, so a slow command doesn't block a quick read, and `v` rejects a mismatched agent. It's the same idea as the Language Server Protocol, which comes later. https://jsonlines.org/
+- **Delivering code without a mount.** The workspace's locked-down settings allow only the workspace volume and `/tmp`. The host copies the built agent into `/tmp` through `docker exec -i … cat` (content on stdin, never on a command line) and starts it. `/tmp` is a tmpfs, so a restarted container gets a fresh copy, which is always the current build.
+- **Path containment.** `resolve(root, path)` and a prefix check catch `../`. Links need more: `realpath` follows them, and the result is checked again. Writes use `O_NOFOLLOW`, so even a link created after the checks can't redirect them. https://man7.org/linux/man-pages/man2/open.2.html
+- **No shell.** Commands are argument lists (`["git", "status"]`) passed to `spawn` directly, so `$(…)`, `;` and backticks mean nothing. Each command gets its own process group, so a time-out stops everything it started (`kill(-pid)`).
+- **Secrets stay out (CLAUDE.md rule 5).** `.env`, `.env.*` and `.dev.vars*` (except `.example`, `.sample`, `.template`) are listed with `secret: true`, and can never be read or written through the API, even through a link. A command in the terminal could still print one; that's the person's own action in their own workspace, and it's never logged.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `workspace/agent/src/protocol.ts` | `AGENT_PROTOCOL` 1, `PROJECT_ROOT`, `LIMITS` (1 MiB files, 5,000 entries, commands up to 2 minutes with 1 MiB of output each); `AgentRequest` (`hello`, `list`, `read`, `write`, `exec`) and results; error codes; `parseAgentRequest` (for untrusted requests) and `isAgentResponse` (for untrusted answers); `isSecretFile`. No imports, so the Worker can bundle it |
+| `workspace/agent/src/agent.ts` | `createAgent({ root })`: the five operations with the containment rules above; `answer()`; `serve()` over line streams |
+| `workspace/agent/src/main.ts`, `files.ts` | The entry point inside the workspace; the built files the host copies in |
+| `workspace/host/src/agents.ts` | `dockerAgent()` (copy in, `docker exec -i`); `Agents`: one connection per workspace, a hello and version check, ids, per-request time limits (the command's own plus 15 s), reconnect after the agent stops, fail waiting requests when it does |
+| `workspace/host/src/workspaces.ts`, `server.ts`, `protocol.ts`, `docker-cli.ts` | `WorkspaceHost.agent()` (running workspaces only; "asleep" and "not running" refused); stop ends the agent; `POST /v1/workspaces/:ref/agent` (checked with `parseAgentRequest`, 2 MiB body); `input` for docker commands |
+| `services/control-plane/src/workspaces/file-routes.ts` | `GET /files`, `GET /file`, `PUT /file`, `POST /exec` under `/api/projects/:id/workspace`. Owner only, running only, same origin for changes. Each counts as activity. Statuses per error code. Logs the operation and outcome only |
+| `services/control-plane/src/workspaces/provider.ts`, `local-host.ts` | `WorkspaceProvider.agent()`; the adapter posts to the host and checks the answer; `WORKSPACES_UNAVAILABLE` moved here to avoid a circular import |
+
+**Tests:**
+- **Agent (18, against a temporary folder):**
+  - list order and secret flags
+  - text and binary reads
+  - `.env` refused, even through a link (canary)
+  - `..`, absolute paths and links out refused
+  - folders and big files refused
+  - writes with folders made as needed and base64
+  - writes refused for `.env`, outside the project and through a link
+  - the size limits, including 3-byte characters
+  - commands: exit code, cwd, no shell, a time-out that kills child processes, the output cap, a missing program
+  - malformed requests, hello, the line protocol and version check
+- **Host (11 new):**
+  - the connections run against the real built agent: reuse, side-by-side requests, reconnect, waiting requests failed, a lying agent refused
+  - `WorkspaceHost.agent()` states
+  - the route: a checked request, a malformed one answered without reaching the agent, the 1 MiB limit
+- **Control plane (15 new):**
+  - the four routes and the requests they build
+  - error codes mapped to statuses
+  - checked before forwarding
+  - counted as activity
+  - logs without paths, content or commands (canary)
+  - running, owner and origin checks
+  - the adapter's answer check
+- **Docker (4 new, 27 in total):**
+  - against the real Rallly clone: list, read and write (owned by uid 1000); `.env` refused (canary); a link to `/etc/passwd` and `../.home` refused
+  - commands: `node -v`, `id -u` and `pwd` in a subfolder, and `git ls-remote` through the proxy
+  - after a stop and start, the agent is copied in again and reads the note back
+  - through the real host process: an empty workspace says "no project files yet"
+
+**Run and check it:**
+```fish
+pnpm test               # 492 tests, no Docker needed
+pnpm test:docker        # 27 Docker tests; Rallly opens in about 8.4 s, then the agent's checks run against it
+```
+Signed in locally, with a project open, the page itself can't use these yet (no UI until step 9 and the editor in phase 3). The routes answer `/api/projects/<id>/workspace/files` and so on.
+
+**Gotchas:**
+- **`read` with no path read the project folder.** A missing `path` defaulted to `''` for both list and read. `read` now requires one, and `list` still defaults to the top of the project. The route test caught it.
+- **A path through a file.** Writing `package.json/x` first failed with a generic error. The nearest existing "folder" is now checked to really be a folder ("Part of that path is a file.").
+- **Circular imports.** The file routes needed a constant from `routes.ts`, which mounts them. It worked only because the constant was read at request time, so it moved to `provider.ts`.
+- **A step 4 test edit hadn't applied.** The wrong-token Docker test should have checked the actionable message, but only its import had changed. That left a lint error in the step 4 commit (CI runs only on PRs and `main`, so nothing failed). Both are fixed. From now on, the full `pnpm lint` runs as the last thing before each commit.
+
+**Docs:** this write-up; ARCHITECTURE (parts, "Files and commands"); ADR 0016 (how the agent is delivered); STATUS.
+
+**Risks:**
+- R1 and R7: the agent runs as the workspace user and is treated as untrusted; commands have time and output limits.
+- R6: the routes are owner only and same origin, the host checks the request again, and the token is unchanged.
+- The others are unchanged.
+- **Laptop:** all five checks ok (24.3 GiB memory available, 580.8 GiB disk free, load 6.4 during tests). Flowcanvas uses 0.5 GiB; no containers or agent processes left behind.
+
+**Commit:** `feat(workspace): workspace agent with the file and process API`
+
+### Phase 1d so far — run and check it (after step 9)
+
+**1. Automated tests** (no sign-in needed):
+```fish
+pnpm install
+pnpm test                 # 597 tests, no Docker needed (the same as CI's checks); about 75 s
+pnpm test:e2e             # 10 recorded walkthroughs: the phase's Try it, the terminal under the production
+                          # CSP, the demo project, sleep and resume, and staging's "Workspaces run locally"
+pnpm test:docker          # 42 tests against real containers; needs Docker 28+ and the internet.
+                          # The first run builds the workspace image (about a minute).
+                          # Look for "Rallly: opened in … ms" in the output.
+pnpm workspace:resources  # your laptop against the budget: five "ok" lines
+pnpm workspace:clean      # removes test leftovers and old images ("Nothing to remove." when clean)
+```
+
+**2. The real thing, with the buttons (step 9).**
+1. Restart `pnpm dev` (the host, the Worker's script and the page all changed). The dev database already has migration 0004.
+2. Open http://localhost:5173 and sign in. Under **Projects**, click **Open demo project**.
+3. **Rallly (demo)** appears first, with "https://github.com/ArmaanAhuja-7777/rallly · pinned at 8e67a21":
+   - The chip says **Starting…**, and a card says "Cloning github.com/ArmaanAhuja-7777/rallly at 8e67a21. Usually under 15 seconds." The first time ever, building the image adds about a minute.
+   - Within about 10 s the chip says **Running · 2 cores**, with **Sleep**, **Stop** and **Terminal**.
+4. **Terminal** opens a shell. Try `git log --oneline -1`: it's `8e67a21`, not the fork's newer head.
+5. **Sleep** shows the asleep card: since when, the machine, the resume time, and no claim that it was idle. **Resume** brings it back.
+6. Leave it running and don't type for 11 minutes (the page checks every 30 s). It goes to sleep by itself, and the card says "Put to sleep after 10 minutes without activity."
+7. **Stop**, then **Open**: it starts again with its files ("Starting it again with its files").
+
+**3. The file and process API, from the console.** These have no buttons yet (the editor is phase 3). In the browser's developer console, signed in, on the app's own page. The browser sends your session cookie and the `Origin` header itself, so the API's checks apply exactly as they will for the page.
+1. Start everything: `pnpm dev` (restart it if it was already running before step 6: Vite's WebSocket forwarding is new). The terminal should show `[workspace-host] Listening on http://127.0.0.1:8790 (Docker …)`. If it says `Not started: …`, it tells you what to fix: the token, Docker, or another `pnpm dev` already running.
+2. Open http://localhost:5173, sign in, and create a project named `Rallly` with the repository `https://github.com/ArmaanAhuja-7777/rallly`.
+3. Open the developer console (F12 → Console) and paste:
+   ```js
+   const { projects } = await (await fetch('/api/projects')).json();
+   const id = projects.find((p) => p.name === 'Rallly').id;
+   const ws = (path, method = 'GET', body) =>
+     fetch(`/api/projects/${id}/workspace${path}`, {
+       method,
+       headers: body ? { 'content-type': 'application/json' } : {},
+       body: body && JSON.stringify(body),
+     }).then(async (r) => ({ status: r.status, ...(await r.json()) }));
+   ```
+4. Then try these one at a time, and compare with what you should see:
+
+   | Paste | You should see |
+   | --- | --- |
+   | `await ws('/open', 'POST')` | after about 10 s, `workspace: { state: 'running' }` (the first time ever, about a minute more for the image) |
+   | `await ws('/files')` | Rallly's top-level folders and files, folders first |
+   | `await ws('/file?path=package.json')` | the file's `content`, `encoding: 'utf8'` |
+   | `await ws('/exec', 'POST', { command: ['git', 'log', '--oneline', '-3'] })` | `exitCode: 0` and three commits in `stdout` |
+   | `await ws('/exec', 'POST', { command: ['sh', '-c', 'echo SECRET=1 > .env'] })` | `exitCode: 0` (makes a test `.env`) |
+   | `await ws('/file?path=.env')` | `status: 403`, "Secrets live in the project's vault…" (never the content) |
+   | `await ws('/file?path=../.home/.bashrc')` | `status: 403`, "That path is outside the project." |
+   | Reload the page | Rallly says **Workspace running** and has a **Terminal** button (from step 6). Click it: "Connected to the workspace.", then a shell in `/workspace/project`. Try `ls`, `git log --oneline -3`, `node -v`; `exit` ends it, and **Start a new terminal** opens another |
+   | In the terminal: `curl -sS https://example.com`, then `getent hosts github.com; echo $?` | `CONNECT tunnel failed, response 403`, then `2`: only the allowlisted hosts, and no DNS out (step 7 has more to try, including `pnpm install`) |
+   | `await ws('/sleep', 'POST')` | `state: 'sleeping'`; then `await ws('/files')` gives 409 "Open the workspace first." |
+   | `await ws('/resume', 'POST')` | `state: 'running'` again, in well under a second |
+   | `await ws('/stop', 'POST')` | `state: 'stopped'`; `await ws('/open', 'POST')` starts it again with the files kept |
+   | `await (await fetch('/api/usage')).json()` | `workspaceSeconds` above 0, and rising while a workspace runs (live, step 8) |
+   | Open it (`await ws('/open', 'POST')`), type in its terminal, then leave it alone for 11 minutes and reload | **Workspace sleeping** (`docker ps --filter label=org.flowcanvas.workspace=1` says `Paused`). The tick runs once a minute, so it sleeps 10 to 11 minutes after your last typing. `await ws('/resume', 'POST')` brings it back with the terminal's files and processes as they were. Usage counts the time up to the sleep, not the time asleep |
+5. In a terminal, `docker ps --filter label=org.flowcanvas.workspace=1` shows `fc-ws-<id>` and `fc-egress`, and `pnpm workspace:resources` counts it.
+6. When you're done: `await ws('/stop', 'POST')`. `pnpm workspace:clean --all` lists everything of Flowcanvas's on the laptop; `--all --yes` removes it, **including the workspace's files**.
+
+**If something's off:**
+- `503 "The workspace host isn't running…"`: `pnpm dev` isn't running, or its host didn't start; its log line says why.
+- `503 "Add WORKSPACE_HOST_TOKEN…"`: the line is missing from `.dev.vars`, or `pnpm dev` was started before it was added. Restart `pnpm dev`.
+- `503 "Workspaces run locally for now"`: you're on staging; that's expected until a cloud provider is connected.
+- `503 "2 workspaces are already running…"`: put one to sleep or stop it (the laptop budget).
+
+### Step 1d.6 — The terminal (ADR 0017)
+
+Three checks came first (details in ADR 0017):
+1. Docker's Engine API gives a real pty that can be resized, with no native modules.
+2. A Worker under `wrangler dev` can relay a WebSocket to the host, provided both sides set `binaryType = 'arraybuffer'` (otherwise binary frames arrive as `Blob`s and go on as the text `[object Blob]`).
+3. xterm.js 6 injects `<style>` elements, which our CSP blocks. They're moved into constructed stylesheets instead of loosening the CSP.
+
+The Durable Object gateway is deferred to the cloud provider (upgrade-later 36): locally, the host already holds the session.
+
+#### 6.1 — Terminal sessions on the host (done by Claude)
+
+**Goal:** the workspace host can open a shell on a pty inside a running workspace, and carry it over a WebSocket with the same checks as its other routes.
+
+**Concepts:**
+- **A pty (pseudo-terminal)** is what makes a program believe it's talking to a terminal: line editing, colours, Ctrl-C, full-screen programs and a size. Docker can create one for an exec (`Tty: true`). The Engine API then switches the HTTP connection to a raw two-way stream, which is the terminal. https://docs.docker.com/reference/api/engine/version/v1.47/#tag/Exec
+- **The Docker Engine API over its Unix socket.** It's the same API the `docker` CLI uses. The CLI can't hand us a pty without a real terminal on its own side, so the host makes these few calls itself (`src/engine.ts`). Only checked names and fixed bodies go in.
+- **The WebSocket upgrade.** A WebSocket starts as an HTTP request with `Upgrade: websocket`. The host checks it like any other request (no `Origin`, the right `Host`, the token) *before* accepting it. A refusal is a plain HTTP answer with the usual JSON error. https://github.com/websockets/ws#multiple-servers-sharing-a-single-https-server
+- **The wire format.** Binary frames are terminal bytes; text frames are JSON control messages. Only `resize` goes in, and `exit` and `error` come out. Anything else is answered with an error and never typed into the shell.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `workspace/host/src/engine.ts` | The Engine API client: JSON calls and the upgraded stream, over `DOCKER_HOST` (when `unix://`) or `/var/run/docker.sock` |
+| `workspace/host/src/terminal.ts` | `openTerminal()`: `bash -l` as uid 1000, `TERM=xterm-256color`, the starting size, resize, exit code. `relayTerminal()`: bytes both ways in frames of at most 64 KiB, control messages, the exit message, hanging up the shell when the page goes away. `checkSize()` (2–500 columns, 2–200 rows) and `parseControl()` |
+| `workspace/host/src/workspaces.ts` | `WorkspaceHost.terminal()`: running only; works in `/workspace/project` (or `/workspace` without a repository); at most 4 per workspace |
+| `workspace/host/src/server.ts` | The upgrade handler for `GET /v1/workspaces/:ref/terminal?cols=&rows=` (`ws`, 64 KiB frames), sharing `refusal()` with the other routes |
+| `workspace/host/src/protocol.ts` | `PATHS.terminal()` |
+| `pnpm-workspace.yaml`, `workspace/host/package.json` | `ws` 8.21.0 (MIT, already in the tree through Wrangler) and `@types/ws` 8.18.2 |
+
+**Tests:**
+- **Server (7 new):** over real WebSockets, against an echoing fake shell: bytes both ways, resize, the exit code, unknown control messages answered and never typed, the shell hung up when the page closes, the caller checked before accepting (token, Origin, size, path), the host's refusal passed on.
+- **Host (4 new):** the exec settings (pty, bash, user, project folder, size), `/workspace` without a project, the cap of 4 and its release, asleep, stopped and foreign refused.
+- **Docker (1 new, 28 in total):** a real shell in the Rallly workspace through the real server: `answer-42`, `node`, `/workspace/project`, a resize seen by `stty size` (`40 120`), and `exit 3` reported as code 3.
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/workspace-host test     # 61 tests
+pnpm test:docker                                  # 28; includes the real shell
+```
+Nothing to click until 6.3.
+
+**Gotchas:**
+- **The fake Docker's `test -d` knew only exact paths,** so a cloned project didn't look like a folder. It now treats a path with anything under it as a folder.
+- **Closing a terminal's stream is how a shell hangs up.** No separate kill is needed. Docker closes the pty, and bash gets `SIGHUP`.
+
+**Risks:**
+- R1 and R7: the shell runs as the workspace user inside the same limits; 4 at most per workspace.
+- R6: the WebSocket gets the same token, Origin and Host checks as everything else.
+- **Laptop:** unchanged (all ok); no containers left after the tests.
+
+**Commit:** `feat(workspace): terminal sessions on the host through the Docker Engine API`
+
+#### 6.2 — The Worker's WebSocket relay (done by Claude)
+
+**Goal:** the browser opens `wss://<app>/api/projects/:id/workspace/terminal`. The Worker checks who's asking, opens the terminal on the workspace host, and carries frames both ways.
+
+**Concepts:**
+- **WebSockets in Workers.** A Worker accepts a browser's WebSocket by creating a `WebSocketPair`. It returns one end in a `101 Switching Protocols` response and keeps the other. It opens a WebSocket *out* with an ordinary `fetch` and an `Upgrade: websocket` header, and the response's `webSocket` is the connection. Both ends need `accept()`. https://developers.cloudflare.com/workers/runtime-apis/websockets/
+- **`binaryType`.** With our compatibility date, a Worker receives binary frames as `Blob`s unless `binaryType` is `'arraybuffer'`. Sent on as is, a Blob becomes the text `[object Blob]`. The relay sets it on both ends, and a test checks it.
+- **Cross-site WebSocket hijacking.** WebSockets aren't covered by CORS: any site can open one to us, and the browser attaches the visitor's cookies. The only defence is checking `Origin` before accepting, which `requireSameOrigin` does here, exactly as for other changes. https://owasp.org/www-community/attacks/Cross-site_WebSocket_hijacking
+- **The relay only trusts one direction.** From the browser it passes byte frames of at most 64 KiB, and resize messages it re-checks and re-writes. Anything else gets an error message back and goes nowhere. From the workspace, everything comes back as it is.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `services/control-plane/src/workspaces/terminal-routes.ts` | `GET /api/projects/:id/workspace/terminal?cols=&rows=`: same origin, a WebSocket, a valid size, the owner, running, then `provider.terminal()`, `acceptWebSocket()` and `relay()`. Typing counts as activity at most every 30 s. Logs who opened it, never what's typed |
+| `services/control-plane/src/workspaces/provider.ts` | `terminal()` and the minimal `TerminalSocket` type, which both a Workers WebSocket and a test fake satisfy |
+| `services/control-plane/src/workspaces/local-host.ts` | The adapter's `terminal()`: an upgrade `fetch` with the token; the host's refusal passed on |
+| `services/control-plane/src/workspaces/routes.ts`, `src/api/app.ts` | The route mounted; `acceptWebSocket` injectable (`WebSocketPair` exists only in Workers) |
+| `workspace/host/src/protocol.ts` | `TERMINAL_LIMITS`, `checkSize`, `parseControl` moved here, so the Worker and the host apply the same rules |
+| `apps/web/vite.config.ts` | `ws: true`, so `pnpm dev` forwards the WebSocket to the Worker |
+| `services/control-plane/src/test/fake-provider.ts` | `FakeSocket`, and `terminal()` on the fake provider |
+| `services/control-plane/src/test/terminal-worker.ts`, `terminal-worker.wrangler.jsonc` | A test-only Worker with its own config, never deployed: the real relay and adapter in workerd, without sign-in |
+
+**Tests:**
+- **Relay (10, fake sockets):**
+  - connects at the right size, with both sides accepted and set to `arraybuffer`
+  - bytes both ways, and resizes re-checked and re-written
+  - nothing else from the browser goes on: plain text, bad sizes, other types, padded messages, frames over 64 KiB, non-frames
+  - either side closing closes both
+  - typing counts as activity at most every 30 s
+  - logs never include what's typed or shown (canary)
+  - the workspace's refusal is passed on
+  - refused before any WebSocket: not running, wrong origin, no session, not the owner, not a WebSocket, a bad size
+- **Adapter (2):** the upgrade request (path, size, token); refusals and an unreachable host.
+- **Docker (1 new, 29 in total):** the **real relay in workerd** (`wrangler dev` with the test Worker), against the real host and a real container: `relayed-42`, a resize seen by `stty` (`43 132`), and `exit 5` reported as code 5.
+
+**Run and check it:**
+```fish
+pnpm test          # 513 tests
+pnpm test:docker   # 29; includes the relay in workerd
+```
+The page part (6.3) comes next; then the terminal can be clicked.
+
+**Gotchas:**
+- **`wrangler dev` finds the nearest `wrangler.jsonc` by itself.** Started inside `services/control-plane` with a script path, it still used the repository's config. That config serves the app's files for everything outside `/api/*`, so the test's request got `index.html` and never reached the Worker. The test Worker has its own config now.
+- **Editing control-plane files reloads a running `pnpm dev`.** Wrangler watches them and restarts workerd (seen at 22:03, during this step). That's expected, and it doesn't affect the workspace host or Vite.
+
+**Risks:**
+- R6: the WebSocket is checked (origin, session, owner, running) before it's accepted.
+- R1 and R7: only bounded bytes and checked resizes reach the shell.
+- **Laptop:** unchanged; no test containers or processes left.
+
+**Commit:** `feat(control-plane): terminal WebSocket relay to the workspace host`
+
+#### 6.3 — The terminal on the page (done by Claude)
+
+**Goal:** a project whose workspace is running has a **Terminal** button. It opens a real shell in the page, styled by the design tokens, under the production CSP with no violations.
+
+**Concepts:**
+- **xterm.js** is the terminal emulator VS Code uses. It draws a terminal from the bytes it's given, and hands back what's typed (`onData`) and size changes (`onResize`). The **fit** add-on works out how many columns and rows fit the box. https://xtermjs.org/docs/
+- **Why xterm and our CSP clashed, and the fix.** xterm puts some of its CSS in `<style>` elements, and `style-src 'self'` blocks those, with a violation for each. Loosening the CSP wasn't an option (ADR 0017). Instead:
+  1. xterm is given a stand-in `document` (`documentOverride`) whose `createElement('style')` returns an inert `<template>`.
+  2. A `MutationObserver` copies the text xterm writes into each one into a **constructed stylesheet** (`document.adoptedStyleSheets`), which CSP doesn't block. That's safe: only our scripts can make one, and `script-src 'self'` already limits scripts to ours.
+  3. **xterm 6.0.0 has a bug:** its scroll area always uses the real `document` (operator precedence in `this._document ?? typeof window … ? window.document : null`). So the real document's `createElement` is swapped for the duration of the one synchronous `terminal.open()` call, then put back.
+
+  https://developer.mozilla.org/en-US/docs/Web/API/Document/adoptedStyleSheets
+- **Colours from the tokens.** xterm needs colour values, not CSS variables, so `terminalTheme()` reads the tokens' computed values (background `surface/canvas`, text `text/primary`, selection `accent/tint`, ANSI red, green, yellow, magenta and blue from the state and accent text colours). The font comes from the mono text style.
+- **CSS containment.** xterm gives its screen a fixed pixel width. Without `contain: inline-size`, that width propped its box open, so the terminal could never get narrower, and the page grew a horizontal scroll. https://developer.mozilla.org/en-US/docs/Web/CSS/contain
+- **Loading on demand.** xterm is about 85 KB gzipped, so `React.lazy` loads it only when someone opens a terminal. The main bundle stays at 133 KB.
+- **Faking a WebSocket in Playwright.** `page.routeWebSocket` answers the page's WebSocket inside the test, the same way `page.route` answers HTTP, so the walkthrough can run on any deployed copy. https://playwright.dev/docs/api/class-websocketroute
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `apps/web/src/terminal/WorkspaceTerminal.tsx` | The terminal: xterm with the tokens' theme and font, the fit add-on and a `ResizeObserver`; the WebSocket (`terminalUrl`: `wss` on https, the page's own origin); bytes out as binary frames, resizes as JSON; output written; exit and notices shown as sentences (`role="status"`); **Start a new terminal**; everything closed on unmount |
+| `apps/web/src/terminal/adopt-styles.ts` | `styleFreeDocument()`, `withoutInlineStyles()`, `adoptInjectedStyles()` (above) |
+| `apps/web/src/terminal/theme.ts` | `terminalTheme()`, `terminalFont()` from the tokens; without a token, xterm keeps its own value |
+| `apps/web/src/terminal/WorkspaceTerminal.module.css` | Tokens only; `contain: inline-size`; the focus ring around the screen while typing |
+| `apps/web/src/projects/Projects.tsx` | **Terminal** / **Close terminal** next to **Secrets**, for running workspaces; the terminal loaded with `React.lazy` |
+| `apps/web/vite.config.ts` | `vite preview` sends the production headers from `public/_headers` (the CSP and the rest), so local walkthroughs match Cloudflare |
+| `apps/web/package.json`, `pnpm-workspace.yaml` | `@xterm/xterm` 6.0.0 and `@xterm/addon-fit` 0.11.0 (MIT, December 2025) |
+| `e2e/try-it/phase-1d.spec.ts` | The walkthrough (below) |
+
+**Tests:**
+- **Component (8):**
+  - the address (`ws`/`wss`, same origin, size)
+  - `arraybuffer` frames; the status line
+  - typing sent as bytes and resizes as JSON; output written
+  - the exit code shown, and a new terminal started
+  - a connection that never opened explained
+  - notices shown without ending
+  - colours and font from the tokens
+  - everything closed on unmount
+- **Shim (9):**
+  - existing, added and nested sources copied
+  - rewrites followed, removals dropped
+  - stopping restores the document's sheets and leaves others alone
+  - no `adoptedStyleSheets`: does nothing
+  - the stand-in document makes templates and is the real document for everything else
+  - `withoutInlineStyles` swaps only during its call, and restores even on a throw
+- **Walkthrough (`pnpm test:e2e`, recorded), under the production CSP:**
+  - the running project offers **Terminal**, connects, and shows the workspace's greeting
+  - `echo hello from the walkthrough` is typed and answered
+  - xterm's own rule applies (`.xterm-rows span` computes to `inline-block`), with no `<style>` element and at least one constructed sheet
+  - a narrower window sends a resize
+  - `exit` shows "The terminal ended (exit code 0)", and a new terminal starts
+  - **no page errors and no CSP violations**
+
+**Run and check it:**
+```fish
+pnpm test                # 530 tests
+pnpm test:e2e            # 7 walkthroughs; the terminal one is "phase 1d: a terminal in the workspace…"
+pnpm --filter @flowcanvas/e2e report      # the recordings
+```
+For real, follow "Phase 1d so far — run and check it" above: open the workspace, reload, click **Terminal**.
+
+**Gotchas:**
+- **A browser's `ArrayBuffer` from another realm.** In jsdom, the bytes in a `MessageEvent` failed `instanceof ArrayBuffer`. The check is now by tag (`[object ArrayBuffer]`), which is right in any realm.
+- **`vi.mock` is hoisted** above everything in the file, so the fake xterm class lives in `vi.hoisted()`.
+- **The temporary page is narrow** (about 400 px), so the terminal is too, until the phase 2 app shell. The walkthrough shrinks the window to 360 px to test resizing.
+- **xterm's scroll area bug** (above) meant `documentOverride` alone still left one `<style>`. The walkthrough's "no `<style>`" check is what caught it.
+
+**Docs:** this write-up and the run guide; ADR 0017; ARCHITECTURE ("Terminal"); STATUS.
+
+**Risks:**
+- The CSP is unchanged and has no violations.
+- R6: same-origin WebSocket only.
+- **Laptop:** all five checks ok (22.0 GiB memory available, 580.7 GiB disk free, load 4.8).
+
+**Commit:** `feat(web): terminal in the page with xterm.js under the strict CSP`
+
+### Step 1d.7 — Network rules and the isolation test (done by Claude)
+
+**Goal:** a workspace can reach exactly what cloning and installing need, through the egress proxy, and nothing else. In particular it can't reach another workspace, this computer or the home network, and that's proven by a test that fails when isolation breaks. This is the third *Done when* item.
+
+**What a workspace can reach (measured, not guessed):**
+- **The allowlist** (`ALLOWED` in `workspace/host/src/egress/proxy.ts`, each host with its reason):
+
+  | Host | Why | Evidence |
+  | --- | --- | --- |
+  | `github.com` | cloning, git dependencies | step 4 |
+  | `codeload.github.com` | GitHub tarball dependencies (`github:` specifiers) | step 4 |
+  | `registry.npmjs.org` | npm and pnpm installs | Rallly's `pnpm install`: 2,163 packages in 2 min 7 s through the proxy, nothing else needed. Documenso's and LibreChat's lockfiles |
+  | `registry.yarnpkg.com` | Yarn installs | Excalidraw's `yarn.lock` names it 1,444 times; it's Yarn Berry's default registry (Twenty, Medusa) |
+  | `binaries.prisma.sh` | Prisma's schema engine, for `prisma generate` and `migrate` | Rallly's `pnpm db:generate` failed with `403` from the proxy until it was added |
+
+  Twenty and Medusa ship their own Yarn release (`yarnPath`), so Yarn itself needs no extra host.
+- **Not allowed, on purpose:**
+  - Google Fonts. Rallly's web app uses `next/font/google`, which only matters once the app's dev server runs (stage 2).
+  - Telemetry endpoints, such as Next.js telemetry (rule 5: telemetry off).
+  - Anything a project's own code calls at run time. That's a per-project choice for later (upgrade-later 37).
+
+**Concepts:**
+- **Why an allowlist and not a blocklist.** A blocklist has to name every bad place, and you can never finish the list. An allowlist names the few good ones, so a new trick still lands on "refused". Code from a repository we don't control runs in the workspace, so it gets the second.
+- **Why DNS matters.** If a workspace could look names up on the internet, it could leak data inside the lookups themselves (DNS tunnelling), even with no TCP route out. A Docker `--internal` network's DNS answers only for containers on that network and forwards nothing. The test checks `getent hosts github.com` fails inside the workspace. https://docs.docker.com/engine/network/#dns-services
+- **Reading connection errors.**
+  - `ENETUNREACH` (no route) and `EHOSTUNREACH` (nobody at that address) mean the packet went nowhere.
+  - `ECONNREFUSED` means a machine answered "nothing on that port". So it counts as **reached**: the address is reachable.
+  - The isolation test passes only on no route, no host or a timeout.
+- **Proxy limits.** These keep one workspace from starving the proxy, which every workspace shares:
+  - 64 open tunnels per workspace and 256 in total; past that, `429`
+  - 10 s to send the `CONNECT` request (a slow-loris defence)
+  - 60 s idle timeout on a tunnel
+- **A test that can't fail proves nothing (mutation check).** After the isolation test passed, its key protection (the network's isolated gateway mode) was removed for one run. The test then failed exactly where it should: this computer's address on the workspace's network answered (`ECONNREFUSED`). Then the code was put back.
+
+**What the isolation test checks** (`workspace/host/src/host.docker.test.ts`, "workspaces can't reach each other…"):
+1. **Workspace to workspace, both directions,** on ports 22, 80, 443, 3000, 5173 and 8080: unreachable. Not even the other's name resolves.
+2. **The proxy:** reachable on its own network on port 3128 only (port 22 refuses). Its addresses on other workspaces' networks, and on its way out, are unreachable.
+3. **This computer:**
+   - every one of its own IPv4 addresses (home network, Docker bridges, VPN) on ports 22, 8790 (the workspace host) and 5173 (Vite)
+   - Docker's default bridge
+   - the cloud metadata address
+   - the internet directly
+
+   All unreachable.
+4. **No DNS out, and no IPv6** apart from loopback.
+5. **Through the proxy:** the other workspace (by address and by name), the host's bridge, `localhost` and the proxy itself are all `403`.
+6. **Allowed hosts:** each one answers through the proxy, and `example.com` is `403`. Plain HTTP is `403`, and going around the proxy has no route.
+
+**Files:**
+
+| File | What changed |
+| --- | --- |
+| `workspace/host/src/egress/proxy.ts` | `ALLOWED` (host → reason); `LIMITS`; per-workspace and total tunnel counts; the header deadline, checked every `headersMs / 4` (Node checks only every 30 s by default); an idle timeout; an injectable `dial` for tests. Fixed: if the upstream failed after the tunnel opened, the proxy wrote an HTTP `502` into the TLS stream; now it closes the connection |
+| `workspace/host/src/egress/proxy.test.ts` | +7 tests (below) |
+| `workspace/host/src/host.docker.test.ts` | The isolation test above (5 tests in place of 1); every allowed host checked through the proxy |
+| `workspace/host/src/workspaces.ts` | A comment brought up to date |
+
+**Tests:**
+- **Unit (16 in the proxy, 7 new):**
+  - the allowlist is exactly these five hosts, each with a reason, on 443 only
+  - a real tunnel both ways, to the public address after skipping a private one
+  - `502` when the upstream refuses
+  - the 3rd tunnel from one workspace is `429`, and a slot frees when one closes
+  - a connection that never finishes its `CONNECT` is closed (`408`)
+  - an idle tunnel is closed
+- **Docker:** 33 in all, 4 new.
+
+**Run and check it:**
+```fish
+pnpm test            # 539 tests
+pnpm test:docker     # 33 tests; look for "workspaces can't reach each other, the host or the home network"
+```
+By hand, in a workspace's **Terminal** (see "Phase 1d so far — run and check it"):
+
+| Type | You should see |
+| --- | --- |
+| `curl -sI https://registry.npmjs.org/ \| head -1` | `HTTP/2 200` |
+| `curl -sS https://example.com` | `CONNECT tunnel failed, response 403` |
+| `curl -sS --noproxy '*' -m 5 https://github.com` | fails: no route out except the proxy |
+| `getent hosts github.com; echo $?` | `2`: no DNS out |
+| `pnpm install` in `/workspace/project` (Rallly) | about 2 minutes, then `Done`. It needs about 2.4 GiB in the workspace's volume |
+
+**Gotchas:**
+- **The host loads `@flowcanvas/workspace-image` from `dist`, not `src`.** The first mutation check edited the source, so the test ran against unchanged code and "passed". Editing the built file made it fail as it should. Rebuilding (`pnpm --filter @flowcanvas/workspace-image build`) restored it. `pnpm test:docker` builds first, through turbo.
+- **A paused socket never closes.** In a test, a client socket with no `data` listener never reads the server's `408` and end, so it never emits `close`. Add `socket.resume()`.
+- **A workspace's root is read-only,** so `docker cp` into it fails ("rootfs is marked read-only"). Write into `/tmp` through `docker exec -i … sh -c 'cat > /tmp/file'` instead.
+
+**Docs:** this write-up; the run guide; risks R1, R3 and R7; ADR 0016; ARCHITECTURE ("Workspaces"); upgrade-later 37; STATUS.
+
+**Risks:**
+- **R3 closed** locally: proven by the isolation test, and checked by the mutation run. It's repeated on the cloud provider (R8).
+- R7: the network half is done; sleep when idle is step 8.
+- R1 unchanged.
+- **Laptop:** all five checks ok (22.2 GiB memory available, 581.3 GiB disk free, load 0.96). The install spike used 2.4 GiB of the 25 GiB budget and was removed afterwards.
+
+**Commit:** `feat(workspace): egress allowlist for installs, proxy limits and the isolation test`
+
+### Step 1d.8 — Sleep after 10 idle minutes, resume intact; metering (done by Claude, ADR 0018)
+
+**Goal:** a running workspace that nobody has used for 10 minutes goes to sleep by itself, and comes back exactly as it was. Its time is metered fairly: running counts, asleep doesn't, and time nobody could use isn't charged. This is the second *Done when* item.
+
+**What was already there (step 3), and what this step adds:**
+- **Already there:**
+  - `sleepIdleWorkspaces()`
+  - `touchWorkspace()`, called on terminal typing (at most every 30 s) and on file and command requests
+  - usage records written on sleep and stop
+- **New:**
+  - **something that runs the check every minute**
+  - a fair rule for time that nothing put to sleep
+  - a usage total that's current while a workspace runs
+
+**Concepts:**
+- **Cron Triggers.** A Worker can have a `scheduled` handler, which Cloudflare runs on a cron schedule (`* * * * *` is every minute). The free plan allows 5 triggers per account, at 10 ms of CPU per run. Waiting for the database isn't CPU. https://developers.cloudflare.com/workers/configuration/cron-triggers/
+- **Why `pnpm dev` needs a ticker.** `wrangler dev` never runs Cron Triggers by itself (it says so when it starts). It runs the handler when you request `/cdn-cgi/local/scheduled`. So `services/control-plane/scripts/dev.ts` starts `wrangler dev` with the same arguments as before, and requests that address once a minute. It passes Ctrl-C on to Wrangler, and exits when Wrangler does.
+- **"Idle" means the person isn't doing anything,** not that the computer isn't. Output alone (a dev server printing logs) doesn't keep a workspace awake, because anything that keeps one awake costs money and has to justify it. A long `pnpm install` left alone is frozen by sleep and carries on after resume, so nothing is lost. More signals come with live frames and agents (upgrade-later 38).
+- **Metering, and why there are no extra writes.**
+  - Records are written only when a workspace sleeps or stops, as before.
+  - `/api/usage` adds the **live** seconds of workspaces running now.
+  - The alternative, a tick that writes records for long-running workspaces, races a person pressing Sleep and can count the same seconds twice.
+- **Metered until it sleeps, or would have** (`meteredUntil` in `src/workspaces/policy.ts`): the earlier of now and the last activity + 10 minutes. If you shut the laptop with a workspace running, nothing could put it to sleep. With this rule the night isn't counted, only the 10 minutes after you last typed.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `services/control-plane/src/workspaces/policy.ts` | `IDLE_SLEEP_MS` (moved from the lifecycle, which re-exports it) and `meteredUntil()`; shared by the lifecycle and the meter without an import cycle |
+| `services/control-plane/src/workspaces/lifecycle.ts` | Rows carry `last_active_at`; sleep and stop record run time up to `meteredUntil` |
+| `services/control-plane/src/usage/usage.ts` | `usageSummary()` adds live seconds (one query; from the later of the start and the month's start, up to `meteredUntil`) |
+| `services/control-plane/src/api/scheduled.ts` | The `scheduled` handler: no provider, nothing done; otherwise `sleepIdleWorkspaces()`, with failures logged redacted |
+| `services/control-plane/src/api/app.ts` | `resolveDependencies()`, so the API and the tick share defaults and the redacting log |
+| `services/control-plane/src/api/worker.ts` | Exports `fetch` and `scheduled` |
+| `wrangler.jsonc` | `triggers.crons: ["* * * * *"]` |
+| `services/control-plane/scripts/dev.ts`, `package.json` | The ticker around `wrangler dev`; the `dev` script runs it |
+| `docs/adr/0018-idle-sleep-tick-and-metering.md` | The choices above and the ones rejected |
+
+**Tests:**
+- **Lifecycle and meter (5 new, PGlite, a clock the tests move):**
+  - live seconds while running, then the same seconds once asleep, never double
+  - capped at the last activity + 10 minutes when nothing put it to sleep
+  - a workspace lost while "running" is recorded the same way
+  - running since last month counts only this month's part
+  - another person's workspace isn't counted
+- **The tick (4 new):**
+  - sleeps an idle workspace, and leaves one that's 1 s short
+  - does nothing at all where no provider is configured (not even open the database)
+  - says so when `DATABASE_URL` is missing
+  - logs a failure without throwing, and never the connection string
+- **Docker, the *Done when* (1 new, `local-host.docker.test.ts`):**
+  - the real workspace host and Docker, with the real lifecycle and tick
+  - a file written, and a process counting in memory
+  - 9 min 59 s on: still running; 10 min: asleep (Docker says `paused`), 600 s metered
+  - an hour later, resume: the file is there, the same process is alive and still counting, and the hour asleep cost nothing
+- **By hand:** the ticker ran for 70 s on a spare port. Wrangler logged `GET /cdn-cgi/local/scheduled 200 OK` at the minute, and Ctrl-C stopped Wrangler with it (the port was free afterwards).
+
+**Run and check it:**
+```fish
+pnpm test            # 548 tests
+pnpm test:docker     # 34 tests; look for "sleeps after 10 idle minutes and resumes intact"
+```
+For real: restart `pnpm dev` (its control-plane script changed). Then, in "Phase 1d so far — run and check it", follow the new row about waiting 10 minutes.
+
+**Gotchas:**
+- **`pkill -f` matches its own shell** when the pattern is in the same command line, and kills the command. It happened again in this step. It only stopped a probe on a spare port, but the rule stands: stop processes by PID, or let `timeout` end them.
+- **Wrangler's debug log** (`WRANGLER_LOG=debug`) can print local variables, so its output was deleted unread apart from the line that was needed.
+- **You can't `docker exec` into a paused container,** so "frozen while asleep" can't be read from inside. The test proves the process kept its memory by its counter carrying on after resume.
+
+**Docs:** this write-up; the run guide; risks R4 and R7; ADR 0018; ARCHITECTURE ("Workspace lifecycle"); upgrade-later 38; STATUS.
+
+**Risks:**
+- R4: pause and resume are proven with the real tick (memory kept, process intact). The cost of a paused workspace's memory is still open, and step 8a's guard handles it.
+- R7: closed locally.
+- New, watch at phase close: Cloudflare's branch previews with a `triggers` block. Triggers apply on deploy, so the PR's preview build shows whether `versions upload` warns.
+- **Laptop:** all five checks ok (21.6 GiB memory available, 579 GiB disk free, load 0.93). The tests' workspaces were removed afterwards.
+
+**Commit:** `feat(control-plane): idle workspaces sleep after 10 minutes (scheduled tick); fair, live metering`
+
+### Step 1d.8a — The resource guard (done by Claude, ADR 0019)
+
+**Goal:** Flowcanvas stays within its budget on your laptop, whatever else is running. When the laptop is short of memory or disk, or busy for minutes, Flowcanvas refuses new workspaces with a clear sentence, and stops or sleeps its own to make room. It never touches anything else on the laptop.
+
+**Two corrections to the plan** (in "On the owner's laptop", written before steps 3 to 8):
+1. **Sleeping doesn't free memory.** `docker pause` freezes processes *with* their memory; that's why resume is intact. So:
+   - under memory pressure, the guard **stops** a workspace (files kept), asleep ones first, since they hold memory nobody's using
+   - under load, it **sleeps** one
+   - under disk pressure, only clean-up helps
+2. **The host measures; the control plane acts.** The database holds each workspace's state and usage. If the host paused or stopped containers itself, the page and the meter would disagree with Docker. So:
+   - the host refuses starts, and removes old images
+   - the control plane's minute tick (step 8) changes workspaces through the lifecycle, with a reason the person will see
+
+**Concepts:**
+- **Load average** is roughly how many processes want a CPU, averaged over a minute. Above the number of cores, work is queuing. It lags: after something stops, it falls over a minute or two. So the guard waits for 2 minutes of high readings before acting, and one low reading starts the wait again. https://man7.org/linux/man-pages/man5/proc_loadavg.5.html
+- **`MemAvailable`** (`/proc/meminfo`) is what can be used without swapping, including cache the kernel can drop. It's the honest "free memory" figure. https://man7.org/linux/man-pages/man5/proc_meminfo.5.html
+- **Measure cheaply, often; expensively, rarely.** Memory, free disk and load are file reads, taken every 30 s. Flowcanvas's own disk use needs `docker system df --verbose`, which sizes every volume (about 4 s here), so it's measured every 5 minutes, and again right after a clean-up.
+- **One change per tick.** Stopping one workspace may be enough. The host measures again within 30 s, so the next tick acts only if it wasn't.
+- **A test hook that can't leak into real use.** Real memory pressure can't be made safely on your laptop. With a test prefix only, `WORKSPACE_HOST_TEST_PRESSURE=memory` makes the host *report* pressure, and under the real `fc` prefix the host refuses to start with it.
+
+**What happens, by pressure:**
+
+| Pressure | Host (every 30 s) | Control plane (every minute) |
+| --- | --- | --- |
+| Memory under 4 GiB available | Refuses to create or start; still lets a sleeping one resume (it holds its memory already) | Stops the least recently used workspace, asleep ones first: "Stopped to free memory on this computer. Its files are kept: open it to start it again." |
+| Load above 14.4 for 2 minutes | Refuses to create, start or resume | Puts the least recently used running workspace to sleep: "Put to sleep because this computer was very busy. Resume it when you need it." |
+| Disk under 50 GiB free | Refuses to create or start; removes old workspace images | Nothing (no one's files are deleted) |
+| Flowcanvas over 25 GiB | The same | Nothing |
+
+The notice is cleared when you next open the workspace. Step 9 shows it on the workspace's card.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `workspace/host/src/guard.ts` | `ResourceGuard` (samples, sustained load, disk every 5 min, logs only changes, keeps its last answer if measuring fails); `evaluate()`; the sentences; `removeOldImages()` |
+| `workspace/host/src/resources.ts` | Readings split into `readSystem()` (cheap) and `readFlowcanvasDisk()` (slow); `BUDGET.loadSustainedMs` |
+| `workspace/host/src/protocol.ts` | `Pressure`, `PRESSURE_KINDS`, `PATHS.pressure` |
+| `workspace/host/src/workspaces.ts`, `server.ts`, `main.ts` | Refusals in `#checkRoom`; `GET /v1/pressure`; the guard started with the host; the test hook (test prefixes only) |
+| `services/control-plane/src/workspaces/provider.ts`, `local-host.ts` | Optional `pressure()`: only known kinds pass |
+| `services/control-plane/src/workspaces/lifecycle.ts` | Sleep and stop take a notice; `relievePressure()`; `RELIEF_NOTICES` |
+| `services/control-plane/src/api/scheduled.ts` | The tick: idle sleep, then the guard |
+| `docs/adr/0019-resource-guard.md` | The split, and the options rejected |
+
+**Tests:**
+- **Host (unit, 15 new):**
+  - each limit and its sentence
+  - load counted only after 2 minutes, and forgotten when it drops
+  - disk measured every 5 minutes, and again after a clean-up
+  - clean-up on disk or budget pressure
+  - logging only changes
+  - the last answer kept when measuring fails
+  - only old images removed (current kept, one in use skipped, never a container or volume)
+  - refusals per kind for create, start and resume
+  - sleep and stop still allowed under pressure
+  - `GET /v1/pressure` behind the token
+- **Control plane (unit, 10 new):**
+  - nothing without pressure, or for disk alone
+  - memory stops the least recently used, asleep first, with the notice and usage recorded
+  - load sleeps one per tick
+  - a failed change is logged
+  - a provider without a guard does nothing
+  - opening clears the notice
+  - the tick runs the guard
+  - the adapter keeps only known kinds, and says when the host is down
+- **Docker (2 new):**
+  - a real host told it's short of memory refuses to open a workspace with its sentence, and nothing is created in Docker; the tick then stops a running workspace with the notice (Docker: `exited`), and its volume is kept
+  - the test hook is refused for real workspaces
+- **By hand:** the real guard on this laptop reported no pressure (first check 4.4 s, because of the disk measurement).
+
+**Run and check it:**
+```fish
+pnpm test               # 573 tests
+pnpm test:docker        # 36 tests; look for "under memory pressure"
+pnpm workspace:resources  # the same numbers the guard uses
+```
+Restart `pnpm dev` (the host changed). Under real pressure its log says `[workspace-host] guard: under pressure: memory`, then `guard: back within limits`.
+
+**Gotchas:**
+- **The control plane uses the host's protocol from `dist`.** After changing `workspace/host/src/protocol.ts`, run `pnpm --filter @flowcanvas/workspace-host build`, or the control plane doesn't see the new types. `pnpm test` and `pnpm dev` build it first, through turbo.
+- **A text pattern can match more than you meant.** A clean-up script's "remove the `let output` line" matched one inside a test too; it stopped because it checks each replacement matches once.
+
+**Docs:** this write-up; the corrections in "On the owner's laptop"; risk R9; ADR 0019; ARCHITECTURE; upgrade-later 39; STATUS.
+
+**Risks:**
+- R9: closed locally (the guard, tested). The numbers can be tuned in `BUDGET`.
+- **Laptop:** all five checks ok (22.7 GiB memory available, 579 GiB disk free, load under 4). The tests' workspaces were removed.
+
+**Commit:** `feat(workspace): resource guard keeps Flowcanvas within its laptop budget`
+
+### Step 1d.9 — Workspace status on the page, and Open demo project
+
+Split into three parts: the demo needs the corpus pin to be honoured, which nothing did yet.
+
+#### 9.1 — Pinned clones and the demo endpoint (done by Claude)
+
+**Goal:** **Open demo project** opens Rallly at the commit the corpus pins (rule 8), with one click, and never the fork's moving head.
+
+**Why this came first:** the fork's `main` had moved on to `10b90ef`, while the corpus pins `8e67a21`. Every clone so far took the branch head, so the demo would have opened code the corpus doesn't describe.
+
+**Concepts:**
+- **Fetching one commit by its SHA.** `git clone` follows a branch. To get exactly one commit, shallow:
+  1. `git init`
+  2. `git remote add origin <url>`
+  3. `git fetch --depth 1 origin <sha>`
+  4. `git checkout --detach <sha>`
+
+  GitHub serves any commit reachable from the repository this way. It ends **detached** (on a commit, not a branch), which is honest: it isn't any branch's head. https://git-scm.com/docs/git-fetch
+- **One source for the pin.** The control plane reads Rallly's fork and commit from `corpus/manifest.json` (bundled into the Worker as JSON). The corpus tests and the demo can't disagree.
+- **Find or create, then open.** `POST /api/projects/demo` makes the demo project the first time (`Rallly (demo)`, pinned) and finds the same one after. The page then opens it through the usual `/workspace/open`, so there's one open path. Where workspaces can't run (staging), it refuses before making anything.
+
+**Files:**
+
+| File | What changed |
+| --- | --- |
+| `services/control-plane/migrations/0004_pinned_commit.sql` | `projects.repo_commit`: a full lower-case SHA, and only with an address (both checked by the database). **Applied to the dev database** (`ep-square-leaf…`); staging at phase close |
+| `services/control-plane/src/projects/demo.ts` | `demoProject()` from the manifest; `ensureDemoProject()` |
+| `services/control-plane/src/projects/projects.ts` | `repoCommit`; each project's workspace now has `stateChangedAt` and `failure` (for the cards); `findPinnedProject()` |
+| `services/control-plane/src/projects/routes.ts` | `POST /api/projects/demo`; `GET /api/projects` adds `workspacesAvailable` |
+| `services/control-plane/src/workspaces/{provider,local-host,lifecycle}.ts` | The commit is passed to `create`, so a lost workspace is made again at the same commit |
+| `workspace/host/src/{protocol,workspaces,server}.ts` | `CreateRequest.commit` (checked: 40 lower-case hex, with a repository); the pinned clone |
+
+**Tests:**
+- **Host:** the pinned clone's exact git commands (https-only rules on each); short, branch-name, upper-case, flag-like and repository-less commits refused before Docker; the server refuses a non-string commit
+- **Control plane:**
+  - the demo is the manifest's fork and pin
+  - made once (201), then found (200, same project)
+  - another project with its name: 409
+  - staging: 503, nothing made
+  - another origin: 403
+  - the database refuses a bad SHA, and a pin without an address
+  - the lifecycle passes the pin to the provider
+- **Docker:** the *Done when* timing test now opens Rallly at its pin. `HEAD` is `8e67a21`, with one commit of history. **7.0 s** (clone 5.6 s), faster than the branch head.
+
+**Gotchas:**
+- **A fork's branch moves; a pin doesn't.** Anything that claims to be "the corpus" has to use the commit, not the branch.
+- **A migration the code needs must reach the dev database before `pnpm dev` restarts,** or listing projects fails on the missing column. `pnpm db:status` shows the target host first.
+
+**Commit:** `feat(workspace): pinned clones and the Open demo project endpoint`
+
+#### 9.2 — The workspace status chip (done by Claude)
+
+**Goal:** the top-bar chip from the design brief ("a small dot plus text"), built once in the design system with every state, before any screen uses it (components first).
+
+**What it looks like** (`packages/ui/src/components/workspace-status/`):
+- The Figma top bar's status: a 6 px dot, a 6 px gap, Mono small text in `text/secondary`.
+- `detail` adds "· 2 cores".
+
+| State | Words | Dot |
+| --- | --- | --- |
+| `not_created`, `sleeping`, `stopped` | Not started, Sleeping, Stopped | neutral (`text/tertiary`, Figma's sleeping dot) |
+| `creating`, `resuming` | Starting…, Resuming… | an open ring (`text/secondary`) |
+| `running` | Running | green (`state/added/solid`): Graphite's runtime "pass" |
+| `failed` | Couldn't start | coral red (`state/removed/solid`): Graphite's "fail" |
+
+**Deviation from Figma, for review:** Figma colours *Starting…* with `accent/solid`. Graphite keeps the accent for selection and focus only, and Graphite outranks Figma (CLAUDE.md, sources), so a changing state is an open ring instead. It differs from idle by shape as well as by its words.
+
+**Concepts:**
+- **State never by colour alone** (WCAG 1.4.1). The words always say the state, so the dot is `aria-hidden` and only repeats them. https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html
+- **Tokens only, even for a circle.** Stylelint refuses `50%` for a radius. A radius of half the size or more makes a circle, so the smallest radius token (4 px) draws a 6 px dot exactly.
+
+**Tests:**
+- **Unit (4):**
+  - every state in words
+  - the detail
+  - each state's tone, with the dot hidden from screen readers
+  - attributes and `data-state` passed through
+- **Visual:** 4 new baselines (`Default`, `AllStates`, both themes), checked by eye, with axe. No existing baseline changed.
+
+```fish
+pnpm --filter @flowcanvas/ui test     # 70 tests
+pnpm test:visual                      # 68 checks; the chip's are "components-workspacestatus--…"
+pnpm --filter @flowcanvas/ui storybook  # Components → WorkspaceStatus
+```
+
+**Commit:** `feat(ui): WorkspaceStatus chip with every workspace state`
+
+#### 9.3 — The workspace on the page, and Open demo project (done by Claude)
+
+**Goal:** every project shows where its workspace is and what you can do with it, and **Open demo project** opens Rallly at its pin in one click. Staging says plainly that workspaces run locally for now, and offers nothing that can't work.
+
+**What each project row shows** (`apps/web/src/projects/ProjectWorkspace.tsx`, until the phase 2 top bar):
+
+| Workspace | Chip | Actions | Card or line |
+| --- | --- | --- | --- |
+| Not started | Not started | **Open** | — |
+| Starting | Starting… | — | "Starting *name*": "Cloning github.com/… at 8e67a21. Usually under 15 seconds." (or "Starting it again with its files" after a stop), with an indeterminate strip |
+| Running | Running · 2 cores | **Sleep**, **Stop**; **Terminal** | — |
+| Asleep | Sleeping | **Stop**, **Resume** | "This workspace is asleep": the reason if it wasn't asked for, then "Its files and running processes are kept as they were, and asleep costs nothing." Facts: asleep since, machine, resume time |
+| Resuming | Resuming… | — | "Resuming *name*": "Waking it with its files and running processes as they were." |
+| Stopped | Stopped | **Open** | the guard's reason, if it stopped it |
+| Couldn't start | Couldn't start | **Try again** | the failure, in words |
+
+A refusal (the 2-workspace cap, the guard's pressure) is shown as the API said it, and the workspace stays as it was.
+
+**Concepts:**
+- **Polling, and why it isn't activity.** While a workspace is starting or resuming, the page asks every 3 s; while it runs, every 30 s. So an idle sleep or the guard's stop shows without a reload. It's a `GET`, and only typing and file or command requests count as activity. So watching the page doesn't keep a workspace awake.
+- **Showing a request in flight truthfully.** "Starting…" appears from the click, because we did ask for it. The answer then replaces it with what the control plane recorded.
+- **No made-up progress.** The host doesn't report progress during a clone, so the strip is indeterminate (`role="progressbar"` with no value). Under reduce-motion it's only the track: a still segment would read as a percentage.
+- **Never claim what isn't known.** A sleep can be idle, the guard's, or the person's own. The page can't tell them apart from the state alone, so the idle check and the guard leave a notice (`failure`), and the card says why only when there's a notice. The brief's "went to sleep after 10 minutes idle" would be false after pressing **Sleep**.
+
+**Deviations from Figma 32 and 33, for the owner's review:**
+- **Left out, because the system doesn't have it yet:** the starting card's step list ("Restoring snapshot", "Installing dependencies…") and progress meter; the asleep card's "Last backup" and "Last checkpoint"; "Everything is saved: …checkpoints, canvas layout and the agent session" (backups are phase 18a, agents stage 3).
+- **Resume is a secondary button,** not primary: several projects can be asleep at once, and Graphite allows one primary per view (the form's **Create project**).
+- **Placement:** the cards sit inside each project's row on the version page, not centred on a dimmed canvas. The canvas and top bar come in phase 2, and the chip's popover (machine, uptime, Sleep now) with the top bar.
+- **Starting dot:** see 9.2 (a ring, not the accent).
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `apps/web/src/projects/ProjectWorkspace.tsx`, `.module.css` | `useWorkspace()` (record, action in flight, the API's sentence, polling) and `ProjectWorkspace` (chip, actions, cards); tokens only |
+| `apps/web/src/projects/Projects.tsx`, `.module.css` | **Open demo project** (or staging's sentence), one panel per row, the pinned commit after the address, toggles grouped on the right |
+| `apps/web/src/projects/api.ts` | `Workspace`, `ProjectList` (`workspacesAvailable`), `workspaceAction()`, `fetchWorkspace()`, `fetchDemoProject()` |
+| `services/control-plane/src/workspaces/lifecycle.ts` | The idle check leaves "Put to sleep after 10 minutes without activity."; a sleep the person asks for leaves none |
+| `e2e/try-it/phase-1d.spec.ts`, `phase-1c.spec.ts` | Two new walkthroughs (below); 1c's fake API and step brought up to date |
+
+**Tests:**
+- **Component (16, of which 10 new):**
+  - staging: one sentence and no buttons
+  - Open: Starting… with the clone line and an indeterminate bar, then Running with Terminal, Sleep and Stop
+  - a guard refusal shown as said, with the workspace left as it was
+  - asleep: the reason, real facts only (no "backup" or "checkpoint"), and Resume
+  - a requested sleep never called idle
+  - stopped and failed, with their reasons, Open and Try again
+  - the demo made, listed first, pinned, and opened in one click (exactly three requests)
+  - the demo's 409 explained
+  - polling at 3 s and 30 s, and not while asleep (fake timers)
+- **Control plane (1 new):** the idle sleep's notice, and none for a requested sleep
+- **Walkthroughs (2 new, recorded, under the production CSP, no page errors):**
+  - *Open demo project*: listed first and pinned, starting, running with a terminal, Sleep (no idle, backup or checkpoint claims), Resume
+  - *Staging*: the sentence, and no demo or Open buttons
+- **By eye:** screenshots of every state in both themes, checked against Figma 32 and 33 (layout and copy differences above).
+
+**Run and check it:** "Phase 1d so far — run and check it", section 2, now uses the buttons.
+```fish
+pnpm test        # 596 tests (corrected in step 10: the run this figure came from was the one where the corpus task failed)
+pnpm test:e2e    # 9 walkthroughs
+```
+
+**Known issue:** one full `pnpm test` run of six had one failing task. Five reruns of the whole suite, and five of the web and host suites alone, all passed. That run's output didn't record which test failed. *Step 10 narrowed it down:* that run counted 586 tests against 596 in every clean run, and the only package with exactly 10 tests is the corpus. Its tests are pure, so the likely cause is Vitest's worker failing to start under the full parallel load. To watch in CI.
+
+**Docs:** this write-up; the run guide; ARCHITECTURE ("Workspaces on the page"); STATUS.
+
+**Risks:**
+- R8 unchanged: on staging, the page now says so instead of offering buttons that fail.
+- **Laptop:** all five checks ok (21.7 GiB memory available, 578 GiB disk free, load 8.1 from this step's own test runs, under the 14.4 limit); no test workspaces left.
+
+**Commit:** `feat(web): workspace status, starting and asleep cards, and Open demo project`
+
+### Step 1d.10 — Security tests, the Try it, the real 10-minute run, Docker in CI (done by Claude)
+
+**Goal:** prove the phase's promises the way a skeptic would. Secrets planted everywhere they could pass are kept nowhere. One workspace reaches nothing else. The *Try it* works as written. Idle sleep works in real time. And the Docker tests run in CI, not only on your laptop.
+
+**Concepts:**
+- **Canaries.** A canary is a made-up secret with an unmistakable marker (`CANARY-…`), planted where a real one could be. The test then searches every place a secret could end up. Finding nothing proves something only if the canary demonstrably passed through, so each test also checks that it did (for example, the owner's own shell does show their own `.env`).
+- **"Kept nowhere," for a workspace,** means not in:
+  - the host's log lines
+  - Docker's stored logs (turned off: `--log-driver none`)
+  - a container's settings and environment (`docker inspect`)
+  - any process environment the workspace can read
+  - the answers to other requests
+
+  The owner's own command output and shell are theirs: they come back to them and are kept nowhere else.
+- **Defence in depth for the host's sentences.** The control plane shows the host's error sentences to the person. A buggy host that echoed its request would have shown the token. Now any sentence containing the token is replaced with "an answer we didn't expect". A mutation check confirmed it: with the filter off, the test fails on `hostToken in responses`.
+- **Faking time in a walkthrough.** Playwright's `page.clock` replaces the page's timers, so "wait for sleep" takes no time: the page's 30-second check runs when the test says. The real wait is proven separately. https://playwright.dev/docs/clock
+- **CI isn't the laptop.** GitHub's runners have far less than 50 GiB free, so the guard would read disk pressure and refuse every workspace. The CI job sets `WORKSPACE_HOST_TEST_PRESSURE=none`, which only test hosts (`fc-test-` prefixes) accept; the real prefix refuses it, which is tested. Turbo hides undeclared variables from tasks, so `test:docker` now passes it through. A run with `memory` proved it arrives (5 tests failed, as they should).
+
+**What's new:**
+
+| Where | What it proves |
+| --- | --- |
+| `workspace/host/src/no-leaks.docker.test.ts` (6, real Docker) | The host's token, a `.env`, a command's argument and output, and terminal input: none kept in the host's logs, other answers, Docker's logs (workspace and proxy), `docker inspect`, or any process environment in the workspace |
+| `services/control-plane/src/api/no-leaks.test.ts` (+1) | Through the workspace routes, the demo and the minute check, including a host that echoes everything it's sent, token included: nothing reaches logs, the console or answers |
+| `services/control-plane/src/workspaces/local-host.ts` | The token filter on the host's sentences |
+| `workspace/host/src/host.docker.test.ts` | The probe of this computer's own addresses now includes the Worker's port 8787 (with 22, 5173 and 8790) |
+| `e2e/try-it/phase-1d.spec.ts` (+1) | **Try it, as written:** create Rallly from its GitHub address, Open, run a command in the terminal, wait for sleep (the page notices by itself), Resume |
+| `services/control-plane/scripts/idle-real.ts` (`pnpm --filter @flowcanvas/control-plane test:idle-real`) | The 10-minute idle sleep in **real time**, nothing faked: the real host, lifecycle and minute check, Rallly at its pin, a file and a counting process |
+| `.github/workflows/ci.yml` (job `docker`), `turbo.json` | `pnpm test:docker` on every PR and every push to `main`, after checking Docker is 28 or newer |
+| `workspace/host/src/main.ts` | The test hook takes `none` (test prefixes only) |
+| `services/control-plane/vitest.config.ts`, `tsconfig.json` | At most 6 test workers (the finding below) |
+
+**The real 10-minute run** (`test:idle-real`, alone on the laptop, 6 Nov): **passed.**
+- Asleep after **10.02** idle minutes (the check runs once a minute), and Docker says `paused`.
+- **600 s** metered.
+- After 30 s asleep it resumed: the file was there, the same process was alive and still counting.
+- The host never printed its token.
+
+The first attempt was spoiled by my own load. With the full unit suite running alongside, the test host's guard saw memory below 4 GiB at 7.2 minutes and correctly **stopped** the workspace for memory (422 s metered: the time it actually ran). That led to the next finding.
+
+**Finding: our own `pnpm test` starved the laptop.** Measured with a sampler reading `MemAvailable` every 0.5 s:
+
+| Run | Lowest memory available | Time |
+| --- | --- | --- |
+| `pnpm test`, before | **1.3 GiB** (from 18.8: about 17.5 GiB used at once) | — |
+| control-plane tests alone, Vitest's default (15 workers) | 6.1 to 4.0 GiB | 83 s |
+| control-plane tests alone, 4 workers | 13.9 GiB | 86 s |
+| control-plane tests alone, **6 workers** | 12.3 GiB | **68 s** |
+| `pnpm test`, after (control plane at 6 workers) | **11.4 GiB** | 75 s |
+
+Most control-plane tests start their own in-process Postgres (PGlite). With a worker per core, that's about 18 GiB at once, and it's slower too, because the workers fight over cores. `services/control-plane/vitest.config.ts` now sets `maxWorkers: 6`.
+
+**Also seen:** your own workspace (`fc-ws-2f78…`), opened with **Open demo project**, went to sleep by itself under your `pnpm dev`. That's the real minute check end to end.
+
+**Run and check it:**
+```fish
+pnpm test                                             # 597 tests
+pnpm test:docker                                      # 42 tests, including "no secret is kept anywhere"
+pnpm test:e2e                                         # 10 walkthroughs, including "phase 1d · Try it"
+pnpm --filter @flowcanvas/control-plane test:idle-real  # about 12 minutes, in real time
+```
+
+**Gotchas:**
+- **Check that a mutation actually breaks something.** My first mutation (`token !== token`) is always false, so it rejected every message, and the test rightly passed. The useful one lets everything through (`token === token`).
+- **`vitest -t` skips the tests a later one depends on.** Filtering to one isolation test skipped the test that creates the workspace, so it "failed" with no container to probe from. Run the file.
+- **The flaky task, narrowed down:** the run that reported 586 tests was missing exactly the corpus package's 10 (596 in every clean run). The 586 in the step 9 docs is corrected.
+
+**Docs:** this write-up; the run guide's counts; the step 9.3 known issue; ARCHITECTURE ("Security checks"); STATUS.
+
+**Risks:**
+- R6 (the Docker socket is root-equivalent): closed locally. The token is checked and never kept or shown, even when a host echoes it, and nothing from requests reaches Docker's arguments.
+- R1 unchanged (the kernel is shared until real VMs).
+- New: whether GitHub's runners have Docker 28 or newer. The `docker` job checks it first, and the PR at phase close shows the answer.
+- R9, now covering our own tools too: the test suite's peak memory is capped (above).
+- **Laptop:** all five checks ok after the step (23.0 GiB memory available, 578 GiB disk free); the test objects were removed. Your own workspace (`fc-ws-2f78…`) was left as your `pnpm dev` put it: asleep.
+
+**Commit:** `test(workspace): no secret kept anywhere, Try it walkthrough, real-time idle run, Docker tests in CI`
+
+### Step 1d.11 — Close the phase as in review (done by Claude)
+
+- **Release:** version `0.5.0`. The CHANGELOG entry is also the in-app What's new: what was added, the security work, and the test change.
+- **Report:** `docs/reports/phase-1d.md`, with each *Done when* item's evidence, the deviations, the ADRs, known issues and what waits for the cloud provider.
+- **Status:** `docs/STATUS.md` says **in review**.
+- **Upgrade-later review:** 33–39 are this phase's, each with a trigger; none is due before phase 2; 32 is still open.
+- **Staging's database** (owner): migrations 0003 and 0004, *before* the merge. They only add columns and tables, so the code staging runs now keeps working, and the new code finds what it reads.
+- **The PR:** CI includes the new `docker` job, which shows whether GitHub's runners have Docker 28 or newer. Merge only when everything is green.
+
+**Commit:** `docs: phase 1d report, 0.5.0, in review`
+
+**Found by the PR: Cloudflare's preview build had failed since step 4.**
+- **What happened:** Cloudflare builds only the web app's task (`pnpm build --filter=@flowcanvas/web`), then bundles the Worker. From step 4 on, the Worker imports `@flowcanvas/workspace-host/protocol` and `@flowcanvas/workspace-agent/protocol`, which resolve to those packages' `dist/`. That task never built them.
+- **Why nobody saw it:** on a laptop, `dist/` is always there from earlier builds. Every commit from `f1af4dc` failed, and the phase had no PR, where Cloudflare's checks show.
+- **The fix:** `turbo.json` makes `@flowcanvas/web#build` also build those two packages. Reproduced from a fresh state, the bundle failed with `Could not resolve "@flowcanvas/workspace-host/protocol"` before the fix and succeeded after (356 KiB, the same as before).
+- **So it can't happen silently again:** CI's checks now run Cloudflare's exact build on the fresh checkout, then `wrangler versions upload --dry-run`, before anything else builds a package.
+- **Gotcha:** a build that works on your machine may rely on outputs left from an earlier build. Check deployable builds from a clean state.
+
+**Staging's database (owner, 6 Nov):** `pnpm db:migrate` on the production branch (`ep-raspy-frost…`, not the dev branch) applied `0003_workspace_lifecycle` and `0004_pinned_commit`.
+
+**Also found by the PR: my test-worker cap was too high for CI.** The step 10 cap (6 workers) is right for the laptop's 16 cores, but CI's runner has 4. Six workers there made each in-process Postgres start too slowly, and 21 setup hooks timed out (10 s). Every failure was a timeout, and all in the control plane. The cap is now *at most 6, and never more than the cores minus one* (`availableParallelism()`, which follows the CPUs a process may use). Checked pinned to 4 cores (233 pass, 68 s) and to 2 (233 pass, 157 s); the laptop still gets 6.
+
+**CI's Docker job, first run:** GitHub's `ubuntu-24.04` runner has **Docker 28.0.4**. All 42 Docker tests ran and passed (Rallly opened in 3.1 s there).
+

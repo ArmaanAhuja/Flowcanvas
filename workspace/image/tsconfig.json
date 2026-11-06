@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true
+  },
+  // Type-check the sources and the image script; tsconfig.build.json emits only src.
+  "include": ["src", "scripts"]
+}

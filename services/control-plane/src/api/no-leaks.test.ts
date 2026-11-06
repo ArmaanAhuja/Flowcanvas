@@ -7,7 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Database } from '../db/database.js';
 import { migratedDatabase } from '../test/database.js';
 import { testVaultKey } from '../test/vault-key.js';
+import { FakeProvider } from '../test/fake-provider.js';
+import { localHostProvider } from '../workspaces/local-host.js';
 import { createApi } from './app.js';
+import { createScheduled } from './scheduled.js';
 
 const APP = 'https://flowcanvas.example.workers.dev';
 const EMAIL = 'ada.canary@example.com';
@@ -18,6 +21,10 @@ const CANARIES = {
   code: 'CANARY-oauth-code',
   githubToken: 'gho_CANARYgithubtoken',
   databasePassword: 'CANARY-db-Pa55word',
+  hostToken: 'CANARY-host-token-0123456789abcdef0123456789abcdef',
+  envFile: 'CANARY-dotenv-DATABASE_URL',
+  commandArgument: 'CANARY-command-argument',
+  commandOutput: 'CANARY-command-output',
 };
 const vaultKey = testVaultKey();
 const env = {
@@ -81,13 +88,34 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function api(options: { failingGitHub?: boolean; database?: () => Database } = {}) {
+type Provider = ReturnType<typeof localHostProvider>;
+
+function api(
+  options: { failingGitHub?: boolean; database?: () => Database; provider?: Provider } = {},
+) {
   return createApi({
     database: options.database ?? (() => db),
     fetch: fakeGitHub(options.failingGitHub ?? false),
     log: (message) => logged.push(message),
+    workspaceProvider: () => options.provider,
   });
 }
+
+/** A workspace host that answers every request with an error echoing what it was sent, token included. */
+const echoingHost: Provider = localHostProvider({
+  url: 'http://127.0.0.1:8790',
+  token: CANARIES.hostToken,
+  fetch: (input, init) => {
+    const sent = JSON.stringify({
+      url: input,
+      headers: init?.headers,
+      body: init?.body,
+    });
+    return Promise.resolve(
+      Response.json({ error: { kind: 'failed', message: sent.slice(0, 300) } }, { status: 502 }),
+    );
+  },
+});
 
 /** Sends a request and keeps the response's body and headers (except Set-Cookie, which carries our own tokens). */
 async function send(
@@ -189,5 +217,69 @@ describe('nothing private leaks, anywhere in the API', () => {
     // Logs name people by user ID, never by email.
     expect(everything.logs).not.toContain(EMAIL);
     expect(everything.console).not.toContain(EMAIL);
+  });
+
+  it('through the workspace: files, commands, a .env file, the demo and the minute check', async () => {
+    const session = await signIn();
+    if (session === undefined) throw new Error('sign-in failed');
+    const post = (body?: unknown) => ({
+      method: 'POST',
+      headers: { cookie: session, origin: APP, 'content-type': 'application/json' },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const provider = new FakeProvider();
+    const withFake = { provider: provider as unknown as Provider };
+
+    const created = await send('/api/projects/demo', post(), withFake);
+    const { project } = (await created.json()) as { project: { id: string } };
+    const ws = `/api/projects/${project.id}/workspace`;
+    await send(`${ws}/open`, post(), withFake);
+
+    // A .env file: refused by the agent, as the real one does, and its content never appears.
+    provider.agentAnswer = {
+      ok: false,
+      error: { code: 'secret_file', message: "Secrets live in the project's vault, not in files." },
+    };
+    await send(`${ws}/file?path=.env`, { headers: { cookie: session } }, withFake);
+    // A command with a secret in its arguments and its output: the output is the person's own and comes back
+    // to them, but nothing of either is logged.
+    provider.agentAnswer = {
+      ok: true,
+      result: { exitCode: 0, stdout: `${CANARIES.commandOutput}\n`, stderr: '', timedOut: false },
+    } as never;
+    const exec = await send(
+      `${ws}/exec`,
+      post({ command: ['sh', '-c', `echo ${CANARIES.commandArgument}`], cwd: '' }),
+      withFake,
+    );
+    expect(await exec.text()).toContain(CANARIES.commandOutput);
+    bodies.pop(); // The person's own output, in their own answer: the one place it belongs.
+
+    // A host that echoes everything it's sent, token included: none of it reaches the person or the logs.
+    for (const action of ['open', 'sleep', 'resume', 'stop']) {
+      await send(`${ws}/${action}`, post(), { provider: echoingHost });
+    }
+    await send(`${ws}/files`, { headers: { cookie: session } }, { provider: echoingHost });
+    await createScheduled({
+      database: () => db,
+      log: (message) => logged.push(message),
+      workspaceProvider: () => echoingHost,
+    })({ cron: '* * * * *', scheduledTime: 0 }, env);
+
+    expect(
+      provider.agentRequests.some((r) => JSON.stringify(r).includes(CANARIES.commandArgument)),
+    ).toBe(true);
+    const everything = {
+      logs: logged.join('\n'),
+      console: consoleOutput.join('\n'),
+      responses: bodies.join('\n'),
+    };
+    for (const [where, text] of Object.entries(everything)) {
+      for (const [name, canary] of Object.entries(CANARIES)) {
+        expect(text, `${name} in ${where}`).not.toContain(canary);
+      }
+    }
+    // The echoing host was reached, so the check above means something.
+    expect(everything.responses).toContain('The workspace host gave an answer we didn’t expect.');
   });
 });

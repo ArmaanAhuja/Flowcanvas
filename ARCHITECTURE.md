@@ -6,14 +6,16 @@ The system as it is **today** (end of phase 1b). Kept current at the end of ever
 
 | Package | Folder | Runs in | Today |
 | --- | --- | --- | --- |
-| `@flowcanvas/web` | `apps/web` | The user's browser (static files from Cloudflare) | Version page built from the design system: name, status, build line, account line (sign in with GitHub or Google, who is signed in, sign out; `src/account/`), projects list and create when signed in (`src/projects/`; a stand-in for the phase 2 start screen), each with a write-only Secrets panel (`src/secrets/`), What's new (from `CHANGELOG.md`, parsed at build time), Labs (switches for unfinished features, off by default; `src/labs/`), theme menu, link to the catalogue |
+| `@flowcanvas/web` | `apps/web` | The user's browser (static files from Cloudflare) | Version page built from the design system: name, status, build line, account line (sign in with GitHub or Google, who is signed in, sign out; `src/account/`), projects list and create when signed in (`src/projects/`; a stand-in for the phase 2 start screen), each with a write-only Secrets panel (`src/secrets/`) and, while its workspace runs, a terminal (`src/terminal/`, ADR 0017), What's new (from `CHANGELOG.md`, parsed at build time), Labs (switches for unfinished features, off by default; `src/labs/`), theme menu, link to the catalogue |
 | `@flowcanvas/ui` | `packages/ui` | The browser (consumed as source by Vite, ADR 0007) | Graphite components (Button, Tag, Input, Toggle, Tabs, Panel, Menu, Popover, Tooltip, Flow node), global styles, fonts, theme switching; Storybook catalogue |
 | `@flowcanvas/tokens` | `packages/tokens` | Shared (CSS and TypeScript) | Design tokens: DTCG source JSON → generated `css/tokens.css` and typed `vars` / `themeValues`; dark and light themes |
 | `@flowcanvas/figma-tokens` | `tools/figma-tokens` | Developer machine / build | Generator: DTCG token JSON (Figma variable export format) → CSS variables + TypeScript |
-| `@flowcanvas/control-plane` | `services/control-plane` | Inside the app's Cloudflare Worker under `/api` (ADR 0013); Neon Postgres | Hono API (`src/api/`): health, database ping, GitHub and Google sign-in, sessions, sign-out and the user/admin/same-origin guards (`src/auth/`), projects list and create (`src/projects/`), the secrets vault (`src/vault/`, ADR 0015); schema migrations and runner (`migrations/`, `src/db/`, ADR 0014). The earlier Fastify server was retired in phase 1c step 3 |
+| `@flowcanvas/control-plane` | `services/control-plane` | Inside the app's Cloudflare Worker under `/api` (ADR 0013); Neon Postgres | Hono API (`src/api/`): health, database ping, GitHub and Google sign-in, sessions, sign-out and the user/admin/same-origin guards (`src/auth/`), projects list and create (`src/projects/`), the secrets vault (`src/vault/`, ADR 0015), the workspace lifecycle and `WorkspaceProvider` (`src/workspaces/`); schema migrations and runner (`migrations/`, `src/db/`, ADR 0014). The earlier Fastify server was retired in phase 1c step 3 |
 | `@flowcanvas/graph-model` | `packages/graph-model` | Shared library (browser and Node) | `BuildInfo` type and `formatBuildInfo()`; becomes the flow graph model in phase 6 |
 | `@flowcanvas/engine` | `packages/engine` | Inside each user workspace (later) | Wired-in placeholder package; indexer arrives in phase 4 |
-| `@flowcanvas/workspace-agent` | `workspace/agent` | Inside each user workspace VM (later) | Wired-in placeholder package; daemon arrives in phase 1d |
+| `@flowcanvas/workspace-host` | `workspace/host` | Developer machine, started by `pnpm dev` (127.0.0.1:8790) | The local workspace host (ADR 0016): an HTTP API with a token (`src/server.ts`; protocol in `src/protocol.ts`, shared with the control plane), workspaces as Docker containers (`src/workspaces.ts`; the 2-running cap), the egress proxy (`src/egress/proxy.ts`), the laptop budget (`src/resources.ts`) and clean-up (`src/clean.ts`) |
+| `@flowcanvas/workspace-image` | `workspace/image` | Developer machine (builds the image); used by the workspace host | The workspace image (`Dockerfile`: Node 24 by digest, pnpm, git, `node` user, telemetry off). Its tag is a hash of the Dockerfile. Also the locked-down `docker run` and network arguments, and the default limits (2 CPUs, 4 GiB, 1,024 processes, 1 GiB `/tmp`, 10 GiB disk measured) |
+| `@flowcanvas/workspace-agent` | `workspace/agent` | Inside each workspace (a local Docker container for now, ADR 0016), as the workspace's user | The workspace agent: list, read and write the project's files and run commands, under `/workspace/project` only, never `.env` files (`src/agent.ts`). Its protocol (`src/protocol.ts`: one JSON message per line, versioned, with `parseAgentRequest`) is shared with the host and the control plane |
 | `@flowcanvas/corpus` | `corpus` | Developer machine / CI | The test corpus: six public forks pinned in `manifest.json`; `pnpm corpus:check` verifies fork, commit, licence and stack through the GitHub API |
 | `@flowcanvas/e2e` | `e2e` | Developer machine / CI | Playwright: one recorded walkthrough per phase (`try-it/`, video and trace) against any URL; visual tests (catalogue baselines in both themes, axe) |
 
@@ -22,6 +24,8 @@ Dependencies between packages:
 - `ui → tokens`
 - `tokens → figma-tokens` (generator, dev only)
 - `e2e → web` (build order only)
+- `control-plane → workspace-host` (its `protocol` only) and `workspace-agent` (its `protocol` only); both are pure modules the Worker bundles
+- `workspace-host → workspace-image, workspace-agent`
 
 ## Design system
 
@@ -55,8 +59,8 @@ Defined by `services/control-plane/migrations/*.sql` (ADR 0014); applied with `p
 | `users` | Email (lower case, unique), name, avatar, role | Deleting a user cascades to everything they own |
 | `identities` | GitHub or Google account linked to a user | Unique per (provider, provider user id) |
 | `sessions` | SHA-256 hash of the session token, expiry | The token itself is never stored |
-| `projects` | Owner, trimmed name (unique per owner), optional repo URL | |
-| `workspaces` | One per project, created in the same statement as the project; state (not created … running, sleeping …) | Records only until phase 1d; migration 0002 backfilled older projects |
+| `projects` | Owner, trimmed name (unique per owner), optional repo URL, optional pinned commit (`repo_commit`, 0004: a full SHA, only with a URL) | The demo project is the corpus's Rallly fork at its pin (`src/projects/demo.ts`; `POST /api/projects/demo`) |
+| `workspaces` | One per project, created in the same statement as the project; state, provider and its name for the workspace, `version`, when the state changed, running since, last active, failure sentence | Migration 0002 backfilled older projects; 0003 added the lifecycle columns. `running_since` is set exactly while running (a check constraint) |
 | `project_keys` | Each project's data key, encrypted by a master key held in a Worker secret | Envelope encryption |
 | `project_secrets` | Secret values as AES-GCM ciphertext and IV; environment-variable-style names | Write-only; never returned |
 | `usage_records` | Measured amounts (workspace seconds, storage) over periods | Metering skeleton; each record sits within one UTC month |
@@ -173,12 +177,112 @@ DELETE /api/admin/allowlist/:email   ──► remove, and end that person's ses
 
 Every route runs `requireUser` then `requireAdmin`; changes also need `requireSameOrigin`. An admin can't demote or remove themselves (409), so the allowlist can't be left without an admin by accident. Changes are logged by the acting admin's user ID, never by email. `pnpm db:allow` still works for the first admin, before anyone can sign in.
 
+## Workspaces (phase 1d, ADR 0016)
+
+For now, workspaces are local Docker containers. A cloud provider replaces the adapter later (upgrade-later 33).
+
+```
+browser ──► Worker /api ──HTTP 127.0.0.1 + token──► workspace host (workspace/host) ──► Docker
+                                                        │ docker exec -i (JSON lines)
+                                                        ▼
+                                  container: our image, non-root, no capabilities, limits
+                                  network: own --internal net, isolated gateway mode (Docker 28+)
+                                  internet: only via the egress proxy (allowlist)
+                                  files: one named volume per workspace
+```
+
+- The control plane sees only `WorkspaceProvider`. The workspace host is the only code that touches Docker, and it takes no image, mount or flag from a request.
+- Sleep is `docker pause`; resume is `docker unpause` (about 50 ms each way, processes intact).
+- Containers run as uid 1000 with no capabilities, `no-new-privileges`, a read-only root filesystem, a 1 GiB `/tmp`, no logs and `--init` (`workspace/image/src/spec.ts`). Only the workspace volume can grow, and Docker can't cap it on every storage driver (not on btrfs), so the host measures it (step 8; upgrade-later 35).
+- Staging has no workspace host, so it shows "Workspaces run locally for now".
+- **The host's API** (`workspace/host/src/protocol.ts`, `v1`): `GET /v1/health`, `POST /v1/workspaces` `{ workspaceId, repoUrl }` → `{ ref, cloned, cloneMs }`, `POST /v1/workspaces/:ref/{start,pause,resume,stop}` → 204. Errors are `{ error: { kind, message } }` with the same kinds as `ProviderError`. It refuses requests without the token (401) and anything with an `Origin` header or a Host other than 127.0.0.1 or localhost (403), so web pages can't drive it.
+- **Names:** a workspace's container, network and volume are all `fc-ws-<workspace id>`. The proxy is `fc-egress` on `fc-egress-out`. Everything is labelled `org.flowcanvas.workspace=1`, with `org.flowcanvas.prefix` and `org.flowcanvas.role`; tests use their own `fc-test-<hex>` prefix.
+- **The egress proxy** allows only `CONNECT` to port 443 on five hosts, each with its reason in `ALLOWED` (`src/egress/proxy.ts`): `github.com` and `codeload.github.com` (clones, git and tarball dependencies), `registry.npmjs.org` and `registry.yarnpkg.com` (installs), `binaries.prisma.sh` (Prisma's engines). It resolves the name itself and refuses non-public addresses. It runs with IP forwarding off, and is connected to each workspace's network. Limits: 64 open tunnels per workspace and 256 in all (then `429`), 10 s to send `CONNECT`, 60 s idle.
+- **What a workspace can't reach** (the isolation test in `host.docker.test.ts`): another workspace, by address or name, either way; the proxy's other sides; any of this computer's addresses; the cloud metadata address; the internet except through the proxy; DNS outside its own network; IPv6 (none, apart from loopback).
+- **Opening a project:** create or wake the container, then a shallow clone (`--depth 1`, https only) into `/workspace/project`; opening again keeps the files. The adapter (`services/control-plane/src/workspaces/local-host.ts`) only talks to loopback addresses, and only passes known error kinds and bounded sentences through.
+
+## Files and commands (phase 1d, step 5)
+
+```
+GET  /api/projects/:id/workspace/files?path=src      ──► { path, entries: [{ name, type, size, secret }], truncated }
+GET  /api/projects/:id/workspace/file?path=a.ts      ──► { path, size, encoding: utf8 | base64, content }
+PUT  /api/projects/:id/workspace/file?path=a.ts      { content, encoding }  (same origin, ≤ 1 MiB)
+POST /api/projects/:id/workspace/exec                { command: [...], cwd, timeoutMs ≤ 120 s }  (same origin)
+        │ parseAgentRequest, owner only, running only (409 "Open the workspace first."), counts as activity
+        ▼
+WorkspaceProvider.agent ──► host POST /v1/workspaces/:ref/agent ──► docker exec -i … node /tmp/flowcanvas-agent/main.js
+                                                                     (JSON lines, protocol 1, hello on connect)
+```
+
+- **The agent** is copied into the workspace's `/tmp` (a tmpfs) by the host and started with `docker exec -i`. A restarted container gets a fresh copy, and no mount is needed. It runs as the workspace's user, so the host and the control plane check its answers (`isAgentResponse`) like any untrusted input.
+- **What it can reach:** `/workspace/project` only. Paths are resolved and links followed, then checked to still be inside. Writes never follow a link (`O_NOFOLLOW`). `.env`-style files (`isSecretFile`) are listed, marked `secret`, and never read or written (CLAUDE.md rule 5).
+- **Commands** run without a shell, from an argument list, in their own process group. They stop at their time limit, and each output is capped at 1 MiB. Long-running and interactive programs are the terminal's job (step 6).
+- **Logs** name the operation and the outcome only, never paths, content or commands.
+
+## Terminal (phase 1d, step 6, ADR 0017)
+
+```
+xterm.js ──wss /api/projects/:id/workspace/terminal?cols=&rows= (same origin; cookie)──► Worker relay
+         binary frames: bytes        text frames: JSON control (resize in; exit, error out)
+Worker   ──ws, bearer token──► host /v1/workspaces/:ref/terminal ──Engine API exec (Tty)──► bash -l (uid 1000)
+```
+
+- The Worker checks origin, session, owner and running before accepting, sets `binaryType = 'arraybuffer'` on both ends, passes only bounded bytes and re-checked resizes from the browser, and counts typing as activity (at most every 30 s).
+- The page (`apps/web/src/terminal/`) runs xterm.js, loaded on demand, with colours and font from the tokens. xterm's `<style>` elements become inert templates whose text goes into constructed stylesheets (`adopt-styles.ts`), so the CSP stays `style-src 'self'` with no violations. `vite preview` sends the production headers from `public/_headers`.
+- The host opens the pty through the Docker Engine API on its Unix socket; at most 4 per workspace. Closing the WebSocket hangs up the shell. A Durable Object gateway (sessions that survive a reconnect) comes with the cloud provider (upgrade-later 36).
+
+## Workspace lifecycle (phase 1d, step 3)
+
+```
+not_created ─open─► creating ─► running ─sleep─► sleeping ─resume─► resuming ─► running
+stopped / failed ─open─► creating        running / sleeping ─stop─► stopped
+GET  /api/projects/:id/workspace                      ──► { workspace: { id, state, stateChangedAt, failure }, available }
+POST /api/projects/:id/workspace/{open,sleep,resume,stop}  (same origin) ──► { workspace } or { error, problem, workspace }
+```
+
+- `src/workspaces/lifecycle.ts` drives every change. Each one is a compare-and-set on `version`, so two requests at once can't both act; the loser gets 409 "changed in the meantime". The provider is called between two such statements.
+- `WorkspaceProvider` (`src/workspaces/provider.ts`): `create`, `start`, `pause`, `resume`, `stop`. Failures are `ProviderError`s whose kind maps to a status: `unavailable` and `refused` → 503 (left as it was), `failed` → 502 (state `failed`), `gone` → 409 (state `stopped`). Any other error becomes a plain sentence, and only a redacted description is logged.
+- The provider comes from `ApiDependencies.workspaceProvider(env)`. Undefined means none can run here (staging for now), and `open` answers "Workspaces run locally for now".
+- **Usage** (ADR 0018):
+  - The time between `running_since` and sleep or stop is written to `usage_records`, split at month boundaries. Asleep costs nothing.
+  - A workspace is metered only until `meteredUntil` (`src/workspaces/policy.ts`): now, or its last activity + 10 minutes, whichever is earlier.
+  - `/api/usage` adds the live seconds of workspaces running now, so the total is current without extra writes.
+- **Idle sleep** (ADR 0018):
+  - `touchWorkspace()` records activity: typing in a terminal (at most every 30 s), and file and command requests.
+  - The Worker's `scheduled` handler (`src/api/scheduled.ts`) runs `sleepIdleWorkspaces()` every minute: a Cron Trigger in `wrangler.jsonc`, and `scripts/dev.ts` under `pnpm dev`, since Wrangler doesn't run Cron Triggers locally.
+  - With no provider (staging) it does nothing.
+- **The resource guard** (ADR 0019, local only):
+  - The host's `ResourceGuard` (`workspace/host/src/guard.ts`) samples memory, free disk and load every 30 s, and Flowcanvas's own disk every 5 minutes, against `BUDGET`.
+  - Under pressure the host refuses to create or start a workspace, and refuses to resume one only when the laptop is busy. It removes old workspace images when disk is short, and answers `GET /v1/pressure`.
+  - After the idle check, the tick runs `relievePressure()`, one workspace per tick: memory stops the least recently used (asleep first); load sleeps the least recently used running one. A notice is stored in `failure`.
+  - A cloud provider has no `pressure()`.
+- The page never sees the provider's own name for a workspace.
+
+## Workspaces on the page (phase 1d, step 9)
+
+- `GET /api/projects` returns `{ projects, workspacesAvailable }`. Each project carries `repoCommit` and its workspace's `state`, `stateChangedAt` and `failure`.
+- `apps/web/src/projects/ProjectWorkspace.tsx`: `useWorkspace()` holds the record, sends `open | sleep | resume | stop`, and polls `GET …/workspace` every 3 s while starting or resuming and every 30 s while running (a GET is not activity). `ProjectWorkspace` shows the `WorkspaceStatus` chip (`packages/ui`), the actions, and the starting and asleep cards. Only recorded facts appear: no backups, checkpoints or progress figures until they exist.
+- `failure` is the person-facing reason for any change they didn't ask for: a failed start, the guard (ADR 0019), or the idle sleep (ADR 0018). A requested sleep has none.
+- **Open demo project:** `POST /api/projects/demo` (find or make the corpus fork at its pin), then the usual `…/workspace/open`. Where `workspacesAvailable` is false (staging), the page shows one sentence and no workspace buttons.
+
+## Security checks for workspaces (phase 1d, step 10)
+
+- **Canaries, never kept:** `workspace/host/src/no-leaks.docker.test.ts` (host logs, other answers, Docker's logs, `docker inspect`, process environments in the workspace) and `services/control-plane/src/api/no-leaks.test.ts` (the API, including a host that echoes its token).
+- **Host sentences:** the adapter (`local-host.ts`) drops any host sentence containing the token.
+- **Isolation:** `workspace/host/src/host.docker.test.ts`: the other workspace, the proxy's other sides, this computer's addresses (ports 22, 5173, 8787, 8790), metadata, DNS, IPv6, directly and through the proxy.
+- **In CI:** job `docker` runs `pnpm test:docker` with `WORKSPACE_HOST_TEST_PRESSURE=none`, which only test hosts accept. The real 10-minute run is `test:idle-real`, run by hand.
+
 ## Local development
 
 ```fish
 pnpm install
-pnpm dev            # http://localhost:5173: Vite, with /api forwarded to the Worker in `wrangler dev` on 8787
+pnpm dev            # http://localhost:5173: Vite, with /api forwarded to the Worker in `wrangler dev` on 8787,
+                    # and the workspace host on 127.0.0.1:8790 (needs WORKSPACE_HOST_TOKEN and Docker)
 pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e
 pnpm --filter @flowcanvas/ui storybook   # catalogue on http://localhost:6006
 pnpm test:visual                         # catalogue baselines in both themes, axe
+pnpm workspace:image                     # build the workspace image (phase 1d), skipped if up to date
+pnpm test:docker                         # tests against real containers; needs Docker 28+ and the internet
+pnpm workspace:resources                 # the laptop's figures and Flowcanvas's share, against the budget
+pnpm workspace:clean                     # test leftovers and old images; --all --yes removes every workspace
 ```

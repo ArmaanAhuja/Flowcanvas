@@ -1,4 +1,5 @@
 import type { Database } from '../db/database.js';
+import { IDLE_SLEEP_MS } from '../workspaces/policy.js';
 
 /**
  * Usage metering skeleton. Each record is a measured amount for one person over one period. Phase 1d's workspaces
@@ -81,7 +82,11 @@ export async function recordUsage(db: Database, record: UsageRecord): Promise<vo
   if (rows.length === 0) throw new UsageError('that workspace isn’t this person’s');
 }
 
-/** This month's sums for one person. Nothing recorded yet is a real 0, not a missing value. */
+/**
+ * This month's sums for one person. Nothing recorded yet is a real 0, not a missing value. Workspace seconds
+ * include workspaces running now (recorded only when they sleep or stop), from the later of their start and the
+ * month's start, up to `meteredUntil` (workspaces/policy.ts), so the total is current without extra writes.
+ */
 export async function usageSummary(
   db: Database,
   userId: string,
@@ -94,11 +99,19 @@ export async function usageSummary(
      group by kind`,
     [userId, start.toISOString(), end.toISOString()],
   );
+  const [live] = await db.query<{ seconds: number }>(
+    `select coalesce(sum(greatest(0, floor(extract(epoch from
+         least(to_timestamp($3::float8 / 1000), w.last_active_at + make_interval(secs => $4::float8 / 1000))
+         - greatest(w.running_since, $2::timestamptz))))), 0)::float8 as seconds
+     from workspaces w join projects p on p.id = w.project_id
+     where p.owner_id = $1 and w.state = 'running' and w.running_since is not null`,
+    [userId, start.toISOString(), now, IDLE_SLEEP_MS],
+  );
   const total = (kind: UsageKind) => rows.find((row) => row.kind === kind)?.total ?? 0;
   return {
     periodStart: start.toISOString(),
     resetsAt: end.toISOString(),
-    workspaceSeconds: total('workspace_seconds'),
+    workspaceSeconds: total('workspace_seconds') + (live?.seconds ?? 0),
     storageByteHours: total('storage_byte_hours'),
   };
 }

@@ -87,12 +87,24 @@ export const SIGN_IN_PROBLEMS: Readonly<Record<string, string>> = {
   failed: 'Sign-in failed. Try again in a moment.',
 };
 
-/** Reads and removes `?sign-in=…` from the address, so a reload doesn't show the message again. */
+// The API's masked hint (`ma…@example.com`): a couple of characters, the ellipsis, then a domain. Anything
+// else in the address is ignored, so a crafted link can't put words in the message.
+const MASKED_EMAIL = /^[^\s@…]{1,2}…@[a-z0-9.-]{1,253}$/i;
+
+/**
+ * Reads and removes `?sign-in=…` (and the refused account's masked `as=…`) from the address, so a reload doesn't
+ * show the message again.
+ */
 export function takeSignInProblem(location: Location, history: History): string | undefined {
   const url = new URL(location.href);
   const problem = url.searchParams.get('sign-in');
   if (problem === null) return undefined;
+  const as = url.searchParams.get('as') ?? '';
   url.searchParams.delete('sign-in');
+  url.searchParams.delete('as');
   history.replaceState(history.state, '', url.pathname + url.search + url.hash);
-  return SIGN_IN_PROBLEMS[problem] ?? SIGN_IN_PROBLEMS.failed;
+  const message = SIGN_IN_PROBLEMS[problem] ?? SIGN_IN_PROBLEMS.failed;
+  return problem === 'not-allowed' && MASKED_EMAIL.test(as)
+    ? `${message ?? ''} It was checked as ${as}.`
+    : message;
 }

@@ -36,6 +36,15 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Cloudflare's own build, on this fresh checkout and before anything else builds a package: only the web
+      # app's build task, then the Worker bundled. It failed unseen from phase 1d step 4 to step 11, when the
+      # Worker started bundling packages that task didn't build.
+      - name: Cloudflare's build, as Cloudflare runs it
+        run: |
+          pnpm build --filter=@flowcanvas/web
+          pnpm exec wrangler versions upload --dry-run
+        env:
+          FLOWCANVAS_COMMIT: ${{ env.COMMIT }}
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
@@ -45,6 +54,33 @@ jobs:
       - run: pnpm corpus:check
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+  docker:
+    name: Workspaces against real Docker
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      # A runner isn't the owner's laptop: its small disk would read as pressure and refuse every workspace.
+      # Only test hosts (fc-test- prefixes) accept this; the guard's own tests still run in `pnpm test`.
+      WORKSPACE_HOST_TEST_PRESSURE: none
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.COMMIT }}
+      # The isolated gateway mode (ADR 0016) needs Docker 28 or newer; the tests check it too.
+      - name: Docker version
+        run: |
+          docker version --format 'Docker {{.Server.Version}}'
+          major="$(docker version --format '{{.Server.Version}}' | cut -d. -f1)"
+          [ "$major" -ge 28 ] || { echo "Workspaces need Docker 28 or newer"; exit 1; }
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Isolation, the egress allowlist, clone time, sleep and resume, the guard, no secrets kept.
+      - run: pnpm test:docker
 
   visual:
     name: Visual and accessibility (catalogue)

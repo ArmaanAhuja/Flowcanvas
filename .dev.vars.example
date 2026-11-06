@@ -1,4 +1,5 @@
 # Local secrets for `wrangler dev` (copy to .dev.vars, which git ignores). Never commit real values.
+# The Neon `dev` branch, never `production` (staging's): `pnpm db:status` prints the host to check.
 DATABASE_URL=postgresql://user:password@ep-example.region.aws.neon.tech/flowcanvas?sslmode=require
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
@@ -7,4 +8,8 @@ GOOGLE_CLIENT_SECRET=
 # The secrets vault's master key (ADR 0015): 32 random bytes, base64. Create yours with:
 #   printf '\nVAULT_KEY=%s\n' (openssl rand -base64 32) >> .dev.vars
 VAULT_KEY=
+# The local workspace host (phase 1d, ADR 0016): any 64 hex characters; the Worker and the host share it.
+# It only works on this computer (127.0.0.1). Create yours with:
+#   printf '\nWORKSPACE_HOST_TOKEN=%s\n' (openssl rand -hex 32) >> .dev.vars
+WORKSPACE_HOST_TOKEN=
 # APP_ORIGIN (where sign-in works) comes from `pnpm dev` (http://localhost:5173); don't set it here.

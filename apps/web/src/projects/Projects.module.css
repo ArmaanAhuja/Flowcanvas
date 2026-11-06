@@ -5,6 +5,13 @@
   gap: var(--space-12);
 }
 
+.headingRow {
+  display: flex;
+  gap: var(--space-12);
+  align-items: center;
+  justify-content: space-between;
+}
+
 .heading {
   margin: 0;
   font-family: var(--text-heading-font-family);
@@ -100,6 +107,11 @@
   font-weight: var(--text-caption-font-weight);
   line-height: var(--text-caption-line-height);
   color: var(--color-text-muted);
+}
+
+.toggles {
+  display: flex;
+  gap: var(--space-12);
 }
 
 .itemHeader {

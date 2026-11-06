@@ -13,6 +13,12 @@ export {
   type ButtonSize,
 } from './components/button/Button';
 export { Tag, type TagProps, type TagTone } from './components/tag/Tag';
+export {
+  WORKSPACE_STATUS_LABELS,
+  WorkspaceStatus,
+  type WorkspaceStatusProps,
+  type WorkspaceStatusState,
+} from './components/workspace-status/WorkspaceStatus';
 export { Input, type InputProps, type InputSize } from './components/input/Input';
 export { Toggle, type ToggleProps } from './components/toggle/Toggle';
 export { Tabs, type TabItem, type TabsProps, type TabsVariant } from './components/tabs/Tabs';

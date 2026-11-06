@@ -72,13 +72,14 @@ async function fakeApi(page: Page): Promise<{ responses: string[] }> {
         id: '3f1c0d2e-0000-4000-8000-000000000001',
         name,
         repoUrl: null,
+        repoCommit: null,
         createdAt: now,
-        workspace: { id: 'w-1', state: 'not_created' },
+        workspace: { id: 'w-1', state: 'not_created', stateChangedAt: now, failure: null },
       };
       projects.unshift(project);
       return reply(route, { project }, 201);
     }
-    if (path === '/api/projects') return reply(route, { projects });
+    if (path === '/api/projects') return reply(route, { projects, workspacesAvailable: true });
     if (path.endsWith('/secrets')) return reply(route, { secrets });
     if (path.includes('/secrets/') && method === 'PUT') {
       const name = path.split('/').pop() ?? '';
@@ -118,12 +119,13 @@ test('phase 1c: create a project and add a secret that is never shown again', as
     await expect(page.getByRole('heading', { name: 'Admin' })).toBeVisible();
   });
 
-  await test.step('Create a project: it is listed, with its workspace not created yet', async () => {
+  await test.step('Create a project: it is listed, with its workspace not started yet', async () => {
     await page.getByLabel('Project name').fill('Rallly');
     await page.getByRole('button', { name: 'Create project' }).click();
     const list = page.getByRole('list', { name: 'Your projects' });
     await expect(list.getByText('Rallly')).toBeVisible();
-    await expect(list.getByText(/Workspace not created yet/)).toBeVisible();
+    await expect(list.getByText('Not started')).toBeVisible();
+    await expect(list.getByRole('button', { name: 'Open' })).toBeVisible();
   });
 
   await test.step('Add a secret: listed by name, masked, and the value is gone from the page', async () => {

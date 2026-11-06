@@ -50,8 +50,20 @@ function signInState(c: AuthContext): SignInState {
   return new URL(c.req.url).origin === APP_ORIGIN ? 'available' : 'staging-only';
 }
 
-function backToApp(c: AuthContext, problem?: SignInProblem): Response {
-  return c.redirect(problem === undefined ? '/' : `/?sign-in=${problem}`, 302);
+function backToApp(c: AuthContext, problem?: SignInProblem, hint?: string): Response {
+  if (problem === undefined) return c.redirect('/', 302);
+  const as = hint === undefined ? '' : `&as=${encodeURIComponent(hint)}`;
+  return c.redirect(`/?sign-in=${problem}${as}`, 302);
+}
+
+/**
+ * Enough of an email for its owner to recognise which account was refused (`ma…@example.com`), without putting
+ * the whole address in a URL. A person with several GitHub or Google accounts can then tell which one was used.
+ */
+export function maskEmail(email: string): string {
+  const at = email.lastIndexOf('@');
+  if (at < 1) return '…';
+  return `${Array.from(email.slice(0, at)).slice(0, 2).join('')}…${email.slice(at)}`;
 }
 
 const callbackUrl = (c: AuthContext, provider: ProviderId) =>
@@ -135,7 +147,9 @@ export function authRoutes(deps: AuthDependencies) {
 
       const db = deps.database(c.env.DATABASE_URL ?? '');
       const result = await signIn(db, identity);
-      if (result.kind === 'not-allowed') return backToApp(c, 'not-allowed');
+      if (result.kind === 'not-allowed') {
+        return backToApp(c, 'not-allowed', maskEmail(identity.email));
+      }
 
       // A fresh token on every sign-in, and the previous session in this browser ends.
       const previous = getCookie(c, SESSION_COOKIE, 'host');

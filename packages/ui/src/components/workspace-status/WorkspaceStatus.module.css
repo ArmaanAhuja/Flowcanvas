@@ -1,0 +1,42 @@
+/* Figma top bar status: a 6 px dot, 6 px gap, Mono small text in text/secondary. */
+.status {
+  display: inline-flex;
+  gap: calc(var(--space-4) + var(--space-2));
+  align-items: center;
+  white-space: nowrap;
+}
+
+.dot {
+  flex: none;
+  box-sizing: border-box;
+  inline-size: calc(var(--space-4) + var(--space-2));
+  block-size: calc(var(--space-4) + var(--space-2));
+  /* Any radius of half the size or more makes a circle; the smallest radius token (4 px) does for 6 px. */
+  border-radius: var(--radius-control);
+}
+
+.dot[data-tone='healthy'] {
+  background: var(--color-state-added-solid);
+}
+
+.dot[data-tone='failed'] {
+  background: var(--color-state-removed-solid);
+}
+
+.dot[data-tone='idle'] {
+  background: var(--color-text-tertiary);
+}
+
+/* Changing (Starting, Resuming): an open ring, so it differs from idle by shape as well as by its words. */
+.dot[data-tone='changing'] {
+  border: var(--border-width-default) solid var(--color-text-secondary);
+  background: none;
+}
+
+.label {
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  font-weight: var(--text-mono-small-font-weight);
+  line-height: var(--text-mono-small-line-height);
+  color: var(--color-text-secondary);
+}

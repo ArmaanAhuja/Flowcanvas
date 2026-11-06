@@ -12,6 +12,9 @@ export interface SignedInEnv {
     readonly DATABASE_URL?: string;
     readonly APP_ORIGIN?: string;
     readonly VAULT_KEY?: string;
+    // The local workspace host (phase 1d, src/workspaces/local-host.ts); never set on staging.
+    readonly WORKSPACE_HOST_URL?: string;
+    readonly WORKSPACE_HOST_TOKEN?: string;
   };
   Variables: { user: SessionUser };
 }

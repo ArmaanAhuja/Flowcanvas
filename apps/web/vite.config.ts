@@ -23,6 +23,20 @@ function resolveCommit(): string {
 const buildInfo: BuildInfo = { version: rootPackage.version, commit: resolveCommit() };
 
 /**
+ * The headers Cloudflare serves for every path (public/_headers: the CSP and the rest), so `vite preview` and
+ * the local walkthroughs run under exactly the production policy.
+ */
+function productionHeaders(): Record<string, string> {
+  const file = fileURLToPath(new URL('public/_headers', import.meta.url));
+  const headers: Record<string, string> = {};
+  for (const line of readFileSync(file, 'utf8').split('\n')) {
+    const match = /^\s+([\w-]+):\s*(.+)$/.exec(line);
+    if (match?.[1] !== undefined && match[2] !== undefined) headers[match[1]] = match[2].trim();
+  }
+  return headers;
+}
+
+/**
  * `import releases from 'virtual:changelog'` gives the parsed root CHANGELOG.md, built in at build time, so
  * the What's new panel can never disagree with the changelog. Editing the changelog reloads the dev server.
  */
@@ -50,8 +64,10 @@ export default defineConfig({
     // `pnpm dev` also runs the API in `wrangler dev` on 8787; the browser only ever talks to this one origin,
     // like on Cloudflare. The Host header must stay localhost:5173 (the address registered with GitHub): the
     // object form keeps it, while the string shorthand would set changeOrigin and rewrite it.
-    proxy: { '/api': { target: 'http://127.0.0.1:8787', changeOrigin: false } },
+    // `ws: true` forwards WebSocket upgrades too (the terminal, ADR 0017).
+    proxy: { '/api': { target: 'http://127.0.0.1:8787', changeOrigin: false, ws: true } },
   },
+  preview: { headers: productionHeaders() },
   build: {
     // Never inline fonts as data: URLs; the Content-Security-Policy only allows fonts from our own origin.
     assetsInlineLimit: (file) => (file.endsWith('.woff2') ? false : undefined),

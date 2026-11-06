@@ -4,6 +4,43 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-11-06 — Phase 1d: workspace sandbox (in review)
+
+Workspaces run on the owner's computer, in Docker, until a cloud provider is connected. On staging, projects say "Workspaces run locally for now", and no button offers what can't work there.
+
+### Try it
+
+On your own computer, with `pnpm dev` (Docker 28 or newer):
+
+1. Click **Open demo project**. Rallly appears first, pinned to the corpus commit, and its chip goes from **Starting…** to **Running · 2 cores** in about 10 seconds.
+2. Click **Terminal** and run `git log --oneline -1`: it's `8e67a21`.
+3. Leave it alone for 11 minutes. It goes to sleep by itself ("Put to sleep after 10 minutes without activity."), and asleep costs nothing.
+4. Click **Resume**: the files and running processes are as they were.
+
+### Added
+
+- **A workspace for every project:**
+  - a locked-down container of its own: no root, no extra privileges, 2 CPUs, 4 GiB of memory
+  - its repository cloned at a pinned commit when there is one
+  - files and commands through a typed API that never reads `.env` files or leaves the project
+- **A terminal in the page** (xterm.js), relayed by the Worker, under the strict Content-Security-Policy.
+- **Sleep and resume:**
+  - a workspace sleeps after 10 idle minutes (a check every minute) and resumes intact
+  - usage counts running time only, never time asleep or with the computer off
+- **Workspace status on each project:** a status chip (also in the component catalogue), Open, Sleep, Stop and Resume, and the starting and asleep cards. Only recorded facts are shown.
+- **Open demo project:** the stage's demo (Rallly, at its corpus commit) in one click.
+- **The resource guard on the computer:** it refuses new workspaces when memory, disk or the processor is short, and stops or sleeps Flowcanvas's own workspaces to make room. It never touches anything else.
+
+### Security
+
+- **The network:** a workspace reaches only five hosts (GitHub, the npm and Yarn registries, Prisma's engines), through a proxy that checks every address. It can't reach other workspaces, the computer it runs on, the home network or cloud metadata, and it has no DNS of its own. Tests try each of these and must fail to connect.
+- **Secrets:** made-up secrets planted in the host's token, a project's `.env`, commands and the terminal are kept nowhere: not in logs, Docker's settings or any process inside the workspace. The control plane never shows a message from the host that contains the host's token.
+- **In CI:** the Docker tests run on every pull request.
+
+### Changed
+
+- The control plane's tests use at most 6 workers. A full `pnpm test` used to take about 17.5 GiB of memory at once; now it leaves more than 11 GiB free, and it's faster.
+
 ## [0.4.0] — 2026-10-31 — Phase 1c: sign-in and control plane
 
 ### Try it

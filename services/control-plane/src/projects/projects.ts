@@ -1,6 +1,6 @@
 import type { Database } from '../db/database.js';
 
-/** The states a workspace record can be in (0001_initial.sql); only `not_created` until phase 1d. */
+/** The states a workspace record can be in (0001_initial.sql); the lifecycle is in src/workspaces/lifecycle.ts. */
 export type WorkspaceState =
   'not_created' | 'creating' | 'running' | 'sleeping' | 'resuming' | 'stopped' | 'failed';
 
@@ -8,15 +8,26 @@ export interface Project {
   readonly id: string;
   readonly name: string;
   readonly repoUrl: string | null;
+  /** The commit it's pinned to (the demo project's corpus fork), or null for the default branch's head. */
+  readonly repoCommit: string | null;
   /** ISO 8601, UTC. */
   readonly createdAt: string;
   /** The project's one cloud workspace, as the control plane last recorded it. */
-  readonly workspace: { readonly id: string; readonly state: WorkspaceState };
+  readonly workspace: {
+    readonly id: string;
+    readonly state: WorkspaceState;
+    /** ISO 8601, UTC. */
+    readonly stateChangedAt: string;
+    /** A sentence about why it isn't as asked (a failed start, or the resource guard's change); else null. */
+    readonly failure: string | null;
+  };
 }
 
 export interface NewProject {
   readonly name: string;
   readonly repoUrl: string | null;
+  /** Only the demo project sets it; the form can't. */
+  readonly repoCommit?: string | null;
 }
 
 /** A rejected field, with a sentence the page can show next to it. */
@@ -74,33 +85,62 @@ interface ProjectRow {
   readonly id: string;
   readonly name: string;
   readonly repo_url: string | null;
+  readonly repo_commit: string | null;
   readonly created_ms: number;
   readonly workspace_id: string;
   readonly workspace_state: WorkspaceState;
+  readonly workspace_changed_ms: number;
+  readonly workspace_failure: string | null;
 }
 
 const columns = (p: string) =>
-  `${p}.id, ${p}.name, ${p}.repo_url, (extract(epoch from ${p}.created_at) * 1000)::float8 as created_ms`;
+  `${p}.id, ${p}.name, ${p}.repo_url, ${p}.repo_commit, (extract(epoch from ${p}.created_at) * 1000)::float8 as created_ms`;
+const workspaceColumns = (w: string) =>
+  `${w}.id as workspace_id, ${w}.state as workspace_state,
+   (extract(epoch from ${w}.state_changed_at) * 1000)::float8 as workspace_changed_ms, ${w}.failure as workspace_failure`;
 
 function toProject(row: ProjectRow): Project {
   return {
     id: row.id,
     name: row.name,
     repoUrl: row.repo_url,
+    repoCommit: row.repo_commit,
     createdAt: new Date(row.created_ms).toISOString(),
-    workspace: { id: row.workspace_id, state: row.workspace_state },
+    workspace: {
+      id: row.workspace_id,
+      state: row.workspace_state,
+      stateChangedAt: new Date(row.workspace_changed_ms).toISOString(),
+      failure: row.workspace_failure,
+    },
   };
 }
 
 /** The person's own projects, newest first. Nobody sees anyone else's. */
 export async function listProjects(db: Database, ownerId: string): Promise<Project[]> {
   const rows = await db.query<ProjectRow>(
-    `select ${columns('p')}, w.id as workspace_id, w.state as workspace_state
+    `select ${columns('p')}, ${workspaceColumns('w')}
      from projects p join workspaces w on w.project_id = p.id
      where p.owner_id = $1 order by p.created_at desc, p.name`,
     [ownerId],
   );
   return rows.map(toProject);
+}
+
+/** The person's project for this repository at this pinned commit, if there is one (the demo project). */
+export async function findPinnedProject(
+  db: Database,
+  ownerId: string,
+  repoUrl: string,
+  repoCommit: string,
+): Promise<Project | undefined> {
+  const rows = await db.query<ProjectRow>(
+    `select ${columns('p')}, ${workspaceColumns('w')}
+     from projects p join workspaces w on w.project_id = p.id
+     where p.owner_id = $1 and p.repo_url = $2 and p.repo_commit = $3
+     order by p.created_at limit 1`,
+    [ownerId, repoUrl, repoCommit],
+  );
+  return rows[0] === undefined ? undefined : toProject(rows[0]);
 }
 
 /** Creates a project and its workspace record together, or says the person already has one with that name. */
@@ -113,14 +153,14 @@ export async function createProject(
   // multi-call transactions). `on conflict do nothing` turns a duplicate name into "no row".
   const rows = await db.query<ProjectRow>(
     `with p as (
-       insert into projects (owner_id, name, repo_url) values ($1, $2, $3)
+       insert into projects (owner_id, name, repo_url, repo_commit) values ($1, $2, $3, $4)
        on conflict (owner_id, name) do nothing
        returning *
      ), w as (
-       insert into workspaces (project_id) select id from p returning id, state
+       insert into workspaces (project_id) select id from p returning id, state, state_changed_at, failure
      )
-     select ${columns('p')}, w.id as workspace_id, w.state as workspace_state from p, w`,
-    [ownerId, project.name, project.repoUrl],
+     select ${columns('p')}, ${workspaceColumns('w')} from p, w`,
+    [ownerId, project.name, project.repoUrl, project.repoCommit ?? null],
   );
   const row = rows[0];
   return row === undefined ? 'duplicate-name' : toProject(row);
@@ -128,13 +168,18 @@ export async function createProject(
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Checked before an ID reaches SQL: Postgres would fail the whole statement on a malformed uuid. */
+export function isUuid(value: string): boolean {
+  return UUID.test(value);
+}
+
 /** Whether this project exists and belongs to this person. Anything else, including a malformed ID, is "no". */
 export async function ownsProject(
   db: Database,
   projectId: string,
   ownerId: string,
 ): Promise<boolean> {
-  if (!UUID.test(projectId)) return false;
+  if (!isUuid(projectId)) return false;
   const rows = await db.query('select 1 from projects where id = $1 and owner_id = $2', [
     projectId,
     ownerId,

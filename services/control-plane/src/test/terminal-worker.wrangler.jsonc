@@ -1,0 +1,9 @@
+// Only for local-host.docker.test.ts: the test-only terminal Worker, on its own. Without its own config,
+// `wrangler dev` would find the repository's wrangler.jsonc and serve the app's static files instead.
+{
+  "$schema": "../../../../node_modules/wrangler/config-schema.json",
+  "name": "flowcanvas-terminal-test",
+  "main": "./terminal-worker.ts",
+  "compatibility_date": "2026-10-01",
+  "send_metrics": false,
+}

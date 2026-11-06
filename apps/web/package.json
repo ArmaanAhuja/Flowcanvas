@@ -14,6 +14,8 @@
   "dependencies": {
     "@flowcanvas/graph-model": "workspace:*",
     "@flowcanvas/ui": "workspace:*",
+    "@xterm/addon-fit": "catalog:",
+    "@xterm/xterm": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"
   },
