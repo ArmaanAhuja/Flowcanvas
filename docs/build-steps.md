@@ -10599,5 +10599,17 @@ pnpm --filter @flowcanvas/control-plane test:idle-real  # about 12 minutes, in r
 
 **Also found by the PR: my test-worker cap was too high for CI.** The step 10 cap (6 workers) is right for the laptop's 16 cores, but CI's runner has 4. Six workers there made each in-process Postgres start too slowly, and 21 setup hooks timed out (10 s). Every failure was a timeout, and all in the control plane. The cap is now *at most 6, and never more than the cores minus one* (`availableParallelism()`, which follows the CPUs a process may use). Checked pinned to 4 cores (233 pass, 68 s) and to 2 (233 pass, 157 s); the laptop still gets 6.
 
+**After the merge, `main`'s CI failed the same way** (3 setup hooks timed out at 10 s, with 3 workers on CI's 4 cores), so capping workers was treating the symptom. **The cause:** every test started its own in-process Postgres. Starting PGlite is almost all the cost (about 0.8 s each here, measured; the migrations take next to nothing), and on a busy 4-core runner it nears the 10 s limit. **The fix** (follow-up PR, `services/control-plane/src/test/`):
+- Each test file starts and migrates **one** Postgres once, and every test gets its own `clone()` of it (about 0.2 s, measured; just as fresh and independent).
+- Each test's databases are **closed when it ends** (`setup.ts`, a Vitest setup file). Without that, the faster clones piled up: the full suite's low point fell to 5.8 GiB.
+
+| Full `pnpm test` | Lowest memory available | Time |
+| --- | --- | --- |
+| Before step 10 | 1.3 GiB | — |
+| Workers capped at 6 (step 10) | 11.4 GiB | 75 s |
+| One migrated Postgres per file, cloned per test, closed after each test | **19.0 GiB** (about 6 GiB used) | **17 to 20 s** |
+
+Checked: control-plane tests pinned to 4 cores, 6 runs out of 6 passed after the change (one run of 15 had failed before it, cause not captured); pinned to 2 cores, passed; 5 full runs in a row passed; the Docker tests pass.
+
 **CI's Docker job, first run:** GitHub's `ubuntu-24.04` runner has **Docker 28.0.4**. All 42 Docker tests ran and passed (Rallly opened in 3.1 s there).
 
