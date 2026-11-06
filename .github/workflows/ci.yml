@@ -36,6 +36,15 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Cloudflare's own build, on this fresh checkout and before anything else builds a package: only the web
+      # app's build task, then the Worker bundled. It failed unseen from phase 1d step 4 to step 11, when the
+      # Worker started bundling packages that task didn't build.
+      - name: Cloudflare's build, as Cloudflare runs it
+        run: |
+          pnpm build --filter=@flowcanvas/web
+          pnpm exec wrangler versions upload --dry-run
+        env:
+          FLOWCANVAS_COMMIT: ${{ env.COMMIT }}
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck

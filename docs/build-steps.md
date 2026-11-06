@@ -10588,3 +10588,14 @@ pnpm --filter @flowcanvas/control-plane test:idle-real  # about 12 minutes, in r
 
 **Commit:** `docs: phase 1d report, 0.5.0, in review`
 
+**Found by the PR: Cloudflare's preview build had failed since step 4.**
+- **What happened:** Cloudflare builds only the web app's task (`pnpm build --filter=@flowcanvas/web`), then bundles the Worker. From step 4 on, the Worker imports `@flowcanvas/workspace-host/protocol` and `@flowcanvas/workspace-agent/protocol`, which resolve to those packages' `dist/`. That task never built them.
+- **Why nobody saw it:** on a laptop, `dist/` is always there from earlier builds. Every commit from `f1af4dc` failed, and the phase had no PR, where Cloudflare's checks show.
+- **The fix:** `turbo.json` makes `@flowcanvas/web#build` also build those two packages. Reproduced from a fresh state, the bundle failed with `Could not resolve "@flowcanvas/workspace-host/protocol"` before the fix and succeeded after (356 KiB, the same as before).
+- **So it can't happen silently again:** CI's checks now run Cloudflare's exact build on the fresh checkout, then `wrangler versions upload --dry-run`, before anything else builds a package.
+- **Gotcha:** a build that works on your machine may rely on outputs left from an earlier build. Check deployable builds from a clean state.
+
+**Staging's database (owner, 6 Nov):** `pnpm db:migrate` on the production branch (`ep-raspy-frost…`, not the dev branch) applied `0003_workspace_lifecycle` and `0004_pinned_commit`.
+
+**CI's Docker job, first run:** GitHub's `ubuntu-24.04` runner has **Docker 28.0.4**. All 42 Docker tests ran and passed (Rallly opened in 3.1 s there).
+

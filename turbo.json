@@ -16,7 +16,14 @@
       "dependsOn": ["^build"]
     },
     "@flowcanvas/web#build": {
-      "dependsOn": ["^build"],
+      // The app's Worker (the control plane) is deployed with these files and bundles the host's and the
+      // agent's protocol from their dist/. Cloudflare's build runs only this task (pnpm build
+      // --filter=@flowcanvas/web), so it builds them too (phase 1d, step 11).
+      "dependsOn": [
+        "^build",
+        "@flowcanvas/workspace-host#build",
+        "@flowcanvas/workspace-agent#build"
+      ],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/package.json", "$TURBO_ROOT$/CHANGELOG.md"],
       "outputs": ["dist/**"],
       "env": ["FLOWCANVAS_COMMIT"]
