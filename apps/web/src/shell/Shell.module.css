@@ -1,69 +1,123 @@
-/* Figma 06 at 1440 × 900: top bar 40, rail 44, left panel 248, right panel 360, review bar 40 (tokens). */
+/*
+ * Figma 06 at 1440 × 900: top bar 40, rail 44, left panel 248, right panel 360, review bar 40 (300 open).
+ * Separators take no width, so each region keeps its exact size; each region draws its own edge toward the
+ * canvas (Graphite: "1 px edge toward the canvas only").
+ */
 .shell {
   display: grid;
-  grid-template-areas:
-    'top top top top'
-    'rail left canvas right'
-    'review review review review';
-  grid-template-rows: var(--size-bar) minmax(0, 1fr) var(--size-bar);
-  grid-template-columns:
-    var(--size-rail) var(--size-panel-left) minmax(0, 1fr)
-    var(--size-panel-right);
+  grid-template-rows: var(--size-bar) minmax(0, 1fr) auto;
   block-size: 100dvh;
   overflow: hidden;
   background: var(--color-surface-canvas);
   color: var(--color-text-primary);
 }
 
-.topBar,
-.rail,
-.left,
-.right,
-.review {
-  min-inline-size: 0;
-  min-block-size: 0;
-  background: var(--color-surface-panel);
-}
-
 .topBar {
-  display: flex;
-  grid-area: top;
-  gap: var(--space-12);
-  align-items: center;
-  padding-inline: var(--space-12);
+  min-inline-size: 0;
   border-block-end: var(--border-width-default) solid var(--color-border-subtle);
 }
 
+.body {
+  display: flex;
+  min-block-size: 0;
+}
+
 .rail {
-  grid-area: rail;
-  border-inline-end: var(--border-width-default) solid var(--color-border-subtle);
+  flex: none;
+}
+
+.group {
+  flex: 1;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+.left,
+.right,
+.dock {
+  box-sizing: border-box;
+  block-size: 100%;
+  overflow: auto;
+  background: var(--color-surface-panel);
 }
 
 .left {
-  grid-area: left;
-  overflow: auto;
   border-inline-end: var(--border-width-default) solid var(--color-border-subtle);
+}
+
+.right {
+  border-inline-start: var(--border-width-default) solid var(--color-border-subtle);
+}
+
+.dock {
+  border-block-start: var(--border-width-default) solid var(--color-border-subtle);
+}
+
+/* Collapsed: no edge either, so it takes no space at all. */
+.left[inert],
+.right[inert],
+.dock[inert] {
+  border: 0;
 }
 
 .canvas {
   position: relative;
-  grid-area: canvas;
-  min-inline-size: 0;
-  min-block-size: 0;
+  block-size: 100%;
   overflow: hidden;
 }
 
-.right {
-  grid-area: right;
-  overflow: auto;
-  border-inline-start: var(--border-width-default) solid var(--color-border-subtle);
+/* A splitter with no width of its own (the library widens its hit area). Hover shows where to grab; the
+   keyboard focus ring is the accent, beside the edge. */
+.separator {
+  position: relative;
+  flex: none;
+  inline-size: 0;
+  outline: none;
+}
+
+.separator[aria-orientation='horizontal'] {
+  inline-size: auto;
+  block-size: 0;
+}
+
+.separator::after {
+  position: absolute;
+  inset-block: 0;
+  inset-inline: calc(-1 * var(--space-2));
+  z-index: 1;
+  border-radius: var(--radius-control);
+  content: '';
+  transition: background-color var(--duration-hover) ease-out;
+}
+
+.separator[aria-orientation='horizontal']::after {
+  inset-block: calc(-1 * var(--space-2));
+  inset-inline: 0;
+}
+
+.separator:hover::after {
+  background: var(--color-border-strong);
+}
+
+.separator:focus-visible::after {
+  background: var(--color-accent-solid);
 }
 
 .review {
-  display: flex;
-  grid-area: review;
-  gap: var(--space-12);
-  align-items: center;
-  padding-inline: var(--space-12);
+  display: grid;
+  grid-template-rows: var(--size-bar);
+  block-size: var(--size-bar);
+  overflow: hidden;
+  border-block-start: var(--border-width-default) solid var(--color-border-subtle);
+  background: var(--color-surface-panel);
+}
+
+.shell[data-review-open='true'] .review {
+  grid-template-rows: var(--size-bar) minmax(0, 1fr);
+  block-size: var(--size-panel-review-open);
+}
+
+.reviewDetail {
+  overflow: auto;
   border-block-start: var(--border-width-default) solid var(--color-border-subtle);
 }

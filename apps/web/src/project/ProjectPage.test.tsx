@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Project } from '../projects/api';
 import { EMPTY, ProjectPage } from './ProjectPage';
@@ -49,7 +50,40 @@ describe('ProjectPage', () => {
       />,
     );
     await screen.findByText('Rallly');
-    for (const text of Object.values(EMPTY)) expect(screen.getByText(text)).toBeTruthy();
+    for (const text of [EMPTY.left, EMPTY.canvas, EMPTY.right, EMPTY.review]) {
+      expect(screen.getByText(text)).toBeTruthy();
+    }
+  });
+
+  it('opens the review bar’s detail, and offers only the views that exist', async () => {
+    render(
+      <ProjectPage
+        projectId="p-1"
+        fetcher={api({ projects: [rallly], workspacesAvailable: true })}
+      />,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Show review' }));
+    expect(screen.getByText(EMPTY.reviewDetail)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Hide review' }).getAttribute('aria-expanded')).toBe(
+      'true',
+    );
+    expect(screen.getByRole('tab', { name: 'Graph' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole<HTMLButtonElement>('tab', { name: 'Sequence' }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>('tab', { name: 'Code' }).disabled).toBe(true);
+  });
+
+  it('puts only working tools on the rail', async () => {
+    render(
+      <ProjectPage
+        projectId="p-1"
+        fetcher={api({ projects: [rallly], workspacesAvailable: true })}
+      />,
+    );
+    const rail = await screen.findByRole('navigation', { name: 'Tools' });
+    expect([...rail.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Entry points',
+      'Terminal',
+    ]);
   });
 
   it('shows no workspace status where workspaces can’t run (staging)', async () => {

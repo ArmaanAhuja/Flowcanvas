@@ -1,9 +1,15 @@
-import { WorkspaceStatus } from '@flowcanvas/ui';
-import { useEffect, useState } from 'react';
+import { Button, Rail, RailButton, ReviewBar, Tabs, TopBar, WorkspaceStatus } from '@flowcanvas/ui';
+import { Maximize2, Minimize2, PanelRight, SquareTerminal, Target } from 'lucide-react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { fetchProjects, isProblem, type Project } from '../projects/api';
 import { linkTo } from '../routing/route';
-import { Shell } from '../shell/Shell';
+import { Shell, useShell } from '../shell/Shell';
 import styles from './ProjectPage.module.css';
+
+// xterm.js only when the dock opens a terminal.
+const WorkspaceTerminal = lazy(async () => ({
+  default: (await import('../terminal/WorkspaceTerminal')).WorkspaceTerminal,
+}));
 
 /** What each region says until its content exists: honest empty states, never placeholders (owner, 7 Nov). */
 export const EMPTY = {
@@ -11,7 +17,23 @@ export const EMPTY = {
   canvas: 'Flows appear here once the project is analysed.',
   right: 'Select something on the canvas to see its details here.',
   review: 'No agent session yet.',
+  reviewDetail:
+    'Changes from an agent session are listed here, with their tests and what’s still unverified.',
+  terminalClosed: 'Open the workspace to use a terminal here.',
+  terminalUnavailable: 'Workspaces run locally for now, so there’s no terminal here.',
 } as const;
+
+/** The view switch: Graph now; the others arrive with their phases (shown, never offered). */
+const VIEWS = [
+  { id: 'graph', label: 'Graph' },
+  {
+    id: 'sequence',
+    label: 'Sequence',
+    disabled: true,
+    hint: 'The sequence view arrives in a later phase',
+  },
+  { id: 'code', label: 'Code', disabled: true, hint: 'The code view arrives with the editor' },
+];
 
 type Loaded =
   | { readonly kind: 'loading' }
@@ -68,29 +90,139 @@ export function ProjectPage({
     );
   }
 
-  const { project } = loaded;
+  const { project, workspacesAvailable } = loaded;
   return (
     <Shell
-      topBar={
+      topBar={<ProjectTopBar project={project} workspacesAvailable={workspacesAvailable} />}
+      rail={<ProjectRail />}
+      left={
+        <section className={styles.panel} aria-labelledby="entry-points">
+          <h2 id="entry-points" className={styles.panelTitle}>
+            Entry points
+          </h2>
+          <p className={styles.empty}>{EMPTY.left}</p>
+        </section>
+      }
+      canvas={<p className={styles.canvasEmpty}>{EMPTY.canvas}</p>}
+      right={
+        <section className={styles.panel} aria-labelledby="inspector">
+          <h2 id="inspector" className={styles.panelTitle}>
+            Inspector
+          </h2>
+          <p className={styles.empty}>{EMPTY.right}</p>
+        </section>
+      }
+      dock={<Dock project={project} workspacesAvailable={workspacesAvailable} />}
+      review={<ProjectReviewBar />}
+      reviewDetail={<p className={styles.empty}>{EMPTY.reviewDetail}</p>}
+    />
+  );
+}
+
+function ProjectTopBar({
+  project,
+  workspacesAvailable,
+}: {
+  readonly project: Project;
+  readonly workspacesAvailable: boolean;
+}) {
+  const shell = useShell();
+  return (
+    <TopBar
+      start={
         <>
           <a className={styles.home} {...linkTo('/')}>
             Flowcanvas
           </a>
           <span className={styles.project}>{project.name}</span>
-          <span className={styles.spacer} />
-          {loaded.workspacesAvailable && (
+        </>
+      }
+      middle={<Tabs aria-label="View" variant="segmented" items={VIEWS} />}
+      end={
+        <>
+          {workspacesAvailable && (
             <WorkspaceStatus
               state={project.workspace.state}
               {...(project.workspace.state === 'running' ? { detail: '2 cores' } : {})}
             />
           )}
+          <RailButton
+            label="Right panel"
+            icon={<PanelRight size={18} />}
+            active={shell.isOpen('right')}
+            onClick={() => {
+              shell.toggle('right');
+            }}
+          />
+          <RailButton
+            label={shell.fullScreen ? 'Leave full screen' : 'Full-screen canvas'}
+            icon={shell.fullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+            active={shell.fullScreen}
+            onClick={shell.toggleFullScreen}
+          />
         </>
       }
-      rail={null}
-      left={<p className={styles.empty}>{EMPTY.left}</p>}
-      canvas={<p className={styles.canvasEmpty}>{EMPTY.canvas}</p>}
-      right={<p className={styles.empty}>{EMPTY.right}</p>}
-      review={<span className={styles.reviewEmpty}>{EMPTY.review}</span>}
     />
+  );
+}
+
+/** Only the tools that work now; the rest of Figma 06's rail arrives with their phases. */
+function ProjectRail() {
+  const shell = useShell();
+  return (
+    <Rail>
+      <RailButton
+        label="Entry points"
+        icon={<Target size={18} />}
+        active={shell.isOpen('left')}
+        onClick={() => {
+          shell.toggle('left');
+        }}
+      />
+      <RailButton
+        label="Terminal"
+        icon={<SquareTerminal size={18} />}
+        active={shell.isOpen('dock')}
+        onClick={() => {
+          shell.toggle('dock');
+        }}
+      />
+    </Rail>
+  );
+}
+
+function ProjectReviewBar() {
+  const shell = useShell();
+  return (
+    <ReviewBar
+      summary={EMPTY.review}
+      actions={
+        <Button
+          kind="ghost"
+          size="sm"
+          aria-expanded={shell.reviewOpen}
+          onClick={shell.toggleReview}
+        >
+          {shell.reviewOpen ? 'Hide review' : 'Show review'}
+        </Button>
+      }
+    />
+  );
+}
+
+function Dock({
+  project,
+  workspacesAvailable,
+}: {
+  readonly project: Project;
+  readonly workspacesAvailable: boolean;
+}) {
+  if (!workspacesAvailable) return <p className={styles.empty}>{EMPTY.terminalUnavailable}</p>;
+  if (project.workspace.state !== 'running')
+    return <p className={styles.empty}>{EMPTY.terminalClosed}</p>;
+  return (
+    <Suspense fallback={<p className={styles.empty}>Loading the terminal…</p>}>
+      <WorkspaceTerminal projectId={project.id} projectName={project.name} />
+    </Suspense>
   );
 }

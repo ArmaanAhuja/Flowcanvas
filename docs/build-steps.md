@@ -10680,8 +10680,8 @@ Both themes; 1440 × 900, checked at 1280 × 800.
 | 1 | Spike: React Flow and `react-resizable-panels` under the strict CSP; a first frame-time measurement with 500 nodes. ADR 0020 | done (Claude, 7 Nov) |
 | 2 | The project page (`/p/:id`) and the shell skeleton at Figma's sizes, with the geometry test | done (Claude, 7 Nov) |
 | 3 | Shell components in the design system: top bar, rail, collapsible panel, review bar (catalogue and baselines) | done (Claude, 7 Nov) |
-| 4 | Panels: collapse, resize, keyboard control; the layout remembered per browser; full-screen canvas | *next* |
-| 5 | The canvas: dot grid, pan, zoom, minimap, selection, zoom controls, fit; `FlowNode` as a node type | *planned* |
+| 4 | Panels: collapse, resize, keyboard control; the layout remembered per browser; full-screen canvas | done (Claude, 7 Nov) |
+| 5 | The canvas: dot grid, pan, zoom, minimap, selection, zoom controls, fit; `FlowNode` as a node type | *next* |
 | 6 | Real content: project, workspace chip and popover, the terminal in the bottom dock; empty states | *planned* |
 | 7 | The 500-node performance test, with its numbers | *planned* |
 | 8 | Baselines, the Try it walkthrough, and the Figma 06 differences list (decision A5) | *planned* |
@@ -10854,4 +10854,79 @@ pnpm --filter @flowcanvas/ui storybook  # Shell → TopBar, Rail, ReviewBar
 - **Laptop:** all five checks ok.
 
 **Commit:** `feat(ui): TopBar, Rail and ReviewBar for the app shell; Tabs gains segmented and disabled items`
+
+### Step 2.4 — Panels that collapse, resize and remember (done by Claude; ADR 0020 addendum)
+
+**Goal:** every side region collapses and resizes, by mouse and keyboard; the canvas can go full screen; and your layout is remembered per browser, at exact pixel sizes.
+
+**What you can do now** (on a project's page):
+- **Rail:**
+  - **Entry points** opens and closes the left panel.
+  - **Terminal** opens the bottom dock (300 px). It shows the real terminal when the workspace runs; otherwise it says to open the workspace, or, on staging, that workspaces run locally.
+- **Top bar:**
+  - **Right panel** toggles the inspector.
+  - **Full-screen canvas** collapses everything but the canvas, and **Leave full screen** restores exactly what was open.
+- **Separators:**
+  - Drag one to resize.
+  - Or Tab to it and use the arrow keys: each is a keyboard splitter with a name, such as "Resize the left panel".
+  - Panels stop at their limits: left 180–480 px, right 280–640, dock 120–600; the canvas keeps at least 320 px.
+- **Review bar:** **Show review** opens it to 300 px, with its honest empty state.
+- **Reload:** your sizes and what was open come back.
+
+**Concepts:**
+- **The window-splitter pattern.** A separator with `role="separator"`, a name, and a value, moved with the arrow keys. https://www.w3.org/WAI/ARIA/apg/patterns/windowsplitter/
+- **`inert`.** A collapsed panel is `inert`: still in the page, but skipped by Tab and hidden from screen readers. https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Global_attributes/inert
+- **A context for the shell.** `useShell()` lets the rail and the top bar open and close regions without passing callbacks through every layer. Each panel's open state comes from its real size, so dragging one shut counts as closing it. https://react.dev/learn/passing-data-deeply-with-context
+- **Pixels, not percentages** (ADR 0020 addendum):
+  - The library saves percentages, so a saved 320 px panel would change width with the window.
+  - So the shell saves pixels itself, and puts open panels back at their pixels when the window resizes.
+  - `localStorage` is wrapped: blocked or broken storage just means the defaults.
+- **Sub-pixel layout.** Browsers place boxes in 1/64 px units. Panels sized as flex proportions can be a sliver off a whole pixel, which is invisible, so the geometry test allows under 0.1 px.
+- **Testing without layout.** jsdom does no layout and has no `ResizeObserver`, so the web tests get a stand-in that reports nothing (`src/test/setup.ts`). Sizes, dragging and keyboard resizing are tested in the browser.
+
+**Files:**
+
+| File | What changed |
+| --- | --- |
+| `apps/web/src/shell/Shell.tsx`, `.module.css` | Resizable groups (left, centre with canvas and dock, right); `useShell()`; the pixel layout and its storage; full screen; the review bar opening to 300 px; zero-width separators with an accent focus ring |
+| `apps/web/src/project/ProjectPage.tsx`, `.module.css` | The top bar (`TopBar`, the view switch, status, panel and full-screen toggles), the rail (working tools only), the review bar, the dock (terminal or why not), panel headings |
+| `packages/ui/src/components/rail/Rail.module.css` | The rail draws its own edge inside its 44 px (it measured 45 with the shell's border) |
+| `tools/figma-tokens/src/render.ts`, `packages/tokens` | `baseValues`: theme-independent token values for code that needs numbers (`--size-panel-left: 248px`) |
+| `apps/web/src/test/setup.ts`, `vite.config.ts` | The `ResizeObserver` stand-in for jsdom |
+| `apps/web/package.json` | `@flowcanvas/tokens` and `lucide-react` used directly |
+
+**Tests:**
+- **Unit:**
+  - the saved layout: defaults at Figma's sizes, read back, out-of-range or malformed entries, broken JSON, blocked storage
+  - the page: the review bar's detail, only the views that exist, only working tools on the rail
+  - the generator's `baseValues`
+- **Walkthrough "panels collapse, resize by mouse and keyboard, and keep their layout"** (8 steps):
+  - the rail collapses and reopens the left panel, and a collapsed panel is `inert`
+  - the keyboard resizes it; dragging resizes it to 320 px
+  - the right panel toggles
+  - the dock opens with its message
+  - full screen and back, exactly as before
+  - the review bar opens to 300 and closes to 40
+  - after a reload the left panel is still 320 px
+- **Geometry:** every region within 0.1 px of Figma 06's sizes, at 1440 × 900 and 1280 × 800, including after the window resizes.
+- **Visual:** the rail's two baselines (its edge), checked by eye. Nothing else changed.
+
+**Run and check it:**
+```fish
+pnpm test        # 621 tests
+pnpm test:e2e    # 11 pass (+1 that runs only in CI)
+pnpm dev         # open a project: try the rail, the separators (drag, or Tab and arrows), full screen, reload
+```
+
+**Gotchas, all caught by the geometry test:**
+- **The rail measured 45 px:** the component was 44 and the shell added a border. In Figma the stroke is inside, so now the component draws its own edge.
+- **A collapsed panel measured 1 px:** its border can't shrink. Collapsed regions draw no edge.
+- **Percentages in a pixel design:** see the ADR addendum.
+
+**Docs:** this write-up; ADR 0020 addendum.
+
+**Risks:**
+- **Laptop:** all five checks ok.
+
+**Commit:** `feat(web): shell panels collapse, resize by mouse and keyboard, and keep pixel layouts`
 

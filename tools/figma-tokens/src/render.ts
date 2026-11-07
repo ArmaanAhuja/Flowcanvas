@@ -272,6 +272,12 @@ export function renderTs(set: TokenSet): string {
     }
     themes[theme.name] = values;
   }
+  const base: Record<string, string> = {};
+  for (const token of set.base) {
+    for (const [name, value] of declarations(token, known)) {
+      base[name] = value;
+    }
+  }
   const themeNames = set.themes.map((theme) => `'${theme.name}'`).join(' | ');
   return [
     `// ${HEADER}`,
@@ -281,6 +287,9 @@ export function renderTs(set: TokenSet): string {
     '',
     '/** Resolved values per theme, for places that cannot read CSS variables (canvas, WebGL). */',
     `export const themeValues = ${JSON.stringify(themes, null, 2)} as const;`,
+    '',
+    '/** Resolved values that are the same in every theme (sizes, spacing, durations), for code that needs numbers. */',
+    `export const baseValues = ${JSON.stringify(base, null, 2)} as const;`,
     '',
     `export type ThemeName = ${themeNames};`,
     '',

@@ -328,6 +328,9 @@ importers:
       '@flowcanvas/graph-model':
         specifier: workspace:*
         version: link:../../packages/graph-model
+      '@flowcanvas/tokens':
+        specifier: workspace:*
+        version: link:../../packages/tokens
       '@flowcanvas/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -340,6 +343,9 @@ importers:
       '@xyflow/react':
         specifier: 'catalog:'
         version: 12.12.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      lucide-react:
+        specifier: 'catalog:'
+        version: 1.55.0(@types/react@19.3.0)(react@19.3.1)
       react:
         specifier: 'catalog:'
         version: 19.3.1

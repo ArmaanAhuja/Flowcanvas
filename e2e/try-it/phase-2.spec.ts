@@ -10,9 +10,10 @@ const PROJECT = {
   repoUrl: 'https://github.com/ArmaanAhuja-7777/rallly',
   repoCommit: null,
   createdAt: '2026-11-07T09:00:00.000Z',
+  // Asleep, so the dock shows its message instead of connecting a terminal (the terminal's own walkthrough is 1d's).
   workspace: {
     id: 'w-1',
-    state: 'running',
+    state: 'sleeping',
     stateChangedAt: '2026-11-07T09:00:00.000Z',
     failure: null,
   },
@@ -78,7 +79,14 @@ test('phase 2: a project opens in the app shell, laid out like Figma 06', async 
       await page.setViewportSize({ width, height });
       for (const [region, box] of Object.entries(expected(width, height))) {
         const actual = await page.locator(`[data-region="${region}"]`).boundingBox();
-        expect(actual, region).toEqual(box);
+        // Within 0.1 px: the panels are sized as flex proportions, and the browser lays them out in 1/64 px
+        // units, so a region can be a sliver (1/64 px) off a whole pixel. Anything visible would be 1 px.
+        for (const key of ['x', 'y', 'width', 'height'] as const) {
+          expect(
+            Math.abs((actual?.[key] ?? Number.NaN) - box[key]),
+            `${region} ${key}`,
+          ).toBeLessThan(0.1);
+        }
       }
     });
   }
@@ -86,6 +94,98 @@ test('phase 2: a project opens in the app shell, laid out like Figma 06', async 
   await test.step('A reload at the project’s address lands on the same page', async () => {
     await page.reload();
     await expect(page.getByRole('banner')).toContainText('Rallly');
+  });
+
+  expect(watch.problems()).toEqual([]);
+});
+
+const width = async (page: Page, region: string) =>
+  (await page.locator(`[data-region="${region}"]`).boundingBox())?.width ?? 0;
+const height = async (page: Page, region: string) =>
+  (await page.locator(`[data-region="${region}"]`).boundingBox())?.height ?? 0;
+
+test('phase 2: panels collapse, resize by mouse and keyboard, and keep their layout', async ({
+  page,
+}) => {
+  const watch = watchForPageProblems(page);
+  await fakeApi(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/p/${PROJECT.id}`);
+  await expect(page.getByRole('banner')).toContainText('Rallly');
+
+  await test.step('The rail’s Entry points closes and reopens the left panel', async () => {
+    const tool = page.getByRole('button', { name: 'Entry points' });
+    await expect(tool).toHaveAttribute('aria-pressed', 'true');
+    await tool.click();
+    await expect.poll(() => width(page, 'left-panel')).toBe(0);
+    await expect(tool).toHaveAttribute('aria-pressed', 'false');
+    // Collapsed means out of reach for the keyboard and screen readers too.
+    await expect(page.locator('[data-region="left-panel"]')).toHaveAttribute('inert', '');
+    expect(await width(page, 'canvas')).toBe(1440 - 44 - 360);
+    await tool.click();
+    await expect.poll(() => width(page, 'left-panel')).toBe(248);
+  });
+
+  await test.step('The keyboard resizes a panel from its separator', async () => {
+    await page.getByRole('separator', { name: 'Resize the left panel' }).focus();
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => width(page, 'left-panel')).toBeGreaterThan(248);
+  });
+
+  await test.step('Dragging resizes it too', async () => {
+    const box = await page.getByRole('separator', { name: 'Resize the left panel' }).boundingBox();
+    if (box === null) throw new Error('no separator');
+    await page.mouse.move(box.x + box.width / 2, 400);
+    await page.mouse.down();
+    await page.mouse.move(44 + 320, 400, { steps: 8 });
+    await page.mouse.up();
+    await expect.poll(() => width(page, 'left-panel')).toBe(320);
+  });
+
+  await test.step('The right panel toggles from the top bar', async () => {
+    const toggle = page.getByRole('button', { name: 'Right panel' });
+    await toggle.click();
+    await expect.poll(() => width(page, 'right-panel')).toBe(0);
+    await toggle.click();
+    await expect.poll(() => width(page, 'right-panel')).toBe(360);
+  });
+
+  await test.step('The bottom dock opens, and says why there’s no shell yet', async () => {
+    expect(await height(page, 'dock')).toBe(0);
+    await page.getByRole('button', { name: 'Terminal' }).click();
+    await expect.poll(() => height(page, 'dock')).toBe(300);
+    await expect(page.locator('[data-region="dock"]')).toContainText(
+      'Open the workspace to use a terminal here.',
+    );
+  });
+
+  await test.step('Full screen collapses everything but the canvas, and restores it', async () => {
+    await page.getByRole('button', { name: 'Full-screen canvas' }).click();
+    await expect.poll(() => width(page, 'left-panel')).toBe(0);
+    expect(await width(page, 'right-panel')).toBe(0);
+    expect(await height(page, 'dock')).toBe(0);
+    expect(await width(page, 'canvas')).toBe(1440 - 44);
+    await page.getByRole('button', { name: 'Leave full screen' }).click();
+    await expect.poll(() => width(page, 'left-panel')).toBe(320);
+    expect(await width(page, 'right-panel')).toBe(360);
+    expect(await height(page, 'dock')).toBe(300);
+  });
+
+  await test.step('The review bar opens to 300 px', async () => {
+    await page.getByRole('button', { name: 'Show review' }).click();
+    await expect.poll(() => height(page, 'review-bar')).toBe(300);
+    await expect(page.locator('[data-region="review-bar"]')).toContainText(
+      'Changes from an agent session',
+    );
+    await page.getByRole('button', { name: 'Hide review' }).click();
+    await expect.poll(() => height(page, 'review-bar')).toBe(40);
+  });
+
+  await test.step('A reload keeps the layout (per browser)', async () => {
+    await page.reload();
+    await expect(page.getByRole('banner')).toContainText('Rallly');
+    await expect.poll(() => width(page, 'left-panel')).toBe(320);
   });
 
   expect(watch.problems()).toEqual([]);

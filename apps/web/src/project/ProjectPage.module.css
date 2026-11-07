@@ -35,10 +35,6 @@
   color: var(--color-text-secondary);
 }
 
-.spacer {
-  flex: 1;
-}
-
 .empty,
 .reviewEmpty {
   margin: 0;
@@ -58,4 +54,25 @@
   inset: 0;
   display: grid;
   place-items: center;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: calc(var(--space-8) + var(--space-2)) var(--space-8) var(--space-12);
+}
+
+.panelTitle {
+  margin: 0;
+  padding-inline: var(--space-4);
+  font-family: var(--text-small-strong-font-family);
+  font-size: var(--text-small-strong-font-size);
+  font-weight: var(--text-small-strong-font-weight);
+  line-height: var(--text-small-strong-line-height);
+  color: var(--color-text-primary);
+}
+
+.panel .empty {
+  padding: 0 var(--space-4);
 }

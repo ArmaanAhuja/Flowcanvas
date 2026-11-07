@@ -13,10 +13,12 @@
   },
   "dependencies": {
     "@flowcanvas/graph-model": "workspace:*",
+    "@flowcanvas/tokens": "workspace:*",
     "@flowcanvas/ui": "workspace:*",
     "@xterm/addon-fit": "catalog:",
     "@xterm/xterm": "catalog:",
     "@xyflow/react": "catalog:",
+    "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-resizable-panels": "catalog:"

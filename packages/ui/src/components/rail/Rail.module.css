@@ -8,6 +8,8 @@
   inline-size: var(--size-rail);
   block-size: 100%;
   padding-block: var(--space-8);
+  /* Its edge toward the canvas, inside the 44 px (Figma draws the stroke inside). */
+  border-inline-end: var(--border-width-default) solid var(--color-border-subtle);
   background: var(--color-surface-panel);
 }
 

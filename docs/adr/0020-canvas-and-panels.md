@@ -40,3 +40,17 @@ Phase 2 builds the app shell from Figma 06 and a canvas with pan, zoom, minimap 
 - `FlowNode` (`packages/ui`) is drawn as a React Flow node type, so the catalogue and the canvas show the same component.
 - **Real frame smoothness is measured in step 7** in a real browser window with a GPU on the owner's laptop. CI's headless runs report numbers but fail only on large regressions.
 - A WebGL layer, if needed later (thousands of nodes), sits beside React Flow, as the build plan says.
+
+## Addendum (7 Nov 2026, step 4): the layout is saved in pixels, by us
+
+The panel library saves layouts as **percentages** (`useDefaultLayout`). A 320 px panel saved at 1440 wide would come back at another width after a reload at 1280, which goes against Figma's fixed pixel sizes. It also rescales by percentage while the window is resized, even with `groupResizeBehavior: "preserve-pixel-size"`: a 248 px panel became 247.81 px at 1280.
+
+So the shell (`apps/web/src/shell/Shell.tsx`):
+- saves each region's **last open size in pixels** and whether it's open (`flowcanvas-shell-layout`)
+- checks the saved values against each region's limits when reading them back, and falls back to the defaults
+- passes those pixels as the panels' default sizes
+- when a panel is reopened, returns it to its last size, not to the minimum
+- **puts open panels back at their saved pixels whenever the window resizes**
+
+The library still does what it's good at: dragging, keyboard splitters, limits and collapsing. A sliver of a pixel (1/64 px, the browser's layout unit) can remain because the library sizes panels as flex proportions; the geometry test allows under 0.1 px.
+
