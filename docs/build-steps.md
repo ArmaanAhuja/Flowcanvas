@@ -10684,8 +10684,8 @@ Both themes; 1440 × 900, checked at 1280 × 800.
 | 5 | The canvas: dot grid, pan, zoom, minimap, selection, zoom controls, fit; `FlowNode` as a node type | done (Claude, 7 Nov) |
 | 6 | Real content: project, workspace chip and popover, the terminal in the bottom dock; empty states | done (Claude, 7 Nov) |
 | 7 | The 500-node performance test, with its numbers | done (Claude, 7 Nov; real window with the owner's approval) |
-| 8 | Baselines, the Try it walkthrough, and the Figma 06 differences list (decision A5) | *next* |
-| 9 | Close: report, 0.6.0, PR | *planned* |
+| 8 | Baselines, the Try it walkthrough, and the Figma 06 differences list (decision A5) | done (Claude, 7 Nov) |
+| 9 | Close: report, 0.6.0, PR | *next* |
 
 ### How each Done-when item is proven
 
@@ -11134,3 +11134,47 @@ pnpm test:perf               # headless, as on CI
 
 **Commit:** `perf(web): 500 nodes pan and zoom smoothly — measured on real hardware`
 
+
+### Step 2.8 — Baselines, the Try it walkthrough, and the Figma 06 differences list (done by Claude)
+
+**Goal:** prove "the layout matches Figma 06" three ways: geometry (already tested since step 2), approved screenshots of the screens in both themes, and a list of every difference from Figma 06 for the owner to review by eye (decision A5).
+
+**What was added:**
+- **Screen baselines** (`e2e/visual/screens.spec.ts`): the project page from the production build, with a fake API, a fixed clock, locale and time zone, in both themes. Each is pixel-compared and checked with axe:
+  - empty project, at 1440 × 900 and 1280 × 800
+  - the Labs stress test (500 example nodes)
+  - the review open
+  - the full-screen canvas
+  - the workspace popover
+- **The visual config has two projects:** `catalogue` (Storybook, as before) and `screens` (the web app's `vite preview`, with the production CSP). `pnpm test:visual` builds both first. CI's job is now "Visual and accessibility (catalogue and screens)".
+- **The differences list:** `docs/reports/phase-2-figma-06-differences.md`, with Figma 06 and our screenshots in `docs/reports/phase-2/`.
+- **The Try it walkthrough** (`e2e/try-it/phase-2.spec.ts`, from steps 2 to 6) is recorded on every run: pan, zoom, select, collapse every panel, restore, reload with the layout kept.
+
+**Found and fixed: the theme didn't follow you onto a project's page.** The theme preference was applied by the projects list only, so a project's page showed the system theme even if you'd chosen dark or light. It's now applied at the app's root, with a unit test that failed before the fix ("applies the chosen theme on a project's page too").
+
+**Concepts:**
+- **Screens need a frozen world.** A screenshot is pixel-exact only if nothing varies: `page.clock.setFixedTime` for "Asleep since", a fixed `locale` and `timezoneId` for date formats, a fake API, and a wait until React Flow's fit animation stops. https://playwright.dev/docs/clock
+- **Baselines catch change; they don't prove a match.** A baseline is what we approved, not Figma. The match with Figma is the geometry test plus the owner's review against the differences list.
+- **Several web servers in one config.** Playwright's `webServer` takes a list, and each project gets its own `baseURL`. https://playwright.dev/docs/test-webserver#multiple-web-servers
+
+**Found in Figma (a question for the owner):** on Figma 06 only, the review bar is at the top (y 40). Every other screen, the generator script and the brief put it at the bottom, which is what's built. Recommendation: keep it at the bottom.
+
+**Run and check it:**
+```fish
+pnpm test:visual          # 90: 78 catalogue stories and 12 screens, in Playwright's Docker image
+pnpm test:e2e             # 15 walkthroughs, recorded (videos in e2e/test-results)
+```
+Then open `docs/reports/phase-2-figma-06-differences.md` and compare `docs/reports/phase-2/figma-06.png` with `built-empty-dark.png`.
+
+**Results:**
+- `pnpm test`: 632 passed (631 and the theme test)
+- `pnpm test:visual`: 90 passed (78 catalogue, 12 screens), axe clean
+- `pnpm test:e2e`: 15 passed
+- lint, typecheck and format clean
+
+**Docs:** this write-up; the differences list; the decisions log (close zoom accepted as a known issue); RUN-AND-FEATURES.
+
+**Risks:**
+- R4 (laptop): all five checks ok. The visual run uses one Docker container, which is removed when it ends.
+
+**Commit:** `test(visual): the project page's screens in both themes; Figma 06 differences; the theme follows you onto a project`

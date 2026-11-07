@@ -48,6 +48,8 @@ function themeLabel(preference: ThemePreference): string {
 
 export function App({ buildInfo, fetcher }: AppProps) {
   const route = useRoute();
+  // Here, not in a page: the chosen theme applies on every page (it once applied only on the projects list).
+  const [theme, setTheme] = useThemePreference();
   if (route.page === 'project') {
     return (
       <LabsProvider>
@@ -61,7 +63,14 @@ export function App({ buildInfo, fetcher }: AppProps) {
     );
   }
   if (route.page === 'not-found') return <NotFound />;
-  return <Home buildInfo={buildInfo} {...(fetcher === undefined ? {} : { fetcher })} />;
+  return (
+    <Home
+      buildInfo={buildInfo}
+      theme={theme}
+      setTheme={setTheme}
+      {...(fetcher === undefined ? {} : { fetcher })}
+    />
+  );
 }
 
 function NotFound() {
@@ -80,8 +89,15 @@ function NotFound() {
 }
 
 /** The projects list and the version page (`/`), until the start screen. */
-function Home({ buildInfo, fetcher }: AppProps) {
-  const [theme, setTheme] = useThemePreference();
+function Home({
+  buildInfo,
+  fetcher,
+  theme,
+  setTheme,
+}: AppProps & {
+  readonly theme: ThemePreference;
+  readonly setTheme: (preference: ThemePreference) => void;
+}) {
   const [unseen, markSeen] = useWhatsNewSeen(releases[0]?.version);
   const [session, setSession] = useState<Session | undefined>(undefined);
   const onSessionChange = useCallback((changed: Session) => {

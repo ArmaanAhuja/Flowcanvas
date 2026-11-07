@@ -1,7 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
-// Visual tests run against the static Storybook build (pnpm test:visual builds it first).
+// Visual tests run against two static builds, both made first by pnpm test:visual:
+// - the catalogue (Storybook) for every component story
+// - the web app's production build for the implemented screens, with a fake API
 const storybookUrl = 'http://127.0.0.1:6008';
+const appUrl = 'http://127.0.0.1:6009';
 const isCi = Boolean(process.env.CI);
 
 export default defineConfig({
@@ -24,7 +27,6 @@ export default defineConfig({
     },
   },
   use: {
-    baseURL: storybookUrl,
     // 2x for sharp screenshots; changing it invalidates every baseline.
     ...devices['Desktop Chrome'],
     deviceScaleFactor: 2,
@@ -33,14 +35,33 @@ export default defineConfig({
     launchOptions: { args: ['--disable-lcd-text'] },
     viewport: { width: 800, height: 900 },
   },
-  projects: [{ name: 'chromium' }],
-  webServer: {
-    // Vite's own binary, not pnpm: the tests run inside Playwright's Docker image, which has Node but no pnpm.
-    command:
-      'node node_modules/vite/bin/vite.js preview --outDir storybook-static --host 127.0.0.1 --port 6008 --strictPort',
-    cwd: '../packages/ui',
-    url: storybookUrl,
-    reuseExistingServer: !isCi,
-    timeout: 30_000,
-  },
+  projects: [
+    { name: 'catalogue', testMatch: 'catalogue.spec.ts', use: { baseURL: storybookUrl } },
+    {
+      name: 'screens',
+      testMatch: 'screens.spec.ts',
+      // 1x keeps the full-page baselines small; locale and time zone fixed so dates render the same everywhere.
+      use: { baseURL: appUrl, deviceScaleFactor: 1, locale: 'en-GB', timezoneId: 'UTC' },
+    },
+  ],
+  // Vite's own binary, not pnpm: the tests run inside Playwright's Docker image, which has Node but no pnpm.
+  webServer: [
+    {
+      command:
+        'node node_modules/vite/bin/vite.js preview --outDir storybook-static --host 127.0.0.1 --port 6008 --strictPort',
+      cwd: '../packages/ui',
+      url: storybookUrl,
+      reuseExistingServer: !isCi,
+      timeout: 30_000,
+    },
+    {
+      // The production headers (CSP) come with it: vite.config.ts serves public/_headers in preview.
+      command:
+        'node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 6009 --strictPort',
+      cwd: '../apps/web',
+      url: appUrl,
+      reuseExistingServer: !isCi,
+      timeout: 30_000,
+    },
+  ],
 });

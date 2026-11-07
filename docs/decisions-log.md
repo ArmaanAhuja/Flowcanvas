@@ -379,3 +379,9 @@ GitHub Actions never ran on `ArmaanAhuja-7777` because of the account billing lo
 
 **Also decided:** a living run-and-features doc, `docs/RUN-AND-FEATURES.md`, linked from a new `README.md` and updated at every build step.
 
+
+## 7 Nov 2026: phase 2's close zoom is accepted as a known issue (owner decision)
+
+**Asked:** the 500-node test meets "smooth" everywhere except zooming in close (100% to 200%), where nodes enter and leave the page and the 95th-percentile frame is about 33 ms (target under 25 ms). Fix it now, or accept it?
+
+**Decided:** accepted as a **known issue** in the phase 2 report. The build plan's **phase 42** (the WebGL renderer with level of detail) is what fixes it. It's not an upgrade-later entry, because it's already planned. The performance test keeps its own, named limit for that one scene (`CLOSE_ZOOM_LIMITS`), so it can't get worse unnoticed.

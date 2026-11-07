@@ -112,7 +112,7 @@ jobs:
           retention-days: 14
 
   visual:
-    name: Visual and accessibility (catalogue)
+    name: Visual and accessibility (catalogue and screens)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     # Same image as `pnpm test:visual` on every machine, so the approved screenshots match (ADR 0012).

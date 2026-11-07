@@ -102,6 +102,17 @@ describe('App', () => {
     expect(localStorage.getItem('flowcanvas-theme')).toBe('light');
   });
 
+  it('applies the chosen theme on a project’s page too, not only on the projects list', () => {
+    localStorage.setItem('flowcanvas-theme', 'dark');
+    window.history.pushState(null, '', '/p/p-1');
+    try {
+      render(<App buildInfo={buildInfo} fetcher={signedOut} />);
+      expect(document.documentElement.dataset.theme).toBe('dark');
+    } finally {
+      window.history.pushState(null, '', '/');
+    }
+  });
+
   it('marks unseen release notes, shows them on demand, then remembers they were seen', async () => {
     const user = userEvent.setup();
     const { unmount } = render(<App buildInfo={buildInfo} fetcher={signedOut} />);
