@@ -10611,5 +10611,9 @@ pnpm --filter @flowcanvas/control-plane test:idle-real  # about 12 minutes, in r
 
 Checked: control-plane tests pinned to 4 cores, 6 runs out of 6 passed after the change (one run of 15 had failed before it, cause not captured); pinned to 2 cores, passed; 5 full runs in a row passed; the Docker tests pass.
 
+**`main` failed once more after #13, and this one explained itself.** The same three tests failed on both `main` runs, and each is the **first test in its file**: three files, three workers. So it wasn't per-test setup any more, but the first PGlite in each fresh worker process, which also compiles its WebAssembly from cold (1.1 s locally against 0.8 s for later ones; past 10 s on a cold, busy runner). The PR runs had passed, so it was close to the limit either way. **The fix** (second follow-up PR): the setup file prepares the migrated template once per test file, in a `beforeAll` allowed 60 s. Each test's clone keeps the normal 10 s limit, so a slow per-test setup would still fail. Passes pinned to 16, 4 and 2 cores.
+
+**Still open:** one rare failing control-plane test, about 1 run in 15, with its name not yet captured. It's being hunted with every failing run's full output kept.
+
 **CI's Docker job, first run:** GitHub's `ubuntu-24.04` runner has **Docker 28.0.4**. All 42 Docker tests ran and passed (Rallly opened in 3.1 s there).
 

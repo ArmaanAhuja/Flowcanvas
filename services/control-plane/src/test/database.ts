@@ -40,6 +40,16 @@ async function migratedTemplate(): Promise<PGlite> {
   return pg;
 }
 
+/**
+ * Starts and migrates this test file's template now. The first PGlite in a fresh worker also compiles its
+ * WebAssembly, which on a busy 4-core CI runner can take longer than a test hook's 10 s (phase 1d step 11), so
+ * the setup file does it once, with more time, before any test (src/test/setup.ts).
+ */
+export async function prepareDatabaseTemplate(): Promise<void> {
+  template ??= migratedTemplate();
+  await template;
+}
+
 export async function migratedDatabase(): Promise<Database> {
   template ??= migratedTemplate();
   const copy = await (await template).clone();
