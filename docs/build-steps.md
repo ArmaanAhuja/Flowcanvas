@@ -10679,8 +10679,8 @@ Both themes; 1440 × 900, checked at 1280 × 800.
 | 0 | Record 1d's after-merge checks; the decisions; upgrade-later 40; branch | done (Claude, 7 Nov) |
 | 1 | Spike: React Flow and `react-resizable-panels` under the strict CSP; a first frame-time measurement with 500 nodes. ADR 0020 | done (Claude, 7 Nov) |
 | 2 | The project page (`/p/:id`) and the shell skeleton at Figma's sizes, with the geometry test | done (Claude, 7 Nov) |
-| 3 | Shell components in the design system: top bar, rail, collapsible panel, review bar (catalogue and baselines) | *next* |
-| 4 | Panels: collapse, resize, keyboard control; the layout remembered per browser; full-screen canvas | *planned* |
+| 3 | Shell components in the design system: top bar, rail, collapsible panel, review bar (catalogue and baselines) | done (Claude, 7 Nov) |
+| 4 | Panels: collapse, resize, keyboard control; the layout remembered per browser; full-screen canvas | *next* |
 | 5 | The canvas: dot grid, pan, zoom, minimap, selection, zoom controls, fit; `FlowNode` as a node type | *planned* |
 | 6 | Real content: project, workspace chip and popover, the terminal in the bottom dock; empty states | *planned* |
 | 7 | The 500-node performance test, with its numbers | *planned* |
@@ -10811,4 +10811,47 @@ pnpm dev         # then click a project's name on http://localhost:5173
 - **Laptop:** all five checks ok (24.1 GiB memory available, 578 GiB disk free; the load read 11.6 just after the full suite, under the 14.4 limit).
 
 **Commit:** `feat(web): a project's own page in the app shell, at Figma 06's sizes`
+
+### Step 2.3 — The shell's components in the design system (done by Claude)
+
+**Goal:** the shell's pieces exist as design-system components, with every state in the catalogue and checked in both themes, before any screen uses them (CLAUDE.md, "components first").
+
+**What's new** (`packages/ui`, catalogue section "Shell"):
+
+| Component | Figma 06 | Notes |
+| --- | --- | --- |
+| `TopBar` | 40 px, 0/12 px padding, 12 px gaps | `start` (project, branch), `middle` (view switch, centred), `end` (search, status, share, avatar) |
+| `Rail`, `RailButton` | 44 px wide; 32 px buttons, radius 6, 18 px icons, 4 px apart | Tools at the top, Account and Settings at the bottom. A button's name is its accessible name and its tooltip; `aria-pressed` while its panel is open. Inactive icons in `text/tertiary` (icons are non-text) |
+| `ReviewBar` | 40 px; pill tabs with count tags; caption summary; actions | No tabs before a session, just the summary ("No agent session yet."). The summary shortens with an ellipsis rather than wrap |
+| `Tabs`: `segmented` | the view switch: raised track, 2 px inset, the selected item lifted | For Graph / Sequence / Code |
+| `Tabs`: disabled items | — | `disabled` and `hint`: shown, never selected, skipped by the arrow keys. Same disabled treatment as the other controls (`--opacity-disabled`) |
+
+**Concepts:**
+- **The accessible name comes from the content.** A tab containing `<span>Changed</span><span>3</span>` is named "Changed3": nothing separates the words. A space between them (invisible in a flex row) makes it "Changed 3" for screen readers. This fixed every tab with a count; an old test had captured `Runs12` as correct and now says `Runs 12`. https://www.w3.org/TR/accname-1.2/
+- **Toggle buttons for panels.** A rail tool is a button with `aria-pressed`: pressed while its panel is open. https://www.w3.org/WAI/ARIA/apg/patterns/button/
+- **Text never in `text/tertiary`** (CLAUDE.md, tokens). It's for icons, edges and placeholders. So a disabled label uses its usual colour at `--opacity-disabled`, like the other controls.
+
+**Tests:**
+- **Unit (8 new):**
+  - TopBar groups
+  - Rail names, pressed state and clicks
+  - ReviewBar empty (no tab list) and with tabs and actions
+  - disabled tabs: hint, never selected, skipped by the arrows
+  - counts named as words apart, in both variants
+- **Visual:** 8 new baselines (TopBar, Rail, ReviewBar empty and after a session; both themes), checked by eye, with axe. No existing baseline changed.
+  - *Caught by eye:* at 800 px the review bar's summary wrapped onto four lines and spilled out of the bar. Now it stays on one line and shortens.
+
+**Run and check it:**
+```fish
+pnpm test                               # 614 tests
+pnpm test:visual                        # 76 checks; the new ones start with "shell-"
+pnpm --filter @flowcanvas/ui storybook  # Shell → TopBar, Rail, ReviewBar
+```
+
+**Docs:** this write-up.
+
+**Risks:**
+- **Laptop:** all five checks ok.
+
+**Commit:** `feat(ui): TopBar, Rail and ReviewBar for the app shell; Tabs gains segmented and disabled items`
 
