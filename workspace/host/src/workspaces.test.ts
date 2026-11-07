@@ -4,6 +4,7 @@ import { Agents, type StartAgent } from './agents.js';
 import { HostError } from './errors.js';
 import { MESSAGES as GUARD_MESSAGES } from './guard.js';
 import type { Pressure } from './protocol.js';
+import { AGENT_PROTOCOL } from '@flowcanvas/workspace-agent/protocol';
 import { FakeDocker } from './test/fake-docker.js';
 import type { Engine } from './engine.js';
 import { CLONE_TIMEOUT_MS, MAX_TERMINALS, MESSAGES, WorkspaceHost } from './workspaces.js';
@@ -40,8 +41,8 @@ const fakeAgent: StartAgent = (ref) => {
       .split('\n')
       .filter((l) => l !== '')) {
       const { id } = JSON.parse(line) as { id: number };
-      const result = { protocol: 1, node: 'v24' };
-      stdout.write(`${JSON.stringify({ v: 1, id, body: { ok: true, result } })}\n`);
+      const result = { protocol: AGENT_PROTOCOL, node: 'v24' };
+      stdout.write(`${JSON.stringify({ v: AGENT_PROTOCOL, id, body: { ok: true, result } })}\n`);
     }
   });
   return Promise.resolve({
@@ -413,7 +414,7 @@ describe('agent', () => {
   it('passes requests to the running workspace’s agent', async () => {
     expect(await host.agent(ref(1), { op: 'hello' })).toEqual({
       ok: true,
-      result: { protocol: 1, node: 'v24' },
+      result: { protocol: AGENT_PROTOCOL, node: 'v24' },
     });
     expect(agentStarts).toEqual([ref(1)]);
   });

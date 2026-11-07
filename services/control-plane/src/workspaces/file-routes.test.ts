@@ -81,12 +81,70 @@ describe('while the workspace runs', () => {
     ]);
   });
 
+  it('lists every file, and passes a conflict-safe write on only when it has a base version', async () => {
+    const tree = {
+      ok: true,
+      result: { files: ['src/index.ts'], truncated: false, source: 'git' },
+    } as const;
+    provider.agentAnswer = tree;
+    expect(await call('GET', '/tree')).toEqual({ status: 200, json: tree.result });
+    const version = 'a'.repeat(64);
+    await call('PUT', '/file?path=a.ts', { body: { content: 'x', baseVersion: version } });
+    await call('PUT', '/file?path=b.ts', { body: { content: 'x', baseVersion: null } });
+    await call('PUT', '/file?path=c.ts', { body: { content: 'x' } });
+    expect(provider.agentRequests.map(({ request }) => request)).toEqual([
+      { op: 'files' },
+      { op: 'write', path: 'a.ts', content: 'x', encoding: 'utf8', baseVersion: version },
+      { op: 'write', path: 'b.ts', content: 'x', encoding: 'utf8', baseVersion: null },
+      { op: 'write', path: 'c.ts', content: 'x', encoding: 'utf8' },
+    ]);
+  });
+
+  it('keeps, lists, gives back and drops unsaved changes through the journal', async () => {
+    const version = 'b'.repeat(64);
+    await call('PUT', '/journal/entry?path=src/a.ts', {
+      body: { content: 'draft', baseVersion: version, revision: 4 },
+    });
+    await call('GET', '/journal');
+    await call('GET', '/journal/entry?path=src/a.ts');
+    await call('DELETE', '/journal/entry?path=src/a.ts&revision=4');
+    expect(provider.agentRequests.map(({ request }) => request)).toEqual([
+      { op: 'journal-put', path: 'src/a.ts', content: 'draft', baseVersion: version, revision: 4 },
+      { op: 'journal-list' },
+      { op: 'journal-get', path: 'src/a.ts' },
+      { op: 'journal-drop', path: 'src/a.ts', revision: 4 },
+    ]);
+  });
+
+  it('refuses journal requests that are malformed or from another site', async () => {
+    expect(await call('DELETE', '/journal/entry?path=a.ts')).toMatchObject({ status: 400 });
+    expect(await call('DELETE', '/journal/entry?path=a.ts&revision=x')).toMatchObject({
+      status: 400,
+    });
+    expect(
+      await call('PUT', '/journal/entry?path=a.ts', { body: { content: 'x', baseVersion: null } }),
+    ).toMatchObject({ status: 400 });
+    expect(
+      await call('PUT', '/journal/entry?path=a.ts', {
+        body: { content: 'x', baseVersion: null, revision: 1 },
+        origin: 'https://evil.example',
+      }),
+    ).toMatchObject({ status: 403 });
+    expect(
+      await call('DELETE', '/journal/entry?path=a.ts&revision=1', {
+        origin: 'https://evil.example',
+      }),
+    ).toMatchObject({ status: 403 });
+    expect(provider.agentRequests).toEqual([]);
+  });
+
   it("passes the agent's refusals on with a matching status", async () => {
     for (const [code, status] of [
       ['secret_file', 403],
       ['not_found', 404],
       ['outside_project', 403],
       ['too_large', 413],
+      ['conflict', 409],
       ['failed', 502],
     ] as const) {
       provider.agentAnswer = { ok: false, error: { code, message: 'A sentence.' } };
@@ -123,10 +181,14 @@ describe('while the workspace runs', () => {
 
   it('logs the operation and outcome, never the path, content or command', async () => {
     await call('PUT', '/file?path=secret-plans.md', { body: { content: 'CANARY-content' } });
+    await call('PUT', '/journal/entry?path=secret-plans.md', {
+      body: { content: 'CANARY-journal', baseVersion: null, revision: 1 },
+    });
     await call('POST', '/exec', { body: { command: ['echo', 'CANARY-command'] } });
     const lines = log.mock.calls.map(([line]) => line).filter((line) => line.includes(' by user '));
     expect(lines.some((line) => / write by user [0-9a-f-]{36}: ok$/.test(line))).toBe(true);
     expect(lines.some((line) => / exec by user [0-9a-f-]{36}: ok$/.test(line))).toBe(true);
+    expect(lines.some((line) => / journal-put by user [0-9a-f-]{36}: ok$/.test(line))).toBe(true);
     for (const line of log.mock.calls.map(([l]) => l)) {
       expect(line).not.toContain('CANARY');
       expect(line).not.toContain('secret-plans');

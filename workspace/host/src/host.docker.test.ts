@@ -82,9 +82,12 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
 
   it('lists, reads and writes the project through the agent', async () => {
     const list = await host.agent(ref, { op: 'list', path: '' });
-    expect(list.ok && 'entries' in list.result && list.result.entries.map((e) => e.name)).toEqual(
-      expect.arrayContaining(['package.json', 'apps']),
-    );
+    expect(
+      list.ok &&
+        'truncated' in list.result &&
+        'entries' in list.result &&
+        list.result.entries.map((e) => e.name),
+    ).toEqual(expect.arrayContaining(['package.json', 'apps']));
     const read = await host.agent(ref, { op: 'read', path: 'package.json' });
     expect(read.ok && 'content' in read.result && read.result.content).toContain('"name"');
     expect(
@@ -141,6 +144,67 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
       timeoutMs: 30_000,
     });
     expect(git).toMatchObject({ ok: true, result: { exitCode: 0 } });
+  });
+
+  it('lists every project file from git, never a .env file (phase 3)', async () => {
+    const tree = await host.agent(ref, { op: 'files' });
+    expect(tree).toMatchObject({ ok: true, result: { source: 'git', truncated: false } });
+    const files = tree.ok && 'files' in tree.result ? tree.result.files : [];
+    expect(files).toEqual(expect.arrayContaining(['package.json', 'flowcanvas-note.md']));
+    expect(files.length).toBeGreaterThan(100);
+    // The .env planted above, and nothing from node_modules or .git.
+    expect(files.filter((path) => /(^|\/)\.env$/.test(path))).toEqual([]);
+    expect(files.filter((path) => /(^|\/)(node_modules|\.git)\//.test(path))).toEqual([]);
+    expect(JSON.stringify(tree)).not.toContain('CANARY');
+  });
+
+  it('refuses a save from an old version after an edit in the terminal (phase 3)', async () => {
+    const before = await host.agent(ref, { op: 'read', path: 'package.json' });
+    const version = before.ok && 'version' in before.result ? before.result.version : '';
+    expect(version).toMatch(/^[0-9a-f]{64}$/);
+    // The terminal's way of editing: sed -i writes a new file and renames it over the old one.
+    await sh(ref, 'cd /workspace/project && sed -i s/rallly/rallly-terminal/ package.json');
+    const save = await host.agent(ref, {
+      op: 'write',
+      path: 'package.json',
+      content: 'the editor’s stale copy',
+      encoding: 'utf8',
+      baseVersion: version,
+    });
+    expect(save).toMatchObject({ ok: false, error: { code: 'conflict' } });
+    const after = await host.agent(ref, { op: 'read', path: 'package.json' });
+    expect(after.ok && 'content' in after.result && after.result.content).toContain(
+      'rallly-terminal',
+    );
+    expect(after.ok && 'version' in after.result && after.result.version).not.toBe(version);
+    await sh(ref, 'cd /workspace/project && git checkout -- package.json');
+  });
+
+  it('keeps unsaved changes in the journal, outside the project and private to the workspace user (phase 3)', async () => {
+    expect(
+      await host.agent(ref, {
+        op: 'journal-put',
+        path: 'apps/web/draft.ts',
+        content: 'export const draft = true;\n',
+        baseVersion: null,
+        revision: 1,
+      }),
+    ).toMatchObject({ ok: true, result: { revision: 1 } });
+    expect(
+      (
+        await sh(
+          ref,
+          'stat -c "%a %u" /workspace/.flowcanvas/journal /workspace/.flowcanvas/journal/*.json',
+        )
+      ).out,
+    ).toBe('700 1000\n600 1000');
+    // git, and so the dev server and the file list, never see it.
+    expect(
+      (await sh(ref, 'cd /workspace/project && git status --porcelain --untracked-files=all')).out,
+    ).not.toContain('flowcanvas/journal');
+    expect((await sh(ref, 'test -e /workspace/project/apps/web/draft.ts || echo absent')).out).toBe(
+      'absent',
+    );
   });
 
   it('gives a real shell over the WebSocket: input, output, resize and exit code', async () => {
@@ -238,6 +302,11 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
     expect(await host.agent(ref, { op: 'read', path: 'flowcanvas-note.md' })).toMatchObject({
       ok: true,
       result: { content: '# Hi\n' },
+    });
+    // Unsaved changes survive the workspace stopping: the journal is in its volume (phase 3).
+    expect(await host.agent(ref, { op: 'journal-get', path: 'apps/web/draft.ts' })).toMatchObject({
+      ok: true,
+      result: { content: 'export const draft = true;\n', revision: 1 },
     });
   });
 

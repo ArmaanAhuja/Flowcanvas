@@ -1,10 +1,15 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { answer, createAgent, serve, type Agent } from './agent.js';
 import { AGENT_PROTOCOL, LIMITS, isSecretFile, type AgentResponse } from './protocol.js';
+
+/** SHA-256 hex, computed here independently of the agent. */
+const sha = (text: string | Buffer) => createHash('sha256').update(text).digest('hex');
 
 let base: string;
 let root: string;
@@ -65,11 +70,21 @@ describe('read', () => {
   it('reads text as utf8 and anything else as base64', async () => {
     expect(await ask({ op: 'read', path: 'package.json' })).toEqual({
       ok: true,
-      result: { path: 'package.json', size: 18, encoding: 'utf8', content: '{"name":"rallly"}\n' },
+      result: {
+        path: 'package.json',
+        size: 18,
+        encoding: 'utf8',
+        content: '{"name":"rallly"}\n',
+        version: sha('{"name":"rallly"}\n'),
+      },
     });
     await writeFile(join(root, 'logo.png'), Buffer.from([0x89, 0x50, 0x00, 0xff]));
     expect(await ask({ op: 'read', path: 'logo.png' })).toMatchObject({
-      result: { encoding: 'base64', content: 'iVAA/w==' },
+      result: {
+        encoding: 'base64',
+        content: 'iVAA/w==',
+        version: sha(Buffer.from([0x89, 0x50, 0x00, 0xff])),
+      },
     });
   });
 
@@ -112,7 +127,7 @@ describe('write', () => {
       await ask({ op: 'write', path: 'notes/today.md', content: '# Hi\n', encoding: 'utf8' }),
     ).toEqual({
       ok: true,
-      result: { path: 'notes/today.md', size: 5 },
+      result: { path: 'notes/today.md', size: 5, version: sha('# Hi\n') },
     });
     expect(await readFile(join(root, 'notes', 'today.md'), 'utf8')).toBe('# Hi\n');
     await ask({ op: 'write', path: 'a.bin', content: 'iVAA/w==', encoding: 'base64' });
@@ -165,6 +180,285 @@ describe('write', () => {
       await ask({ op: 'write', path: 'package.json/x', content: 'x', encoding: 'utf8' }),
       'not_a_directory',
     );
+  });
+});
+
+describe('conflict-safe writes', () => {
+  const original = '{"name":"rallly"}\n';
+
+  it('writes when the file is still the version it was edited from', async () => {
+    const response = await ask({
+      op: 'write',
+      path: 'package.json',
+      content: '{"name":"rallly","private":true}\n',
+      encoding: 'utf8',
+      baseVersion: sha(original),
+    });
+    expect(response).toEqual({
+      ok: true,
+      result: {
+        path: 'package.json',
+        size: 33,
+        version: sha('{"name":"rallly","private":true}\n'),
+      },
+    });
+  });
+
+  it('refuses, and changes nothing, when the file changed meanwhile (an edit in the terminal)', async () => {
+    await writeFile(join(root, 'package.json'), '{"name":"changed in the terminal"}\n');
+    const response = await ask({
+      op: 'write',
+      path: 'package.json',
+      content: 'mine',
+      encoding: 'utf8',
+      baseVersion: sha(original),
+    });
+    expectError(response, 'conflict');
+    expect(await readFile(join(root, 'package.json'), 'utf8')).toBe(
+      '{"name":"changed in the terminal"}\n',
+    );
+  });
+
+  it('with a null base, creates a new file but never overwrites one that appeared', async () => {
+    const created = await ask({
+      op: 'write',
+      path: 'src/new.ts',
+      content: 'x',
+      encoding: 'utf8',
+      baseVersion: null,
+    });
+    expect(created).toMatchObject({ ok: true, result: { version: sha('x') } });
+    expectError(
+      await ask({
+        op: 'write',
+        path: 'src/new.ts',
+        content: 'y',
+        encoding: 'utf8',
+        baseVersion: null,
+      }),
+      'conflict',
+    );
+    expect(await readFile(join(root, 'src', 'new.ts'), 'utf8')).toBe('x');
+  });
+
+  it('refuses a file deleted meanwhile, and a base that is not a version', async () => {
+    await rm(join(root, 'package.json'));
+    expectError(
+      await ask({
+        op: 'write',
+        path: 'package.json',
+        content: 'x',
+        encoding: 'utf8',
+        baseVersion: sha(original),
+      }),
+      'conflict',
+    );
+    expectError(
+      await ask({ op: 'write', path: 'a.ts', content: 'x', encoding: 'utf8', baseVersion: 'abc' }),
+      'invalid_request',
+    );
+  });
+
+  it('lets only one of two saves from the same version win', async () => {
+    const save = (content: string) =>
+      ask({
+        op: 'write',
+        path: 'package.json',
+        content,
+        encoding: 'utf8',
+        baseVersion: sha(original),
+      });
+    const results = await Promise.all([save('first'), save('second')]);
+    expect(results.filter((response) => response.ok)).toHaveLength(1);
+    expect(results.filter((response) => !response.ok)).toHaveLength(1);
+  });
+
+  it('still never writes a .env file or through a link', async () => {
+    expectError(
+      await ask({ op: 'write', path: '.env', content: 'x', encoding: 'utf8', baseVersion: null }),
+      'secret_file',
+    );
+    await symlink(join(base, 'outside.txt'), join(root, 'out.txt'));
+    const response = await ask({
+      op: 'write',
+      path: 'out.txt',
+      content: 'x',
+      encoding: 'utf8',
+      baseVersion: null,
+    });
+    expect(response.ok).toBe(false);
+    expect(await readFile(join(base, 'outside.txt'), 'utf8')).toBe('CANARY-outside\n');
+  });
+});
+
+describe('files', () => {
+  it('without git, lists every file outside the ignored folders, never a .env file', async () => {
+    await mkdir(join(root, 'node_modules', 'react'), { recursive: true });
+    await writeFile(join(root, 'node_modules', 'react', 'index.js'), '');
+    await mkdir(join(root, 'dist'), { recursive: true });
+    await writeFile(join(root, 'dist', 'out.js'), '');
+    await writeFile(join(root, 'src', '.env.local'), 'CANARY-local');
+    const response = await ask({ op: 'files' });
+    expect(response).toEqual({
+      ok: true,
+      result: {
+        files: ['.env.example', 'package.json', 'src/index.ts'],
+        truncated: false,
+        source: 'walk',
+      },
+    });
+    expect(JSON.stringify(response)).not.toContain('CANARY');
+  });
+
+  it('in a git repository: tracked and untracked files, not ignored or deleted ones', async () => {
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.email=t@example.com', '-c', 'user.name=T', ...args], {
+        cwd: root,
+      });
+    git('init', '-q');
+    await writeFile(join(root, '.gitignore'), 'generated/\n');
+    await writeFile(join(root, 'old.ts'), 'gone soon');
+    git('add', '.gitignore', 'package.json', 'src/index.ts', 'old.ts');
+    git('commit', '-q', '-m', 'start');
+    await rm(join(root, 'old.ts'));
+    await writeFile(join(root, 'untracked.ts'), '');
+    await mkdir(join(root, 'generated'));
+    await writeFile(join(root, 'generated', 'skip.ts'), '');
+    expect(await ask({ op: 'files' })).toEqual({
+      ok: true,
+      result: {
+        files: ['.env.example', '.gitignore', 'package.json', 'src/index.ts', 'untracked.ts'],
+        truncated: false,
+        source: 'git',
+      },
+    });
+  });
+});
+
+describe('journal', () => {
+  let clock: number;
+  let journal: string;
+
+  beforeEach(() => {
+    clock = Date.UTC(2026, 10, 7, 12);
+    journal = join(base, '.flowcanvas', 'journal');
+    agent = createAgent({ root, journal, now: () => clock });
+  });
+
+  const put = (
+    path: string,
+    content: string,
+    revision: number,
+    baseVersion: string | null = null,
+  ) => ask({ op: 'journal-put', path, content, baseVersion, revision });
+
+  it('keeps unsaved changes outside the project, and gives them back', async () => {
+    expect(await put('src/index.ts', 'export const draft = 1;\n', 3, sha('export {};\n'))).toEqual({
+      ok: true,
+      result: { path: 'src/index.ts', revision: 3 },
+    });
+    expect(await ask({ op: 'journal-list' })).toEqual({
+      ok: true,
+      result: {
+        entries: [
+          {
+            path: 'src/index.ts',
+            baseVersion: sha('export {};\n'),
+            revision: 3,
+            updatedAt: clock,
+            size: 24,
+          },
+        ],
+      },
+    });
+    expect(await ask({ op: 'journal-get', path: 'src/index.ts' })).toMatchObject({
+      result: { content: 'export const draft = 1;\n', revision: 3 },
+    });
+    // The project's own files are untouched, and nothing of the journal is inside the project.
+    expect(await readFile(join(root, 'src', 'index.ts'), 'utf8')).toBe('export {};\n');
+    const listed = await ask({ op: 'files' });
+    expect(listed.ok).toBe(true);
+    expect(JSON.stringify(listed)).not.toContain('flowcanvas');
+    expect(await readdir(journal)).toHaveLength(1);
+  });
+
+  it('survives the agent restarting (it lives on disk)', async () => {
+    await put('src/index.ts', 'draft', 1);
+    const restarted = createAgent({ root, journal });
+    expect(await answer(restarted, { op: 'journal-get', path: 'src/index.ts' })).toMatchObject({
+      result: { content: 'draft' },
+    });
+  });
+
+  it('never lets an older put replace newer edits', async () => {
+    await put('src/index.ts', 'newer', 5);
+    expect(await put('src/index.ts', 'older, arrived late', 4)).toEqual({
+      ok: true,
+      result: { path: 'src/index.ts', revision: 5 },
+    });
+    expect(await ask({ op: 'journal-get', path: 'src/index.ts' })).toMatchObject({
+      result: { content: 'newer' },
+    });
+  });
+
+  it('drops an entry after a save, but keeps edits made after that save', async () => {
+    await put('src/index.ts', 'typed after saving', 8);
+    expect(await ask({ op: 'journal-drop', path: 'src/index.ts', revision: 7 })).toEqual({
+      ok: true,
+      result: { path: 'src/index.ts', dropped: false },
+    });
+    expect(await ask({ op: 'journal-drop', path: 'src/index.ts', revision: 8 })).toEqual({
+      ok: true,
+      result: { path: 'src/index.ts', dropped: true },
+    });
+    expectError(await ask({ op: 'journal-get', path: 'src/index.ts' }), 'not_found');
+    expect(await ask({ op: 'journal-list' })).toEqual({ ok: true, result: { entries: [] } });
+  });
+
+  it('never journals a .env file or a path outside the project', async () => {
+    const response = await put('.env', 'CANARY-journal', 1);
+    expectError(response, 'secret_file');
+    expectError(await put('../outside.txt', 'x', 1), 'outside_project');
+    expectError(await put('', 'x', 1), 'is_a_directory');
+    await expect(readdir(journal)).rejects.toThrow();
+  });
+
+  it('skips damaged or misplaced entries instead of showing them as work', async () => {
+    await put('src/index.ts', 'real', 1);
+    await writeFile(join(journal, `${'0'.repeat(64)}.json`), '{"broken"');
+    await writeFile(
+      join(journal, `${'1'.repeat(64)}.json`),
+      JSON.stringify({
+        path: 'src/index.ts',
+        baseVersion: null,
+        revision: 9,
+        updatedAt: 0,
+        content: 'misplaced',
+      }),
+    );
+    expect(await ask({ op: 'journal-list' })).toMatchObject({
+      result: { entries: [{ path: 'src/index.ts', revision: 1 }] },
+    });
+  });
+
+  it('refuses too much: over 1 MB, or too many unsaved files', async () => {
+    expectError(await put('big.ts', 'x'.repeat(LIMITS.fileBytes + 1), 1), 'too_large');
+    for (let i = 0; i < LIMITS.journalEntries; i++) await put(`f${String(i)}.ts`, 'x', 1);
+    expectError(await put('one-more.ts', 'x', 1), 'too_large');
+    // An existing entry can still be updated.
+    expect(await put('f0.ts', 'y', 2)).toMatchObject({ ok: true });
+  });
+
+  it('checks its requests', async () => {
+    expectError(
+      await ask({ op: 'journal-put', path: 'a.ts', content: 'x', revision: -1 }),
+      'invalid_request',
+    );
+    expectError(
+      await ask({ op: 'journal-put', path: 'a.ts', content: 7, revision: 1 }),
+      'invalid_request',
+    );
+    expectError(await ask({ op: 'journal-drop', path: 'a.ts' }), 'invalid_request');
   });
 });
 
@@ -272,25 +566,25 @@ describe('serve', () => {
         .filter((l) => l !== ''))
         lines.push(JSON.parse(line));
     });
-    input.write(`${JSON.stringify({ v: 1, id: 7, body: { op: 'read', path: 'package.json' } })}\n`);
-    input.write(`${JSON.stringify({ v: 2, id: 8, body: { op: 'hello' } })}\n`);
+    input.write(`${JSON.stringify({ v: 2, id: 7, body: { op: 'read', path: 'package.json' } })}\n`);
+    input.write(`${JSON.stringify({ v: 1, id: 8, body: { op: 'hello' } })}\n`);
     input.write('not json\n');
     input.end();
     await done;
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(lines).toEqual(
       expect.arrayContaining([
-        { v: 1, id: 7, body: expect.objectContaining({ ok: true }) as unknown },
+        { v: 2, id: 7, body: expect.objectContaining({ ok: true }) as unknown },
         {
-          v: 1,
+          v: 2,
           id: 8,
           body: {
             ok: false,
-            error: { code: 'invalid_request', message: 'This agent speaks protocol 1.' },
+            error: { code: 'invalid_request', message: 'This agent speaks protocol 2.' },
           },
         },
         {
-          v: 1,
+          v: 2,
           id: 0,
           body: {
             ok: false,

@@ -11280,8 +11280,8 @@ pnpm size               # after pnpm build: the bundle budgets
 | --- | --- | --- |
 | 0 | Record the decisions; this plan; branch | done (Claude, 7 Nov) |
 | 1 | Spike: an editor under our CSP, and its size (Monaco, CodeMirror 6 and Ace compared; CodeMirror 6 chosen); the watcher's cost with Rallly's `node_modules`. ADR 0021 | done (Claude, 7 Nov) |
-| 2 | Agent: file list, versioned read and write, conflicts, journal operations | *next* |
-| 3 | The watcher and the events channel: agent → host → control plane WebSocket | *planned* |
+| 2 | Agent: file list, versioned read and write, conflicts, journal operations | done (Claude, 7 Nov) |
+| 3 | The watcher and the events channel: agent → host → control plane WebSocket | *next* |
 | 4 | UI components: EditorTabs, FileTree, StatusBar, Breadcrumb (catalogue and baselines) | *planned* |
 | 5 | The Code view: tree, CodeMirror in a shadow root, tabs, save, undo; binary, large and secret states; canvas shortcuts through shadow roots | *planned* |
 | 6 | Saving: autosave, the journal (workspace and IndexedDB), restore on reopen | *planned* |
@@ -11309,8 +11309,8 @@ CI's walkthroughs use a fake workspace (staging has none until upgrade-later 33)
 | R1 | The editor breaks our CSP | Step 1 spike before anything is built on it | **closed (step 1):** Monaco needed `style-src-attr 'unsafe-inline'`; CodeMirror 6 in a shadow root has 0 violations under the unchanged policy (owner chose it, ADR 0021). Step 5's walkthrough fails on any violation |
 | R2 | The editor's size | Lazy chunk with its own budget; only the languages a web project needs | **mostly closed (step 1):** CodeMirror 6 with TypeScript is 147 kB gzipped (Monaco 705). The budget is set in step 8 |
 | R3 | **Laptop:** inotify's limit is shared with the whole computer; watching `node_modules` could exhaust it | Watch without `node_modules`, `.git` and build output; measure in the spike | **understood (step 1):** Rallly is 599 folders without `node_modules` (0.1% of 524,288); the watcher skips it (step 3) |
-| R4 | Lost edits (disconnect, sleep, closed tab) | Journal every 2 s and on page hide, an IndexedDB copy, tests for each case | open |
-| R5 | Silent overwrites when disk and editor disagree | Versioned writes; conflicts shown, never resolved silently | open |
+| R4 | Lost edits (disconnect, sleep, closed tab) | Journal every 2 s and on page hide, an IndexedDB copy, tests for each case | open: **step 2:** the workspace journal exists and survives a restart (Docker test); the page's side is step 6 |
+| R5 | Silent overwrites when disk and editor disagree | Versioned writes; conflicts shown, never resolved silently | open: **step 2:** conflict-safe saves are refused after a terminal edit (Docker test); showing it is step 7 |
 
 ### Step 3.1 — Spike: which editor, under our CSP; and the watcher's cost (done by Claude; ADR 0021)
 
@@ -11343,3 +11343,58 @@ CI's walkthroughs use a fake workspace (staging has none until upgrade-later 33)
 - **Laptop:** all five checks ok. Two measuring containers ran read-only, with no network, labelled `org.flowcanvas.role=measure`, and were removed. The sleeping workspace wasn't touched.
 
 **Commit:** `build(web): CodeMirror 6 replaces Monaco as the editor, checked under the CSP (ADR 0021)`
+
+### Step 3.2 — The workspace agent: file list, versions, conflict-safe saves, the journal (done by Claude)
+
+**Goal:** give the editor what it needs from the workspace, before any editor code exists: a list of the project's files, a version with every read and save so nothing is silently overwritten, and a journal that keeps unsaved changes safe in the workspace.
+
+**Agent protocol 2** (`workspace/agent/src/protocol.ts`; the host copies the agent in on every connection, so the host and agent always match):
+
+| Operation | What it does |
+| --- | --- |
+| `files` | Every file of the project, from `git ls-files` (tracked and untracked, not ignored, not deleted), or a walk that skips `node_modules`, `.git` and build output when it isn't a repository. Never `.env` files. Up to 50,000 |
+| `read` | As before, plus `version`: the SHA-256 of the bytes |
+| `write` | As before, plus `version`. With `baseVersion` it's conflict-safe: refused with `conflict` if the file isn't that version any more. `null` means the file mustn't exist yet |
+| `journal-put` | Keeps an unsaved buffer (with the version it was edited from and a rising `revision`); an older revision never replaces a newer one |
+| `journal-list`, `journal-get` | What's unsaved, and the content |
+| `journal-drop` | Removes an entry after a save, unless it has newer edits than that save |
+
+**Where the journal lives:** `/workspace/.flowcanvas/journal`, in the workspace's volume (so it survives sleep, stop and start) but outside the project, so git, the dev server and the file list never see it. One file per buffer, named by a hash of its path, written whole and renamed into place, with mode 600 in a 700 folder.
+
+**Control plane routes** (`services/control-plane/src/workspaces/file-routes.ts`), owner only, while running, same-origin for changes:
+- `GET /tree`
+- `PUT /file` with `baseVersion` (a conflict answers **409**)
+- `GET /journal`
+- `GET`, `PUT` and `DELETE /journal/entry`
+
+The logs record the operation and outcome only, never paths or content (tested with a canary).
+
+**Concepts:**
+- **Optimistic concurrency.** Instead of locking a file while you edit, remember which version you started from, and refuse the save if it changed. HTTP does the same with `If-Match`. https://developer.mozilla.org/en-US/docs/Web/HTTP/Conditional_requests
+- **Content hashes as versions.** The same bytes always give the same SHA-256, so a version means "exactly this content", whatever the clock or the file system says.
+- **Write, then rename.** `rename()` replaces a file in one step, so a crash leaves the old entry or the new one, never half of one.
+- **Serialising per key.** Two saves of the same file at once could both pass the version check. The agent runs them one after the other, so exactly one wins (tested).
+
+**Tests:**
+- **Agent (34, 16 new):** versions; conflicts after a change, a new file and a deletion; two saves from one version where exactly one wins; the file list with and without git; the journal (restart, revisions, drops, limits, damaged entries, secrets, paths).
+- **Mutation-checked:** removing the conflict check fails 4 tests, and each revision guard fails its own.
+- **Routes (3 new):** the operations each route sends, 409 for a conflict, same-origin and malformed requests refused, the journal never logged.
+- **Docker (3 new, in a real Rallly workspace):**
+  - the file list comes from git and has no `.env`
+  - **a `sed -i` in the terminal makes a save from the old version fail, keeping the terminal's change**
+  - the journal is outside the project (git doesn't see it), mode 600, and survives the workspace stopping and starting
+
+**Results:** `pnpm test` 651 passed; `pnpm test:docker` 45 passed; lint and typecheck clean.
+
+**Gotchas:**
+- **The control plane reads the agent's protocol from `dist/`.** After changing `protocol.ts`, build the agent (`pnpm --filter @flowcanvas/workspace-agent build`); turbo does this before tests in CI.
+- **Tests with the protocol version written in as a literal broke on the bump.** They use `AGENT_PROTOCOL` now.
+- **Narrowing by a field name.** `'entries' in result` stopped meaning "a folder listing" once the journal list also had `entries`; TypeScript caught it.
+- **One Docker run left `fc-test-*` containers behind.** A clean full run afterwards left none. To watch; `pnpm workspace:clean` removes them, and nothing else.
+
+**Risks:**
+- R4 (lost edits): the journal exists and is proven to survive a restart.
+- R5 (silent overwrites): conflict-safe saves exist and are proven against a terminal edit.
+- **Laptop:** all five checks ok. The Docker runs used test workspaces only, and your sleeping workspace wasn't touched.
+
+**Commit:** `feat(workspace): file list, versioned conflict-safe saves and the journal (agent protocol 2)`

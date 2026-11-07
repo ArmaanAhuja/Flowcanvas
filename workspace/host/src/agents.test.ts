@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AGENT_DIR } from '@flowcanvas/workspace-agent/files';
+import { AGENT_PROTOCOL } from '@flowcanvas/workspace-agent/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Agents, MESSAGES, type AgentProcess, type StartAgent } from './agents.js';
 import { HostError } from './errors.js';
@@ -97,11 +98,18 @@ describe('Agents', () => {
   it('refuses an agent that speaks another version, or answers nonsense', async () => {
     const liar: StartAgent = async (ref) => {
       const real = await local(ref);
-      // Rewrite every answer to claim protocol 2.
+      // Rewrite every answer to claim the next protocol version.
       const { PassThrough } = await import('node:stream');
       const out = new PassThrough();
       real.stdout.on('data', (chunk: Buffer) =>
-        out.write(chunk.toString().replace('"protocol":1', '"protocol":2')),
+        out.write(
+          chunk
+            .toString()
+            .replace(
+              `"protocol":${String(AGENT_PROTOCOL)}`,
+              `"protocol":${String(AGENT_PROTOCOL + 1)}`,
+            ),
+        ),
       );
       return { ...real, stdout: out };
     };

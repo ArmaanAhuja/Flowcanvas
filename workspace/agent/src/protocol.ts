@@ -1,11 +1,33 @@
-// The workspace agent's protocol (phase 1d step 5): one JSON message per line over the agent's stdin and
-// stdout, through the workspace host. Shared by the agent, the host and the control plane, so it has no
-// imports and no Node APIs: the control plane bundles it into its Worker.
+// The workspace agent's protocol (phase 1d step 5; version 2 in phase 3 step 2): one JSON message per line over
+// the agent's stdin and stdout, through the workspace host. Shared by the agent, the host and the control plane,
+// so it has no imports and no Node APIs: the control plane bundles it into its Worker.
 
-export const AGENT_PROTOCOL = 1;
+/** 2 (phase 3): versions on read and write, conflict-safe writes, the file list and the journal. The host copies
+ * the agent into the workspace on every connection, so both sides always match. */
+export const AGENT_PROTOCOL = 2;
 
 /** Everything the API can see or change lives under this folder: the project's clone. */
 export const PROJECT_ROOT = '/workspace/project';
+
+/** Unsaved editor buffers (phase 3): in the workspace's volume, outside the project, so git, the dev server and
+ * the file list never see them. */
+export const JOURNAL_ROOT = '/workspace/.flowcanvas/journal';
+
+/** Folders the file list and the watcher skip: dependencies, git's own data and build output. Watching
+ * node_modules alone can take tens of thousands of inotify watches (ADR 0021). */
+export const IGNORED_DIRECTORIES: readonly string[] = [
+  'node_modules',
+  '.git',
+  '.next',
+  '.nuxt',
+  '.svelte-kit',
+  '.turbo',
+  '.cache',
+  'dist',
+  'build',
+  'out',
+  'coverage',
+];
 
 export const LIMITS = {
   /** Longest path, in characters. */
@@ -14,6 +36,10 @@ export const LIMITS = {
   fileBytes: 1024 * 1024,
   /** Most entries a listing returns. */
   entries: 5000,
+  /** Most paths the file list returns. */
+  files: 50_000,
+  /** Most unsaved buffers kept in the journal. */
+  journalEntries: 500,
   /** Longest a command may run, and the default. */
   execTimeoutMs: 120_000,
   execDefaultTimeoutMs: 30_000,
@@ -34,6 +60,27 @@ export type AgentRequest =
       readonly path: string;
       readonly content: string;
       readonly encoding: Encoding;
+      /** The version this content was edited from: refused with `conflict` if the file changed meanwhile. `null`:
+       * the file must not exist yet. Absent: write whatever is there (phase 1d behaviour). */
+      readonly baseVersion?: Version | null;
+    }
+  | { readonly op: 'files' }
+  | {
+      readonly op: 'journal-put';
+      readonly path: string;
+      readonly content: string;
+      /** The file's version the buffer was edited from; `null` for a file that doesn't exist yet. */
+      readonly baseVersion: Version | null;
+      /** Rises with every edit of the buffer; an older put never replaces a newer one. */
+      readonly revision: number;
+    }
+  | { readonly op: 'journal-list' }
+  | { readonly op: 'journal-get'; readonly path: string }
+  | {
+      readonly op: 'journal-drop';
+      readonly path: string;
+      /** Drops the entry only if it's no newer than this, so edits made after a save are kept. */
+      readonly revision: number;
     }
   | {
       readonly op: 'exec';
@@ -43,6 +90,10 @@ export type AgentRequest =
     };
 
 export type Encoding = 'utf8' | 'base64';
+
+/** A file's version: the SHA-256 of its bytes, as 64 hex digits. */
+export type Version = string;
+const VERSION = /^[0-9a-f]{64}$/;
 
 export interface Entry {
   readonly name: string;
@@ -64,8 +115,20 @@ export interface Results {
     readonly size: number;
     readonly encoding: Encoding;
     readonly content: string;
+    readonly version: Version;
   };
-  readonly write: { readonly path: string; readonly size: number };
+  readonly write: { readonly path: string; readonly size: number; readonly version: Version };
+  readonly files: {
+    /** Project-relative paths of files, sorted; never secret files. */
+    readonly files: readonly string[];
+    readonly truncated: boolean;
+    /** `git`: tracked and untracked, not ignored. `walk`: not a git repository, so every folder but the ignored. */
+    readonly source: 'git' | 'walk';
+  };
+  readonly 'journal-put': { readonly path: string; readonly revision: number };
+  readonly 'journal-list': { readonly entries: readonly JournalSummary[] };
+  readonly 'journal-get': JournalSummary & { readonly content: string };
+  readonly 'journal-drop': { readonly path: string; readonly dropped: boolean };
   readonly exec: {
     readonly exitCode: number | null;
     readonly signal: string | null;
@@ -75,6 +138,15 @@ export interface Results {
     readonly timedOut: boolean;
     readonly durationMs: number;
   };
+}
+
+export interface JournalSummary {
+  readonly path: string;
+  readonly baseVersion: Version | null;
+  readonly revision: number;
+  /** When the agent stored it (ms since the epoch, the workspace's clock). */
+  readonly updatedAt: number;
+  readonly size: number;
 }
 
 export type AgentResult = Results[keyof Results];
@@ -88,6 +160,8 @@ export const ERROR_CODES = [
   'secret_file',
   'too_large',
   'not_allowed',
+  /** A conflict-safe write found a different version on disk than the one it was edited from. */
+  'conflict',
   'failed',
 ] as const;
 export type AgentErrorCode = (typeof ERROR_CODES)[number];
@@ -132,6 +206,30 @@ function checkPath(value: unknown, field = 'path'): string {
   return value;
 }
 
+function checkVersion(value: unknown, field: string): Version | null {
+  if (value === null) return null;
+  if (typeof value !== 'string' || !VERSION.test(value)) {
+    throw new AgentProblem('invalid_request', `The ${field} must be a file version or null.`);
+  }
+  return value;
+}
+
+function checkRevision(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    throw new AgentProblem('invalid_request', 'The revision must be a whole number.');
+  }
+  return value;
+}
+
+function checkText(value: unknown): string {
+  if (typeof value !== 'string')
+    throw new AgentProblem('invalid_request', 'Give the content as text.');
+  // A quick bound; the agent checks the exact size in bytes.
+  if (value.length > LIMITS.fileBytes)
+    throw new AgentProblem('too_large', 'Keep files under 1 MB.');
+  return value;
+}
+
 /** Checks an untrusted request (from the browser, through the control plane) before anything acts on it. */
 export function parseAgentRequest(input: unknown): AgentRequest {
   const fields =
@@ -158,8 +256,36 @@ export function parseAgentRequest(input: unknown): AgentRequest {
       if (fields.content.length > most) {
         throw new AgentProblem('too_large', 'Keep files under 1 MB.');
       }
-      return { op: 'write', path, content: fields.content, encoding };
+      return {
+        op: 'write',
+        path,
+        content: fields.content,
+        encoding,
+        ...(fields.baseVersion === undefined
+          ? {}
+          : { baseVersion: checkVersion(fields.baseVersion, 'base version') }),
+      };
     }
+    case 'files':
+      return { op: 'files' };
+    case 'journal-put':
+      return {
+        op: 'journal-put',
+        path: checkPath(fields.path),
+        content: checkText(fields.content),
+        baseVersion: checkVersion(fields.baseVersion ?? null, 'base version'),
+        revision: checkRevision(fields.revision),
+      };
+    case 'journal-list':
+      return { op: 'journal-list' };
+    case 'journal-get':
+      return { op: 'journal-get', path: checkPath(fields.path) };
+    case 'journal-drop':
+      return {
+        op: 'journal-drop',
+        path: checkPath(fields.path),
+        revision: checkRevision(fields.revision),
+      };
     case 'exec': {
       const command = fields.command;
       if (
