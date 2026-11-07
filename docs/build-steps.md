@@ -11232,3 +11232,7 @@ pnpm size               # after pnpm build: the bundle budgets
 - R4 (laptop): all five checks ok throughout.
 
 **Commit:** `chore(release): phase 2 report, 0.6.0, in review; web TypeScript split and bundle budget`
+
+**Found at the PR:** the headless `perf` job failed on CI with `ENOENT: reports-data/canvas-perf.json`. That folder is git-ignored, so it existed on the laptop but not on a fresh checkout. The test now creates it (`mkdirSync`, recursive), checked by running it with the folder removed. **Gotcha:** a test that writes files must create their folders, because CI starts from a clean clone.
+
+**Commit:** `fix(e2e): the performance test creates its results folder, missing on a fresh checkout`

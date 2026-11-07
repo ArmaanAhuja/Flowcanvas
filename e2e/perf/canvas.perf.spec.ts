@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page, type Route } from '@playwright/test';
 
 // Phase 2 · Done when: "500 dummy nodes pan and zoom smoothly". 500 nodes (the Labs stress test), panned by
@@ -226,6 +226,8 @@ test('500 nodes pan and zoom smoothly', async ({ page }) => {
     results,
   };
   console.log(JSON.stringify(report, null, 2));
+  // reports-data is git-ignored, so a fresh checkout (CI) doesn't have it.
+  mkdirSync('reports-data', { recursive: true });
   writeFileSync('reports-data/canvas-perf.json', `${JSON.stringify(report, null, 2)}\n`);
 
   for (const row of results) {

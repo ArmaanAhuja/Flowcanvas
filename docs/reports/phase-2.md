@@ -77,6 +77,7 @@
 - **Close zoom isn't fully smooth:** p95 33 ms between 100% and 200%, where nodes enter and leave the page. The test holds it to its own named limit, so it can't get worse unnoticed. Fixed by the build plan's **phase 42** (the WebGL renderer with level of detail).
 - **Found and fixed in step 8:** your theme choice wasn't applied on a project's page. It's now applied at the app's root, with a test.
 - **Movable panels:** upgrade-later 40.
+- **Fixed at the PR:** CI's headless performance job failed on its first run because the test wrote its results into `e2e/reports-data/`, which is git-ignored and so missing on a fresh checkout. The test now creates it. The frame times on CI were within limits (16.7 ms median, no long tasks).
 
 **Upgrade-later review at phase end:**
 - **Closed this phase:** 4 (the web app's TypeScript settings split into browser, Node and tests; Node APIs no longer type-check in browser code) and 18 (the bundle-size budget, in CI).
