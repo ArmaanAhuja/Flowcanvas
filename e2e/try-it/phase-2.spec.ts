@@ -190,3 +190,135 @@ test('phase 2: panels collapse, resize by mouse and keyboard, and keep their lay
 
   expect(watch.problems()).toEqual([]);
 });
+
+const viewport = (page: Page) =>
+  page.locator('.react-flow__viewport').evaluate((el) => {
+    const m = new DOMMatrixReadOnly(getComputedStyle(el).transform);
+    return { x: m.e, y: m.f, zoom: m.a };
+  });
+const zoomLabel = (page: Page) => page.getByLabel('Zoom level').textContent();
+
+test('phase 2: the canvas is honest when empty', async ({ page }) => {
+  const watch = watchForPageProblems(page);
+  await fakeApi(page);
+  await page.goto(`/p/${PROJECT.id}`);
+  const canvas = page.getByRole('main', { name: 'Canvas' });
+  await expect(canvas).toContainText('Flows appear here once the project is analysed.');
+  await expect(page.getByRole('toolbar', { name: 'Canvas' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Fit (F)' })).toBeDisabled();
+  await expect(page.locator('.react-flow__minimap')).toHaveCount(0);
+  await expect(page.locator('.react-flow__node')).toHaveCount(0);
+  expect(watch.problems()).toEqual([]);
+});
+
+test('phase 2 · Try it: pan, zoom and select on the canvas (stress test, 500 example nodes)', async ({
+  page,
+}) => {
+  const watch = watchForPageProblems(page);
+  await fakeApi(page);
+  // The Labs switch, as turned on from the Labs panel (stored in this browser).
+  await page.addInitScript(() => {
+    window.localStorage.setItem('flowcanvas-labs', JSON.stringify({ 'canvas-stress-test': true }));
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/p/${PROJECT.id}`);
+
+  await test.step('500 example nodes, clearly labelled as examples', async () => {
+    await expect(page.getByRole('note')).toHaveText(
+      'Canvas stress test (Labs): 500 example nodes, not your project’s flows.',
+    );
+    await expect(page.locator('.react-flow__node')).toHaveCount(500);
+  });
+
+  await test.step('The minimap sits bottom-left at Figma 06’s size', async () => {
+    const minimap = await page.locator('.react-flow__minimap').boundingBox();
+    const canvas = await page.locator('[data-region="canvas"]').boundingBox();
+    if (minimap === null || canvas === null) throw new Error('no minimap or canvas');
+    expect(minimap.width).toBe(140);
+    expect(minimap.height).toBe(84);
+    // Figma 06, minimap(): 20 px from the left, 16 px from the bottom.
+    expect(minimap.x - canvas.x).toBeCloseTo(20, 0);
+    expect(canvas.y + canvas.height - (minimap.y + minimap.height)).toBeCloseTo(16, 0);
+  });
+
+  await test.step('Zoom in and out from the toolbar, and with Ctrl + scroll', async () => {
+    const start = await zoomLabel(page);
+    await page.getByRole('button', { name: 'Zoom in' }).click();
+    await expect.poll(() => zoomLabel(page)).not.toBe(start);
+    const zoomed = (await viewport(page)).zoom;
+    await page.getByRole('button', { name: 'Zoom out' }).click();
+    await expect.poll(async () => (await viewport(page)).zoom).toBeLessThan(zoomed);
+    const before = (await viewport(page)).zoom;
+    await page.mouse.move(800, 400);
+    await page.keyboard.down('Control');
+    await page.mouse.wheel(0, -300);
+    await page.keyboard.up('Control');
+    await expect.poll(async () => (await viewport(page)).zoom).toBeGreaterThan(before);
+  });
+
+  await test.step('Scrolling pans without zooming', async () => {
+    const before = await viewport(page);
+    await page.mouse.wheel(0, 200);
+    await expect.poll(async () => (await viewport(page)).y).not.toBe(before.y);
+    expect((await viewport(page)).zoom).toBeCloseTo(before.zoom, 5);
+  });
+
+  await test.step('The Pan tool (H) drags the view', async () => {
+    await page.keyboard.press('h');
+    await expect(page.getByRole('button', { name: 'Pan (H)' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    const before = await viewport(page);
+    await page.mouse.move(900, 450);
+    await page.mouse.down();
+    await page.mouse.move(700, 350, { steps: 6 });
+    await page.mouse.up();
+    const after = await viewport(page);
+    expect(after.x).toBeCloseTo(before.x - 200, 0);
+    expect(after.y).toBeCloseTo(before.y - 100, 0);
+  });
+
+  await test.step('Select (V): a click selects a node; a drag selects a box', async () => {
+    await page.keyboard.press('v');
+    await expect(page.getByRole('button', { name: 'Select (V)' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await page.getByRole('button', { name: 'Fit (F)' }).click();
+    await page.waitForTimeout(300);
+    const node = page.locator('.react-flow__node').first();
+    await node.click();
+    await expect(node).toHaveClass(/selected/);
+    await expect(node.locator('[data-selected="true"]')).toHaveCount(1);
+    // Fit to screen leaves empty space above a wide grid: start just above and left of the first node, on the
+    // background (a drag that starts on a node draws no box), and cover a few rows and columns.
+    const first = await node.boundingBox();
+    if (first === null) throw new Error('no node');
+    await page.mouse.move(first.x - 4, first.y - 4);
+    await page.mouse.down();
+    await page.mouse.move(first.x + first.width * 6, first.y + first.height * 4, { steps: 8 });
+    await page.mouse.up();
+    expect(await page.locator('.react-flow__node.selected').count()).toBeGreaterThan(1);
+  });
+
+  await test.step('F fits the selection', async () => {
+    const before = (await viewport(page)).zoom;
+    await page.locator('.react-flow__node').nth(250).click();
+    await page.keyboard.press('f');
+    await expect.poll(async () => (await viewport(page)).zoom).toBeGreaterThan(before);
+  });
+
+  await test.step('Space + drag pans in Select mode too', async () => {
+    const before = await viewport(page);
+    await page.mouse.move(800, 450);
+    await page.keyboard.down('Space');
+    await page.mouse.down();
+    await page.mouse.move(700, 450, { steps: 6 });
+    await page.mouse.up();
+    await page.keyboard.up('Space');
+    expect((await viewport(page)).x).toBeCloseTo(before.x - 100, 0);
+  });
+
+  expect(watch.problems()).toEqual([]);
+});

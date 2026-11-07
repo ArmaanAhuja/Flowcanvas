@@ -1,7 +1,10 @@
 import { Button, Rail, RailButton, ReviewBar, Tabs, TopBar, WorkspaceStatus } from '@flowcanvas/ui';
 import { Maximize2, Minimize2, PanelRight, SquareTerminal, Target } from 'lucide-react';
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { fetchProjects, isProblem, type Project } from '../projects/api';
+import { FlowCanvas } from '../canvas/FlowCanvas';
+import { EXAMPLE_BANNER, exampleGraph } from '../canvas/examples';
+import { useLabs } from '../labs/LabsProvider';
 import { linkTo } from '../routing/route';
 import { Shell, useShell } from '../shell/Shell';
 import styles from './ProjectPage.module.css';
@@ -103,7 +106,7 @@ export function ProjectPage({
           <p className={styles.empty}>{EMPTY.left}</p>
         </section>
       }
-      canvas={<p className={styles.canvasEmpty}>{EMPTY.canvas}</p>}
+      canvas={<ProjectCanvas />}
       right={
         <section className={styles.panel} aria-labelledby="inspector">
           <h2 id="inspector" className={styles.panelTitle}>
@@ -224,5 +227,19 @@ function Dock({
     <Suspense fallback={<p className={styles.empty}>Loading the terminal…</p>}>
       <WorkspaceTerminal projectId={project.id} projectName={project.name} />
     </Suspense>
+  );
+}
+
+/** No flows until the project is analysed (phase 4 onwards); the Labs stress test shows labelled examples. */
+function ProjectCanvas() {
+  const stressTest = useLabs().isOn('canvas-stress-test');
+  const examples = useMemo(() => (stressTest ? exampleGraph() : undefined), [stressTest]);
+  return (
+    <FlowCanvas
+      nodes={examples?.nodes ?? []}
+      edges={examples?.edges ?? []}
+      empty={<p className={styles.empty}>{EMPTY.canvas}</p>}
+      {...(examples === undefined ? {} : { banner: EXAMPLE_BANNER })}
+    />
   );
 }

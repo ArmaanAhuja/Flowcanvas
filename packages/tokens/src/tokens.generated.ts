@@ -116,6 +116,10 @@ export const vars = {
       "right": "var(--size-panel-right)",
       "review-open": "var(--size-panel-review-open)"
     },
+    "minimap": {
+      "width": "var(--size-minimap-width)",
+      "height": "var(--size-minimap-height)"
+    },
     "icon": {
       "xs": "var(--size-icon-xs)",
       "sm": "var(--size-icon-sm)",
@@ -132,6 +136,7 @@ export const vars = {
     "width": {
       "default": "var(--border-width-default)",
       "selected": "var(--border-width-selected)",
+      "edge": "var(--border-width-edge)",
       "focus": "var(--border-width-focus)",
       "state-bar": "var(--border-width-state-bar)",
       "halo": "var(--border-width-halo)",
@@ -393,6 +398,8 @@ export const baseValues = {
   "--size-panel-left": "248px",
   "--size-panel-right": "360px",
   "--size-panel-review-open": "300px",
+  "--size-minimap-width": "140px",
+  "--size-minimap-height": "84px",
   "--size-icon-xs": "14px",
   "--size-icon-sm": "16px",
   "--size-icon-md": "18px",
@@ -402,6 +409,7 @@ export const baseValues = {
   "--size-toggle-knob": "12px",
   "--border-width-default": "1px",
   "--border-width-selected": "1.5px",
+  "--border-width-edge": "1.25px",
   "--border-width-focus": "2px",
   "--border-width-state-bar": "2px",
   "--border-width-halo": "2px",

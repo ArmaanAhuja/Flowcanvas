@@ -2,7 +2,7 @@
 
 The one place to see how to run Flowcanvas, how to test it, and which features exist so far. It's updated at every build step. Details for each step live in `docs/build-steps.md`; phase status in `docs/STATUS.md`; how it's put together in `ARCHITECTURE.md`.
 
-- **Last updated:** 7 Nov 2026, phase 2 step 4 (branch `phase/2-canvas-app-shell`)
+- **Last updated:** 7 Nov 2026, phase 2 step 5 (branch `phase/2-canvas-app-shell`)
 - **Released (on staging):** `0.5.0`, phase 1d
 - **Progress:** phases 1, 1a, 1b and 1c are accepted; 1d is in review; phase 2 is in progress. That's 5 of the build plan's 96 phases. Stage 0's goal: open a repository in a workspace, see it on a canvas, edit it, and answer "what calls this?"
 
@@ -45,10 +45,10 @@ If the host can't start, its log line says why: the token, Docker, or another `p
 
 | Command | What it checks | Time |
 | --- | --- | --- |
-| `pnpm test` | 621 unit and component tests, with no Docker or network | about 20 s |
+| `pnpm test` | 627 unit and component tests, with no Docker or network | about 20 s |
 | `pnpm lint`, `pnpm typecheck`, `pnpm format:check` | Lint (with the design-token rules), strict TypeScript, formatting | — |
 | `pnpm test:docker` | 42 tests against real containers: isolation, the network allowlist, clone time, sleep and resume, the guard, no secret kept anywhere. Needs Docker 28+ and the internet | about 1 min |
-| `pnpm test:e2e` | 12 recorded walkthroughs of each phase's *Try it*, under the production security policy (1 runs only in CI) | about 25 s |
+| `pnpm test:e2e` | 14 recorded walkthroughs of each phase's *Try it*, under the production security policy (1 runs only in CI) | about 45 s |
 | `pnpm test:visual` | Screenshots of every catalogue story in both themes against approved baselines, plus accessibility checks (axe) | about 2 min |
 | `pnpm --filter @flowcanvas/control-plane test:idle-real` | The 10-minute idle sleep in real time, nothing faked | about 12 min |
 | `pnpm workspace:resources` | Your laptop against Flowcanvas's budget | instant |
@@ -97,7 +97,11 @@ CI runs the checks, Docker, visual and walkthrough jobs on every pull request an
   - review bar
 - 🟡 **Panels:** they collapse and resize by mouse and keyboard. There's a full-screen canvas, and the review bar opens to 300 px. Your layout is remembered, in pixels.
 - 🟡 **Honest empty states** wherever content doesn't exist yet. The view switch offers Graph; Sequence and Code show as coming later.
-- ⬜ **The canvas:** pan, zoom, fit, selection, minimap, zoom controls (step 5).
+- 🟡 **The canvas:**
+  - scroll pans; Ctrl or ⌘ + scroll, or a pinch, zooms; **F** fits; **V** selects (click, or drag a box); **H** pans (as does Space + drag)
+  - a minimap bottom-left and a toolbar bottom-centre, as on Figma 06
+  - honestly empty until the project is analysed (stage 1)
+  - the Labs **Canvas stress test** shows 500 example nodes, labelled as examples
 - ⬜ **The workspace chip's popover** in the top bar (step 6).
 - ⬜ **500 nodes,** smooth, measured on real hardware (step 7).
 
@@ -108,15 +112,13 @@ CI runs the checks, Docker, visual and walkthrough jobs on every pull request an
 - ✅ **Components:**
   - Button, Tag, Input, Toggle, Menu, Tooltip, Tabs
   - Panel, Popover, Flow node, Workspace status
-  - Top bar, Rail, Review bar
+  - Top bar, Rail, Review bar, Canvas toolbar
   - all in the catalogue
-- ✅ **What's new** (from the CHANGELOG), Labs switches, and the build's version and commit on the page.
+- ✅ **What's new** (from the CHANGELOG), Labs switches (the first: Canvas stress test), and the build's version and commit on the page.
 - ✅ **A strict security policy:** no inline scripts or styles, previews per pull request, and telemetry off.
 
 ### Coming next
-- **Rest of phase 2:**
-  - the canvas (React Flow): pan, zoom, minimap, selection, fit; flow nodes in our design
-  - the workspace popover, and the 500-node performance test
+- **Rest of phase 2:** the workspace popover in the top bar; the 500-node performance test on real hardware; baselines and the Figma 06 differences list.
 - **Phase 3:** the editor (Monaco), synced to the workspace, with autosave.
 - **Phase 4:** the indexer: every file parsed, symbols searchable in under 100 ms.
 - **Phase 5:** TypeScript call graphs: callers and callees.

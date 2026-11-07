@@ -76,6 +76,8 @@
   --size-panel-left: 248px;
   --size-panel-right: 360px;
   --size-panel-review-open: 300px;
+  --size-minimap-width: 140px;
+  --size-minimap-height: 84px;
   --size-icon-xs: 14px;
   --size-icon-sm: 16px;
   --size-icon-md: 18px;
@@ -85,6 +87,7 @@
   --size-toggle-knob: 12px;
   --border-width-default: 1px;
   --border-width-selected: 1.5px;
+  --border-width-edge: 1.25px;
   --border-width-focus: 2px;
   --border-width-state-bar: 2px;
   --border-width-halo: 2px;

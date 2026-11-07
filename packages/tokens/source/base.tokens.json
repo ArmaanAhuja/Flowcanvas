@@ -349,6 +349,21 @@
         }
       }
     },
+    "minimap": {
+      "$description": "Canvas minimap (Figma generator, minimap(): phase 2)",
+      "width": {
+        "$value": {
+          "value": 140,
+          "unit": "px"
+        }
+      },
+      "height": {
+        "$value": {
+          "value": 84,
+          "unit": "px"
+        }
+      }
+    },
     "icon": {
       "xs": {
         "$value": {
@@ -412,6 +427,13 @@
           "value": 1.5,
           "unit": "px"
         }
+      },
+      "edge": {
+        "$value": {
+          "value": 1.25,
+          "unit": "px"
+        },
+        "$description": "Flow edges on the canvas (Graphite: 1.25 px; 1.5 px, the selected width, when selected)"
       },
       "focus": {
         "$value": {

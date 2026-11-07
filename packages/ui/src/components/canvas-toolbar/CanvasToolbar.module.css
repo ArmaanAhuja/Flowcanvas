@@ -1,0 +1,68 @@
+/* Figma 06 canvas toolbar: 4 px padding, 2 px gaps, radius 8; 28 px buttons (radius 4, 16 px icons). */
+.toolbar {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-4);
+  border: var(--border-width-default) solid var(--color-border-subtle);
+  border-radius: var(--radius-popover);
+  background: var(--color-surface-panel);
+  box-shadow: var(--shadow-popover);
+}
+
+.button {
+  display: grid;
+  place-items: center;
+  inline-size: var(--size-control-sm);
+  block-size: var(--size-control-sm);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition:
+    color var(--duration-hover) ease-out,
+    background-color var(--duration-hover) ease-out;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+}
+
+.button[aria-pressed='true'] {
+  background: var(--color-surface-selected);
+  color: var(--color-text-primary);
+}
+
+.button:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
+.icon {
+  display: grid;
+  inline-size: var(--size-icon-sm);
+  block-size: var(--size-icon-sm);
+}
+
+.divider {
+  inline-size: var(--border-width-default);
+  block-size: var(--size-icon-sm);
+  margin-inline: var(--space-2);
+  background: var(--color-border-subtle);
+}
+
+/* The zoom level: Small, secondary; fixed width so the toolbar doesn't jump as it changes. */
+.text {
+  min-inline-size: calc(var(--space-32) + var(--space-8));
+  padding-inline: var(--space-4);
+  text-align: center;
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  font-weight: var(--text-small-font-weight);
+  line-height: var(--text-small-line-height);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}

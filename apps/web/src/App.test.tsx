@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import releases from 'virtual:changelog';
@@ -119,11 +119,16 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: "What's new" })).toBeTruthy();
   });
 
-  it('opens Labs, which honestly has no previews yet', async () => {
+  it('opens Labs, listing the canvas stress test as a preview, off by default', async () => {
     const user = userEvent.setup();
     render(<App buildInfo={buildInfo} fetcher={signedOut} />);
     await user.click(screen.getByRole('button', { name: 'Labs' }));
     const labs = screen.getByRole('dialog', { name: 'Labs' });
-    expect(labs.textContent).toContain('No previews right now');
+    expect(labs.textContent).toContain('Canvas stress test');
+    expect(
+      within(labs)
+        .getByRole('switch', { name: /Canvas stress test/ })
+        .getAttribute('aria-checked'),
+    ).toBe('false');
   });
 });

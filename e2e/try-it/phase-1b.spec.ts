@@ -37,10 +37,11 @@ test('phase 1b: Labs lists previews of unfinished features', async ({ page }) =>
     await page.getByRole('button', { name: 'Labs' }).click();
   });
 
-  await test.step('Nothing is in preview yet, and Labs says so', async () => {
+  await test.step('Previews are listed as switches, off by default', async () => {
     const labs = page.getByRole('dialog', { name: 'Labs' });
     await expect(labs).toBeVisible();
-    await expect(labs.getByText(/No previews right now/)).toBeVisible();
+    // Phase 2 added the first: the canvas stress test, labelled as examples wherever it shows.
+    await expect(labs.getByRole('switch', { name: /Canvas stress test/ })).not.toBeChecked();
     await page.keyboard.press('Escape');
     await expect(labs).toBeHidden();
   });

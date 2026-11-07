@@ -10681,8 +10681,8 @@ Both themes; 1440 × 900, checked at 1280 × 800.
 | 2 | The project page (`/p/:id`) and the shell skeleton at Figma's sizes, with the geometry test | done (Claude, 7 Nov) |
 | 3 | Shell components in the design system: top bar, rail, collapsible panel, review bar (catalogue and baselines) | done (Claude, 7 Nov) |
 | 4 | Panels: collapse, resize, keyboard control; the layout remembered per browser; full-screen canvas | done (Claude, 7 Nov) |
-| 5 | The canvas: dot grid, pan, zoom, minimap, selection, zoom controls, fit; `FlowNode` as a node type | *next* |
-| 6 | Real content: project, workspace chip and popover, the terminal in the bottom dock; empty states | *planned* |
+| 5 | The canvas: dot grid, pan, zoom, minimap, selection, zoom controls, fit; `FlowNode` as a node type | done (Claude, 7 Nov) |
+| 6 | Real content: project, workspace chip and popover, the terminal in the bottom dock; empty states | *next* |
 | 7 | The 500-node performance test, with its numbers | *planned* |
 | 8 | Baselines, the Try it walkthrough, and the Figma 06 differences list (decision A5) | *planned* |
 | 9 | Close: report, 0.6.0, PR | *planned* |
@@ -10929,4 +10929,86 @@ pnpm dev         # open a project: try the rail, the separators (drag, or Tab an
 - **Laptop:** all five checks ok.
 
 **Commit:** `feat(web): shell panels collapse, resize by mouse and keyboard, and keep pixel layouts`
+
+### Step 2.5 — The canvas (done by Claude)
+
+**Goal:** a real canvas: pan, zoom, fit, selection, a minimap and a toolbar, with our `FlowNode` as its nodes, styled entirely from Graphite tokens. It stays honestly empty until the project is analysed; the Labs **Canvas stress test** fills it with 500 labelled example nodes.
+
+**How it behaves** (Figma 06, and the design brief's interactions):
+
+| Do | Result |
+| --- | --- |
+| Scroll | Pans |
+| Ctrl or ⌘ + scroll, or pinch | Zooms (5% to 200%) |
+| **Select (V)** and drag on the background | Selects a box of nodes; a click selects one |
+| **Pan (H)**, or Space + drag with either tool | Moves the view |
+| **F**, or the toolbar's Fit | Fits the selection, or everything if nothing is selected |
+| Toolbar zoom out and in | Steps the zoom; the level shows between them |
+
+- **Placement (Figma 06, over the brief):**
+  - the toolbar bottom-centre, 16 px up
+  - the minimap bottom-left, 20 px from the left and 16 from the bottom, 140 × 84 px
+- **Nodes can be selected, not dragged or connected.** Flows come from the code (stage 1), not from drawing.
+- **Empty:** "Flows appear here once the project is analysed.", with Fit disabled and no minimap.
+- **The Labs switch "Canvas stress test"** shows 500 example nodes under a banner: "Canvas stress test (Labs): 500 example nodes, not your project's flows." Rule 10 allows mock data only in Labs, tests and the catalogue.
+
+**Concepts:**
+- **React Flow basics.** Nodes and edges are data. Node types are React components, here our `FlowNode`, and the viewport is a transform (x, y, zoom). Selection lives in the nodes, so React Flow must hold them (`useNodesState`): with nodes as plain props and no `onNodesChange`, a click selected nothing. https://reactflow.dev/learn/concepts/terms-and-definitions
+- **Theming a library with tokens.** Only `@xyflow/react/dist/base.css` (layout) is imported. Every colour comes from React Flow's `--xy-*` variables, set to tokens on the canvas:
+  - the dot grid in `border/subtle`
+  - edges in `edge/default` at the new `border.width.edge` (1.25 px)
+  - selection in the accent
+  - the minimap in `border/strong`, with a translucent mask
+- **Our own shortcuts.** React Flow's `useKeyPress` stopped reporting F after a box selection, found by the walkthrough and reproduced in isolation. The canvas listens for F, V and H itself (`isCanvasShortcut`): never while typing (inputs, text areas including the terminal's, editable text), and never with Ctrl, ⌘ or Alt, so ⌘F still searches the page.
+- **A floating toolbar gets a shadow.** Graphite keeps shadows for things that float. The toolbar floats over the canvas, so it uses the popover shadow token, as Figma does.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `apps/web/src/canvas/FlowCanvas.tsx`, `.module.css` | The canvas: `FlowNode` as the node type (invisible handles anchor edges), tools, zoom, fit, minimap, toolbar, empty state, banner; `isCanvasShortcut` |
+| `apps/web/src/canvas/examples.ts` | 500 example nodes in a 25-column grid, each column a chain, all named `example…` |
+| `apps/web/src/labs/flags.ts` | The first Labs switch: **Canvas stress test** (phase 2) |
+| `apps/web/src/project/ProjectPage.tsx` | The project's canvas: empty, or the examples while the switch is on |
+| `packages/ui/src/components/canvas-toolbar/` | `CanvasToolbar`, `ToolbarButton` (a tool with `aria-pressed`, or an action), `ToolbarDivider`, `ToolbarText`; story and test |
+| `packages/tokens/source/base.tokens.json` | `size.minimap.width` / `height` (140 × 84), `border.width.edge` (1.25 px) |
+
+**Tests:**
+- **Unit:**
+  - the example nodes: 500, chained, all examples
+  - the banner's words
+  - shortcuts: anywhere on the page, never while typing, never with modifiers or repeats
+  - the toolbar's roles, pressed states and actions
+  - Labs lists the switch, off by default
+- **Walkthroughs (`phase-2.spec.ts`):**
+  - *"the canvas is honest when empty"*: the message, Fit disabled, no minimap, no nodes
+  - *"Try it: pan, zoom and select on the canvas"* (500 examples):
+    - the banner
+    - the minimap at Figma's place and size
+    - zoom from the toolbar and with Ctrl + scroll; scroll pans without zooming
+    - the Pan tool by its key
+    - click and box selection
+    - F fits the selection; Space + drag pans
+  - no page errors or CSP violations
+- **Visual:** the toolbar's 2 baselines, checked by eye. The canvas in both themes and the minimap were checked by eye too (see Gotchas).
+
+**Run and check it:**
+```fish
+pnpm test        # 627 tests
+pnpm test:e2e    # 13 pass (+1 that runs only in CI)
+pnpm dev         # open a project; turn on Labs → Canvas stress test on the home page to see 500 examples
+```
+
+**Gotchas:**
+- **Selection needs state.** Controlled nodes without `onNodesChange` can't be selected.
+- **A wide graph fitted to the screen leaves empty bands** above and below. A test's box selection must start next to the nodes, not in the band.
+- **Caught by eye:** the minimap looked empty. Its mask (opaque) covered the nodes, and they were nearly the panel's colour. Now the mask dims instead of hides, and the nodes use `border/strong`.
+- **Caught by the Figma check:** the minimap first sat 16 px from the left; Figma says 20.
+
+**Docs:** this write-up; `docs/RUN-AND-FEATURES.md`.
+
+**Risks:**
+- **Laptop:** all five checks ok.
+
+**Commit:** `feat(web): the canvas — pan, zoom, fit, selection, minimap and toolbar, from tokens`
 

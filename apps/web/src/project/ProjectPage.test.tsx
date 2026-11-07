@@ -1,7 +1,9 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Project } from '../projects/api';
+import { LabsProvider } from '../labs/LabsProvider';
 import { EMPTY, ProjectPage } from './ProjectPage';
 
 afterEach(cleanup);
@@ -20,12 +22,15 @@ const rallly: Project = {
   },
 };
 
+/** The page as the app shows it: inside Labs (its canvas reads the stress-test switch). */
+const renderPage = (page: ReactElement) => render(<LabsProvider>{page}</LabsProvider>);
+
 const api = (body: unknown, status = 200) =>
   vi.fn<typeof fetch>(() => Promise.resolve(Response.json(body, { status })));
 
 describe('ProjectPage', () => {
   it('says it is opening the project, then shows the shell with every region', async () => {
-    render(
+    renderPage(
       <ProjectPage
         projectId="p-1"
         fetcher={api({ projects: [rallly], workspacesAvailable: true })}
@@ -43,7 +48,7 @@ describe('ProjectPage', () => {
   });
 
   it('shows honest empty states, never made-up content', async () => {
-    render(
+    renderPage(
       <ProjectPage
         projectId="p-1"
         fetcher={api({ projects: [rallly], workspacesAvailable: true })}
@@ -56,7 +61,7 @@ describe('ProjectPage', () => {
   });
 
   it('opens the review bar’s detail, and offers only the views that exist', async () => {
-    render(
+    renderPage(
       <ProjectPage
         projectId="p-1"
         fetcher={api({ projects: [rallly], workspacesAvailable: true })}
@@ -73,7 +78,7 @@ describe('ProjectPage', () => {
   });
 
   it('puts only working tools on the rail', async () => {
-    render(
+    renderPage(
       <ProjectPage
         projectId="p-1"
         fetcher={api({ projects: [rallly], workspacesAvailable: true })}
@@ -87,7 +92,7 @@ describe('ProjectPage', () => {
   });
 
   it('shows no workspace status where workspaces can’t run (staging)', async () => {
-    render(
+    renderPage(
       <ProjectPage
         projectId="p-1"
         fetcher={api({ projects: [rallly], workspacesAvailable: false })}
@@ -98,7 +103,7 @@ describe('ProjectPage', () => {
   });
 
   it('says so for a project that isn’t there or isn’t yours, with a way back', async () => {
-    render(
+    renderPage(
       <ProjectPage
         projectId="p-9"
         fetcher={api({ projects: [rallly], workspacesAvailable: true })}
@@ -113,7 +118,7 @@ describe('ProjectPage', () => {
   });
 
   it('shows the API’s reason when signed out', async () => {
-    render(<ProjectPage projectId="p-1" fetcher={api({ error: 'Sign in first.' }, 401)} />);
+    renderPage(<ProjectPage projectId="p-1" fetcher={api({ error: 'Sign in first.' }, 401)} />);
     expect((await screen.findByRole('alert')).textContent).toBe('Sign in first.');
   });
 });
