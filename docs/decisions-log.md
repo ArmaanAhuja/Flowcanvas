@@ -358,3 +358,24 @@ GitHub Actions never ran on `ArmaanAhuja-7777` because of the account billing lo
 - **Sizes follow Figma** (top bar 40, rail 44, left panel 248, right panel 360, review bar 40 and 300 open) where the design brief differs (44, 48, 260, 280).
 - **The terminal goes in a bottom dock** above the review bar (design brief, "18. Terminal and run manager").
 
+## 7 Nov 2026: running on your own computer from the hosted site waits for phase 48a (owner decision)
+
+**Asked:** that people can choose between running their projects on our hosting or on their own laptop, and how the hosted site would reach a laptop, including the app's running screens.
+
+**Decided:**
+- It's phase **48a, the local runner**, as the build plan has it. It's not pulled forward.
+- **Requirement for 48a: the choice must be seamless.** The same hosted site, and per project, "our cloud workspace" or "my computer".
+- Phase 2 continues meanwhile. Until 48a, workspaces run on a laptop only through `pnpm dev`.
+
+**The approach, recorded for 48a** (the owner's answer to the plan's question):
+- **The laptop dials out; nothing dials in.** The runner (the workspace host in a runner mode) keeps an outgoing encrypted WebSocket to a Cloudflare Durable Object per connected computer, which is on the free plan.
+- **The web app's requests travel down that connection.** So the laptop opens no ports, its services stay on 127.0.0.1, and the browser only ever talks to our site.
+- **Pairing:** a one-time code from "Connect this computer" on the site. The server stores the runner's token only as a hash, and computers can be listed and revoked.
+- **The tunnel is only transport:** a "runner" workspace provider sends the same fixed, checked host operations.
+- **The app's running screens** (live frames, stage 2) use the same tunnel, served from a separate preview origin with links signed per user and session.
+- **Rejected:**
+  - the browser calling `localhost`: browsers block it or ask, and the page would hold the host's token
+  - a public tunnel per laptop: it exposes the laptop to the internet
+
+**Also decided:** a living run-and-features doc, `docs/RUN-AND-FEATURES.md`, linked from a new `README.md` and updated at every build step.
+
