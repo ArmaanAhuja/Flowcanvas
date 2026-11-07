@@ -103,7 +103,7 @@ The order matters. Secrets go in before the database migration, and the migratio
 ## Known issues and follow-ups
 
 - **Worker secrets are lost on assets-only deploys of `main`.** Re-adding them is after-merge check 1.
-- **Cloudflare invocation logs are off,** because they recorded the sign-in code. CPU time per request is still in the Worker's Metrics tab (upgrade-later 31).
+- **Cloudflare invocation logs are off,** because they recorded the sign-in code. CPU time per request is still in the Worker's Metrics tab; the build plan's phase 44 (monitoring and alerts) brings proper monitoring, and it must strip query strings from anything it logs.
 - **The staging GitHub client secret wasn't rotated** (owner's choice). It had sat in local `.dev.vars` once, and was never pushed (push protection blocked it). Upgrade-later 32.
 - **Previews and reports are public by link** (item 11). They show no user data: previews can't sign in, and reports use fake data.
 - **Profile pictures not shown** (item 24), GitHub token not revoked after sign-in (25), Google app in Testing (26), no per-person limits (27), no vault key rotation (28), usage summed on read (29), admin audit log only in Worker logs (30).

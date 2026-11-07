@@ -229,7 +229,7 @@ Worker   ──ws, bearer token──► host /v1/workspaces/:ref/terminal ─�
 
 - The Worker checks origin, session, owner and running before accepting, sets `binaryType = 'arraybuffer'` on both ends, passes only bounded bytes and re-checked resizes from the browser, and counts typing as activity (at most every 30 s).
 - The page (`apps/web/src/terminal/`) runs xterm.js, loaded on demand, with colours and font from the tokens. xterm's `<style>` elements become inert templates whose text goes into constructed stylesheets (`adopt-styles.ts`), so the CSP stays `style-src 'self'` with no violations. `vite preview` sends the production headers from `public/_headers`.
-- The host opens the pty through the Docker Engine API on its Unix socket; at most 4 per workspace. Closing the WebSocket hangs up the shell. A Durable Object gateway (sessions that survive a reconnect) comes with the cloud provider (upgrade-later 36).
+- The host opens the pty through the Docker Engine API on its Unix socket; at most 4 per workspace. Closing the WebSocket hangs up the shell. A Durable Object gateway (sessions that survive a reconnect) comes with the cloud provider (upgrade-later 33).
 
 ## Workspace lifecycle (phase 1d, step 3)
 

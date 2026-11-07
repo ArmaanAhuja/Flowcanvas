@@ -104,7 +104,7 @@ CI runs the checks, Docker, visual, canvas performance (headless) and walkthroug
   - honestly empty until the project is analysed (stage 1)
   - the Labs **Canvas stress test** shows 500 example nodes, labelled as examples
 - 🟡 **The workspace chip in the top bar** opens its facts (status, machine, since when, this month's usage, any reason) and actions (Open, Sleep now, Resume, Stop). The bottom dock's terminal follows the workspace's state.
-- 🟡 **500 nodes are smooth,** measured on real hardware: panning at 120 or 60 fps, with no long tasks. Zooming in close (100% to 200%) still drops occasional frames (upgrade-later 41).
+- 🟡 **500 nodes are smooth,** measured on real hardware: panning at 120 or 60 fps, with no long tasks. Zooming in close (100% to 200%) still drops occasional frames (the build plan's phase 42, the WebGL renderer, fixes it).
 
 ### Design system and quality (phases 1a, 1b)
 - ✅ **Graphite tokens:**

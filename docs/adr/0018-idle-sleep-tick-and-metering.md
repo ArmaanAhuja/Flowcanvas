@@ -22,7 +22,7 @@ Checked on 5 Nov 2026:
 - **A Cron Trigger, every minute** (`* * * * *`) on the Worker's `scheduled` handler. Locally, `services/control-plane/scripts/dev.ts` starts `wrangler dev` unchanged and calls the local endpoint every minute. *Chosen.* The same code runs locally and deployed, and only the trigger differs.
 - **A timer in the workspace host.** Rejected. The host doesn't know the database, so the state would live in two places, and usage would be lost.
 - **Checking on each API request.** Rejected. It doesn't fire when nobody's looking at the page, which is exactly when a workspace should sleep.
-- **A Durable Object alarm per workspace.** It's exact, but more than the local stand-in needs. It's a fit for the cloud provider later (upgrade-later 36 already moves terminals into Durable Objects).
+- **A Durable Object alarm per workspace.** It's exact, but more than the local stand-in needs. It's a fit for the cloud provider later (upgrade-later 33 already moves terminals into Durable Objects).
 
 **Keeping usage current:**
 - **The tick writes records for long-running workspaces.** Rejected. A tick moving `running_since` races a person's Sleep or Stop, which reads it, so seconds can be counted twice unless every action retries.

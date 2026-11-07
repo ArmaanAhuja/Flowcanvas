@@ -65,5 +65,5 @@ Tried and rejected, on the measurements:
 - **The viewport as a GPU layer during gestures** (`will-change: transform`): overview zoom reached 120 fps, but zooming at 100% got worse (9 long tasks), and text is soft while moving.
 - **Keeping all 500 mounted:** with or without browser culling (`content-visibility: auto`), everything was at 60 fps, and zooming at 100% stuttered more.
 
-**Left, and recorded (upgrade-later 41):** zooming in close, between 100% and 200%, has a p95 frame of about 33 ms (no long tasks). That's the GPU re-rasterising node text at each zoom step, the DOM's limit and the case for the build plan's WebGL layer.
+**Left, and recorded (the build plan's phase 42, the WebGL renderer, fixes it):** zooming in close, between 100% and 200%, has a p95 frame of about 33 ms (no long tasks). That's the GPU re-rasterising node text at each zoom step, the DOM's limit and the case for the build plan's WebGL layer.
 

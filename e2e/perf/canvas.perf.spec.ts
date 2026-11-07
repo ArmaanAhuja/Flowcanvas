@@ -19,7 +19,7 @@ export const LIMITS = real
   : { medianFrameMs: 50, p95FrameMs: 100, worstLongTaskMs: 250, slowInputShare: 0.25 };
 
 /**
- * The one known exception (phase 2 report, upgrade-later 41): zooming in close (100% to 200%), where nodes come
+ * The one known exception (phase 2 report; the build plan's phase 42 brings the WebGL renderer that fixes it): zooming in close (100% to 200%), where nodes come
  * into and leave the page as they enter and leave the view, still drops a few frames (p95 about 40 to 50 ms).
  * Its own limit is named here so it can't get worse unseen; the target is LIMITS, like everything else.
  */

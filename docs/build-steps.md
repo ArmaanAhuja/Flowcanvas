@@ -10331,7 +10331,7 @@ Restart `pnpm dev` (the host changed). Under real pressure its log says `[worksp
 - **The control plane uses the host's protocol from `dist`.** After changing `workspace/host/src/protocol.ts`, run `pnpm --filter @flowcanvas/workspace-host build`, or the control plane doesn't see the new types. `pnpm test` and `pnpm dev` build it first, through turbo.
 - **A text pattern can match more than you meant.** A clean-up script's "remove the `let output` line" matched one inside a test too; it stopped because it checks each replacement matches once.
 
-**Docs:** this write-up; the corrections in "On the owner's laptop"; risk R9; ADR 0019; ARCHITECTURE; upgrade-later 39; STATUS.
+**Docs:** this write-up; the corrections in "On the owner's laptop"; risk R9; ADR 0019; ARCHITECTURE; the deletion requirement in ADR 0019; STATUS.
 
 **Risks:**
 - R9: closed locally (the guard, tested). The numbers can be tuned in `BUDGET`.
@@ -10700,7 +10700,7 @@ Both themes; 1440 × 900, checked at 1280 × 800.
 | # | Risk | How we keep it in check | Status |
 | --- | --- | --- | --- |
 | R1 | A library injects inline styles, which our CSP blocks (as xterm.js did) | Step 1 checks both under the deployed CSP before anything is built on them | **closed (step 1):** no violations; React Flow uses a static CSS file, the panels constructed stylesheets |
-| R2 | 500 nodes aren't smooth (React Flow renders DOM nodes) | Measured in step 1. Memoised node components keep each frame light. A WebGL layer is the build plan's later answer | **mostly closed (step 7):** in a real window, panning and overview zoom at the target, 0 long tasks. Zooming in close is still at p95 about 33 ms (upgrade-later 41). **Step 1:** main thread at 60 fps with 500 nodes, worst frame 33 ms, no long tasks |
+| R2 | 500 nodes aren't smooth (React Flow renders DOM nodes) | Measured in step 1. Memoised node components keep each frame light. A WebGL layer is the build plan's later answer | **mostly closed (step 7):** in a real window, panning and overview zoom at the target, 0 long tasks. Zooming in close is still at p95 about 33 ms: a known issue, fixed by the build plan's phase 42 (the WebGL renderer). **Step 1:** main thread at 60 fps with 500 nodes, worst frame 33 ms, no long tasks |
 | R3 | Frame times on CI aren't meaningful (no GPU, shared cores) | Laptop numbers decide; CI only catches large regressions | **closed (step 7):** `PERF_REAL=1` on the laptop decides; CI's `perf` job runs it headless with loose limits |
 | R4 | Laptop: Chromium in the performance test | Light; checked every step | open |
 
@@ -11112,7 +11112,7 @@ pnpm dev         # open a project: click the workspace chip in the top bar
 - Level of detail below 40% zoom (`data-detail="low"`, CSS only): nodes paint as shapes, and screen readers still read them.
 - Only visible nodes are rendered.
 
-**Known issue (upgrade-later 41):** zooming in close is at about 33 ms p95. The GPU redraws node text at each zoom step, the DOM's limit and the case for the build plan's WebGL layer.
+**Known issue (fixed by the build plan's phase 42, the WebGL renderer with level of detail):** zooming in close is at about 33 ms p95. The GPU redraws node text at each zoom step, the DOM's limit and the case for the build plan's WebGL layer.
 
 **Files:** `e2e/perf/canvas.perf.spec.ts`, `e2e/playwright.perf.config.ts`; `apps/web/src/canvas/FlowCanvas.tsx` (`ZoomControls`, `DetailLevel`, the constants); `packages/ui/src/components/flow-node/FlowNode.module.css` (level of detail); `.github/workflows/ci.yml` (job `perf`); `test:perf` scripts.
 
@@ -11127,7 +11127,7 @@ pnpm test:perf               # headless, as on CI
 - **Measure gestures separately.** The combined number hid that panning was fine and only close zoom wasn't.
 - **Runs vary with what else the laptop is doing.** Run twice and report both.
 
-**Docs:** this write-up; ADR 0020 addendum; upgrade-later 41; risks R2 and R3; `docs/RUN-AND-FEATURES.md`.
+**Docs:** this write-up; ADR 0020 addendum; risks R2 and R3; `docs/RUN-AND-FEATURES.md`.
 
 **Risks:**
 - **Laptop:** all five checks ok. The real window was opened with the owner's approval.
