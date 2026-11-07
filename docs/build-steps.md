@@ -11146,7 +11146,7 @@ pnpm test:perf               # headless, as on CI
   - the review open
   - the full-screen canvas
   - the workspace popover
-- **The visual config has two projects:** `catalogue` (Storybook, as before) and `screens` (the web app's `vite preview`, with the production CSP). `pnpm test:visual` builds both first. CI's job is now "Visual and accessibility (catalogue and screens)".
+- **The visual config has two projects:** `catalogue` (Storybook, as before) and `screens` (the web app's `vite preview`, with the production CSP). `pnpm test:visual` builds both first. CI's job keeps its name, "Visual and accessibility (catalogue)", because main's ruleset requires a check by that exact name (renaming it blocked the merge of PR #15 until it was put back).
 - **The differences list:** `docs/reports/phase-2-figma-06-differences.md`, with Figma 06 and our screenshots in `docs/reports/phase-2/`.
 - **The Try it walkthrough** (`e2e/try-it/phase-2.spec.ts`, from steps 2 to 6) is recorded on every run: pan, zoom, select, collapse every panel, restore, reload with the layout kept.
 
@@ -11236,3 +11236,7 @@ pnpm size               # after pnpm build: the bundle budgets
 **Found at the PR:** the headless `perf` job failed on CI with `ENOENT: reports-data/canvas-perf.json`. That folder is git-ignored, so it existed on the laptop but not on a fresh checkout. The test now creates it (`mkdirSync`, recursive), checked by running it with the folder removed. **Gotcha:** a test that writes files must create their folders, because CI starts from a clean clone.
 
 **Commit:** `fix(e2e): the performance test creates its results folder, missing on a fresh checkout`
+
+**Found at the merge:** GitHub refused the merge ("the base branch policy prohibits the merge") with every check green. Main's ruleset requires checks **by job name**, and step 8 had renamed the visual job, so the required one never reported. The name is back, with a comment in `ci.yml`. **Gotcha:** renaming a required CI job needs the ruleset changed in the same go (Settings → Rules).
+
+**Commit:** `fix(ci): keep the visual job's name, a required check on main`
