@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test:e2e": "playwright test",
+    "test:perf": "playwright test --config playwright.perf.config.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test:visual": "sh scripts/visual.sh",

@@ -10683,8 +10683,8 @@ Both themes; 1440 × 900, checked at 1280 × 800.
 | 4 | Panels: collapse, resize, keyboard control; the layout remembered per browser; full-screen canvas | done (Claude, 7 Nov) |
 | 5 | The canvas: dot grid, pan, zoom, minimap, selection, zoom controls, fit; `FlowNode` as a node type | done (Claude, 7 Nov) |
 | 6 | Real content: project, workspace chip and popover, the terminal in the bottom dock; empty states | done (Claude, 7 Nov) |
-| 7 | The 500-node performance test, with its numbers | *next* |
-| 8 | Baselines, the Try it walkthrough, and the Figma 06 differences list (decision A5) | *planned* |
+| 7 | The 500-node performance test, with its numbers | done (Claude, 7 Nov; real window with the owner's approval) |
+| 8 | Baselines, the Try it walkthrough, and the Figma 06 differences list (decision A5) | *next* |
 | 9 | Close: report, 0.6.0, PR | *planned* |
 
 ### How each Done-when item is proven
@@ -10700,8 +10700,8 @@ Both themes; 1440 × 900, checked at 1280 × 800.
 | # | Risk | How we keep it in check | Status |
 | --- | --- | --- | --- |
 | R1 | A library injects inline styles, which our CSP blocks (as xterm.js did) | Step 1 checks both under the deployed CSP before anything is built on them | **closed (step 1):** no violations; React Flow uses a static CSS file, the panels constructed stylesheets |
-| R2 | 500 nodes aren't smooth (React Flow renders DOM nodes) | Measured in step 1. Memoised node components keep each frame light. A WebGL layer is the build plan's later answer | open: step 7 (painting with a GPU). **Step 1:** main thread at 60 fps with 500 nodes, worst frame 33 ms, no long tasks |
-| R3 | Frame times on CI aren't meaningful (no GPU, shared cores) | Laptop numbers decide; CI only catches large regressions | open: step 7 |
+| R2 | 500 nodes aren't smooth (React Flow renders DOM nodes) | Measured in step 1. Memoised node components keep each frame light. A WebGL layer is the build plan's later answer | **mostly closed (step 7):** in a real window, panning and overview zoom at the target, 0 long tasks. Zooming in close is still at p95 about 33 ms (upgrade-later 41). **Step 1:** main thread at 60 fps with 500 nodes, worst frame 33 ms, no long tasks |
+| R3 | Frame times on CI aren't meaningful (no GPU, shared cores) | Laptop numbers decide; CI only catches large regressions | **closed (step 7):** `PERF_REAL=1` on the laptop decides; CI's `perf` job runs it headless with loose limits |
 | R4 | Laptop: Chromium in the performance test | Light; checked every step | open |
 
 ### Step 2.1 — Spike: React Flow and the panels under our CSP; 500 nodes (done by Claude, ADR 0020)
@@ -11064,4 +11064,73 @@ pnpm dev         # open a project: click the workspace chip in the top bar
 - **Laptop:** all five checks ok.
 
 **Commit:** `feat(web): the workspace popover in the top bar; the dock follows the workspace`
+
+### Step 2.7 — 500 nodes, measured on real hardware (done by Claude; ADR 0020 addendum)
+
+**Goal:** prove the *Done when* "500 dummy nodes pan and zoom smoothly" where it counts, on a real screen with a GPU, and fix what the measurements show.
+
+**The test** (`e2e/perf/canvas.perf.spec.ts`, its own config `playwright.perf.config.ts`, with no slow motion or recording since both distort timing):
+- **Two scenes:** all 500 nodes on screen, and 100% zoom.
+- **Three gestures each:** Space + drag to pan, scroll to pan, Ctrl + scroll to zoom.
+- **Measured per gesture:**
+  - frame times (median, p95, worst)
+  - long tasks (main thread blocked over 50 ms)
+  - the share of inputs taking over 16 ms to paint (Event Timing)
+- **It records the GPU that drew it:** "Intel Arc", or SwiftShader headless.
+- **Target (plan):** median 60 fps, p95 under 25 ms. Zooming in close has its own **named** limit (p95 under 60 ms), recorded as a known issue rather than hidden.
+- **Run:**
+  - `PERF_REAL=1 pnpm test:perf`: real window, on the laptop
+  - `pnpm test:perf`: headless
+  - CI's new `perf` job runs headless, regressions only
+
+**Concepts:**
+- **Frames versus painting versus input.**
+  - `requestAnimationFrame` shows the main thread's frames.
+  - Long tasks show the main thread blocked.
+  - Event Timing shows input to the next *painted* frame, which is what a person feels.
+  - The browser reports only inputs over a threshold, so the test also counts every input and reports a *share*: a p95 of two slow events is just their maximum.
+  - https://developer.mozilla.org/en-US/docs/Web/API/PerformanceEventTiming
+- **Refresh steps.** On a 120 Hz screen, frame times come in steps of 8.3 ms (8.3, 16.7, 25.0, 33.3). So "p95 25.0 ms" means a frame missed two refreshes.
+- **Re-renders are the first suspect.** A component that reads the viewport re-renders on every frame of a pan, and fresh option objects make the library redo work.
+- **Level of detail.** At low zoom, text can't be read, so don't paint it.
+
+**Measured** (all 500 nodes, 1440 × 900; median / p95 frame in ms):
+
+| | Before (step 5 code) | After, run 1 | After, run 2 |
+| --- | --- | --- | --- |
+| All on screen, the three gestures | p95 50, **60 long tasks** | 8.4 or 16.7 / 16.8–25.0, 0 long tasks | 8.3–8.4 / 8.4–16.8, 0 long tasks |
+| 100%: drag and scroll to pan | p95 42, 25 long tasks | 16.6 / 20.8–21.0, 0 long tasks | 8.3 / 8.4–16.6, 0 long tasks |
+| 100%: zoom closer | (in the line above) | 16.7 / **33.3**, 0 long tasks | 8.4 / **33.3**, 0 long tasks |
+
+- Run 1 failed the 25 ms bar on one gesture at exactly 25.0 ms (load from other apps; the bar wasn't widened).
+- Run 2 met the target in every gesture but close zoom.
+- Under 1% of inputs took over 16 ms to paint.
+- Headless (software rendering) was 60 fps with p95 16.7–16.8 everywhere; the limits there only catch large regressions.
+
+**What changed** (ADR 0020 addendum, with what was tried and rejected):
+- The canvas doesn't re-render while the view moves: only `ZoomControls` reads the viewport, and React Flow's options are constants.
+- Level of detail below 40% zoom (`data-detail="low"`, CSS only): nodes paint as shapes, and screen readers still read them.
+- Only visible nodes are rendered.
+
+**Known issue (upgrade-later 41):** zooming in close is at about 33 ms p95. The GPU redraws node text at each zoom step, the DOM's limit and the case for the build plan's WebGL layer.
+
+**Files:** `e2e/perf/canvas.perf.spec.ts`, `e2e/playwright.perf.config.ts`; `apps/web/src/canvas/FlowCanvas.tsx` (`ZoomControls`, `DetailLevel`, the constants); `packages/ui/src/components/flow-node/FlowNode.module.css` (level of detail); `.github/workflows/ci.yml` (job `perf`); `test:perf` scripts.
+
+**Run and check it:**
+```fish
+PERF_REAL=1 pnpm test:perf   # opens a Chromium window for about 30 s; numbers in the output and e2e/reports-data/canvas-perf.json
+pnpm test:perf               # headless, as on CI
+```
+
+**Gotchas:**
+- **Measure the right thing.** `requestAnimationFrame` alone hid painting, and a p95 of two slow events was meaningless. Count all inputs.
+- **Measure gestures separately.** The combined number hid that panning was fine and only close zoom wasn't.
+- **Runs vary with what else the laptop is doing.** Run twice and report both.
+
+**Docs:** this write-up; ADR 0020 addendum; upgrade-later 41; risks R2 and R3; `docs/RUN-AND-FEATURES.md`.
+
+**Risks:**
+- **Laptop:** all five checks ok. The real window was opened with the owner's approval.
+
+**Commit:** `perf(web): 500 nodes pan and zoom smoothly — measured on real hardware`
 

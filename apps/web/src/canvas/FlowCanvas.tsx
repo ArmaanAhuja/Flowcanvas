@@ -20,6 +20,7 @@ import {
   useEdgesState,
   useNodesState,
   useReactFlow,
+  useStore,
   useViewport,
   type Edge,
   type Node,
@@ -72,6 +73,19 @@ const MINIMAP = { width: px('--size-minimap-width'), height: px('--size-minimap-
 
 export const ZOOM = { min: 0.05, max: 2, step: 1.2 } as const;
 
+// React Flow's options, made once: a fresh object or array on every render makes it redo work, which showed up
+// as stutter while panning 500 nodes (phase 2 step 7).
+const EDGE_OPTIONS = { type: 'smoothstep' } as const;
+const FIT_OPTIONS = { padding: 0.15 } as const;
+const ZOOM_KEYS = ['Control', 'Meta'];
+/** In Select, the middle and right buttons pan; the left one draws a selection box. */
+const PAN_BUTTONS_SELECT = [1, 2];
+const PRO_OPTIONS = { hideAttribution: true } as const;
+const MINIMAP_STYLE = { width: MINIMAP.width, height: MINIMAP.height } as const;
+
+/** Below this zoom a node's text is too small to read: nodes paint as shapes only (FlowNode's level of detail). */
+export const LOW_DETAIL_BELOW = 0.4;
+
 export type CanvasTool = 'select' | 'pan';
 
 export interface FlowCanvasProps {
@@ -109,8 +123,9 @@ function Canvas({ nodes: given, edges: givenEdges, empty, banner }: FlowCanvasPr
   useEffect(() => {
     setEdges([...givenEdges]);
   }, [givenEdges, setEdges]);
+  const container = useRef<HTMLDivElement>(null);
+  // No useViewport here: only ZoomControls follows the zoom, so panning doesn't re-render the canvas.
   const flow = useReactFlow<CanvasNode, CanvasEdge>();
-  const { zoom } = useViewport();
   const isEmpty = nodes.length === 0;
 
   const fit = () => {
@@ -144,7 +159,8 @@ function Canvas({ nodes: given, edges: givenEdges, empty, banner }: FlowCanvasPr
   }, []);
 
   return (
-    <div className={styles.canvas} data-tool={tool}>
+    <div className={styles.canvas} data-tool={tool} ref={container}>
+      <DetailLevel container={container} />
       {banner !== undefined && (
         <p className={styles.banner} role="note">
           {banner}
@@ -156,30 +172,32 @@ function Canvas({ nodes: given, edges: givenEdges, empty, banner }: FlowCanvasPr
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={NODE_TYPES}
-        defaultEdgeOptions={{ type: 'smoothstep' }}
+        defaultEdgeOptions={EDGE_OPTIONS}
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable
         minZoom={ZOOM.min}
         maxZoom={ZOOM.max}
         fitView
-        fitViewOptions={{ padding: 0.15 }}
+        fitViewOptions={FIT_OPTIONS}
         panOnScroll
         zoomOnScroll={false}
         zoomOnPinch
-        zoomActivationKeyCode={['Control', 'Meta']}
+        zoomActivationKeyCode={ZOOM_KEYS}
         panActivationKeyCode="Space"
         selectionOnDrag={tool === 'select'}
-        panOnDrag={tool === 'pan' ? true : [1, 2]}
+        panOnDrag={tool === 'pan' ? true : PAN_BUTTONS_SELECT}
         deleteKeyCode={null}
-        proOptions={{ hideAttribution: true }}
+        // Zoomed in, only the nodes on screen are in the page; zoomed out, all of them are (shapes only).
+        onlyRenderVisibleElements
+        proOptions={PRO_OPTIONS}
         aria-label="Flow canvas"
       >
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
         {!isEmpty && (
           <MiniMap
             position="bottom-left"
-            style={{ width: MINIMAP.width, height: MINIMAP.height }}
+            style={MINIMAP_STYLE}
             ariaLabel="Minimap"
             pannable
             zoomable
@@ -206,21 +224,7 @@ function Canvas({ nodes: given, edges: givenEdges, empty, banner }: FlowCanvasPr
             }}
           />
           <ToolbarDivider />
-          <ToolbarButton
-            label="Zoom out"
-            icon={<Minus size={16} />}
-            disabled={zoom <= ZOOM.min}
-            onClick={() => void flow.zoomOut({ duration: 150 })}
-          />
-          <ToolbarText>
-            <span aria-label="Zoom level">{`${String(Math.round(zoom * 100))}%`}</span>
-          </ToolbarText>
-          <ToolbarButton
-            label="Zoom in"
-            icon={<Plus size={16} />}
-            disabled={zoom >= ZOOM.max}
-            onClick={() => void flow.zoomIn({ duration: 150 })}
-          />
+          <ZoomControls />
           <ToolbarButton
             label="Fit (F)"
             icon={<Maximize size={16} />}
@@ -253,4 +257,48 @@ export function isCanvasShortcut(event: KeyboardEvent): boolean {
     target instanceof HTMLTextAreaElement ||
     target instanceof HTMLSelectElement
   );
+}
+
+/** The zoom buttons and level: the only part of the canvas that re-renders as the view moves. */
+function ZoomControls() {
+  const flow = useReactFlow();
+  const { zoom } = useViewport();
+  return (
+    <>
+      <ToolbarButton
+        label="Zoom out"
+        icon={<Minus size={16} />}
+        disabled={zoom <= ZOOM.min}
+        onClick={() => void flow.zoomOut({ duration: 150 })}
+      />
+      <ToolbarText>
+        <span aria-label="Zoom level">{`${String(Math.round(zoom * 100))}%`}</span>
+      </ToolbarText>
+      <ToolbarButton
+        label="Zoom in"
+        icon={<Plus size={16} />}
+        disabled={zoom >= ZOOM.max}
+        onClick={() => void flow.zoomIn({ duration: 150 })}
+      />
+    </>
+  );
+}
+
+/**
+ * Marks the canvas `data-detail="low"` while zoomed out below LOW_DETAIL_BELOW. Subscribed to that one boolean, so
+ * it changes once per crossing, never per frame, and the nodes themselves don't re-render (it's CSS).
+ */
+function DetailLevel({
+  container,
+}: {
+  readonly container: React.RefObject<HTMLDivElement | null>;
+}) {
+  const low = useStore((state) => state.transform[2] < LOW_DETAIL_BELOW);
+  useEffect(() => {
+    const element = container.current;
+    if (element === null) return;
+    if (low) element.dataset.detail = 'low';
+    else delete element.dataset.detail;
+  }, [low, container]);
+  return null;
 }

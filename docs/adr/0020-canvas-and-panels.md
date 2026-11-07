@@ -54,3 +54,16 @@ So the shell (`apps/web/src/shell/Shell.tsx`):
 
 The library still does what it's good at: dragging, keyboard splitters, limits and collapsing. A sliver of a pixel (1/64 px, the browser's layout unit) can remain because the library sizes panels as flex proportions; the geometry test allows under 0.1 px.
 
+## Addendum (7 Nov 2026, step 7): what keeps 500 nodes smooth
+
+Measured in a real window on the owner's laptop (Intel Arc GPU, a 120 Hz screen) with `PERF_REAL=1 pnpm test:perf`. Chosen:
+1. **The canvas doesn't re-render while the view moves.** Only `ZoomControls` reads the viewport. React Flow's options are constants made once: fresh objects on every render had it redoing work every frame. This alone took the overview from **60 long tasks to 0**.
+2. **Level of detail.** Below 40% zoom, where node text can't be read, nodes paint as shapes only. `data-detail="low"` on the canvas, set by a component subscribed to that one boolean, so nodes never re-render for it. FlowNode's text becomes transparent, not hidden, so screen readers still read it.
+3. **Only visible nodes are rendered** (`onlyRenderVisibleElements`). At 100% zoom that's what gives 120 fps panning; without it, every gesture fell to 60 fps.
+
+Tried and rejected, on the measurements:
+- **The viewport as a GPU layer during gestures** (`will-change: transform`): overview zoom reached 120 fps, but zooming at 100% got worse (9 long tasks), and text is soft while moving.
+- **Keeping all 500 mounted:** with or without browser culling (`content-visibility: auto`), everything was at 60 fps, and zooming at 100% stuttered more.
+
+**Left, and recorded (upgrade-later 41):** zooming in close, between 100% and 200%, has a p95 frame of about 33 ms (no long tasks). That's the GPU re-rasterising node text at each zoom step, the DOM's limit and the case for the build plan's WebGL layer.
+
