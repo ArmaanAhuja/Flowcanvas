@@ -109,6 +109,11 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 - 🟡 **The workspace chip in the top bar** opens its facts (status, machine, since when, this month's usage, any reason) and actions (Open, Sleep now, Resume, Stop). The bottom dock's terminal follows the workspace's state.
 - 🟡 **500 nodes are smooth,** measured on real hardware: panning at 120 or 60 fps, with no long tasks. Zooming in close (100% to 200%) still drops occasional frames (the build plan's phase 42, the WebGL renderer, fixes it).
 
+### The editor (phase 3, in progress)
+- ⬜ **The Code view** (Figma 11): file tree, tabs, Monaco with syntax highlighting, save (Ctrl/⌘+S), undo, quick-open (Ctrl/⌘+P).
+- ⬜ **Autosave** for when you forget: after 5 s without typing, and on switching file or window. Unsaved changes are also journalled every 2 s, so closing the tab loses nothing.
+- ⬜ **Changes from the terminal** appear in the editor; a conflict with unsaved changes is shown, never overwritten.
+
 ### Design system and quality (phases 1a, 1b)
 - ✅ **Graphite tokens:**
   - generated from `packages/tokens/source` into CSS, plus TypeScript values for code that needs numbers
@@ -122,7 +127,7 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 - ✅ **A strict security policy:** no inline scripts or styles, previews per pull request, and telemetry off.
 
 ### Coming next
-- **Phase 3:** the editor (Monaco), synced to the workspace, with autosave.
+- **Phase 3 (now):** the editor (Monaco), synced to the workspace, with autosave.
 - **Phase 4:** the indexer: every file parsed, symbols searchable in under 100 ms.
 - **Phase 5:** TypeScript call graphs: callers and callees.
 - **After that:** stage 1 draws real flows from code, and stage 2 adds live frames of the running app.

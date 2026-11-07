@@ -391,3 +391,16 @@ GitHub Actions never ran on `ArmaanAhuja-7777` because of the account billing lo
 **Asked:** Figma 06, alone among the screens, has the review bar at the top (under the top bar). Every other screen, the generator script and the design brief have it at the bottom.
 
 **Decided:** **at the bottom**, as built. Figma 06's position is treated as a one-off; when the Figma file is next regenerated from the script, it will match.
+
+## 7 Nov 2026: phase 2 accepted; phase 3 plan (owner decisions)
+
+**Phase 2:** accepted by the owner and merged (PR #15, `14d1c2e`).
+
+**Phase 3 answers:**
+1. **Autosave is for when a person forgets to save** (owner): an amalgamation of a save button and real autosave.
+   - **Ctrl/⌘+S** writes the file at once.
+   - **Autosave** writes it after **5 seconds without typing**, and at once when you switch to another file, leave the Code view, or the browser window loses focus.
+   - **The journal underneath:** unsaved changes go to the workspace every 2 seconds while typing and when the tab is hidden or closed (plus a copy in the browser's IndexedDB), so nothing is lost before an autosave or when the workspace can't be reached. Reopening restores them.
+   - **A switch** in the status bar, "Autosave: on/off", kept per browser; on by default.
+2. **The editor lives in the Code view** (Figma 11) in this phase. The editor as a card on the canvas (design brief §17) comes with phase 7.
+3. **No fake errors:** syntax highlighting only. Monaco's own TypeScript checking stays off, because without the project's types it would report wrong errors, and the status bar shows no error count until phase 33's language servers.

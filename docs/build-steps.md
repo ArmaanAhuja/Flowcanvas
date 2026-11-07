@@ -11240,3 +11240,73 @@ pnpm size               # after pnpm build: the bundle budgets
 **Found at the merge:** GitHub refused the merge ("the base branch policy prohibits the merge") with every check green. Main's ruleset requires checks **by job name**, and step 8 had renamed the visual job, so the required one never reported. The name is back, with a comment in `ci.yml`. **Gotcha:** renaming a required CI job needs the ruleset changed in the same go (Settings → Rules).
 
 **Commit:** `fix(ci): keep the visual job's name, a required check on main`
+
+## Phase 3 — Open a repo and edit
+
+**From the build plan:**
+- **Build:** Monaco in the browser with the buffer synced to the workspace; tabs, save, undo, quick-open; autosave journal every few seconds; file watcher.
+- **Done when:** edits survive closing the tab and reopening; an edit made in the terminal appears in the editor.
+- **Try it:** edit a file in Rallly, close the tab, reopen it: the change is still there.
+
+**Owner decisions (7 Nov 2026, decisions log):**
+- **Saving:** Ctrl/⌘+S at once; autosave after 5 s without typing and on switching file, leaving the view or the window losing focus; the journal every 2 s and on hiding the tab; an "Autosave: on/off" switch, on by default.
+- **The Code view** (Figma 11); the editor card on the canvas is phase 7.
+- **Syntax highlighting only;** no error count until phase 33.
+
+**Expected outcome:** on a project's page, the **Code** switch opens the Code view, laid out like Figma 11:
+- a file tree in the left panel
+- tabs, with a dot on unsaved files
+- a breadcrumb, the editor, and a status bar (line and column, indentation, encoding, language, autosave)
+- **Ctrl/⌘+S** saves, **Ctrl/⌘+P** opens a file by name, undo works, and autosave catches what you forget
+- close the browser tab mid-edit and reopen it: your changes are there
+- `sed` in the terminal: the open file updates in front of you
+
+**Concepts this phase introduces** (each gets a primer in its step):
+- Monaco, the editor core of VS Code: models, editors, workers: https://microsoft.github.io/monaco-editor/
+- Content-Security-Policy for styles and workers: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy
+- File watching with inotify, and its limits: https://man7.org/linux/man-pages/man7/inotify.7.html
+- Optimistic concurrency (versioned writes): https://developer.mozilla.org/en-US/docs/Web/HTTP/Conditional_requests
+- IndexedDB, for the browser's copy of the journal: https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API
+- Saving when a page goes away (`visibilitychange`, `pagehide`, `fetch` with `keepalive`): https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API
+
+**Scope:**
+- **In:** the Code view; the file tree; Monaco with syntax highlighting; tabs, save, undo, quick-open; autosave and the journal; the file watcher and changes on disk; honest states (binary, too large, secret file, workspace asleep).
+- **Out:** language servers (phase 33); global search (phase 4); the editor card on the canvas (phase 7); git markers and the git panel (phase 34); inline agent diffs (stage 3); split view; backups and restore history (phase 20a).
+
+### Steps (planned)
+
+| # | Step | Status |
+| --- | --- | --- |
+| 0 | Record the decisions; this plan; branch | done (Claude, 7 Nov) |
+| 1 | Spike: Monaco under our CSP (styles, workers, fonts) and its size; the watcher's cost with Rallly's `node_modules`. ADR 0021 | *next* |
+| 2 | Agent: file list, versioned read and write, conflicts, journal operations | *planned* |
+| 3 | The watcher and the events channel: agent → host → control plane WebSocket | *planned* |
+| 4 | UI components: EditorTabs, FileTree, StatusBar, Breadcrumb (catalogue and baselines) | *planned* |
+| 5 | The Code view: tree, Monaco, tabs, save, undo; binary, large and secret states | *planned* |
+| 6 | Saving: autosave, the journal (workspace and IndexedDB), restore on reopen | *planned* |
+| 7 | Changes on disk (reload or banner) and quick-open | *planned* |
+| 8 | Walkthrough, screen baselines, Figma 11 differences, editor bundle budget | *planned* |
+| 9 | Close: report, 0.7.0, PR | *planned* |
+
+### How each Done-when item is proven
+
+| Item | Test |
+| --- | --- |
+| Edits survive closing the tab and reopening | Docker test: the journal written and read back in a real container. Walkthrough: type, close the page, open a new one, the text is back |
+| An edit made in the terminal appears in the editor | Docker test: `sed -i` in a real container produces a watcher event with the new version. Walkthrough: the event updates a clean buffer; an unsaved one shows "Changed on disk" |
+| Tabs, save, undo, quick-open, autosave | Component and unit tests; walkthrough |
+| Never lose work | Unit tests: save failures, workspace asleep, the IndexedDB fallback |
+| Secrets | Canary: a `.env` never appears in the tree, quick-open, the journal or events |
+| Looks like Figma 11 | Screen baselines in both themes, axe, and the differences list |
+
+CI's walkthroughs use a fake workspace (staging has none until upgrade-later 33); the real-container half is proven by Docker tests and by the owner on `pnpm dev`, as in 1d.
+
+### Risks (checked at every step)
+
+| # | Risk | How we keep it in check | Status |
+| --- | --- | --- | --- |
+| R1 | Monaco adds `<style>` elements, which our CSP forbids | Step 1 spike before anything is built on it; options brought to the owner if it can't be made clean | open |
+| R2 | Monaco's size | Lazy chunk with its own budget; only the languages a web project needs | open |
+| R3 | **Laptop:** inotify's limit is shared with the whole computer; watching `node_modules` could exhaust it | Watch without `node_modules`, `.git` and build output; measure in the spike | open |
+| R4 | Lost edits (disconnect, sleep, closed tab) | Journal every 2 s and on page hide, an IndexedDB copy, tests for each case | open |
+| R5 | Silent overwrites when disk and editor disagree | Versioned writes; conflicts shown, never resolved silently | open |
