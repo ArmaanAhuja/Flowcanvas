@@ -111,6 +111,11 @@ export const vars = {
     },
     "bar": "var(--size-bar)",
     "rail": "var(--size-rail)",
+    "panel": {
+      "left": "var(--size-panel-left)",
+      "right": "var(--size-panel-right)",
+      "review-open": "var(--size-panel-review-open)"
+    },
     "icon": {
       "xs": "var(--size-icon-xs)",
       "sm": "var(--size-icon-sm)",

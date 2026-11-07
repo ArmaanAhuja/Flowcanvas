@@ -73,6 +73,9 @@
   --size-row-comfortable: 32px;
   --size-bar: 40px;
   --size-rail: 44px;
+  --size-panel-left: 248px;
+  --size-panel-right: 360px;
+  --size-panel-review-open: 300px;
   --size-icon-xs: 14px;
   --size-icon-sm: 16px;
   --size-icon-md: 18px;

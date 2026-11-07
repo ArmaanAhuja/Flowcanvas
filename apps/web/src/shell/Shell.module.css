@@ -1,0 +1,69 @@
+/* Figma 06 at 1440 × 900: top bar 40, rail 44, left panel 248, right panel 360, review bar 40 (tokens). */
+.shell {
+  display: grid;
+  grid-template-areas:
+    'top top top top'
+    'rail left canvas right'
+    'review review review review';
+  grid-template-rows: var(--size-bar) minmax(0, 1fr) var(--size-bar);
+  grid-template-columns:
+    var(--size-rail) var(--size-panel-left) minmax(0, 1fr)
+    var(--size-panel-right);
+  block-size: 100dvh;
+  overflow: hidden;
+  background: var(--color-surface-canvas);
+  color: var(--color-text-primary);
+}
+
+.topBar,
+.rail,
+.left,
+.right,
+.review {
+  min-inline-size: 0;
+  min-block-size: 0;
+  background: var(--color-surface-panel);
+}
+
+.topBar {
+  display: flex;
+  grid-area: top;
+  gap: var(--space-12);
+  align-items: center;
+  padding-inline: var(--space-12);
+  border-block-end: var(--border-width-default) solid var(--color-border-subtle);
+}
+
+.rail {
+  grid-area: rail;
+  border-inline-end: var(--border-width-default) solid var(--color-border-subtle);
+}
+
+.left {
+  grid-area: left;
+  overflow: auto;
+  border-inline-end: var(--border-width-default) solid var(--color-border-subtle);
+}
+
+.canvas {
+  position: relative;
+  grid-area: canvas;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.right {
+  grid-area: right;
+  overflow: auto;
+  border-inline-start: var(--border-width-default) solid var(--color-border-subtle);
+}
+
+.review {
+  display: flex;
+  grid-area: review;
+  gap: var(--space-12);
+  align-items: center;
+  padding-inline: var(--space-12);
+  border-block-start: var(--border-width-default) solid var(--color-border-subtle);
+}

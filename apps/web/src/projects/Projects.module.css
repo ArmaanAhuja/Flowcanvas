@@ -85,6 +85,8 @@
 }
 
 .name {
+  border-radius: var(--radius-control);
+  text-decoration: none;
   font-family: var(--text-body-strong-font-family);
   font-size: var(--text-body-strong-font-size);
   font-weight: var(--text-body-strong-font-weight);
@@ -141,4 +143,10 @@
 
 .toggle:hover {
   text-decoration-color: var(--color-text-primary);
+}
+
+.name:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--color-border-strong);
+  text-underline-offset: var(--space-4);
 }

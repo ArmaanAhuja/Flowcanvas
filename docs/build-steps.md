@@ -10678,8 +10678,8 @@ Both themes; 1440 × 900, checked at 1280 × 800.
 | --- | --- | --- |
 | 0 | Record 1d's after-merge checks; the decisions; upgrade-later 40; branch | done (Claude, 7 Nov) |
 | 1 | Spike: React Flow and `react-resizable-panels` under the strict CSP; a first frame-time measurement with 500 nodes. ADR 0020 | done (Claude, 7 Nov) |
-| 2 | The project page (`/p/:id`) and the shell skeleton at Figma's sizes, with the geometry test | *next* |
-| 3 | Shell components in the design system: top bar, rail, collapsible panel, review bar (catalogue and baselines) | *planned* |
+| 2 | The project page (`/p/:id`) and the shell skeleton at Figma's sizes, with the geometry test | done (Claude, 7 Nov) |
+| 3 | Shell components in the design system: top bar, rail, collapsible panel, review bar (catalogue and baselines) | *next* |
 | 4 | Panels: collapse, resize, keyboard control; the layout remembered per browser; full-screen canvas | *planned* |
 | 5 | The canvas: dot grid, pan, zoom, minimap, selection, zoom controls, fit; `FlowNode` as a node type | *planned* |
 | 6 | Real content: project, workspace chip and popover, the terminal in the bottom dock; empty states | *planned* |
@@ -10750,4 +10750,65 @@ Both themes; 1440 × 900, checked at 1280 × 800.
 - **Laptop:** all five checks ok (24.1 GiB memory available, 578 GiB disk free, load 0.7).
 
 **Commit:** `build(web): React Flow 12 and react-resizable-panels, checked under the CSP (ADR 0020)`
+
+### Step 2.2 — The project page and the shell skeleton (done by Claude)
+
+**Goal:** a project opens on its own page, `/p/<id>`, and the page is laid out exactly at Figma 06's sizes, proven by a test that measures every region.
+
+**Concepts:**
+- **Client-side routing with the History API.**
+  - `history.pushState` changes the address without a reload, and the `popstate` event fires on back and forward.
+  - A link keeps a real `href`, so it can still be opened in a new tab, copied, or announced as a link; only a plain left click is handled in the page.
+  - Cloudflare (`not_found_handling: single-page-application`) and `vite preview` serve `index.html` for any path, so a reload at `/p/<id>` works.
+  - Two routes don't justify a routing library (ADR 0020).
+  - https://developer.mozilla.org/en-US/docs/Web/API/History/pushState
+- **Landmarks.** The shell's regions are `header` (banner), `nav` ("Tools"), two `aside`s ("Left panel", "Right panel"), `main` ("Canvas") and `footer` ("Review"), so screen-reader users can jump between them. https://www.w3.org/WAI/ARIA/apg/practices/landmark-regions/
+- **Layout from tokens.** A CSS grid whose tracks are tokens: `size.bar` (40), `size.rail` (44), and new `size.panel.left` (248), `size.panel.right` (360) and `size.panel.review-open` (300), added to `packages/tokens/source/base.tokens.json` and generated, never typed into components (rule 9).
+- **Loading the canvas only when needed.** The project page is loaded with `React.lazy`, so React Flow (step 5) never weighs down the projects list.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `apps/web/src/routing/route.ts` | `parseRoute`, `useRoute`, `navigate`, `linkTo`, `projectPath` |
+| `apps/web/src/shell/Shell.tsx`, `.module.css` | The five regions as landmarks, at token sizes (step 4 makes the sides resizable) |
+| `apps/web/src/project/ProjectPage.tsx`, `.module.css` | Loads the project, then shows the shell. "Opening the project…", "There's no such project, or it isn't yours.", or the API's reason (signed out), each with a way back. Honest empty states (`EMPTY`). The workspace chip only where workspaces can run |
+| `apps/web/src/App.tsx` | Picks the page from the route (`Home`, `ProjectPage`, `NotFound`) |
+| `apps/web/src/projects/Projects.tsx` | Each project's name links to its page (the row's **Open** still starts the workspace) |
+| `packages/tokens/source/base.tokens.json` (+ generated) | `size.panel.left`, `size.panel.right`, `size.panel.review-open` |
+
+**Tests:**
+- **Router (5):**
+  - the routes, and anything else not found (including a malformed address)
+  - a project address parses back to the same project
+  - links, back and forward without reloading
+  - a link has a real `href`, and a plain click stays in the app
+- **Project page (5):**
+  - loading, then all six landmarks and the chip
+  - the honest empty states
+  - no chip where workspaces can't run
+  - a missing project, with a way back
+  - signed out, with the API's reason
+- **Walkthrough (`phase-2.spec.ts`):**
+  - the name in the list opens the page
+  - **every region's position and size equal Figma 06's at 1440 × 900 and 1280 × 800**
+  - a reload lands on the same page
+  - no page errors or CSP violations
+
+**Run and check it:**
+```fish
+pnpm test        # 607 tests
+pnpm test:e2e    # 11 walkthroughs (1 needs a real API and runs in CI only), including "phase 2: a project opens in the app shell…"
+pnpm dev         # then click a project's name on http://localhost:5173
+```
+
+**Gotchas:**
+- **`eslint --fix` after Prettier can leave formatting off.** Run Prettier last, and `pnpm format:check` before committing.
+
+**Docs:** this write-up; STATUS.
+
+**Risks:**
+- **Laptop:** all five checks ok (24.1 GiB memory available, 578 GiB disk free; the load read 11.6 just after the full suite, under the 14.4 limit).
+
+**Commit:** `feat(web): a project's own page in the app shell, at Figma 06's sizes`
 

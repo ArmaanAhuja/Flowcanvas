@@ -1,0 +1,61 @@
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  align-items: flex-start;
+  padding: var(--space-32);
+  font-family: var(--text-body-font-family);
+  font-size: var(--text-body-font-size);
+  line-height: var(--text-body-line-height);
+  color: var(--color-text-secondary);
+}
+
+.link,
+.home {
+  border-radius: var(--radius-control);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.link {
+  text-decoration: underline;
+  text-decoration-color: var(--color-border-strong);
+  text-underline-offset: var(--space-4);
+}
+
+.home,
+.project {
+  font-family: var(--text-small-strong-font-family);
+  font-size: var(--text-small-strong-font-size);
+  font-weight: var(--text-small-strong-font-weight);
+  line-height: var(--text-small-strong-line-height);
+}
+
+.project {
+  color: var(--color-text-secondary);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.empty,
+.reviewEmpty {
+  margin: 0;
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  line-height: var(--text-small-line-height);
+  color: var(--color-text-muted);
+}
+
+.empty {
+  padding: var(--space-12);
+}
+
+.canvasEmpty {
+  composes: empty;
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}

@@ -328,6 +328,27 @@
         "unit": "px"
       }
     },
+    "panel": {
+      "$description": "Shell side panels and the open review bar (Figma generator, shell(): phase 2)",
+      "left": {
+        "$value": {
+          "value": 248,
+          "unit": "px"
+        }
+      },
+      "right": {
+        "$value": {
+          "value": 360,
+          "unit": "px"
+        }
+      },
+      "review-open": {
+        "$value": {
+          "value": 300,
+          "unit": "px"
+        }
+      }
+    },
     "icon": {
       "xs": {
         "$value": {

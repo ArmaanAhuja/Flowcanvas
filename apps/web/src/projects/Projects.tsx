@@ -10,6 +10,7 @@ import {
 } from './api';
 import { ProjectSecrets } from '../secrets/ProjectSecrets';
 import { ProjectWorkspace, shownState, useWorkspace } from './ProjectWorkspace';
+import { linkTo, projectPath } from '../routing/route';
 import styles from './Projects.module.css';
 
 /** Where workspaces can't run (staging, until a cloud provider is connected), said once, plainly. */
@@ -151,7 +152,9 @@ function ProjectItem({
   return (
     <li className={styles.item}>
       <span className={styles.itemHeader}>
-        <span className={styles.name}>{project.name}</span>
+        <a className={styles.name} {...linkTo(projectPath(project.id))}>
+          {project.name}
+        </a>
         <span className={styles.toggles}>
           <button
             type="button"
