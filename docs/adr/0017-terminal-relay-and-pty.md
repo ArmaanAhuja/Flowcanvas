@@ -22,7 +22,7 @@ Phase 1d's Try it includes "run a command in the terminal". The browser needs an
    - `script` inside the container: no way to resize from outside
 2. **The gateway:**
    - **the app's Worker relays the WebSocket to the workspace host (chosen for now)**
-   - a Durable Object per session: the place to keep a session alive across reconnects and to share it between viewers. Locally, the workspace host already is that stateful place, so a Durable Object would add a class, a migration and a hop with nothing to hold yet. It comes with the cloud provider, when the host isn't on the same machine (upgrade-later 36)
+   - a Durable Object per session: the place to keep a session alive across reconnects and to share it between viewers. Locally, the workspace host already is that stateful place, so a Durable Object would add a class, a migration and a hop with nothing to hold yet. It comes with the cloud provider, when the host isn't on the same machine (upgrade-later 33)
 3. **xterm.js and the CSP:**
    - **move xterm's `<style>` text into constructed stylesheets (`document.adoptedStyleSheets`) (chosen)**
    - add `'unsafe-inline'` to `style-src`: weakens a rule the project treats as non-negotiable (CLAUDE.md section 7)
@@ -40,12 +40,12 @@ Worker ──WebSocket, bearer token──► workspace host /v1/workspaces/:ref
 
 - **The workspace host opens the pty** through the Docker Engine API on its Unix socket (`DOCKER_HOST` if it's `unix://`, else `/var/run/docker.sock`): `bash -l` as uid 1000, `TERM=xterm-256color`, in `/workspace/project` (or `/workspace` without a repository). It resizes with the Engine API and reports the exit code. Closing the WebSocket closes the stream, which hangs up the shell.
 - **The Worker relays.** It only accepts the upgrade after the same checks as the other workspace routes: signed in, `Origin` ours (against cross-site WebSocket hijacking), the project's owner, the workspace running. It sets `binaryType = 'arraybuffer'` on both sides, accepts only resize messages and bounded frames from the browser, and counts input as activity (at most once every 30 seconds).
-- **One shell per connection,** for now. Closing the page ends it; reconnecting starts a new one. Keeping sessions across reconnects, with their scrollback, is upgrade-later 36.
+- **One shell per connection,** for now. Closing the page ends it; reconnecting starts a new one. Keeping sessions across reconnects, with their scrollback, is upgrade-later 33.
 - **xterm.js 6 with its own stylesheet bundled** (served from our origin, so the CSP allows it). A small shim watches the terminal's element and copies each `<style>` element's text into a constructed stylesheet. Only our own scripts can create one, and `script-src 'self'` already limits scripts to ours, so the CSP's protection is unchanged. A walkthrough checks it under the deployed CSP.
 
 ## Consequences
 
 - No native dependencies. The host gains `ws` (MIT, already in the dependency tree through Wrangler) for its WebSocket server.
 - Terminal colours come from the design tokens at runtime (CSS variables read into xterm's theme), so they follow the theme without hard-coded values.
-- A refreshed page loses the shell and its scrollback until upgrade-later 36.
+- A refreshed page loses the shell and its scrollback until upgrade-later 33.
 - The cloud provider brings the Durable Object gateway. The browser's side of the protocol stays the same.

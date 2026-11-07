@@ -14,5 +14,13 @@ export interface LabsFlag {
   readonly phase: string;
 }
 
-/** Every switch ships off. Empty: nothing is half-built right now. */
-export const LABS_FLAGS: readonly LabsFlag[] = [];
+/** Every switch ships off. */
+export const LABS_FLAGS: readonly LabsFlag[] = [
+  {
+    id: 'canvas-stress-test',
+    label: 'Canvas stress test',
+    description:
+      'Fills every project’s canvas with 500 example nodes, to try panning and zooming at scale. They are examples, not your project’s flows, and the canvas says so.',
+    phase: '2',
+  },
+];

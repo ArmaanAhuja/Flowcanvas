@@ -37,4 +37,4 @@ Cloudflare's dashboard also now creates new projects as **Workers** (with static
 - Deferred and tracked in `docs/upgrade-later.md`:
   - deploys and the e2e test from CI once Actions work (items 8, 10)
   - control-plane hosting (item 12)
-  - faster image builds (item 13)
+  - faster image builds (item 12)

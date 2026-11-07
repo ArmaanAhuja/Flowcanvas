@@ -196,3 +196,13 @@
     display: none;
   }
 }
+
+/*
+ * Level of detail: inside an element marked data-detail='low' (the canvas zoomed out below 40%, where a node's
+ * text is too small to read), only the node's shape and state colours are painted. The text stays in place and
+ * in the accessibility tree (opacity, not visibility), so screen readers still read each node.
+ */
+:global([data-detail='low']) .icon,
+:global([data-detail='low']) .text {
+  opacity: 0;
+}

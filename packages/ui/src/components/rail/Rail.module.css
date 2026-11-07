@@ -1,0 +1,53 @@
+/* Figma 06 rail: 44 px, 8 px top and bottom, 4 px between 32 px buttons (radius 6, 18 px icons). */
+.rail {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  box-sizing: border-box;
+  inline-size: var(--size-rail);
+  block-size: 100%;
+  padding-block: var(--space-8);
+  /* Its edge toward the canvas, inside the 44 px (Figma draws the stroke inside). */
+  border-inline-end: var(--border-width-default) solid var(--color-border-subtle);
+  background: var(--color-surface-panel);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.button {
+  display: grid;
+  place-items: center;
+  inline-size: var(--size-control-md);
+  block-size: var(--size-control-md);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-node);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition:
+    color var(--duration-hover) ease-out,
+    background-color var(--duration-hover) ease-out;
+}
+
+.button:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+}
+
+.button[aria-pressed='true'] {
+  background: var(--color-surface-selected);
+  color: var(--color-text-primary);
+}
+
+.icon {
+  display: grid;
+  inline-size: var(--size-icon-md);
+  block-size: var(--size-icon-md);
+}

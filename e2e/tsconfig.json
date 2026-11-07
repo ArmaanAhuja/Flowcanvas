@@ -5,5 +5,13 @@
     "noEmit": true,
     "lib": ["es2024", "dom"]
   },
-  "include": ["try-it", "visual", "scripts", "playwright.config.ts", "playwright.visual.config.ts"]
+  "include": [
+    "try-it",
+    "visual",
+    "perf",
+    "scripts",
+    "playwright.config.ts",
+    "playwright.visual.config.ts",
+    "playwright.perf.config.ts"
+  ]
 }

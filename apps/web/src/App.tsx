@@ -10,7 +10,7 @@ import {
   useThemePreference,
   type ThemePreference,
 } from '@flowcanvas/ui';
-import { useCallback, useState } from 'react';
+import { Suspense, lazy, useCallback, useState } from 'react';
 import releases from 'virtual:changelog';
 import { Account } from './account/Account';
 import { Admin } from './admin/Admin';
@@ -20,6 +20,7 @@ import { LabsPanel } from './labs/LabsPanel';
 import { LabsProvider } from './labs/LabsProvider';
 import { Projects } from './projects/Projects';
 import { CATALOGUE_URL } from './links';
+import { linkTo, useRoute } from './routing/route';
 import { Usage } from './usage/Usage';
 import { useWhatsNewSeen } from './whats-new/seen';
 import { WhatsNew } from './whats-new/WhatsNew';
@@ -36,12 +37,67 @@ const THEMES: readonly { readonly id: ThemePreference; readonly label: string }[
   { id: 'light', label: 'Light' },
 ];
 
+// The project page carries the canvas (React Flow): loaded only when a project is opened.
+const ProjectPage = lazy(async () => ({
+  default: (await import('./project/ProjectPage')).ProjectPage,
+}));
+
 function themeLabel(preference: ThemePreference): string {
   return THEMES.find((theme) => theme.id === preference)?.label ?? 'System';
 }
 
 export function App({ buildInfo, fetcher }: AppProps) {
+  const route = useRoute();
+  // Here, not in a page: the chosen theme applies on every page (it once applied only on the projects list).
   const [theme, setTheme] = useThemePreference();
+  if (route.page === 'project') {
+    return (
+      <LabsProvider>
+        <Suspense fallback={null}>
+          <ProjectPage
+            projectId={route.projectId}
+            {...(fetcher === undefined ? {} : { fetcher })}
+          />
+        </Suspense>
+      </LabsProvider>
+    );
+  }
+  if (route.page === 'not-found') return <NotFound />;
+  return (
+    <Home
+      buildInfo={buildInfo}
+      theme={theme}
+      setTheme={setTheme}
+      {...(fetcher === undefined ? {} : { fetcher })}
+    />
+  );
+}
+
+function NotFound() {
+  return (
+    <main className={styles.page}>
+      <div className={styles.content}>
+        <p className={styles.summary} role="alert">
+          There’s nothing at this address.
+        </p>
+        <a className={styles.link} {...linkTo('/')}>
+          Go to your projects
+        </a>
+      </div>
+    </main>
+  );
+}
+
+/** The projects list and the version page (`/`), until the start screen. */
+function Home({
+  buildInfo,
+  fetcher,
+  theme,
+  setTheme,
+}: AppProps & {
+  readonly theme: ThemePreference;
+  readonly setTheme: (preference: ThemePreference) => void;
+}) {
   const [unseen, markSeen] = useWhatsNewSeen(releases[0]?.version);
   const [session, setSession] = useState<Session | undefined>(undefined);
   const onSessionChange = useCallback((changed: Session) => {

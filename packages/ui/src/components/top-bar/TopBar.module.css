@@ -1,0 +1,24 @@
+/* Figma 06 top bar: 40 px, 0/12 px padding, 12 px gaps; the middle group centred between the others. */
+.bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: var(--space-12);
+  align-items: center;
+  box-sizing: border-box;
+  block-size: var(--size-bar);
+  padding-inline: var(--space-12);
+  background: var(--color-surface-panel);
+}
+
+.start,
+.middle,
+.end {
+  display: flex;
+  gap: var(--space-12);
+  align-items: center;
+  min-inline-size: 0;
+}
+
+.end {
+  justify-content: flex-end;
+}

@@ -86,7 +86,7 @@ describe('Tabs', () => {
 
   it('shows counts after the label', () => {
     renderInspector();
-    expect(tab(/Runs/).textContent).toBe('Runs12');
+    expect(tab(/Runs/).textContent).toBe('Runs 12');
   });
 
   it('follows `value` when controlled', () => {
@@ -104,5 +104,15 @@ describe('Tabs', () => {
     const onValueChange = renderInspector();
     fireEvent.click(tab(/Details/));
     expect(onValueChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('Tabs: counts', () => {
+  it('names a tab with its count as words apart ("Runs 12"), in both variants', () => {
+    for (const variant of ['underline', 'pill'] as const) {
+      render(<Tabs aria-label={variant} variant={variant} items={items} />);
+      expect(screen.getByRole('tab', { name: 'Runs 12' })).toBeTruthy();
+      cleanup();
+    }
   });
 });

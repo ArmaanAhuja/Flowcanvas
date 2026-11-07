@@ -1,0 +1,38 @@
+/* Figma 06 review bar: 40 px, 0/12 px padding, 4 px between tabs; caption summary, then the actions. */
+.bar {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  box-sizing: border-box;
+  block-size: var(--size-bar);
+  padding-inline: var(--space-12);
+  background: var(--color-surface-panel);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.bar > :not(.spacer, .summary) {
+  flex: none;
+}
+
+/* One line always: when space runs short the summary gives way (ellipsis), never the tabs or the actions. */
+.summary {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-inline-end: var(--space-8);
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  font-weight: var(--text-caption-font-weight);
+  line-height: var(--text-caption-line-height);
+  letter-spacing: var(--text-caption-letter-spacing);
+  color: var(--color-text-muted);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-8);
+}

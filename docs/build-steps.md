@@ -10331,7 +10331,7 @@ Restart `pnpm dev` (the host changed). Under real pressure its log says `[worksp
 - **The control plane uses the host's protocol from `dist`.** After changing `workspace/host/src/protocol.ts`, run `pnpm --filter @flowcanvas/workspace-host build`, or the control plane doesn't see the new types. `pnpm test` and `pnpm dev` build it first, through turbo.
 - **A text pattern can match more than you meant.** A clean-up script's "remove the `let output` line" matched one inside a test too; it stopped because it checks each replacement matches once.
 
-**Docs:** this write-up; the corrections in "On the owner's laptop"; risk R9; ADR 0019; ARCHITECTURE; upgrade-later 39; STATUS.
+**Docs:** this write-up; the corrections in "On the owner's laptop"; risk R9; ADR 0019; ARCHITECTURE; the deletion requirement in ADR 0019; STATUS.
 
 **Risks:**
 - R9: closed locally (the guard, tested). The numbers can be tuned in `BUDGET`.
@@ -10613,7 +10613,630 @@ Checked: control-plane tests pinned to 4 cores, 6 runs out of 6 passed after the
 
 **`main` failed once more after #13, and this one explained itself.** The same three tests failed on both `main` runs, and each is the **first test in its file**: three files, three workers. So it wasn't per-test setup any more, but the first PGlite in each fresh worker process, which also compiles its WebAssembly from cold (1.1 s locally against 0.8 s for later ones; past 10 s on a cold, busy runner). The PR runs had passed, so it was close to the limit either way. **The fix** (second follow-up PR): the setup file prepares the migrated template once per test file, in a `beforeAll` allowed 60 s. Each test's clone keeps the normal 10 s limit, so a slow per-test setup would still fail. Passes pinned to 16, 4 and 2 cores.
 
-**Still open:** one rare failing control-plane test, about 1 run in 15, with its name not yet captured. It's being hunted with every failing run's full output kept.
+**Still open:** one rare failing control-plane test, about 1 run in 15, with its name not yet captured. *Hunt (7 Nov):* 20 more runs at low priority with full output kept, plus 8 before them, all passed. Likely the same slow start under load that #13 and #14 fixed. If it recurs, CI's log names it.
 
 **CI's Docker job, first run:** GitHub's `ubuntu-24.04` runner has **Docker 28.0.4**. All 42 Docker tests ran and passed (Rallly opened in 3.1 s there).
 
+## Phase 2 — Canvas and app shell
+
+**From the build plan:**
+- **Build:** a React Flow canvas with pan, zoom, minimap and selection; the app shell from Figma 06 (top bar, rail, side panels, review bar) with placeholder content; panels that dock and collapse.
+- **Done when:** 500 dummy nodes pan and zoom smoothly; the layout matches Figma 06.
+- **Try it:** pan, zoom and collapse panels; compare with Figma 06.
+
+**Owner decisions (7 Nov 2026, decisions log):**
+- **Honest empty states, not placeholders** (rule 10). The 500 dummy nodes appear only in the catalogue, the performance test, and a Labs switch labelled as a preview.
+- **Docked panels collapse and resize;** moving them is upgrade-later 40.
+- **The projects list stays at `/`;** a project opens at `/p/<id>`.
+
+**Expected outcome:** opening a project takes you to its own page, laid out like Figma 06:
+- **Top bar:** the project, its workspace chip with its popover (Sleep, Stop, the machine, usage), the view switch (Graph now; Sequence and Code disabled until their phases), and search (disabled until phase 4).
+- **Rail:** tools open their panels. **Terminal** opens the real terminal in the bottom dock.
+- **Canvas:** pan (Space + drag), zoom (Ctrl + scroll, pinch), fit (F), select, a minimap, zoom controls, and a dot grid.
+- **Right panel and review bar:** collapse and resize them, or collapse everything for a full-screen canvas. Your layout is remembered.
+
+Both themes; 1440 × 900, checked at 1280 × 800.
+
+**Sizes (Figma generator script, `shell()`; they win over the brief):**
+
+| Region | Figma | Brief |
+| --- | --- | --- |
+| Top bar | 40 px | 44 px |
+| Rail | 44 px | 48 px |
+| Left panel | 248 px | 260 px |
+| Right panel | 360 px | 360 px |
+| Review bar | 40 px; 300 px open | 40 px; about 280 px open |
+| Dot grid | 16 px, `border/subtle` | — |
+
+**Concepts this phase introduces** (each gets a primer in its step):
+- React Flow: nodes, edges, the viewport, custom node types: https://reactflow.dev/learn
+- Resizable, collapsible panels, and the separator pattern for keyboard users: https://www.w3.org/WAI/ARIA/apg/patterns/windowsplitter/
+- Client-side routing with the History API: https://developer.mozilla.org/en-US/docs/Web/API/History_API
+- Measuring smoothness: frame times with `requestAnimationFrame`: https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame
+
+**Scope:**
+- **In:**
+  - the five regions, built from design-system components shown in the catalogue first
+  - collapse and resize, by mouse and keyboard
+  - the canvas basics
+  - `FlowNode` as a React Flow node
+  - the workspace chip's popover, and the terminal in the bottom dock
+  - honest empty states
+  - the 500-node performance test
+- **Out:**
+  - real flows (phase 4 onwards)
+  - the editor (phase 3)
+  - the Sequence and Code views
+  - search (phase 4)
+  - the agent panel's content (stage 3)
+  - movable panels (upgrade-later 40)
+  - the start screen
+
+### Steps (planned)
+
+| # | Step | Status |
+| --- | --- | --- |
+| 0 | Record 1d's after-merge checks; the decisions; upgrade-later 40; branch | done (Claude, 7 Nov) |
+| 1 | Spike: React Flow and `react-resizable-panels` under the strict CSP; a first frame-time measurement with 500 nodes. ADR 0020 | done (Claude, 7 Nov) |
+| 2 | The project page (`/p/:id`) and the shell skeleton at Figma's sizes, with the geometry test | done (Claude, 7 Nov) |
+| 3 | Shell components in the design system: top bar, rail, collapsible panel, review bar (catalogue and baselines) | done (Claude, 7 Nov) |
+| 4 | Panels: collapse, resize, keyboard control; the layout remembered per browser; full-screen canvas | done (Claude, 7 Nov) |
+| 5 | The canvas: dot grid, pan, zoom, minimap, selection, zoom controls, fit; `FlowNode` as a node type | done (Claude, 7 Nov) |
+| 6 | Real content: project, workspace chip and popover, the terminal in the bottom dock; empty states | done (Claude, 7 Nov) |
+| 7 | The 500-node performance test, with its numbers | done (Claude, 7 Nov; real window with the owner's approval) |
+| 8 | Baselines, the Try it walkthrough, and the Figma 06 differences list (decision A5) | done (Claude, 7 Nov) |
+| 9 | Close: report, 0.6.0, PR | done (Claude, 7 Nov) |
+
+### How each Done-when item is proven
+
+| Item | Test |
+| --- | --- |
+| 500 dummy nodes pan and zoom smoothly | Playwright drives scripted pan and zoom over 500 nodes and records frame times. Target on the laptop: median 60 fps, 95th percentile under 25 ms. On CI (no GPU) it reports and fails only on a large regression |
+| The layout matches Figma 06 | A geometry test of every region at 1440 × 900 and 1280 × 800; visual baselines in both themes; the owner's side-by-side review with the differences list |
+| Try it | A recorded walkthrough: pan, zoom, collapse every panel, restore, reload (layout kept) |
+
+### Risks (checked at every step)
+
+| # | Risk | How we keep it in check | Status |
+| --- | --- | --- | --- |
+| R1 | A library injects inline styles, which our CSP blocks (as xterm.js did) | Step 1 checks both under the deployed CSP before anything is built on them | **closed (step 1):** no violations; React Flow uses a static CSS file, the panels constructed stylesheets |
+| R2 | 500 nodes aren't smooth (React Flow renders DOM nodes) | Measured in step 1. Memoised node components keep each frame light. A WebGL layer is the build plan's later answer | **mostly closed (step 7):** in a real window, panning and overview zoom at the target, 0 long tasks. Zooming in close is still at p95 about 33 ms: a known issue, fixed by the build plan's phase 42 (the WebGL renderer). **Step 1:** main thread at 60 fps with 500 nodes, worst frame 33 ms, no long tasks |
+| R3 | Frame times on CI aren't meaningful (no GPU, shared cores) | Laptop numbers decide; CI only catches large regressions | **closed (step 7):** `PERF_REAL=1` on the laptop decides; CI's `perf` job runs it headless with loose limits |
+| R4 | Laptop: Chromium in the performance test | Light; checked every step | **closed (step 9):** all five checks ok in every step |
+
+### Step 2.1 — Spike: React Flow and the panels under our CSP; 500 nodes (done by Claude, ADR 0020)
+
+**Goal:** before building on two new libraries, prove they work under our Content-Security-Policy, and get a first measure of 500 nodes.
+
+**Concepts:**
+- **What our CSP blocks, and what it doesn't.**
+  - `style-src 'self'` blocks `<style>` elements and `style="…"` attributes in markup.
+  - It allows stylesheet files from our own origin, styles set from script (`element.style.x = …`, which is how React applies `style={…}`), and *constructed stylesheets* (`new CSSStyleSheet()`, `adoptedStyleSheets`).
+  - So the question for each library is whether it creates style elements.
+  - https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/style-src
+- **Main thread versus painting.**
+  - `requestAnimationFrame` fires once per main-thread frame, so its timing shows JavaScript and layout.
+  - The picture is painted later, by the compositor. In headless Chromium that happens in software, with no GPU.
+  - A page can tick at 60 fps on the main thread and still paint slowly. Long tasks (`PerformanceObserver` `longtask`, over 50 ms) show main-thread blocking.
+  - https://developer.mozilla.org/en-US/docs/Web/API/PerformanceLongTaskTiming
+- **Release age.** For a dependency that publishes daily, take a release that has been out for a while: it has had time to be reported if broken or compromised.
+
+**What was done:**
+1. Added `@xyflow/react` 12.12.0 (24 Sep) and `react-resizable-panels` 4.14.8 (20 Oct) to the catalog and the web app. Both are MIT, with no install scripts; React Flow brings `zustand`, `classcat` and `@xyflow/system`.
+2. **Read their built code** for style injection:
+   - React Flow: none in the ESM build. `innerHTML` appears only in its UMD builds, which Vite doesn't use.
+   - The panels: constructed stylesheets only.
+3. **A temporary spike page** (`#spike`, never committed): 500 `FlowNode`s in React Flow, with a minimap, controls and a dot grid, inside resizable panels. It was built, then checked by Playwright under the production headers.
+
+**Results:**
+- **CSP violations: none. Console errors: none.** React Flow's own stylesheet loads (the minimap is positioned).
+- **Frames:**
+
+  | Fast pan and zoom (300 moves, 40 wheel steps) | Median, p95, worst frame | Long tasks | Input time |
+  | --- | --- | --- | --- |
+  | 0 nodes | 16.7, 16.7, 16.8 ms | none | 6.4 s |
+  | 500 nodes | 16.7, 16.8, 33.4 ms (60 fps) | none | 11.8 s |
+
+  The main thread handles 500 nodes easily. The longer input time comes from Playwright waiting for each event to be painted, in software. Step 7 measures painting in a real window with a GPU.
+
+**Gotchas:**
+- **The try-it walkthroughs run with `slowMo: 500`** (half a second before each action, so the videos can be followed). The first timings measured that pause: 40 mouse moves took 20 s even on the plain projects page. Turn it off for anything timed.
+- **A sorting script reordered the catalog.** Adding entries by sorting the whole list moved existing lines and dropped a blank line. Insert only the new lines, and check `git diff` shows just them.
+
+**Docs:** this write-up; ADR 0020; risks R1 (closed) and R2.
+
+**Risks:**
+- R1 closed. R2: main thread proven, painting in step 7.
+- **Laptop:** all five checks ok (24.1 GiB memory available, 578 GiB disk free, load 0.7).
+
+**Commit:** `build(web): React Flow 12 and react-resizable-panels, checked under the CSP (ADR 0020)`
+
+### Step 2.2 — The project page and the shell skeleton (done by Claude)
+
+**Goal:** a project opens on its own page, `/p/<id>`, and the page is laid out exactly at Figma 06's sizes, proven by a test that measures every region.
+
+**Concepts:**
+- **Client-side routing with the History API.**
+  - `history.pushState` changes the address without a reload, and the `popstate` event fires on back and forward.
+  - A link keeps a real `href`, so it can still be opened in a new tab, copied, or announced as a link; only a plain left click is handled in the page.
+  - Cloudflare (`not_found_handling: single-page-application`) and `vite preview` serve `index.html` for any path, so a reload at `/p/<id>` works.
+  - Two routes don't justify a routing library (ADR 0020).
+  - https://developer.mozilla.org/en-US/docs/Web/API/History/pushState
+- **Landmarks.** The shell's regions are `header` (banner), `nav` ("Tools"), two `aside`s ("Left panel", "Right panel"), `main` ("Canvas") and `footer` ("Review"), so screen-reader users can jump between them. https://www.w3.org/WAI/ARIA/apg/practices/landmark-regions/
+- **Layout from tokens.** A CSS grid whose tracks are tokens: `size.bar` (40), `size.rail` (44), and new `size.panel.left` (248), `size.panel.right` (360) and `size.panel.review-open` (300), added to `packages/tokens/source/base.tokens.json` and generated, never typed into components (rule 9).
+- **Loading the canvas only when needed.** The project page is loaded with `React.lazy`, so React Flow (step 5) never weighs down the projects list.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `apps/web/src/routing/route.ts` | `parseRoute`, `useRoute`, `navigate`, `linkTo`, `projectPath` |
+| `apps/web/src/shell/Shell.tsx`, `.module.css` | The five regions as landmarks, at token sizes (step 4 makes the sides resizable) |
+| `apps/web/src/project/ProjectPage.tsx`, `.module.css` | Loads the project, then shows the shell. "Opening the project…", "There's no such project, or it isn't yours.", or the API's reason (signed out), each with a way back. Honest empty states (`EMPTY`). The workspace chip only where workspaces can run |
+| `apps/web/src/App.tsx` | Picks the page from the route (`Home`, `ProjectPage`, `NotFound`) |
+| `apps/web/src/projects/Projects.tsx` | Each project's name links to its page (the row's **Open** still starts the workspace) |
+| `packages/tokens/source/base.tokens.json` (+ generated) | `size.panel.left`, `size.panel.right`, `size.panel.review-open` |
+
+**Tests:**
+- **Router (5):**
+  - the routes, and anything else not found (including a malformed address)
+  - a project address parses back to the same project
+  - links, back and forward without reloading
+  - a link has a real `href`, and a plain click stays in the app
+- **Project page (5):**
+  - loading, then all six landmarks and the chip
+  - the honest empty states
+  - no chip where workspaces can't run
+  - a missing project, with a way back
+  - signed out, with the API's reason
+- **Walkthrough (`phase-2.spec.ts`):**
+  - the name in the list opens the page
+  - **every region's position and size equal Figma 06's at 1440 × 900 and 1280 × 800**
+  - a reload lands on the same page
+  - no page errors or CSP violations
+
+**Run and check it:**
+```fish
+pnpm test        # 607 tests
+pnpm test:e2e    # 11 walkthroughs (1 needs a real API and runs in CI only), including "phase 2: a project opens in the app shell…"
+pnpm dev         # then click a project's name on http://localhost:5173
+```
+
+**Gotchas:**
+- **`eslint --fix` after Prettier can leave formatting off.** Run Prettier last, and `pnpm format:check` before committing.
+
+**Docs:** this write-up; STATUS.
+
+**Risks:**
+- **Laptop:** all five checks ok (24.1 GiB memory available, 578 GiB disk free; the load read 11.6 just after the full suite, under the 14.4 limit).
+
+**Commit:** `feat(web): a project's own page in the app shell, at Figma 06's sizes`
+
+### Step 2.3 — The shell's components in the design system (done by Claude)
+
+**Goal:** the shell's pieces exist as design-system components, with every state in the catalogue and checked in both themes, before any screen uses them (CLAUDE.md, "components first").
+
+**What's new** (`packages/ui`, catalogue section "Shell"):
+
+| Component | Figma 06 | Notes |
+| --- | --- | --- |
+| `TopBar` | 40 px, 0/12 px padding, 12 px gaps | `start` (project, branch), `middle` (view switch, centred), `end` (search, status, share, avatar) |
+| `Rail`, `RailButton` | 44 px wide; 32 px buttons, radius 6, 18 px icons, 4 px apart | Tools at the top, Account and Settings at the bottom. A button's name is its accessible name and its tooltip; `aria-pressed` while its panel is open. Inactive icons in `text/tertiary` (icons are non-text) |
+| `ReviewBar` | 40 px; pill tabs with count tags; caption summary; actions | No tabs before a session, just the summary ("No agent session yet."). The summary shortens with an ellipsis rather than wrap |
+| `Tabs`: `segmented` | the view switch: raised track, 2 px inset, the selected item lifted | For Graph / Sequence / Code |
+| `Tabs`: disabled items | — | `disabled` and `hint`: shown, never selected, skipped by the arrow keys. Same disabled treatment as the other controls (`--opacity-disabled`) |
+
+**Concepts:**
+- **The accessible name comes from the content.** A tab containing `<span>Changed</span><span>3</span>` is named "Changed3": nothing separates the words. A space between them (invisible in a flex row) makes it "Changed 3" for screen readers. This fixed every tab with a count; an old test had captured `Runs12` as correct and now says `Runs 12`. https://www.w3.org/TR/accname-1.2/
+- **Toggle buttons for panels.** A rail tool is a button with `aria-pressed`: pressed while its panel is open. https://www.w3.org/WAI/ARIA/apg/patterns/button/
+- **Text never in `text/tertiary`** (CLAUDE.md, tokens). It's for icons, edges and placeholders. So a disabled label uses its usual colour at `--opacity-disabled`, like the other controls.
+
+**Tests:**
+- **Unit (8 new):**
+  - TopBar groups
+  - Rail names, pressed state and clicks
+  - ReviewBar empty (no tab list) and with tabs and actions
+  - disabled tabs: hint, never selected, skipped by the arrows
+  - counts named as words apart, in both variants
+- **Visual:** 8 new baselines (TopBar, Rail, ReviewBar empty and after a session; both themes), checked by eye, with axe. No existing baseline changed.
+  - *Caught by eye:* at 800 px the review bar's summary wrapped onto four lines and spilled out of the bar. Now it stays on one line and shortens.
+
+**Run and check it:**
+```fish
+pnpm test                               # 614 tests
+pnpm test:visual                        # 76 checks; the new ones start with "shell-"
+pnpm --filter @flowcanvas/ui storybook  # Shell → TopBar, Rail, ReviewBar
+```
+
+**Docs:** this write-up.
+
+**Risks:**
+- **Laptop:** all five checks ok.
+
+**Commit:** `feat(ui): TopBar, Rail and ReviewBar for the app shell; Tabs gains segmented and disabled items`
+
+### Step 2.4 — Panels that collapse, resize and remember (done by Claude; ADR 0020 addendum)
+
+**Goal:** every side region collapses and resizes, by mouse and keyboard; the canvas can go full screen; and your layout is remembered per browser, at exact pixel sizes.
+
+**What you can do now** (on a project's page):
+- **Rail:**
+  - **Entry points** opens and closes the left panel.
+  - **Terminal** opens the bottom dock (300 px). It shows the real terminal when the workspace runs; otherwise it says to open the workspace, or, on staging, that workspaces run locally.
+- **Top bar:**
+  - **Right panel** toggles the inspector.
+  - **Full-screen canvas** collapses everything but the canvas, and **Leave full screen** restores exactly what was open.
+- **Separators:**
+  - Drag one to resize.
+  - Or Tab to it and use the arrow keys: each is a keyboard splitter with a name, such as "Resize the left panel".
+  - Panels stop at their limits: left 180–480 px, right 280–640, dock 120–600; the canvas keeps at least 320 px.
+- **Review bar:** **Show review** opens it to 300 px, with its honest empty state.
+- **Reload:** your sizes and what was open come back.
+
+**Concepts:**
+- **The window-splitter pattern.** A separator with `role="separator"`, a name, and a value, moved with the arrow keys. https://www.w3.org/WAI/ARIA/apg/patterns/windowsplitter/
+- **`inert`.** A collapsed panel is `inert`: still in the page, but skipped by Tab and hidden from screen readers. https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Global_attributes/inert
+- **A context for the shell.** `useShell()` lets the rail and the top bar open and close regions without passing callbacks through every layer. Each panel's open state comes from its real size, so dragging one shut counts as closing it. https://react.dev/learn/passing-data-deeply-with-context
+- **Pixels, not percentages** (ADR 0020 addendum):
+  - The library saves percentages, so a saved 320 px panel would change width with the window.
+  - So the shell saves pixels itself, and puts open panels back at their pixels when the window resizes.
+  - `localStorage` is wrapped: blocked or broken storage just means the defaults.
+- **Sub-pixel layout.** Browsers place boxes in 1/64 px units. Panels sized as flex proportions can be a sliver off a whole pixel, which is invisible, so the geometry test allows under 0.1 px.
+- **Testing without layout.** jsdom does no layout and has no `ResizeObserver`, so the web tests get a stand-in that reports nothing (`src/test/setup.ts`). Sizes, dragging and keyboard resizing are tested in the browser.
+
+**Files:**
+
+| File | What changed |
+| --- | --- |
+| `apps/web/src/shell/Shell.tsx`, `.module.css` | Resizable groups (left, centre with canvas and dock, right); `useShell()`; the pixel layout and its storage; full screen; the review bar opening to 300 px; zero-width separators with an accent focus ring |
+| `apps/web/src/project/ProjectPage.tsx`, `.module.css` | The top bar (`TopBar`, the view switch, status, panel and full-screen toggles), the rail (working tools only), the review bar, the dock (terminal or why not), panel headings |
+| `packages/ui/src/components/rail/Rail.module.css` | The rail draws its own edge inside its 44 px (it measured 45 with the shell's border) |
+| `tools/figma-tokens/src/render.ts`, `packages/tokens` | `baseValues`: theme-independent token values for code that needs numbers (`--size-panel-left: 248px`) |
+| `apps/web/src/test/setup.ts`, `vite.config.ts` | The `ResizeObserver` stand-in for jsdom |
+| `apps/web/package.json` | `@flowcanvas/tokens` and `lucide-react` used directly |
+
+**Tests:**
+- **Unit:**
+  - the saved layout: defaults at Figma's sizes, read back, out-of-range or malformed entries, broken JSON, blocked storage
+  - the page: the review bar's detail, only the views that exist, only working tools on the rail
+  - the generator's `baseValues`
+- **Walkthrough "panels collapse, resize by mouse and keyboard, and keep their layout"** (8 steps):
+  - the rail collapses and reopens the left panel, and a collapsed panel is `inert`
+  - the keyboard resizes it; dragging resizes it to 320 px
+  - the right panel toggles
+  - the dock opens with its message
+  - full screen and back, exactly as before
+  - the review bar opens to 300 and closes to 40
+  - after a reload the left panel is still 320 px
+- **Geometry:** every region within 0.1 px of Figma 06's sizes, at 1440 × 900 and 1280 × 800, including after the window resizes.
+- **Visual:** the rail's two baselines (its edge), checked by eye. Nothing else changed.
+
+**Run and check it:**
+```fish
+pnpm test        # 621 tests
+pnpm test:e2e    # 11 pass (+1 that runs only in CI)
+pnpm dev         # open a project: try the rail, the separators (drag, or Tab and arrows), full screen, reload
+```
+
+**Gotchas, all caught by the geometry test:**
+- **The rail measured 45 px:** the component was 44 and the shell added a border. In Figma the stroke is inside, so now the component draws its own edge.
+- **A collapsed panel measured 1 px:** its border can't shrink. Collapsed regions draw no edge.
+- **Percentages in a pixel design:** see the ADR addendum.
+
+**Docs:** this write-up; ADR 0020 addendum.
+
+**Risks:**
+- **Laptop:** all five checks ok.
+
+**Commit:** `feat(web): shell panels collapse, resize by mouse and keyboard, and keep pixel layouts`
+
+### Step 2.5 — The canvas (done by Claude)
+
+**Goal:** a real canvas: pan, zoom, fit, selection, a minimap and a toolbar, with our `FlowNode` as its nodes, styled entirely from Graphite tokens. It stays honestly empty until the project is analysed; the Labs **Canvas stress test** fills it with 500 labelled example nodes.
+
+**How it behaves** (Figma 06, and the design brief's interactions):
+
+| Do | Result |
+| --- | --- |
+| Scroll | Pans |
+| Ctrl or ⌘ + scroll, or pinch | Zooms (5% to 200%) |
+| **Select (V)** and drag on the background | Selects a box of nodes; a click selects one |
+| **Pan (H)**, or Space + drag with either tool | Moves the view |
+| **F**, or the toolbar's Fit | Fits the selection, or everything if nothing is selected |
+| Toolbar zoom out and in | Steps the zoom; the level shows between them |
+
+- **Placement (Figma 06, over the brief):**
+  - the toolbar bottom-centre, 16 px up
+  - the minimap bottom-left, 20 px from the left and 16 from the bottom, 140 × 84 px
+- **Nodes can be selected, not dragged or connected.** Flows come from the code (stage 1), not from drawing.
+- **Empty:** "Flows appear here once the project is analysed.", with Fit disabled and no minimap.
+- **The Labs switch "Canvas stress test"** shows 500 example nodes under a banner: "Canvas stress test (Labs): 500 example nodes, not your project's flows." Rule 10 allows mock data only in Labs, tests and the catalogue.
+
+**Concepts:**
+- **React Flow basics.** Nodes and edges are data. Node types are React components, here our `FlowNode`, and the viewport is a transform (x, y, zoom). Selection lives in the nodes, so React Flow must hold them (`useNodesState`): with nodes as plain props and no `onNodesChange`, a click selected nothing. https://reactflow.dev/learn/concepts/terms-and-definitions
+- **Theming a library with tokens.** Only `@xyflow/react/dist/base.css` (layout) is imported. Every colour comes from React Flow's `--xy-*` variables, set to tokens on the canvas:
+  - the dot grid in `border/subtle`
+  - edges in `edge/default` at the new `border.width.edge` (1.25 px)
+  - selection in the accent
+  - the minimap in `border/strong`, with a translucent mask
+- **Our own shortcuts.** React Flow's `useKeyPress` stopped reporting F after a box selection, found by the walkthrough and reproduced in isolation. The canvas listens for F, V and H itself (`isCanvasShortcut`): never while typing (inputs, text areas including the terminal's, editable text), and never with Ctrl, ⌘ or Alt, so ⌘F still searches the page.
+- **A floating toolbar gets a shadow.** Graphite keeps shadows for things that float. The toolbar floats over the canvas, so it uses the popover shadow token, as Figma does.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `apps/web/src/canvas/FlowCanvas.tsx`, `.module.css` | The canvas: `FlowNode` as the node type (invisible handles anchor edges), tools, zoom, fit, minimap, toolbar, empty state, banner; `isCanvasShortcut` |
+| `apps/web/src/canvas/examples.ts` | 500 example nodes in a 25-column grid, each column a chain, all named `example…` |
+| `apps/web/src/labs/flags.ts` | The first Labs switch: **Canvas stress test** (phase 2) |
+| `apps/web/src/project/ProjectPage.tsx` | The project's canvas: empty, or the examples while the switch is on |
+| `packages/ui/src/components/canvas-toolbar/` | `CanvasToolbar`, `ToolbarButton` (a tool with `aria-pressed`, or an action), `ToolbarDivider`, `ToolbarText`; story and test |
+| `packages/tokens/source/base.tokens.json` | `size.minimap.width` / `height` (140 × 84), `border.width.edge` (1.25 px) |
+
+**Tests:**
+- **Unit:**
+  - the example nodes: 500, chained, all examples
+  - the banner's words
+  - shortcuts: anywhere on the page, never while typing, never with modifiers or repeats
+  - the toolbar's roles, pressed states and actions
+  - Labs lists the switch, off by default
+- **Walkthroughs (`phase-2.spec.ts`):**
+  - *"the canvas is honest when empty"*: the message, Fit disabled, no minimap, no nodes
+  - *"Try it: pan, zoom and select on the canvas"* (500 examples):
+    - the banner
+    - the minimap at Figma's place and size
+    - zoom from the toolbar and with Ctrl + scroll; scroll pans without zooming
+    - the Pan tool by its key
+    - click and box selection
+    - F fits the selection; Space + drag pans
+  - no page errors or CSP violations
+- **Visual:** the toolbar's 2 baselines, checked by eye. The canvas in both themes and the minimap were checked by eye too (see Gotchas).
+
+**Run and check it:**
+```fish
+pnpm test        # 627 tests
+pnpm test:e2e    # 13 pass (+1 that runs only in CI)
+pnpm dev         # open a project; turn on Labs → Canvas stress test on the home page to see 500 examples
+```
+
+**Gotchas:**
+- **Selection needs state.** Controlled nodes without `onNodesChange` can't be selected.
+- **A wide graph fitted to the screen leaves empty bands** above and below. A test's box selection must start next to the nodes, not in the band.
+- **Caught by eye:** the minimap looked empty. Its mask (opaque) covered the nodes, and they were nearly the panel's colour. Now the mask dims instead of hides, and the nodes use `border/strong`.
+- **Caught by the Figma check:** the minimap first sat 16 px from the left; Figma says 20.
+
+**Docs:** this write-up; `docs/RUN-AND-FEATURES.md`.
+
+**Risks:**
+- **Laptop:** all five checks ok.
+
+**Commit:** `feat(web): the canvas — pan, zoom, fit, selection, minimap and toolbar, from tokens`
+
+### Step 2.6 — The workspace in the top bar, and a dock that follows it (done by Claude)
+
+**Goal:** the project page shows the workspace's real state everywhere, and acts on it from the top bar. Every region holds real content or an honest empty state.
+
+**What's new:**
+- **The top bar's chip opens a popover** (brief 29: "click for machine size, uptime … and Sleep now"; Figma 37's workspace popover):
+  - **Facts:**
+    - the status
+    - the machine (2 cores · 4 GiB · this computer)
+    - "Running since", "Asleep since" or "Stopped since"
+    - this month's usage, read when it opens
+    - a recorded reason, such as the guard's
+  - **Actions for the state:** Open or Try again, Sleep now, Resume, Stop. A refusal shows the API's sentence.
+  - **Left out, because they don't exist yet:** last backup (18a), region and "change where it runs" (48a).
+  - Its accessible name says what it is, for example "Workspace: Running".
+- **One workspace record for the page.** The chip, the popover and the dock follow it, with 1d's polling (3 s while changing, 30 s while running), so an idle sleep or the guard's change shows here without a reload.
+- **The dock follows it:** a terminal while running; "Open the workspace to use a terminal here." otherwise; on staging, that workspaces run locally.
+
+**Concepts:**
+- **Lifting state up.** The workspace's state moved from the chip into `ReadyProject`, which owns `useWorkspace()` and passes it down, so the top bar and the dock can't disagree. https://react.dev/learn/sharing-state-between-components
+- **Modal popovers hide the page.** While a React Aria popover is open, everything outside it is hidden from screen readers, so a test can't find the chip by role until the popover closes. That's correct, and the test now closes it first.
+- **A screenshot during an animation lies.** The first capture showed the right panel over the popover. It was the 240 ms fade-in, checked with `elementFromPoint` and a second capture: the popover is on top.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `apps/web/src/project/WorkspacePopover.tsx`, `.module.css` | The chip as a popover trigger; the facts, the reason, the actions |
+| `apps/web/src/project/ProjectPage.tsx` | `ReadyProject` owns the workspace state; the top bar, the popover and the dock use it |
+
+**Tests:**
+- **Unit (4 new):**
+  - the facts, including this month's usage, with no backup, region or move
+  - Sleep now: the request, the popover offering Resume, the chip saying Sleeping
+  - the actions for a stopped workspace, with its reason
+  - no chip on staging
+- **Walkthrough (new):** the popover's facts; Sleep now, after which the chip says Sleeping and the dock says there's no shell; Resume from the popover, after which the dock connects a terminal. No page errors.
+- **By eye:** the popover in both themes, settled.
+
+**Run and check it:**
+```fish
+pnpm test        # 631 tests
+pnpm test:e2e    # 15 walkthroughs (with pnpm dev running, the API-backed one runs too)
+pnpm dev         # open a project: click the workspace chip in the top bar
+```
+
+**Docs:** this write-up; `docs/RUN-AND-FEATURES.md`.
+
+**Risks:**
+- **Laptop:** all five checks ok.
+
+**Commit:** `feat(web): the workspace popover in the top bar; the dock follows the workspace`
+
+### Step 2.7 — 500 nodes, measured on real hardware (done by Claude; ADR 0020 addendum)
+
+**Goal:** prove the *Done when* "500 dummy nodes pan and zoom smoothly" where it counts, on a real screen with a GPU, and fix what the measurements show.
+
+**The test** (`e2e/perf/canvas.perf.spec.ts`, its own config `playwright.perf.config.ts`, with no slow motion or recording since both distort timing):
+- **Two scenes:** all 500 nodes on screen, and 100% zoom.
+- **Three gestures each:** Space + drag to pan, scroll to pan, Ctrl + scroll to zoom.
+- **Measured per gesture:**
+  - frame times (median, p95, worst)
+  - long tasks (main thread blocked over 50 ms)
+  - the share of inputs taking over 16 ms to paint (Event Timing)
+- **It records the GPU that drew it:** "Intel Arc", or SwiftShader headless.
+- **Target (plan):** median 60 fps, p95 under 25 ms. Zooming in close has its own **named** limit (p95 under 60 ms), recorded as a known issue rather than hidden.
+- **Run:**
+  - `PERF_REAL=1 pnpm test:perf`: real window, on the laptop
+  - `pnpm test:perf`: headless
+  - CI's new `perf` job runs headless, regressions only
+
+**Concepts:**
+- **Frames versus painting versus input.**
+  - `requestAnimationFrame` shows the main thread's frames.
+  - Long tasks show the main thread blocked.
+  - Event Timing shows input to the next *painted* frame, which is what a person feels.
+  - The browser reports only inputs over a threshold, so the test also counts every input and reports a *share*: a p95 of two slow events is just their maximum.
+  - https://developer.mozilla.org/en-US/docs/Web/API/PerformanceEventTiming
+- **Refresh steps.** On a 120 Hz screen, frame times come in steps of 8.3 ms (8.3, 16.7, 25.0, 33.3). So "p95 25.0 ms" means a frame missed two refreshes.
+- **Re-renders are the first suspect.** A component that reads the viewport re-renders on every frame of a pan, and fresh option objects make the library redo work.
+- **Level of detail.** At low zoom, text can't be read, so don't paint it.
+
+**Measured** (all 500 nodes, 1440 × 900; median / p95 frame in ms):
+
+| | Before (step 5 code) | After, run 1 | After, run 2 |
+| --- | --- | --- | --- |
+| All on screen, the three gestures | p95 50, **60 long tasks** | 8.4 or 16.7 / 16.8–25.0, 0 long tasks | 8.3–8.4 / 8.4–16.8, 0 long tasks |
+| 100%: drag and scroll to pan | p95 42, 25 long tasks | 16.6 / 20.8–21.0, 0 long tasks | 8.3 / 8.4–16.6, 0 long tasks |
+| 100%: zoom closer | (in the line above) | 16.7 / **33.3**, 0 long tasks | 8.4 / **33.3**, 0 long tasks |
+
+- Run 1 failed the 25 ms bar on one gesture at exactly 25.0 ms (load from other apps; the bar wasn't widened).
+- Run 2 met the target in every gesture but close zoom.
+- Under 1% of inputs took over 16 ms to paint.
+- Headless (software rendering) was 60 fps with p95 16.7–16.8 everywhere; the limits there only catch large regressions.
+
+**What changed** (ADR 0020 addendum, with what was tried and rejected):
+- The canvas doesn't re-render while the view moves: only `ZoomControls` reads the viewport, and React Flow's options are constants.
+- Level of detail below 40% zoom (`data-detail="low"`, CSS only): nodes paint as shapes, and screen readers still read them.
+- Only visible nodes are rendered.
+
+**Known issue (fixed by the build plan's phase 42, the WebGL renderer with level of detail):** zooming in close is at about 33 ms p95. The GPU redraws node text at each zoom step, the DOM's limit and the case for the build plan's WebGL layer.
+
+**Files:** `e2e/perf/canvas.perf.spec.ts`, `e2e/playwright.perf.config.ts`; `apps/web/src/canvas/FlowCanvas.tsx` (`ZoomControls`, `DetailLevel`, the constants); `packages/ui/src/components/flow-node/FlowNode.module.css` (level of detail); `.github/workflows/ci.yml` (job `perf`); `test:perf` scripts.
+
+**Run and check it:**
+```fish
+PERF_REAL=1 pnpm test:perf   # opens a Chromium window for about 30 s; numbers in the output and e2e/reports-data/canvas-perf.json
+pnpm test:perf               # headless, as on CI
+```
+
+**Gotchas:**
+- **Measure the right thing.** `requestAnimationFrame` alone hid painting, and a p95 of two slow events was meaningless. Count all inputs.
+- **Measure gestures separately.** The combined number hid that panning was fine and only close zoom wasn't.
+- **Runs vary with what else the laptop is doing.** Run twice and report both.
+
+**Docs:** this write-up; ADR 0020 addendum; risks R2 and R3; `docs/RUN-AND-FEATURES.md`.
+
+**Risks:**
+- **Laptop:** all five checks ok. The real window was opened with the owner's approval.
+
+**Commit:** `perf(web): 500 nodes pan and zoom smoothly — measured on real hardware`
+
+
+### Step 2.8 — Baselines, the Try it walkthrough, and the Figma 06 differences list (done by Claude)
+
+**Goal:** prove "the layout matches Figma 06" three ways: geometry (already tested since step 2), approved screenshots of the screens in both themes, and a list of every difference from Figma 06 for the owner to review by eye (decision A5).
+
+**What was added:**
+- **Screen baselines** (`e2e/visual/screens.spec.ts`): the project page from the production build, with a fake API, a fixed clock, locale and time zone, in both themes. Each is pixel-compared and checked with axe:
+  - empty project, at 1440 × 900 and 1280 × 800
+  - the Labs stress test (500 example nodes)
+  - the review open
+  - the full-screen canvas
+  - the workspace popover
+- **The visual config has two projects:** `catalogue` (Storybook, as before) and `screens` (the web app's `vite preview`, with the production CSP). `pnpm test:visual` builds both first. CI's job keeps its name, "Visual and accessibility (catalogue)", because main's ruleset requires a check by that exact name (renaming it blocked the merge of PR #15 until it was put back).
+- **The differences list:** `docs/reports/phase-2-figma-06-differences.md`, with Figma 06 and our screenshots in `docs/reports/phase-2/`.
+- **The Try it walkthrough** (`e2e/try-it/phase-2.spec.ts`, from steps 2 to 6) is recorded on every run: pan, zoom, select, collapse every panel, restore, reload with the layout kept.
+
+**Found and fixed: the theme didn't follow you onto a project's page.** The theme preference was applied by the projects list only, so a project's page showed the system theme even if you'd chosen dark or light. It's now applied at the app's root, with a unit test that failed before the fix ("applies the chosen theme on a project's page too").
+
+**Concepts:**
+- **Screens need a frozen world.** A screenshot is pixel-exact only if nothing varies: `page.clock.setFixedTime` for "Asleep since", a fixed `locale` and `timezoneId` for date formats, a fake API, and a wait until React Flow's fit animation stops. https://playwright.dev/docs/clock
+- **Baselines catch change; they don't prove a match.** A baseline is what we approved, not Figma. The match with Figma is the geometry test plus the owner's review against the differences list.
+- **Several web servers in one config.** Playwright's `webServer` takes a list, and each project gets its own `baseURL`. https://playwright.dev/docs/test-webserver#multiple-web-servers
+
+**Found in Figma:** on Figma 06 only, the review bar is at the top (y 40). Every other screen, the generator script and the brief put it at the bottom, which is what's built. **Owner, 7 Nov: it stays at the bottom** (decisions log).
+
+**Run and check it:**
+```fish
+pnpm test:visual          # 90: 78 catalogue stories and 12 screens, in Playwright's Docker image
+pnpm test:e2e             # 15 walkthroughs, recorded (videos in e2e/test-results)
+```
+Then open `docs/reports/phase-2-figma-06-differences.md` and compare `docs/reports/phase-2/figma-06.png` with `built-empty-dark.png`.
+
+**Results:**
+- `pnpm test`: 632 passed (631 and the theme test)
+- `pnpm test:visual`: 90 passed (78 catalogue, 12 screens), axe clean
+- `pnpm test:e2e`: 15 passed
+- lint, typecheck and format clean
+
+**Docs:** this write-up; the differences list; the decisions log (close zoom accepted as a known issue); RUN-AND-FEATURES.
+
+**Risks:**
+- R4 (laptop): all five checks ok. The visual run uses one Docker container, which is removed when it ends.
+
+**Commit:** `test(visual): the project page's screens in both themes; Figma 06 differences; the theme follows you onto a project`
+
+### Step 2.9 — Close the phase: report, 0.6.0, the two due upgrades, PR (done by Claude)
+
+**Goal:** finish phase 2 so it can be reviewed and accepted: the two upgrade-later items that were due, the report, the release, and the pull request.
+
+**Upgrade-later 4, the web app's TypeScript settings split:**
+- `apps/web/tsconfig.json` is now a **solution file** that only lists three projects:
+  - `tsconfig.app.json`: the browser code. DOM and Vite's types, **no Node**, tests excluded.
+  - `tsconfig.node.json`: `vite.config.ts`, `scripts/`, and the changelog parser they share with the app. Node, no DOM.
+  - `tsconfig.test.json`: all of `src` with Node too, because tests run in Node under Vitest (one reads `CHANGELOG.md` from disk).
+- `pnpm typecheck` runs `tsc -b --noEmit`, which checks all three. Each needs `composite` (required for project references) and keeps its build info in `node_modules/.cache`.
+- **Proven:** a throwaway `process.env.HOME` in browser code fails the typecheck ("Cannot find name 'process'"). Under the old settings it passed, because Node's types applied everywhere.
+- **Concept, project references:** one folder, several sets of rules, each file checked under the rules of where it runs. ESLint's project service and Vite both understand the solution file. https://www.typescriptlang.org/docs/handbook/project-references.html
+
+**Upgrade-later 18, the bundle-size budget:**
+- `apps/web/scripts/bundle-size.ts` (run with `pnpm size` after a build), with no new dependency:
+  - **first load** is what `dist/index.html` loads: its script, preloads and stylesheets
+  - each **lazy chunk** is counted by name: the project page, the terminal
+  - everything is measured gzipped, as a browser downloads it
+- Budgets are set about 10% above today's sizes: first load 149.4 kB of 160 (with 0.6.0's changelog in it), the project page 82.3 of 95, the terminal 86.0 of 95.
+- Over budget, it fails and names the part. To raise a budget, change it in the script, in the same commit, and say why.
+- **CI** runs it after the build, and writes the table to the job's summary page.
+- **Proven:** with the project page's budget set to 50 kB, it failed with exit 1, "Over budget: ProjectPage".
+
+**Release:** `0.6.0` in `package.json` and `CHANGELOG.md` (What's new shows it); `docs/reports/phase-2.md`; `docs/STATUS.md` says "in review".
+
+**Phase 2 — run and check it (fresh clone):**
+```fish
+git clone https://github.com/ArmaanAhuja/Flowcanvas && cd Flowcanvas
+corepack enable && pnpm install
+cp .dev.vars.example .dev.vars          # then fill in your own values (never paste them anywhere)
+pnpm db:status && pnpm db:migrate       # must say the dev branch
+pnpm dev                                # http://localhost:5173
+```
+1. Sign in and click a project's name: its page opens at `/p/<id>`. Compare it with `docs/reports/phase-2/figma-06.png`.
+2. **Labs → Canvas stress test:** 500 example nodes and a banner saying they're examples.
+3. Scroll to pan, Ctrl + scroll to zoom, **F** to fit; click or drag a box to select.
+4. Collapse the panels from the rail and the top bar, and try full screen. Drag a panel's edge. Reload: the layout is kept.
+5. Click the workspace chip; open the workspace, then **Terminal** in the rail.
+
+**What proves it:**
+```fish
+pnpm test               # 632
+pnpm test:e2e           # 15 walkthroughs, recorded; phase 2's five among them
+pnpm test:visual        # 90 screenshots and axe, in Playwright's Docker image
+PERF_REAL=1 pnpm test:perf   # the 500 nodes in a real window (opens a browser for about 30 s)
+pnpm size               # after pnpm build: the bundle budgets
+```
+
+**Risks, closed:**
+- R2 is accepted with a known issue: close zoom, fixed by phase 42 (owner, 7 Nov).
+- R4 (laptop): all five checks ok throughout.
+
+**Commit:** `chore(release): phase 2 report, 0.6.0, in review; web TypeScript split and bundle budget`
+
+**Found at the PR:** the headless `perf` job failed on CI with `ENOENT: reports-data/canvas-perf.json`. That folder is git-ignored, so it existed on the laptop but not on a fresh checkout. The test now creates it (`mkdirSync`, recursive), checked by running it with the folder removed. **Gotcha:** a test that writes files must create their folders, because CI starts from a clean clone.
+
+**Commit:** `fix(e2e): the performance test creates its results folder, missing on a fresh checkout`
+
+**Found at the merge:** GitHub refused the merge ("the base branch policy prohibits the merge") with every check green. Main's ruleset requires checks **by job name**, and step 8 had renamed the visual job, so the required one never reported. The name is back, with a comment in `ci.yml`. **Gotcha:** renaming a required CI job needs the ruleset changed in the same go (Settings → Rules).
+
+**Commit:** `fix(ci): keep the visual job's name, a required check on main`

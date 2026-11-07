@@ -161,4 +161,17 @@ describe('renderTs', () => {
     expect(ts).toContain('"--color-surface-canvas": "#fcfcfd"');
     expect(ts).toContain("export type ThemeName = 'dark' | 'light';");
   });
+
+  it('exports the values that are the same in every theme, for code that needs numbers', () => {
+    const ts = renderTs(
+      set({ size: { $type: 'dimension', rail: { $value: { value: 44, unit: 'px' } } } }, [
+        'dark',
+        dark,
+      ]),
+    );
+    expect(ts).toContain('export const baseValues = {');
+    expect(ts).toContain('"--size-rail": "44px"');
+    // Theme colours stay in themeValues only.
+    expect(ts.slice(ts.indexOf('baseValues'))).not.toContain('--color-surface-canvas');
+  });
 });

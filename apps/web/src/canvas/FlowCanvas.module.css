@@ -1,0 +1,87 @@
+/*
+ * The canvas, styled from Graphite tokens only. React Flow's base.css gives layout; every colour it uses comes
+ * from the --xy-* variables set here: a 16 px dot grid in border/subtle, edges in edge/default (1.25 px),
+ * selection in the accent (Graphite: the accent is for selection and focus only).
+ */
+.canvas {
+  --xy-background-color: var(--color-surface-canvas);
+  --xy-background-pattern-dots-color-default: var(--color-border-subtle);
+  --xy-edge-stroke: var(--color-edge-default);
+  --xy-edge-stroke-width: var(--border-width-edge);
+  --xy-edge-stroke-selected: var(--color-accent-solid);
+  --xy-selection-background-color: var(--color-accent-tint);
+  --xy-selection-border: var(--border-width-default) solid var(--color-accent-solid);
+  --xy-minimap-background-color: var(--color-surface-panel);
+  /* The minimap: nodes in border/strong (a graphic, clear on the panel in both themes); what's outside the view
+     is dimmed, not hidden, so the whole graph stays readable. */
+  --xy-minimap-mask-background-color: color-mix(
+    in srgb,
+    var(--color-surface-canvas) 60%,
+    transparent
+  );
+  --xy-minimap-mask-stroke-color: var(--color-text-tertiary);
+  --xy-minimap-node-background-color: var(--color-border-strong);
+  --xy-minimap-node-stroke-color: transparent;
+
+  position: relative;
+  block-size: 100%;
+  background: var(--color-surface-canvas);
+}
+
+.canvas[data-tool='pan'] :global(.react-flow__pane) {
+  cursor: grab;
+}
+
+/* Figma 06's minimap: 20 px from the left, 16 px from the bottom, radius 6, a subtle border. */
+.canvas :global(.react-flow__minimap) {
+  margin: 0 0 var(--space-16) calc(var(--space-16) + var(--space-4));
+  overflow: hidden;
+  border: var(--border-width-default) solid var(--color-border-subtle);
+  border-radius: var(--radius-node);
+}
+
+/* Edges anchor on invisible handles: nodes aren't joined by hand. */
+.handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toolbar {
+  position: absolute;
+  inset-block-end: var(--space-16);
+  inset-inline: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.toolbar > * {
+  pointer-events: auto;
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.banner {
+  position: absolute;
+  inset-block-start: var(--space-12);
+  inset-inline: 0;
+  z-index: 5;
+  inline-size: max-content;
+  max-inline-size: calc(100% - var(--space-32));
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-12);
+  border: var(--border-width-default) solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-raised);
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  line-height: var(--text-small-line-height);
+  color: var(--color-text-secondary);
+}

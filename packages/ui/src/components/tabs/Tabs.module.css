@@ -69,6 +69,36 @@
   background: var(--color-surface-selected);
 }
 
+/* Segmented (the top bar's view switch, Figma 06): raised track, 2 px inset; 3/10 px items, the selected one
+   on the selected surface. */
+.list[data-variant='segmented'] {
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-node);
+  background: var(--color-surface-raised);
+}
+
+.list[data-variant='segmented'] .tab {
+  padding: calc(var(--space-2) + var(--space-2) / 2) calc(var(--space-8) + var(--space-2));
+  border-radius: var(--radius-control);
+  font-weight: var(--text-small-strong-font-weight);
+}
+
+.list[data-variant='segmented'] .tab[aria-selected='true'] {
+  background: var(--color-surface-selected);
+}
+
+/* Like the other disabled controls: the usual colour at the disabled opacity (tertiary is for non-text). */
+.tab:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
+.tab:disabled:hover {
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+
 .count {
   color: var(--color-text-muted);
   font-weight: var(--text-small-font-weight);

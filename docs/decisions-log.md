@@ -344,3 +344,50 @@ GitHub Actions never ran on `ArmaanAhuja-7777` because of the account billing lo
 1. **What happened.** Signing in on `localhost:5173` said the account wasn't on the allowlist. The dev database's allowlist had one entry (the owner, as admin), and no account had ever signed in there. GitHub sign-in checks the GitHub account's **primary verified email**. The browser was signed in to a GitHub account whose primary email is a different one of the owner's addresses. On production both of the owner's addresses were allowed; when local development moved to the `dev` branch (2 Nov), only one was added.
 2. **Fix for the owner:** allow the other address on the dev database with `pnpm db:allow <email> --admin` (it prints the database host, which should be the `dev` branch's). Or sign in with Google, or with the GitHub account whose primary email is the allowed one.
 3. **So it can't be a mystery again:** the refusal now says which account was checked, masked (for example `It was checked as ma…@example.com.`). The API adds `as=<masked>` to the redirect, never the whole address; the page shows it only if it matches the masked pattern.
+
+## 7 Nov 2026: phase 1d after the merge; phase 2 plan (owner decisions)
+
+**Phase 1d:** the owner confirmed on staging that projects are listed, that the page says "Workspaces run locally for now", and that What's new shows 0.5.0. With the owner's migration of staging's database (0003, 0004, 6 Nov), the after-merge checks are done. The phase stays **in review** until a cloud provider is connected.
+
+**Phase 2 (canvas and app shell), the owner's answers to the plan's questions:**
+1. **"Placeholder content" against rule 10.** The shell shows honest empty states, such as "Flows appear here once the project is analysed". The 500 dummy nodes appear only in the component catalogue, the performance test, and a Labs switch labelled as a preview. Real content goes wherever it already exists: the project, the workspace chip, the terminal.
+2. **"Dock" panels.** Panels are docked to their edges and collapse and resize. Moving panels between sides isn't in the build plan or the design brief, so it's recorded in upgrade-later (40).
+3. **The projects list stays at `/` for now.** **Open** goes to the project's page (`/p/<id>`). The start screen comes with its own phase.
+
+**Also settled for phase 2, from the sources:**
+- **Sizes follow Figma** (top bar 40, rail 44, left panel 248, right panel 360, review bar 40 and 300 open) where the design brief differs (44, 48, 260, 280).
+- **The terminal goes in a bottom dock** above the review bar (design brief, "18. Terminal and run manager").
+
+## 7 Nov 2026: running on your own computer from the hosted site waits for phase 48a (owner decision)
+
+**Asked:** that people can choose between running their projects on our hosting or on their own laptop, and how the hosted site would reach a laptop, including the app's running screens.
+
+**Decided:**
+- It's phase **48a, the local runner**, as the build plan has it. It's not pulled forward.
+- **Requirement for 48a: the choice must be seamless.** The same hosted site, and per project, "our cloud workspace" or "my computer".
+- Phase 2 continues meanwhile. Until 48a, workspaces run on a laptop only through `pnpm dev`.
+
+**The approach, recorded for 48a** (the owner's answer to the plan's question):
+- **The laptop dials out; nothing dials in.** The runner (the workspace host in a runner mode) keeps an outgoing encrypted WebSocket to a Cloudflare Durable Object per connected computer, which is on the free plan.
+- **The web app's requests travel down that connection.** So the laptop opens no ports, its services stay on 127.0.0.1, and the browser only ever talks to our site.
+- **Pairing:** a one-time code from "Connect this computer" on the site. The server stores the runner's token only as a hash, and computers can be listed and revoked.
+- **The tunnel is only transport:** a "runner" workspace provider sends the same fixed, checked host operations.
+- **The app's running screens** (live frames, stage 2) use the same tunnel, served from a separate preview origin with links signed per user and session.
+- **Rejected:**
+  - the browser calling `localhost`: browsers block it or ask, and the page would hold the host's token
+  - a public tunnel per laptop: it exposes the laptop to the internet
+
+**Also decided:** a living run-and-features doc, `docs/RUN-AND-FEATURES.md`, linked from a new `README.md` and updated at every build step.
+
+
+## 7 Nov 2026: phase 2's close zoom is accepted as a known issue (owner decision)
+
+**Asked:** the 500-node test meets "smooth" everywhere except zooming in close (100% to 200%), where nodes enter and leave the page and the 95th-percentile frame is about 33 ms (target under 25 ms). Fix it now, or accept it?
+
+**Decided:** accepted as a **known issue** in the phase 2 report. The build plan's **phase 42** (the WebGL renderer with level of detail) is what fixes it. It's not an upgrade-later entry, because it's already planned. The performance test keeps its own, named limit for that one scene (`CLOSE_ZOOM_LIMITS`), so it can't get worse unnoticed.
+
+## 7 Nov 2026: the review bar stays at the bottom (owner decision)
+
+**Asked:** Figma 06, alone among the screens, has the review bar at the top (under the top bar). Every other screen, the generator script and the design brief have it at the bottom.
+
+**Decided:** **at the bottom**, as built. Figma 06's position is treated as a one-off; when the Figma file is next regenerated from the script, it will match.

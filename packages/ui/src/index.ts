@@ -56,3 +56,14 @@ export {
   PopoverTrigger,
   type PopoverProps,
 } from './components/popover/Popover';
+export { TopBar, type TopBarProps } from './components/top-bar/TopBar';
+export { Rail, RailButton, type RailButtonProps, type RailProps } from './components/rail/Rail';
+export { ReviewBar, type ReviewBarProps } from './components/review-bar/ReviewBar';
+export {
+  CanvasToolbar,
+  ToolbarButton,
+  ToolbarDivider,
+  ToolbarText,
+  type CanvasToolbarProps,
+  type ToolbarButtonProps,
+} from './components/canvas-toolbar/CanvasToolbar';

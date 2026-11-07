@@ -50,6 +50,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - name: Web bundle within its budget
+        run: pnpm --filter @flowcanvas/web size
       # The pinned test repos: public forks, commits on their branches, licences unchanged (corpus/manifest.json).
       - run: pnpm corpus:check
         env:
@@ -82,7 +84,38 @@ jobs:
       # Isolation, the egress allowlist, clone time, sleep and resume, the guard, no secrets kept.
       - run: pnpm test:docker
 
+  perf:
+    name: Canvas performance (headless, regressions only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # The same browser image as the visual job. Headless means software rendering, so this job only catches large
+    # regressions; real smoothness is measured on a laptop with its GPU (PERF_REAL=1, phase 2 step 7).
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+      options: --ipc=host --init
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.COMMIT }}
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:perf
+        env:
+          FLOWCANVAS_COMMIT: ${{ env.COMMIT }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: canvas-perf
+          path: e2e/reports-data/canvas-perf.json
+          retention-days: 14
+
   visual:
+    # This name is a required check in main's ruleset: renaming it blocks every merge until the ruleset changes
+    # too. It covers the screens as well since phase 2.
     name: Visual and accessibility (catalogue)
     runs-on: ubuntu-24.04
     timeout-minutes: 20

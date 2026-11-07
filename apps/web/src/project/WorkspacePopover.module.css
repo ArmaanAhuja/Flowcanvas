@@ -1,0 +1,43 @@
+/* Figma 37's workspace popover: facts, then the actions. The width is the shared Popover's. */
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-4) var(--space-12);
+  margin: 0;
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  line-height: var(--text-small-line-height);
+}
+
+.facts dt {
+  color: var(--color-text-muted);
+}
+
+.facts dd {
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.note,
+.problem {
+  margin: 0;
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  line-height: var(--text-small-line-height);
+  color: var(--color-text-secondary);
+}
+
+.problem {
+  color: var(--color-state-removed-text);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-8);
+}

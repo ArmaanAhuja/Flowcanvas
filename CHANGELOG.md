@@ -4,6 +4,40 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-11-07 — Phase 2: canvas and app shell (in review)
+
+A project now opens on its own page, laid out like the Figma design: a top bar, a rail of tools, side panels, the canvas and a review bar. The canvas is empty until a project is analysed (the next stage); the Labs switch **Canvas stress test** fills it with 500 example nodes.
+
+### Try it
+
+1. Click a project's name: its page opens at `/p/<id>`.
+2. Turn on **Labs → Canvas stress test**.
+3. Scroll to pan, Ctrl or ⌘ + scroll to zoom, and press **F** to fit. Click a node, or drag a box to select several.
+4. Collapse the side panels from the rail and the top bar, or go full screen. Reload: your layout is kept.
+
+### Added
+
+- **A project's own page** in the app shell, at the Figma design's sizes (tested to within 0.1 px at 1440 × 900 and 1280 × 800).
+- **The canvas:**
+  - pan, zoom, fit, selection, a minimap and a toolbar
+  - keyboard shortcuts: **F** fit, **V** select, **H** pan, and Space + drag
+  - 500 nodes pan smoothly on a laptop: 120 frames a second, with no long tasks
+- **Panels:**
+  - collapse and resize, by mouse or keyboard
+  - a full-screen canvas, and the review bar opens to 300 px
+  - your layout is remembered in this browser
+- **The workspace in the top bar:** the chip opens its facts (status, machine, since when, this month's usage) and actions. The bottom dock's terminal follows the workspace.
+- **Design system:** Top bar, Rail, Review bar and Canvas toolbar, and segmented Tabs with disabled items, in the catalogue.
+- **Honest empty states** wherever content doesn't exist yet.
+
+### Fixed
+
+- Your theme choice (dark or light) now applies on a project's page too, not only on the projects list.
+
+### Changed
+
+- **Checks:** screenshots of the project page in both themes are compared with approved ones, the web bundle has a size budget in CI, and the canvas's speed is measured on every pull request.
+
 ## [0.5.0] — 2026-11-06 — Phase 1d: workspace sandbox (in review)
 
 Workspaces run on the owner's computer, in Docker, until a cloud provider is connected. On staging, projects say "Workspaces run locally for now", and no button offers what can't work there.

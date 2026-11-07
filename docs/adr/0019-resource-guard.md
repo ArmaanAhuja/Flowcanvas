@@ -31,7 +31,7 @@ Two things learned since the plan was written changed how it's built:
 
 - **Budget:** the numbers above (`BUDGET` in `resources.ts`, pinned by a test).
 - **Sustained load** means every sample for 2 minutes was above 0.9 × cores. One low sample starts the 2 minutes again.
-- **Disk:** only old workspace images are removed automatically. Nothing that holds a person's work (containers, volumes) is removed by the guard. Projects can't be deleted yet, so no workspace volume can be orphaned. When deletion comes, it removes its own workspace (upgrade-later 39).
+- **Disk:** only old workspace images are removed automatically. Nothing that holds a person's work (containers, volumes) is removed by the guard. Projects can't be deleted yet, so no workspace volume can be orphaned. When deletion comes, it must remove its own workspace: a requirement on that feature, not a gap left here.
 - **Reasons the person sees** are stored in the workspace's `failure` field (step 9 shows them), and cleared when the person next opens it:
   - "Stopped to free memory on this computer. Its files are kept: open it to start it again."
   - "Put to sleep because this computer was very busy. Resume it when you need it."

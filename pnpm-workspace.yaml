@@ -32,6 +32,7 @@ catalog:
   '@vitejs/plugin-react': 6.1.2
   '@xterm/addon-fit': 0.11.0
   '@xterm/xterm': 6.0.0
+  '@xyflow/react': 12.12.0
   eslint: 10.13.0
   eslint-config-prettier: 10.1.8
   hono: 4.13.13
@@ -41,6 +42,7 @@ catalog:
   react: 19.3.1
   react-aria-components: 1.22.1
   react-dom: 19.3.1
+  react-resizable-panels: 4.14.8
   storybook: 10.6.3
   stylelint: 17.16.0
   tsx: 4.23.15

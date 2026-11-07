@@ -1,1 +1,1 @@
-export { themeValues, vars, type ThemeName } from './tokens.generated.js';
+export { baseValues, themeValues, vars, type ThemeName } from './tokens.generated.js';
