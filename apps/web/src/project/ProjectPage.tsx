@@ -1,11 +1,13 @@
-import { Button, Rail, RailButton, ReviewBar, Tabs, TopBar, WorkspaceStatus } from '@flowcanvas/ui';
+import { Button, Rail, RailButton, ReviewBar, Tabs, TopBar } from '@flowcanvas/ui';
 import { Maximize2, Minimize2, PanelRight, SquareTerminal, Target } from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { fetchProjects, isProblem, type Project } from '../projects/api';
 import { FlowCanvas } from '../canvas/FlowCanvas';
 import { EXAMPLE_BANNER, exampleGraph } from '../canvas/examples';
 import { useLabs } from '../labs/LabsProvider';
+import { shownState, useWorkspace, type WorkspaceControl } from '../projects/ProjectWorkspace';
 import { linkTo } from '../routing/route';
+import { WorkspacePopover } from './WorkspacePopover';
 import { Shell, useShell } from '../shell/Shell';
 import styles from './ProjectPage.module.css';
 
@@ -93,10 +95,36 @@ export function ProjectPage({
     );
   }
 
-  const { project, workspacesAvailable } = loaded;
+  return (
+    <ReadyProject
+      project={loaded.project}
+      workspacesAvailable={loaded.workspacesAvailable}
+      fetcher={fetcher}
+    />
+  );
+}
+
+/** The loaded project in the shell. One workspace record for the whole page: the chip, its popover and the
+ * dock all follow it, with its polling (so an idle sleep shows here too). */
+function ReadyProject({
+  project,
+  workspacesAvailable,
+  fetcher,
+}: {
+  readonly project: Project;
+  readonly workspacesAvailable: boolean;
+  readonly fetcher: typeof fetch;
+}) {
+  const control = useWorkspace(project.id, project.workspace, fetcher);
   return (
     <Shell
-      topBar={<ProjectTopBar project={project} workspacesAvailable={workspacesAvailable} />}
+      topBar={
+        <ProjectTopBar
+          project={project}
+          {...(workspacesAvailable ? { workspace: control } : {})}
+          fetcher={fetcher}
+        />
+      }
       rail={<ProjectRail />}
       left={
         <section className={styles.panel} aria-labelledby="entry-points">
@@ -115,7 +143,12 @@ export function ProjectPage({
           <p className={styles.empty}>{EMPTY.right}</p>
         </section>
       }
-      dock={<Dock project={project} workspacesAvailable={workspacesAvailable} />}
+      dock={
+        <Dock
+          project={project}
+          {...(workspacesAvailable ? { running: shownState(control) === 'running' } : {})}
+        />
+      }
       review={<ProjectReviewBar />}
       reviewDetail={<p className={styles.empty}>{EMPTY.reviewDetail}</p>}
     />
@@ -124,10 +157,13 @@ export function ProjectPage({
 
 function ProjectTopBar({
   project,
-  workspacesAvailable,
+  workspace,
+  fetcher,
 }: {
   readonly project: Project;
-  readonly workspacesAvailable: boolean;
+  /** Absent where workspaces can't run (staging): no chip at all. */
+  readonly workspace?: WorkspaceControl;
+  readonly fetcher: typeof fetch;
 }) {
   const shell = useShell();
   return (
@@ -143,12 +179,7 @@ function ProjectTopBar({
       middle={<Tabs aria-label="View" variant="segmented" items={VIEWS} />}
       end={
         <>
-          {workspacesAvailable && (
-            <WorkspaceStatus
-              state={project.workspace.state}
-              {...(project.workspace.state === 'running' ? { detail: '2 cores' } : {})}
-            />
-          )}
+          {workspace !== undefined && <WorkspacePopover control={workspace} fetcher={fetcher} />}
           <RailButton
             label="Right panel"
             icon={<PanelRight size={18} />}
@@ -213,16 +244,9 @@ function ProjectReviewBar() {
   );
 }
 
-function Dock({
-  project,
-  workspacesAvailable,
-}: {
-  readonly project: Project;
-  readonly workspacesAvailable: boolean;
-}) {
-  if (!workspacesAvailable) return <p className={styles.empty}>{EMPTY.terminalUnavailable}</p>;
-  if (project.workspace.state !== 'running')
-    return <p className={styles.empty}>{EMPTY.terminalClosed}</p>;
+function Dock({ project, running }: { readonly project: Project; readonly running?: boolean }) {
+  if (running === undefined) return <p className={styles.empty}>{EMPTY.terminalUnavailable}</p>;
+  if (!running) return <p className={styles.empty}>{EMPTY.terminalClosed}</p>;
   return (
     <Suspense fallback={<p className={styles.empty}>Loading the terminal…</p>}>
       <WorkspaceTerminal projectId={project.id} projectName={project.name} />

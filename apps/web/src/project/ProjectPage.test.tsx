@@ -44,7 +44,9 @@ describe('ProjectPage', () => {
     expect(screen.getByRole('main', { name: 'Canvas' })).toBeTruthy();
     expect(screen.getByRole('complementary', { name: 'Right panel' })).toBeTruthy();
     expect(screen.getByRole('contentinfo', { name: 'Review' })).toBeTruthy();
-    expect(screen.getByText('Running · 2 cores')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Workspace: Running' }).textContent).toBe(
+      'Running · 2 cores',
+    );
   });
 
   it('shows honest empty states, never made-up content', async () => {

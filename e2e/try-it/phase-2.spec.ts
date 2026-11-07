@@ -322,3 +322,64 @@ test('phase 2 · Try it: pan, zoom and select on the canvas (stress test, 500 ex
 
   expect(watch.problems()).toEqual([]);
 });
+
+test('phase 2: the workspace popover in the top bar, and the dock following the workspace', async ({
+  page,
+}) => {
+  const watch = watchForPageProblems(page);
+  await fakeApi(page);
+  let state = 'running';
+  const now = () => ({
+    id: 'w-1',
+    state,
+    stateChangedAt: '2026-11-07T09:30:00.000Z',
+    failure: null,
+  });
+  await page.route('**/api/projects', (route) =>
+    reply(route, { projects: [{ ...PROJECT, workspace: now() }], workspacesAvailable: true }),
+  );
+  await page.route(`**/api/projects/${PROJECT.id}/workspace/*`, (route) => {
+    const action = new URL(route.request().url()).pathname.split('/').pop() ?? '';
+    if (action === 'sleep') state = 'sleeping';
+    if (action === 'resume') state = 'running';
+    return reply(route, { workspace: now() });
+  });
+  await page.routeWebSocket(/\/workspace\/terminal/, (socket) => {
+    socket.send(Buffer.from('Rallly workspace\r\n$ '));
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/p/${PROJECT.id}`);
+
+  await test.step('The chip opens the workspace’s facts', async () => {
+    await page.getByRole('button', { name: 'Workspace: Running' }).click();
+    const popover = page.getByRole('dialog', { name: 'Workspace' });
+    await expect(popover).toContainText('2 cores · 4 GiB · this computer');
+    await expect(popover).toContainText('Running since');
+    await expect(popover).toContainText('This month');
+  });
+
+  await test.step('Sleep now: the chip follows, and the dock says there’s no shell while asleep', async () => {
+    await page.getByRole('button', { name: 'Sleep now' }).click();
+    await expect(
+      page.getByRole('dialog', { name: 'Workspace' }).getByRole('button', { name: 'Resume' }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: 'Workspace: Sleeping' })).toBeVisible();
+    await page.getByRole('button', { name: 'Terminal' }).click();
+    await expect(page.locator('[data-region="dock"]')).toContainText(
+      'Open the workspace to use a terminal here.',
+    );
+  });
+
+  await test.step('Resume from the popover: the dock connects a terminal', async () => {
+    await page.getByRole('button', { name: 'Workspace: Sleeping' }).click();
+    await page.getByRole('button', { name: 'Resume' }).click();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: 'Workspace: Running' })).toBeVisible();
+    await expect(page.locator('[data-region="dock"] .xterm-rows')).toContainText(
+      'Rallly workspace',
+    );
+  });
+
+  expect(watch.problems()).toEqual([]);
+});

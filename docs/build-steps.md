@@ -10682,8 +10682,8 @@ Both themes; 1440 × 900, checked at 1280 × 800.
 | 3 | Shell components in the design system: top bar, rail, collapsible panel, review bar (catalogue and baselines) | done (Claude, 7 Nov) |
 | 4 | Panels: collapse, resize, keyboard control; the layout remembered per browser; full-screen canvas | done (Claude, 7 Nov) |
 | 5 | The canvas: dot grid, pan, zoom, minimap, selection, zoom controls, fit; `FlowNode` as a node type | done (Claude, 7 Nov) |
-| 6 | Real content: project, workspace chip and popover, the terminal in the bottom dock; empty states | *next* |
-| 7 | The 500-node performance test, with its numbers | *planned* |
+| 6 | Real content: project, workspace chip and popover, the terminal in the bottom dock; empty states | done (Claude, 7 Nov) |
+| 7 | The 500-node performance test, with its numbers | *next* |
 | 8 | Baselines, the Try it walkthrough, and the Figma 06 differences list (decision A5) | *planned* |
 | 9 | Close: report, 0.6.0, PR | *planned* |
 
@@ -11011,4 +11011,57 @@ pnpm dev         # open a project; turn on Labs → Canvas stress test on the ho
 - **Laptop:** all five checks ok.
 
 **Commit:** `feat(web): the canvas — pan, zoom, fit, selection, minimap and toolbar, from tokens`
+
+### Step 2.6 — The workspace in the top bar, and a dock that follows it (done by Claude)
+
+**Goal:** the project page shows the workspace's real state everywhere, and acts on it from the top bar. Every region holds real content or an honest empty state.
+
+**What's new:**
+- **The top bar's chip opens a popover** (brief 29: "click for machine size, uptime … and Sleep now"; Figma 37's workspace popover):
+  - **Facts:**
+    - the status
+    - the machine (2 cores · 4 GiB · this computer)
+    - "Running since", "Asleep since" or "Stopped since"
+    - this month's usage, read when it opens
+    - a recorded reason, such as the guard's
+  - **Actions for the state:** Open or Try again, Sleep now, Resume, Stop. A refusal shows the API's sentence.
+  - **Left out, because they don't exist yet:** last backup (18a), region and "change where it runs" (48a).
+  - Its accessible name says what it is, for example "Workspace: Running".
+- **One workspace record for the page.** The chip, the popover and the dock follow it, with 1d's polling (3 s while changing, 30 s while running), so an idle sleep or the guard's change shows here without a reload.
+- **The dock follows it:** a terminal while running; "Open the workspace to use a terminal here." otherwise; on staging, that workspaces run locally.
+
+**Concepts:**
+- **Lifting state up.** The workspace's state moved from the chip into `ReadyProject`, which owns `useWorkspace()` and passes it down, so the top bar and the dock can't disagree. https://react.dev/learn/sharing-state-between-components
+- **Modal popovers hide the page.** While a React Aria popover is open, everything outside it is hidden from screen readers, so a test can't find the chip by role until the popover closes. That's correct, and the test now closes it first.
+- **A screenshot during an animation lies.** The first capture showed the right panel over the popover. It was the 240 ms fade-in, checked with `elementFromPoint` and a second capture: the popover is on top.
+
+**Files:**
+
+| File | What it is |
+| --- | --- |
+| `apps/web/src/project/WorkspacePopover.tsx`, `.module.css` | The chip as a popover trigger; the facts, the reason, the actions |
+| `apps/web/src/project/ProjectPage.tsx` | `ReadyProject` owns the workspace state; the top bar, the popover and the dock use it |
+
+**Tests:**
+- **Unit (4 new):**
+  - the facts, including this month's usage, with no backup, region or move
+  - Sleep now: the request, the popover offering Resume, the chip saying Sleeping
+  - the actions for a stopped workspace, with its reason
+  - no chip on staging
+- **Walkthrough (new):** the popover's facts; Sleep now, after which the chip says Sleeping and the dock says there's no shell; Resume from the popover, after which the dock connects a terminal. No page errors.
+- **By eye:** the popover in both themes, settled.
+
+**Run and check it:**
+```fish
+pnpm test        # 631 tests
+pnpm test:e2e    # 15 walkthroughs (with pnpm dev running, the API-backed one runs too)
+pnpm dev         # open a project: click the workspace chip in the top bar
+```
+
+**Docs:** this write-up; `docs/RUN-AND-FEATURES.md`.
+
+**Risks:**
+- **Laptop:** all five checks ok.
+
+**Commit:** `feat(web): the workspace popover in the top bar; the dock follows the workspace`
 
