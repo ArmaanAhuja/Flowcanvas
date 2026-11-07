@@ -11244,7 +11244,7 @@ pnpm size               # after pnpm build: the bundle budgets
 ## Phase 3 — Open a repo and edit
 
 **From the build plan:**
-- **Build:** Monaco in the browser with the buffer synced to the workspace; tabs, save, undo, quick-open; autosave journal every few seconds; file watcher.
+- **Build:** CodeMirror 6 in the browser (the plan said Monaco; ADR 0021) with the buffer synced to the workspace; tabs, save, undo, quick-open; autosave journal every few seconds; file watcher.
 - **Done when:** edits survive closing the tab and reopening; an edit made in the terminal appears in the editor.
 - **Try it:** edit a file in Rallly, close the tab, reopen it: the change is still there.
 
@@ -11262,7 +11262,8 @@ pnpm size               # after pnpm build: the bundle budgets
 - `sed` in the terminal: the open file updates in front of you
 
 **Concepts this phase introduces** (each gets a primer in its step):
-- Monaco, the editor core of VS Code: models, editors, workers: https://microsoft.github.io/monaco-editor/
+- CodeMirror 6: state, views, transactions and extensions: https://codemirror.net/docs/guide/
+- Shadow DOM, where each editor lives so its styles stay within our CSP: https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_shadow_DOM
 - Content-Security-Policy for styles and workers: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy
 - File watching with inotify, and its limits: https://man7.org/linux/man-pages/man7/inotify.7.html
 - Optimistic concurrency (versioned writes): https://developer.mozilla.org/en-US/docs/Web/HTTP/Conditional_requests
@@ -11270,7 +11271,7 @@ pnpm size               # after pnpm build: the bundle budgets
 - Saving when a page goes away (`visibilitychange`, `pagehide`, `fetch` with `keepalive`): https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API
 
 **Scope:**
-- **In:** the Code view; the file tree; Monaco with syntax highlighting; tabs, save, undo, quick-open; autosave and the journal; the file watcher and changes on disk; honest states (binary, too large, secret file, workspace asleep).
+- **In:** the Code view; the file tree; CodeMirror 6 with syntax highlighting; tabs, save, undo, quick-open; autosave and the journal; the file watcher and changes on disk; honest states (binary, too large, secret file, workspace asleep).
 - **Out:** language servers (phase 33); global search (phase 4); the editor card on the canvas (phase 7); git markers and the git panel (phase 34); inline agent diffs (stage 3); split view; backups and restore history (phase 20a).
 
 ### Steps (planned)
@@ -11278,11 +11279,11 @@ pnpm size               # after pnpm build: the bundle budgets
 | # | Step | Status |
 | --- | --- | --- |
 | 0 | Record the decisions; this plan; branch | done (Claude, 7 Nov) |
-| 1 | Spike: Monaco under our CSP (styles, workers, fonts) and its size; the watcher's cost with Rallly's `node_modules`. ADR 0021 | *next* |
-| 2 | Agent: file list, versioned read and write, conflicts, journal operations | *planned* |
+| 1 | Spike: an editor under our CSP, and its size (Monaco, CodeMirror 6 and Ace compared; CodeMirror 6 chosen); the watcher's cost with Rallly's `node_modules`. ADR 0021 | done (Claude, 7 Nov) |
+| 2 | Agent: file list, versioned read and write, conflicts, journal operations | *next* |
 | 3 | The watcher and the events channel: agent → host → control plane WebSocket | *planned* |
 | 4 | UI components: EditorTabs, FileTree, StatusBar, Breadcrumb (catalogue and baselines) | *planned* |
-| 5 | The Code view: tree, Monaco, tabs, save, undo; binary, large and secret states | *planned* |
+| 5 | The Code view: tree, CodeMirror in a shadow root, tabs, save, undo; binary, large and secret states; canvas shortcuts through shadow roots | *planned* |
 | 6 | Saving: autosave, the journal (workspace and IndexedDB), restore on reopen | *planned* |
 | 7 | Changes on disk (reload or banner) and quick-open | *planned* |
 | 8 | Walkthrough, screen baselines, Figma 11 differences, editor bundle budget | *planned* |
@@ -11305,8 +11306,40 @@ CI's walkthroughs use a fake workspace (staging has none until upgrade-later 33)
 
 | # | Risk | How we keep it in check | Status |
 | --- | --- | --- | --- |
-| R1 | Monaco adds `<style>` elements, which our CSP forbids | Step 1 spike before anything is built on it; options brought to the owner if it can't be made clean | open |
-| R2 | Monaco's size | Lazy chunk with its own budget; only the languages a web project needs | open |
-| R3 | **Laptop:** inotify's limit is shared with the whole computer; watching `node_modules` could exhaust it | Watch without `node_modules`, `.git` and build output; measure in the spike | open |
+| R1 | The editor breaks our CSP | Step 1 spike before anything is built on it | **closed (step 1):** Monaco needed `style-src-attr 'unsafe-inline'`; CodeMirror 6 in a shadow root has 0 violations under the unchanged policy (owner chose it, ADR 0021). Step 5's walkthrough fails on any violation |
+| R2 | The editor's size | Lazy chunk with its own budget; only the languages a web project needs | **mostly closed (step 1):** CodeMirror 6 with TypeScript is 147 kB gzipped (Monaco 705). The budget is set in step 8 |
+| R3 | **Laptop:** inotify's limit is shared with the whole computer; watching `node_modules` could exhaust it | Watch without `node_modules`, `.git` and build output; measure in the spike | **understood (step 1):** Rallly is 599 folders without `node_modules` (0.1% of 524,288); the watcher skips it (step 3) |
 | R4 | Lost edits (disconnect, sleep, closed tab) | Journal every 2 s and on page hide, an IndexedDB copy, tests for each case | open |
 | R5 | Silent overwrites when disk and editor disagree | Versioned writes; conflicts shown, never resolved silently | open |
+
+### Step 3.1 — Spike: which editor, under our CSP; and the watcher's cost (done by Claude; ADR 0021)
+
+**Goal:** before building on an editor, prove it runs under our Content-Security-Policy and is light enough for many editors on the canvas; and measure what a file watcher costs on the owner's laptop.
+
+**Concepts:**
+- **Content-Security-Policy (CSP):** a header that tells the browser what a page may load and run. Ours allows scripts, styles, images, fonts and connections only from our own site, and no inline code or styles. It's our main defence against cross-site scripting: even if an attacker's text slipped into the page as HTML, it couldn't run. https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP
+- **`style-src-elem` versus `style-src-attr`:** `<style>` elements and `style="…"` attributes are checked separately. Setting `element.style.top` from a script (the CSS object model) and constructed stylesheets (`new CSSStyleSheet()`, `adoptedStyleSheets`) are allowed, because only our own scripts can do them.
+- **Shadow DOM:** a separate DOM tree attached to an element. Styles inside don't leak out, page styles don't leak in, and CSS variables and fonts still pass through. https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_shadow_DOM
+- **inotify:** how Linux reports file changes. One watch per folder, from a pool shared by the whole computer. https://man7.org/linux/man-pages/man7/inotify.7.html
+
+**What happened:**
+1. **Monaco** (the plan's choice) under our policy: broken, with 70 violations. Routing its `<style>` elements into constructed stylesheets and loading its worker from our own site removed all but the `style="…"` attributes, which it puts on every line it draws (`viewLine.js:135`, via `innerHTML`). It only worked with `style-src-attr 'unsafe-inline'`. That needed the owner's decision.
+2. **The owner:** "it's not necessary to be fixated on one or make it look like VS Code; explore what's best suited for us."
+3. **Monaco, CodeMirror 6 and Ace** were compared on the same tests under the unchanged policy (figures in ADR 0021). CodeMirror 6 had 0 violations with each editor in a shadow root (its styling library only uses constructed stylesheets there), was about a fifth of Monaco's size, used a third of its memory for 21 editors, and typed fastest.
+4. **The owner chose CodeMirror 6** and asked for the replacement to be complete:
+   - Monaco and Ace are removed from the dependencies (none left in the lockfile).
+   - The CodeMirror packages we use are in the catalog, all MIT.
+   - CLAUDE.md, the build plan, the decisions log, this plan and RUN-AND-FEATURES say CodeMirror 6. The research report and ADR 0002 carry dated notes.
+5. **The watcher:** Rallly's code is 599 folders (0.1% of the laptop's 524,288 inotify watches), and `node_modules` must be skipped. `sed -i` was noticed in a median of 3.6 ms in a workspace container. Watch folders, not files.
+
+**Gotchas:**
+- **`style-mod` only uses constructed stylesheets in a shadow root.** On the main document it writes a `<style>` element, which our CSP blocks, and the editor looks unstyled with just one violation reported.
+- **Events from inside a shadow root are retargeted.** A `window` listener sees the host element as `event.target`, so the canvas shortcuts must look at `event.composedPath()[0]` (step 5, with a test).
+- **Spike measurements are headless (software rendering):** they compare the editors with each other; they aren't real-world times.
+
+**Risks:**
+- R1 and R2 are closed or mostly closed (see the table).
+- R3 (inotify) is understood: watch without `node_modules`.
+- **Laptop:** all five checks ok. Two measuring containers ran read-only, with no network, labelled `org.flowcanvas.role=measure`, and were removed. The sleeping workspace wasn't touched.
+
+**Commit:** `build(web): CodeMirror 6 replaces Monaco as the editor, checked under the CSP (ADR 0021)`

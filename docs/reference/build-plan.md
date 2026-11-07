@@ -64,7 +64,7 @@ Each box is a stage; the line under the stage name is what works when it ends. S
 | App UI | React + TypeScript | Same language as wave 1 targets; huge component ecosystem |
 | Canvas | React Flow (xyflow) first, custom WebGL layer for large graphs in stage 6 | Fast start with nodes, edges, pan and zoom; WebGL when graphs get big |
 | Graph layout | ELK (elkjs) with pinned positions | Layered layouts for flows; supports incremental, stable layout |
-| Code editor | Monaco | The editor core of VS Code; familiar keybindings and behaviour |
+| Code editor | CodeMirror 6 (owner decision 7 Nov 2026, ADR 0021; was Monaco) | Runs under the strict CSP, light enough for many editors on the canvas, colours from our tokens, official diff and language-server packages |
 | Language features | Language Server Protocol clients | One integration gives completion, diagnostics and go-to-definition for any language |
 | Debugger | Debug Adapter Protocol clients | Same idea as LSP for debuggers; adapters exist for most languages |
 | Terminal | xterm.js + node-pty | Standard pairing used by VS Code |
@@ -98,7 +98,7 @@ Each box is a stage; the line under the stage name is what works when it ends. S
 | 1c. Sign-in and control plane | GitHub and Google sign-in; projects list; workspace records; secrets vault; usage metering skeleton; admin view | A new user signs in, creates a project and sees it listed; saved secrets never appear in logs | Sign in with GitHub, create a project, add a secret, confirm the logs show no value |
 | 1d. Workspace sandbox | One isolated virtual machine per project; clone a repo; file and process API; terminal in the browser; outbound network rules; resource limits; sleep when idle and resume | A fork clones and opens in under 60 s; a workspace sleeps after 10 idle minutes and resumes intact; workspaces can't reach each other | Open Rallly from its GitHub URL, run a command in the terminal, wait for sleep, then resume |
 | 2. Canvas and app shell | React Flow canvas with pan, zoom, minimap, selection; the app shell from Figma 06 (top bar, rail, side panels, review bar) with placeholder content; panels that dock and collapse | 500 dummy nodes pan and zoom smoothly; layout matches Figma 06 | Pan, zoom and collapse panels; compare with Figma 06 |
-| 3. Open a repo and edit | Monaco in the browser with the buffer synced to the workspace; tabs, save, undo, quick-open; autosave journal every few seconds; file watcher | Edits survive closing the tab and reopening; an edit made in the terminal appears in the editor | Edit a file in Rallly, close the tab, reopen it: the change is still there |
+| 3. Open a repo and edit | CodeMirror 6 in the browser (was Monaco; ADR 0021) with the buffer synced to the workspace; tabs, save, undo, quick-open; autosave journal every few seconds; file watcher | Edits survive closing the tab and reopening; an edit made in the terminal appears in the editor | Edit a file in Rallly, close the tab, reopen it: the change is still there |
 | 4. Indexer | Engine inside the workspace; tree-sitter parse of every file; symbols into SQLite; symbol search; re-index changed files on save | Both forks index in under 30 s; symbol search under 100 ms | Press ⌘K and jump to any function in Rallly |
 | 5. TypeScript semantics | TypeScript compiler API service: definitions, references, type-resolved call edges; callers and callees panel | Callers and callees for 20 hand-picked functions match a manual check | Right-click a function → Callers; compare with your own reading of the code |
 

@@ -403,4 +403,21 @@ GitHub Actions never ran on `ArmaanAhuja-7777` because of the account billing lo
    - **The journal underneath:** unsaved changes go to the workspace every 2 seconds while typing and when the tab is hidden or closed (plus a copy in the browser's IndexedDB), so nothing is lost before an autosave or when the workspace can't be reached. Reopening restores them.
    - **A switch** in the status bar, "Autosave: on/off", kept per browser; on by default.
 2. **The editor lives in the Code view** (Figma 11) in this phase. The editor as a card on the canvas (design brief §17) comes with phase 7.
-3. **No fake errors:** syntax highlighting only. Monaco's own TypeScript checking stays off, because without the project's types it would report wrong errors, and the status bar shows no error count until phase 33's language servers.
+3. **No fake errors:** syntax highlighting only. The editor's own type checking (Monaco's, when this was written; see the next entry for CodeMirror 6) stays off, because without the project's types it would report wrong errors, and the status bar shows no error count until phase 33's language servers.
+
+## 7 Nov 2026: the code editor is CodeMirror 6, not Monaco (owner decision)
+
+**Found (phase 3 step 1 spike):** Monaco draws every line with inline `style` attributes, which our Content-Security-Policy forbids, so it would only work if the policy allowed `style-src-attr 'unsafe-inline'`.
+
+**Owner:** the editor doesn't have to be, or look like, VS Code; explore and pick what suits Flowcanvas best.
+
+**Compared** (each under our production policy, with the same tests): Monaco, CodeMirror 6 and Ace. The figures are in ADR 0021.
+
+**Decided:** **CodeMirror 6**, each editor in its own shadow root.
+- It runs under the unchanged strict policy.
+- It's about a fifth of Monaco's download (147 against 705 kB gzipped) and a third of its memory per editor, which matters for code cards on the canvas (phase 7).
+- It typed fastest in a 20,000-line file.
+- It takes colours straight from our CSS variables.
+- It has official packages for the diffs with accept and reject per change (stage 3), language servers (phase 33) and shared editing (phase 77).
+
+The build plan's technology table and phase 3, and CLAUDE.md's stack line, now say CodeMirror 6, pointing to ADR 0021. The owner asked for the replacement to be complete: Monaco and Ace are removed from the dependencies, and every document that named Monaco as our choice is updated or carries a dated note.

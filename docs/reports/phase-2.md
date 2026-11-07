@@ -94,7 +94,7 @@ No database migrations this phase. On staging, check:
 ## Next phase preview
 
 **Phase 3, open a repo and edit:**
-- Monaco in the browser, with the buffer synced to the workspace
+- a code editor in the browser (CodeMirror 6, ADR 0021; the plan said Monaco), with the buffer synced to the workspace
 - tabs, save, undo and quick-open
 - an autosave journal every few seconds, and a file watcher
 

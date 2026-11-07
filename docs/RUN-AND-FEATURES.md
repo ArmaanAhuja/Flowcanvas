@@ -2,7 +2,7 @@
 
 The one place to see how to run Flowcanvas, how to test it, and which features exist so far. It's updated at every build step. Details for each step live in `docs/build-steps.md`; phase status in `docs/STATUS.md`; how it's put together in `ARCHITECTURE.md`.
 
-- **Last updated:** 7 Nov 2026: phase 2 accepted and merged (PR #15); phase 3 planning (branch `phase/3-open-repo-and-edit`)
+- **Last updated:** 7 Nov 2026, phase 3 step 1: CodeMirror 6 chosen as the editor (ADR 0021) (branch `phase/3-open-repo-and-edit`)
 - **Released (on staging):** `0.6.0`, phase 2
 - **Progress:** phases 1, 1a, 1b, 1c and 2 are accepted; 1d is in review; phase 3 is being planned. That's 6 of the build plan's 96 phases. Stage 0's goal: open a repository in a workspace, see it on a canvas, edit it, and answer "what calls this?"
 
@@ -110,7 +110,7 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 - 🟡 **500 nodes are smooth,** measured on real hardware: panning at 120 or 60 fps, with no long tasks. Zooming in close (100% to 200%) still drops occasional frames (the build plan's phase 42, the WebGL renderer, fixes it).
 
 ### The editor (phase 3, in progress)
-- ⬜ **The Code view** (Figma 11): file tree, tabs, Monaco with syntax highlighting, save (Ctrl/⌘+S), undo, quick-open (Ctrl/⌘+P).
+- ⬜ **The Code view** (Figma 11): file tree, tabs, CodeMirror 6 with syntax highlighting, save (Ctrl/⌘+S), undo, quick-open (Ctrl/⌘+P).
 - ⬜ **Autosave** for when you forget: after 5 s without typing, and on switching file or window. Unsaved changes are also journalled every 2 s, so closing the tab loses nothing.
 - ⬜ **Changes from the terminal** appear in the editor; a conflict with unsaved changes is shown, never overwritten.
 
@@ -127,7 +127,7 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 - ✅ **A strict security policy:** no inline scripts or styles, previews per pull request, and telemetry off.
 
 ### Coming next
-- **Phase 3 (now):** the editor (Monaco), synced to the workspace, with autosave.
+- **Phase 3 (now):** the editor (CodeMirror 6), synced to the workspace, with autosave.
 - **Phase 4:** the indexer: every file parsed, symbols searchable in under 100 ms.
 - **Phase 5:** TypeScript call graphs: callers and callees.
 - **After that:** stage 1 draws real flows from code, and stage 2 adds live frames of the running app.

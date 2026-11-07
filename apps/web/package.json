@@ -13,9 +13,16 @@
     "lint": "eslint . && stylelint \"src/**/*.css\""
   },
   "dependencies": {
+    "@codemirror/commands": "catalog:",
+    "@codemirror/lang-javascript": "catalog:",
+    "@codemirror/language": "catalog:",
+    "@codemirror/search": "catalog:",
+    "@codemirror/state": "catalog:",
+    "@codemirror/view": "catalog:",
     "@flowcanvas/graph-model": "workspace:*",
     "@flowcanvas/tokens": "workspace:*",
     "@flowcanvas/ui": "workspace:*",
+    "@lezer/highlight": "catalog:",
     "@xterm/addon-fit": "catalog:",
     "@xterm/xterm": "catalog:",
     "@xyflow/react": "catalog:",
