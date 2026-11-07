@@ -10613,7 +10613,94 @@ Checked: control-plane tests pinned to 4 cores, 6 runs out of 6 passed after the
 
 **`main` failed once more after #13, and this one explained itself.** The same three tests failed on both `main` runs, and each is the **first test in its file**: three files, three workers. So it wasn't per-test setup any more, but the first PGlite in each fresh worker process, which also compiles its WebAssembly from cold (1.1 s locally against 0.8 s for later ones; past 10 s on a cold, busy runner). The PR runs had passed, so it was close to the limit either way. **The fix** (second follow-up PR): the setup file prepares the migrated template once per test file, in a `beforeAll` allowed 60 s. Each test's clone keeps the normal 10 s limit, so a slow per-test setup would still fail. Passes pinned to 16, 4 and 2 cores.
 
-**Still open:** one rare failing control-plane test, about 1 run in 15, with its name not yet captured. It's being hunted with every failing run's full output kept.
+**Still open:** one rare failing control-plane test, about 1 run in 15, with its name not yet captured. *Hunt (7 Nov):* 20 more runs at low priority with full output kept, plus 8 before them, all passed. Likely the same slow start under load that #13 and #14 fixed. If it recurs, CI's log names it.
 
 **CI's Docker job, first run:** GitHub's `ubuntu-24.04` runner has **Docker 28.0.4**. All 42 Docker tests ran and passed (Rallly opened in 3.1 s there).
+
+## Phase 2 — Canvas and app shell
+
+**From the build plan:**
+- **Build:** a React Flow canvas with pan, zoom, minimap and selection; the app shell from Figma 06 (top bar, rail, side panels, review bar) with placeholder content; panels that dock and collapse.
+- **Done when:** 500 dummy nodes pan and zoom smoothly; the layout matches Figma 06.
+- **Try it:** pan, zoom and collapse panels; compare with Figma 06.
+
+**Owner decisions (7 Nov 2026, decisions log):**
+- **Honest empty states, not placeholders** (rule 10). The 500 dummy nodes appear only in the catalogue, the performance test, and a Labs switch labelled as a preview.
+- **Docked panels collapse and resize;** moving them is upgrade-later 40.
+- **The projects list stays at `/`;** a project opens at `/p/<id>`.
+
+**Expected outcome:** opening a project takes you to its own page, laid out like Figma 06:
+- **Top bar:** the project, its workspace chip with its popover (Sleep, Stop, the machine, usage), the view switch (Graph now; Sequence and Code disabled until their phases), and search (disabled until phase 4).
+- **Rail:** tools open their panels. **Terminal** opens the real terminal in the bottom dock.
+- **Canvas:** pan (Space + drag), zoom (Ctrl + scroll, pinch), fit (F), select, a minimap, zoom controls, and a dot grid.
+- **Right panel and review bar:** collapse and resize them, or collapse everything for a full-screen canvas. Your layout is remembered.
+
+Both themes; 1440 × 900, checked at 1280 × 800.
+
+**Sizes (Figma generator script, `shell()`; they win over the brief):**
+
+| Region | Figma | Brief |
+| --- | --- | --- |
+| Top bar | 40 px | 44 px |
+| Rail | 44 px | 48 px |
+| Left panel | 248 px | 260 px |
+| Right panel | 360 px | 360 px |
+| Review bar | 40 px; 300 px open | 40 px; about 280 px open |
+| Dot grid | 16 px, `border/subtle` | — |
+
+**Concepts this phase introduces** (each gets a primer in its step):
+- React Flow: nodes, edges, the viewport, custom node types: https://reactflow.dev/learn
+- Resizable, collapsible panels, and the separator pattern for keyboard users: https://www.w3.org/WAI/ARIA/apg/patterns/windowsplitter/
+- Client-side routing with the History API: https://developer.mozilla.org/en-US/docs/Web/API/History_API
+- Measuring smoothness: frame times with `requestAnimationFrame`: https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame
+
+**Scope:**
+- **In:**
+  - the five regions, built from design-system components shown in the catalogue first
+  - collapse and resize, by mouse and keyboard
+  - the canvas basics
+  - `FlowNode` as a React Flow node
+  - the workspace chip's popover, and the terminal in the bottom dock
+  - honest empty states
+  - the 500-node performance test
+- **Out:**
+  - real flows (phase 4 onwards)
+  - the editor (phase 3)
+  - the Sequence and Code views
+  - search (phase 4)
+  - the agent panel's content (stage 3)
+  - movable panels (upgrade-later 40)
+  - the start screen
+
+### Steps (planned)
+
+| # | Step | Status |
+| --- | --- | --- |
+| 0 | Record 1d's after-merge checks; the decisions; upgrade-later 40; branch | done (Claude, 7 Nov) |
+| 1 | Spike: React Flow and `react-resizable-panels` under the strict CSP; a first frame-time measurement with 500 nodes. ADR 0020 | *next* |
+| 2 | The project page (`/p/:id`) and the shell skeleton at Figma's sizes, with the geometry test | *planned* |
+| 3 | Shell components in the design system: top bar, rail, collapsible panel, review bar (catalogue and baselines) | *planned* |
+| 4 | Panels: collapse, resize, keyboard control; the layout remembered per browser; full-screen canvas | *planned* |
+| 5 | The canvas: dot grid, pan, zoom, minimap, selection, zoom controls, fit; `FlowNode` as a node type | *planned* |
+| 6 | Real content: project, workspace chip and popover, the terminal in the bottom dock; empty states | *planned* |
+| 7 | The 500-node performance test, with its numbers | *planned* |
+| 8 | Baselines, the Try it walkthrough, and the Figma 06 differences list (decision A5) | *planned* |
+| 9 | Close: report, 0.6.0, PR | *planned* |
+
+### How each Done-when item is proven
+
+| Item | Test |
+| --- | --- |
+| 500 dummy nodes pan and zoom smoothly | Playwright drives scripted pan and zoom over 500 nodes and records frame times. Target on the laptop: median 60 fps, 95th percentile under 25 ms. On CI (no GPU) it reports and fails only on a large regression |
+| The layout matches Figma 06 | A geometry test of every region at 1440 × 900 and 1280 × 800; visual baselines in both themes; the owner's side-by-side review with the differences list |
+| Try it | A recorded walkthrough: pan, zoom, collapse every panel, restore, reload (layout kept) |
+
+### Risks (checked at every step)
+
+| # | Risk | How we keep it in check | Status |
+| --- | --- | --- | --- |
+| R1 | A library injects inline styles, which our CSP blocks (as xterm.js did) | Step 1 checks both under the deployed CSP before anything is built on them | open: step 1 |
+| R2 | 500 nodes aren't smooth (React Flow renders DOM nodes) | Measured in step 1. React Flow renders only what's visible, and memoised node components keep each frame light. A WebGL layer is the build plan's later answer | open: step 1 |
+| R3 | Frame times on CI aren't meaningful (no GPU, shared cores) | Laptop numbers decide; CI only catches large regressions | open: step 7 |
+| R4 | Laptop: Chromium in the performance test | Light; checked every step | open |
 

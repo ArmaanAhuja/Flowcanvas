@@ -344,3 +344,17 @@ GitHub Actions never ran on `ArmaanAhuja-7777` because of the account billing lo
 1. **What happened.** Signing in on `localhost:5173` said the account wasn't on the allowlist. The dev database's allowlist had one entry (the owner, as admin), and no account had ever signed in there. GitHub sign-in checks the GitHub account's **primary verified email**. The browser was signed in to a GitHub account whose primary email is a different one of the owner's addresses. On production both of the owner's addresses were allowed; when local development moved to the `dev` branch (2 Nov), only one was added.
 2. **Fix for the owner:** allow the other address on the dev database with `pnpm db:allow <email> --admin` (it prints the database host, which should be the `dev` branch's). Or sign in with Google, or with the GitHub account whose primary email is the allowed one.
 3. **So it can't be a mystery again:** the refusal now says which account was checked, masked (for example `It was checked as ma…@example.com.`). The API adds `as=<masked>` to the redirect, never the whole address; the page shows it only if it matches the masked pattern.
+
+## 7 Nov 2026: phase 1d after the merge; phase 2 plan (owner decisions)
+
+**Phase 1d:** the owner confirmed on staging that projects are listed, that the page says "Workspaces run locally for now", and that What's new shows 0.5.0. With the owner's migration of staging's database (0003, 0004, 6 Nov), the after-merge checks are done. The phase stays **in review** until a cloud provider is connected.
+
+**Phase 2 (canvas and app shell), the owner's answers to the plan's questions:**
+1. **"Placeholder content" against rule 10.** The shell shows honest empty states, such as "Flows appear here once the project is analysed". The 500 dummy nodes appear only in the component catalogue, the performance test, and a Labs switch labelled as a preview. Real content goes wherever it already exists: the project, the workspace chip, the terminal.
+2. **"Dock" panels.** Panels are docked to their edges and collapse and resize. Moving panels between sides isn't in the build plan or the design brief, so it's recorded in upgrade-later (40).
+3. **The projects list stays at `/` for now.** **Open** goes to the project's page (`/p/<id>`). The start screen comes with its own phase.
+
+**Also settled for phase 2, from the sources:**
+- **Sizes follow Figma** (top bar 40, rail 44, left panel 248, right panel 360, review bar 40 and 300 open) where the design brief differs (44, 48, 260, 280).
+- **The terminal goes in a bottom dock** above the review bar (design brief, "18. Terminal and run manager").
+

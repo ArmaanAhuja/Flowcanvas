@@ -107,6 +107,11 @@ The full guide is in `docs/build-steps.md`, "Phase 1d so far — run and check i
 ## After the merge (owner)
 
 1. **Migrate staging's database** to 0003 and 0004: done by the owner before the merge (6 Nov, the `production` branch `ep-raspy-frost…`).
+
+**Results (7 Nov 2026):**
+- ✅ Staging runs `0.5.0`, and its database answers (`/api/db/ping` is ok).
+- ✅ Confirmed by the owner, signed in: projects listed, "Workspaces run locally for now", and What's new shows 0.5.0.
+- ✅ `main`'s CI is green after follow-ups #13 and #14 (the control-plane tests' start-up). A hunt of 20 more runs found no recurrence of the rare unnamed failure.
 2. **On staging, check:**
    - projects load
    - the page says "Workspaces run locally for now"
