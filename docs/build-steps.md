@@ -11283,8 +11283,8 @@ pnpm size               # after pnpm build: the bundle budgets
 | 2 | Agent: file list, versioned read and write, conflicts, journal operations | done (Claude, 7 Nov) |
 | 3 | The watcher and the events channel: agent → host → control plane WebSocket | done (Claude, 7 Nov) |
 | 4 | UI components: EditorTabs, FileTree, StatusBar, Breadcrumb (catalogue and baselines) | done (Claude, 8 Nov) |
-| 5 | The Code view: tree, CodeMirror in a shadow root, tabs, save, undo; binary, large and secret states; canvas shortcuts through shadow roots | *next* |
-| 6 | Saving: autosave, the journal (workspace and IndexedDB), restore on reopen | *planned* |
+| 5 | The Code view: tree, CodeMirror in a shadow root, tabs, save, undo; binary, large and secret states; canvas shortcuts through shadow roots | done (Claude, 8 Nov) |
+| 6 | Saving: autosave, the journal (workspace and IndexedDB), restore on reopen | *next* |
 | 7 | Changes on disk (reload or banner) and quick-open | *planned* |
 | 8 | Walkthrough, screen baselines, Figma 11 differences, editor bundle budget | *planned* |
 | 9 | Close: report, 0.7.0, PR | *planned* |
@@ -11492,3 +11492,72 @@ The logs record the operation and outcome only, never paths or content (tested w
 - **Laptop:** all five checks ok. The visual runs use one Docker container at a time.
 
 **Commit:** `feat(ui): EditorTabs, FileTree, Breadcrumb and StatusBar for the Code view, catalogued with baselines`
+
+### Step 3.5 — The Code view: open, edit and save files in CodeMirror (done by Claude)
+
+**Goal:** the **Code** switch works. The project's files are on the left; a file opens in CodeMirror with its tab, path and status; Ctrl/⌘+S saves it from the version it was opened at; and a change made in the workspace meanwhile is never overwritten.
+
+**What a person can do now** (`pnpm dev`, a running workspace):
+- **Code** in the top bar, or **Files** on the rail, shows the project's files: folders first, `.env` files never listed.
+- **Click a file** to open it in a tab, with its path above and the cursor, indentation, encoding and language below. Binary files say what they are, and refused files (`.env`) say why, in the workspace's words.
+- **Type,** and the tab and the tree row get a dot ("unsaved changes" in their names). Undoing back to the saved text clears it.
+- **Ctrl/⌘+S saves** ("Saving…", then "Saved"). If the file changed in the workspace since it was opened (the terminal, another tab), the save is refused, a message says so, and the changes stay in the editor.
+- **Closing a tab** with unsaved changes saves it first; if that fails, the tab stays open.
+- **Open tabs and the view are remembered** per project in this browser.
+- **F, V and H typed in the editor are letters,** never canvas shortcuts.
+
+**Code** (`apps/web/src/code/`):
+
+| File | What |
+| --- | --- |
+| `api.ts` | The file list, reads (text with a version, binary, or a refusal), saves (`saved`, `conflict` or `failed`) |
+| `languages.ts` | The language by extension, each parser loaded on demand; the indentation a file uses |
+| `editor-setup.ts` | Each file's `EditorState` (text, undo history, keys: Mod-s, Tab indents, search); the theme and highlighting from tokens |
+| `CodeEditor.tsx` | One `EditorView` in an open shadow root; switching files swaps the state |
+| `useCodeFiles.ts` | Open files, unsaved tracking (against the saved text), saving from the opened version, remembering tabs |
+| `FilesPanel.tsx`, `CodeView.tsx` | The left panel and the Code view (Figma 11) |
+
+Also: `ProjectPage.tsx` (the view switch, the rail's Files button; Files and the editor load lazily); `FlowCanvas.tsx` (`isCanvasShortcut` uses `event.composedPath()[0]`).
+
+**Concepts:**
+- **An `EditorState` per file.** CodeMirror keeps a document, its selection and its undo history in one immutable state. Keeping one per file and swapping it into a single view gives every tab its own undo, cheaply. https://codemirror.net/docs/guide/#state
+- **Not re-rendering while typing.** The latest state per file lives in a React ref. React state changes only when something shown changes (a dot, the status, another file), so typing in a large file doesn't re-render the page.
+- **Esc, then Tab.** Tab indents in the editor (as code editors do), so keyboard users leave with Esc then Tab, CodeMirror's built-in escape. The status bar's description says so.
+- **Code splitting by intent.** The page downloads what you use: the editor's core with the Code view, each language with its first file, the file tree with Files. The bundle budget enforces it. https://vite.dev/guide/features#dynamic-import
+
+**Found and fixed on the way:**
+1. **The file tree stopped responding after the first file.** With selection on, React Aria turns a click into a selection change once something is selected, and the "replace" behaviour selects on every arrow key instead. The tree now has no selection: a click or Enter acts, arrows only move, and the open file is in the row's name ("open in the editor") and styled by `data-current`. React Aria drops `aria-current`, so the name carries it. Regression tests cover both cases.
+2. **Tree rows didn't update** when the open file or its unsaved state changed: React Aria caches rows by item until its `dependencies` prop changes. Caught by the real-browser walkthrough, not by jsdom; regression test added.
+3. **A labelled dot inside a tree row was never announced:** a row's accessible name is its `textValue`. "Unsaved changes" is now in that name.
+4. **CodeMirror was in the project page's chunk** (82 → 271 kB) **and the file tree in the first load** (+25 kB). The bundle budget caught both before anything shipped. The fixes: a dynamic `import()`, `sideEffects` in `packages/ui`, a lazy Files panel, and named chunk groups. The first load ended at 143 kB, below phase 2's 149.
+5. **The token test caught Prettier rewriting generated files.** Generated files are exactly what the generator writes, and are never formatted by hand.
+
+**New budgets** (`apps/web/scripts/bundle-size.ts`): `codemirror` 130 kB (114 now); `lang` 85 (73 for all, each loading alone); `FilesPanel` 30 (25).
+
+**New tokens:** `color.syntax.keyword`, `string`, `number`, `comment` and `plain`, set to Figma 11's colours. **Owner question:** strings and numbers use the green and amber that also mean "added" and "modified". Keep them, or a quieter code palette?
+
+**Tests:**
+- **Unit:** 711 passed in all, 17 new:
+  - the file API's mapping
+  - languages and indentation
+  - the Code view through the page (open, edit, Ctrl+S from the opened version and then the new one, undo clearing the dot, a conflict keeping the text, binary and `.env` states, remembered tabs, workspace not running)
+  - canvas shortcuts from a shadow root
+  - the tree's regressions
+- **Walkthrough (new, `e2e/try-it/phase-3.spec.ts`):** in a real browser under the production CSP, against a fake workspace with real versions and real conflict checks. It opens a file, types (including F, V and H), saves, is refused after a "terminal" change with the text kept, and shows a binary file, with no CSP violations. All 16 walkthroughs pass.
+- **Visual:** 106 passed. 14 baselines were re-approved after reviewing each diff: the rail's Files button and Code enabled (12 screens), and the syntax tokens on the tokens page (2).
+
+**Run and check it:**
+```fish
+pnpm dev            # open a project with a running workspace, then Code
+pnpm test           # 711
+pnpm test:e2e       # 16, the phase 3 walkthrough among them
+pnpm build && pnpm size
+```
+
+**Risks:**
+- R1 (CSP): closed in the page too, with 0 violations in the walkthrough.
+- R2 (size): within the new budgets.
+- R5 (overwrites): the page refuses to overwrite, and keeps the text.
+- **Laptop:** all five checks ok.
+
+**Commit:** `feat(web): the Code view — files, CodeMirror in a shadow root, tabs, conflict-safe saves; lazy editor chunks`

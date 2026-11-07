@@ -134,6 +134,24 @@
         "$value": "#6B7380"
       }
     },
+    "syntax": {
+      "$description": "Code highlighting in the editor (phase 3). Set to Figma 11's colours for now; their own tokens so the palette can change in one place (owner question, 8 Nov 2026).",
+      "keyword": {
+        "$value": "{color.accent.text}"
+      },
+      "string": {
+        "$value": "{color.state.added.text}"
+      },
+      "number": {
+        "$value": "{color.state.modified.text}"
+      },
+      "comment": {
+        "$value": "{color.text.muted}"
+      },
+      "plain": {
+        "$value": "{color.text.primary}"
+      }
+    },
     "preview": {
       "surface": {
         "$value": "#FFFFFF"

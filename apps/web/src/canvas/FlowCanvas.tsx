@@ -243,7 +243,9 @@ function Canvas({ nodes: given, edges: givenEdges, empty, banner }: FlowCanvasPr
  */
 export function isCanvasShortcut(event: KeyboardEvent): boolean {
   if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return false;
-  const target = event.target;
+  // Where the key was really pressed: inside a shadow root (the code editor, ADR 0021), `event.target` is only the
+  // shadow root's host by the time a window listener sees it.
+  const target = event.composedPath()[0] ?? event.target;
   if (!(target instanceof HTMLElement)) return true;
   // Inside editable text (also nested inside an editor's own markup).
   if (

@@ -78,3 +78,16 @@ Each editor on its own page, built by Vite and served with our production header
 - **So the watcher walks the project itself and skips** `node_modules`, `.git` and build output, rather than using Node's `fs.watch(…, { recursive: true })`, which on Linux can't skip anything.
 - **It watches folders, not files.** `sed -i` replaces a file with a new one, so a watch on the old file would go silent.
 - **Speed:** in a workspace container (Node 24), a `sed -i` was seen in a median of 3.6 ms (worst 10 ms), including starting `sed`. The end-to-end time, through the host and the control plane to the page, is measured in step 3.
+
+## Addendum (8 Nov 2026, phase 3 step 5): building it into the page
+
+- **The shadow root works as planned** under the production CSP: the phase 3 walkthrough types, saves and shows a conflict with **no policy violations** (`watchForPageProblems`). Playwright reaches into open shadow roots, so tests address `.cm-content` directly.
+- **Canvas shortcuts** look at `event.composedPath()[0]`. A test types F in editable text inside a shadow root, and fails without the change.
+- **Loading in pieces** (Vite `codeSplitting` groups, `includeDependenciesRecursively: false`):
+  - the editor's core: `codemirror`, 114 kB gzipped, with the Code view
+  - each language's parser on its own: `lang-javascript` 34 kB, CSS 13, HTML 12, Markdown 15, JSON 1, with its first file
+  - the file tree: `FilesPanel`, 25 kB, only when Files is shown
+
+  So a TypeScript file costs about 150 kB, as the spike estimated, and nothing of the editor is in the first load.
+- **`packages/ui` is marked free of side effects** (`"sideEffects": ["**/*.css"]`), so unused components are left out of a page's bundle. The first load fell from 149.4 to 143.0 kB.
+- **Syntax colours have their own tokens** (`color.syntax.*`), set to Figma 11's for now. Whether green and amber, the "added" and "modified" hues, should also colour strings and numbers is an owner question (8 Nov 2026).

@@ -71,6 +71,35 @@ export default defineConfig({
   build: {
     // Never inline fonts as data: URLs; the Content-Security-Policy only allows fonts from our own origin.
     assetsInlineLimit: (file) => (file.endsWith('.woff2') ? false : undefined),
+    rolldownOptions: {
+      output: {
+        // The code editor (CodeMirror, its parsers) in one chunk, loaded only with the Code view, with its own
+        // bundle budget (scripts/bundle-size.ts, ADR 0021).
+        codeSplitting: {
+          // A group takes only its own modules, not everything they import (else a language takes the core).
+          includeDependenciesRecursively: false,
+          groups: [
+            {
+              // Each language's parser in its own chunk, loaded with its first file: lang-javascript, lang-css...
+              name: (id: string) => {
+                const language =
+                  /[\\/](?:lang-|@lezer[\\/])(javascript|css|html|json|markdown)[\\/]/.exec(
+                    id,
+                  )?.[1];
+                return language === undefined ? null : `lang-${language}`;
+              },
+              priority: 2,
+            },
+            {
+              // The editor's core (CodeMirror itself): one chunk, loaded only with the Code view.
+              name: 'codemirror',
+              test: /node_modules[\\/](@codemirror|@lezer|style-mod|w3c-keyname|crelt|@marijn)[\\/]/,
+              priority: 1,
+            },
+          ],
+        },
+      },
+    },
   },
   test: {
     environment: 'jsdom',

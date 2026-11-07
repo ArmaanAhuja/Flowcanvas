@@ -14,7 +14,11 @@
   },
   "dependencies": {
     "@codemirror/commands": "catalog:",
+    "@codemirror/lang-css": "catalog:",
+    "@codemirror/lang-html": "catalog:",
     "@codemirror/lang-javascript": "catalog:",
+    "@codemirror/lang-json": "catalog:",
+    "@codemirror/lang-markdown": "catalog:",
     "@codemirror/language": "catalog:",
     "@codemirror/search": "catalog:",
     "@codemirror/state": "catalog:",

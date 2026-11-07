@@ -1,6 +1,7 @@
 import { Button, Rail, RailButton, ReviewBar, Tabs, TopBar } from '@flowcanvas/ui';
-import { Maximize2, Minimize2, PanelRight, SquareTerminal, Target } from 'lucide-react';
+import { FileText, Maximize2, Minimize2, PanelRight, SquareTerminal, Target } from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { useCodeFiles } from '../code/useCodeFiles';
 import { fetchProjects, isProblem, type Project } from '../projects/api';
 import { FlowCanvas } from '../canvas/FlowCanvas';
 import { EXAMPLE_BANNER, exampleGraph } from '../canvas/examples';
@@ -10,6 +11,11 @@ import { linkTo } from '../routing/route';
 import { WorkspacePopover } from './WorkspacePopover';
 import { Shell, useShell } from '../shell/Shell';
 import styles from './ProjectPage.module.css';
+
+// The file tree (React Aria's Tree) only when Files is shown, and CodeMirror only when the Code view opens:
+// each in its own chunk, so a project page that never opens them doesn't download them.
+const FilesPanel = lazy(async () => ({ default: (await import('../code/FilesPanel')).FilesPanel }));
+const CodeView = lazy(async () => ({ default: (await import('../code/CodeView')).CodeView }));
 
 // xterm.js only when the dock opens a terminal.
 const WorkspaceTerminal = lazy(async () => ({
@@ -28,7 +34,7 @@ export const EMPTY = {
   terminalUnavailable: 'Workspaces run locally for now, so there’s no terminal here.',
 } as const;
 
-/** The view switch: Graph now; the others arrive with their phases (shown, never offered). */
+/** The view switch: Graph and Code (phase 3); Sequence arrives with its phase (shown, never offered). */
 const VIEWS = [
   { id: 'graph', label: 'Graph' },
   {
@@ -37,8 +43,21 @@ const VIEWS = [
     disabled: true,
     hint: 'The sequence view arrives in a later phase',
   },
-  { id: 'code', label: 'Code', disabled: true, hint: 'The code view arrives with the editor' },
+  { id: 'code', label: 'Code' },
 ];
+
+export type ProjectView = 'graph' | 'code';
+type LeftTool = 'entry-points' | 'files';
+
+const viewKey = (projectId: string) => `flowcanvas-view-${projectId}`;
+
+function rememberedView(projectId: string): ProjectView {
+  try {
+    return window.localStorage.getItem(viewKey(projectId)) === 'code' ? 'code' : 'graph';
+  } catch {
+    return 'graph';
+  }
+}
 
 type Loaded =
   | { readonly kind: 'loading' }
@@ -116,25 +135,70 @@ function ReadyProject({
   readonly fetcher: typeof fetch;
 }) {
   const control = useWorkspace(project.id, project.workspace, fetcher);
+  const running = workspacesAvailable && shownState(control) === 'running';
+  const [view, setViewState] = useState<ProjectView>(() => rememberedView(project.id));
+  const [leftTool, setLeftTool] = useState<LeftTool>(view === 'code' ? 'files' : 'entry-points');
+  const code = useCodeFiles(project.id, fetcher, running);
+  const unsaved = useMemo(
+    () => new Set(code.files.filter((file) => file.unsaved).map((file) => file.path)),
+    [code.files],
+  );
+  const setView = (next: ProjectView) => {
+    setViewState(next);
+    // As on Figma 11: the Code view's left panel is the file tree, the Graph view's the entry points.
+    setLeftTool(next === 'code' ? 'files' : 'entry-points');
+    try {
+      window.localStorage.setItem(viewKey(project.id), next);
+    } catch {
+      // Not remembering the view is fine.
+    }
+  };
   return (
     <Shell
       topBar={
         <ProjectTopBar
           project={project}
+          view={view}
+          onView={setView}
           {...(workspacesAvailable ? { workspace: control } : {})}
           fetcher={fetcher}
         />
       }
-      rail={<ProjectRail />}
+      rail={<ProjectRail leftTool={leftTool} onLeftTool={setLeftTool} />}
       left={
-        <section className={styles.panel} aria-labelledby="entry-points">
-          <h2 id="entry-points" className={styles.panelTitle}>
-            Entry points
-          </h2>
-          <p className={styles.empty}>{EMPTY.left}</p>
-        </section>
+        leftTool === 'files' ? (
+          <Suspense fallback={<p className={styles.empty}>Loading the files…</p>}>
+            <FilesPanel
+              projectId={project.id}
+              projectName={project.name}
+              running={running}
+              selected={code.active?.path}
+              unsaved={unsaved}
+              onOpen={(path) => {
+                if (view !== 'code') setView('code');
+                code.open(path);
+              }}
+              fetcher={fetcher}
+            />
+          </Suspense>
+        ) : (
+          <section className={styles.panel} aria-labelledby="entry-points">
+            <h2 id="entry-points" className={styles.panelTitle}>
+              Entry points
+            </h2>
+            <p className={styles.empty}>{EMPTY.left}</p>
+          </section>
+        )
       }
-      canvas={<ProjectCanvas />}
+      canvas={
+        view === 'code' ? (
+          <Suspense fallback={<p className={styles.empty}>Loading the editor…</p>}>
+            <CodeView files={code} running={running} />
+          </Suspense>
+        ) : (
+          <ProjectCanvas />
+        )
+      }
       right={
         <section className={styles.panel} aria-labelledby="inspector">
           <h2 id="inspector" className={styles.panelTitle}>
@@ -157,10 +221,14 @@ function ReadyProject({
 
 function ProjectTopBar({
   project,
+  view,
+  onView,
   workspace,
   fetcher,
 }: {
   readonly project: Project;
+  readonly view: ProjectView;
+  readonly onView: (view: ProjectView) => void;
   /** Absent where workspaces can't run (staging): no chip at all. */
   readonly workspace?: WorkspaceControl;
   readonly fetcher: typeof fetch;
@@ -176,7 +244,17 @@ function ProjectTopBar({
           <span className={styles.project}>{project.name}</span>
         </>
       }
-      middle={<Tabs aria-label="View" variant="segmented" items={VIEWS} />}
+      middle={
+        <Tabs
+          aria-label="View"
+          variant="segmented"
+          items={VIEWS}
+          value={view}
+          onValueChange={(id) => {
+            if (id === 'graph' || id === 'code') onView(id);
+          }}
+        />
+      }
       end={
         <>
           {workspace !== undefined && <WorkspacePopover control={workspace} fetcher={fetcher} />}
@@ -200,18 +278,37 @@ function ProjectTopBar({
   );
 }
 
-/** Only the tools that work now; the rest of Figma 06's rail arrives with their phases. */
-function ProjectRail() {
+/** Only the tools that work now; the rest of Figma 06's rail arrives with their phases. Entry points and Files
+ * share the left panel: a tool's button shows it there, or closes the panel if it's already showing. */
+function ProjectRail({
+  leftTool,
+  onLeftTool,
+}: {
+  readonly leftTool: LeftTool;
+  readonly onLeftTool: (tool: LeftTool) => void;
+}) {
   const shell = useShell();
+  const leftButton = (tool: LeftTool) => () => {
+    if (leftTool === tool) {
+      shell.toggle('left');
+    } else {
+      onLeftTool(tool);
+      shell.setOpen('left', true);
+    }
+  };
   return (
     <Rail>
       <RailButton
         label="Entry points"
         icon={<Target size={18} />}
-        active={shell.isOpen('left')}
-        onClick={() => {
-          shell.toggle('left');
-        }}
+        active={leftTool === 'entry-points' && shell.isOpen('left')}
+        onClick={leftButton('entry-points')}
+      />
+      <RailButton
+        label="Files"
+        icon={<FileText size={18} />}
+        active={leftTool === 'files' && shell.isOpen('left')}
+        onClick={leftButton('files')}
       />
       <RailButton
         label="Terminal"

@@ -16,7 +16,7 @@ import styles from './FileTree.module.css';
 export interface FileTreeProps {
   /** Every file of the project, as project-relative paths (folders come from them). */
   readonly files: readonly string[];
-  /** The file shown in the editor: selected, and its folders opened so it's in view. */
+  /** The file shown in the editor: marked, and its folders opened so it's in view. */
   readonly selected?: string;
   /** A file was chosen (click, or Enter). */
   readonly onOpen: (path: string) => void;
@@ -69,13 +69,31 @@ export function FileTree({
     });
   }, [selected]);
 
+  const choose = (id: string) => {
+    if (folders.has(id)) {
+      setExpanded((now) => {
+        const next = new Set(now);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    } else if (id !== selected) {
+      onOpen(id);
+    }
+  };
+
   const renderNode = (node: TreeNode) => (
     <TreeItem
       key={node.id}
       id={node.id}
-      textValue={node.name}
+      // The row's accessible name: what it is, then whether it's the open file and has unsaved changes.
+      textValue={[
+        node.name,
+        ...(node.id === selected ? ['open in the editor'] : []),
+        ...(unsaved.has(node.id) ? ['unsaved changes'] : []),
+      ].join(', ')}
       className={classNames(styles.item)}
-      data-unsaved={unsaved.has(node.id) ? '' : undefined}
+      data-current={node.id === selected ? '' : undefined}
     >
       <TreeItemContent>
         {({ isExpanded }) => (
@@ -90,9 +108,7 @@ export function FileTree({
               )}
             </span>
             <span className={styles.name}>{node.name}</span>
-            {unsaved.has(node.id) && (
-              <span className={styles.unsaved} role="img" aria-label="unsaved changes" />
-            )}
+            {unsaved.has(node.id) && <span className={styles.unsaved} aria-hidden="true" />}
           </div>
         )}
       </TreeItemContent>
@@ -108,22 +124,17 @@ export function FileTree({
         aria-label={ariaLabel}
         className={classNames(styles.tree, className)}
         items={tree}
-        selectionMode="single"
-        selectedKeys={selected === undefined ? [] : [selected]}
+        // React Aria caches each row by its item; these change a row's name and look, so rows re-render with them.
+        dependencies={[selected, unsaved]}
+        // No selection: a click or Enter always acts (a file opens, a folder opens or closes) and the arrow keys only
+        // move. With selection, React Aria turns clicks into selection changes once something is selected, or makes
+        // arrows select as they move (found by the Code view's test, phase 3 step 5). The open file is marked in
+        // its name and by data-current instead.
+        selectionMode="none"
         expandedKeys={expanded}
         onExpandedChange={setExpanded}
         onAction={(key) => {
-          const id = String(key);
-          if (folders.has(id)) {
-            setExpanded((now) => {
-              const next = new Set(now);
-              if (next.has(id)) next.delete(id);
-              else next.add(id);
-              return next;
-            });
-          } else {
-            onOpen(id);
-          }
+          choose(String(key));
         }}
         renderEmptyState={() => <p className={styles.empty}>No files yet.</p>}
       >

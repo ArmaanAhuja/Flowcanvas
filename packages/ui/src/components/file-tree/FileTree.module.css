@@ -20,7 +20,7 @@
   background: var(--color-surface-hover);
 }
 
-.item[data-selected] {
+.item[data-current] {
   background: var(--color-surface-selected);
   color: var(--color-text-primary);
 }
@@ -45,7 +45,7 @@
   color: var(--color-text-tertiary);
 }
 
-.item[data-selected] .icon {
+.item[data-current] .icon {
   color: var(--color-text-primary);
 }
 
