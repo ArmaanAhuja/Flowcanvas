@@ -1,6 +1,6 @@
 {
   "name": "flowcanvas",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "Canvas-first, AI-native development environment (working name)",
   "type": "module",
@@ -18,6 +18,7 @@
     "lint": "turbo run lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "size": "pnpm --filter @flowcanvas/web size",
     "test:visual": "turbo run build-storybook --filter=@flowcanvas/ui && turbo run build --filter=@flowcanvas/web && pnpm --filter @flowcanvas/e2e --fail-if-no-match test:visual",
     "test:visual:update": "turbo run build-storybook --filter=@flowcanvas/ui && turbo run build --filter=@flowcanvas/web && pnpm --filter @flowcanvas/e2e --fail-if-no-match test:visual --update-snapshots",
     "corpus:check": "pnpm --filter @flowcanvas/corpus --fail-if-no-match check",

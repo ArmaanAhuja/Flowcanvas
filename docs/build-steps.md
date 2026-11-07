@@ -10685,7 +10685,7 @@ Both themes; 1440 × 900, checked at 1280 × 800.
 | 6 | Real content: project, workspace chip and popover, the terminal in the bottom dock; empty states | done (Claude, 7 Nov) |
 | 7 | The 500-node performance test, with its numbers | done (Claude, 7 Nov; real window with the owner's approval) |
 | 8 | Baselines, the Try it walkthrough, and the Figma 06 differences list (decision A5) | done (Claude, 7 Nov) |
-| 9 | Close: report, 0.6.0, PR | *next* |
+| 9 | Close: report, 0.6.0, PR | done (Claude, 7 Nov) |
 
 ### How each Done-when item is proven
 
@@ -10702,7 +10702,7 @@ Both themes; 1440 × 900, checked at 1280 × 800.
 | R1 | A library injects inline styles, which our CSP blocks (as xterm.js did) | Step 1 checks both under the deployed CSP before anything is built on them | **closed (step 1):** no violations; React Flow uses a static CSS file, the panels constructed stylesheets |
 | R2 | 500 nodes aren't smooth (React Flow renders DOM nodes) | Measured in step 1. Memoised node components keep each frame light. A WebGL layer is the build plan's later answer | **mostly closed (step 7):** in a real window, panning and overview zoom at the target, 0 long tasks. Zooming in close is still at p95 about 33 ms: a known issue, fixed by the build plan's phase 42 (the WebGL renderer). **Step 1:** main thread at 60 fps with 500 nodes, worst frame 33 ms, no long tasks |
 | R3 | Frame times on CI aren't meaningful (no GPU, shared cores) | Laptop numbers decide; CI only catches large regressions | **closed (step 7):** `PERF_REAL=1` on the laptop decides; CI's `perf` job runs it headless with loose limits |
-| R4 | Laptop: Chromium in the performance test | Light; checked every step | open |
+| R4 | Laptop: Chromium in the performance test | Light; checked every step | **closed (step 9):** all five checks ok in every step |
 
 ### Step 2.1 — Spike: React Flow and the panels under our CSP; 500 nodes (done by Claude, ADR 0020)
 
@@ -11157,7 +11157,7 @@ pnpm test:perf               # headless, as on CI
 - **Baselines catch change; they don't prove a match.** A baseline is what we approved, not Figma. The match with Figma is the geometry test plus the owner's review against the differences list.
 - **Several web servers in one config.** Playwright's `webServer` takes a list, and each project gets its own `baseURL`. https://playwright.dev/docs/test-webserver#multiple-web-servers
 
-**Found in Figma (a question for the owner):** on Figma 06 only, the review bar is at the top (y 40). Every other screen, the generator script and the brief put it at the bottom, which is what's built. Recommendation: keep it at the bottom.
+**Found in Figma:** on Figma 06 only, the review bar is at the top (y 40). Every other screen, the generator script and the brief put it at the bottom, which is what's built. **Owner, 7 Nov: it stays at the bottom** (decisions log).
 
 **Run and check it:**
 ```fish
@@ -11178,3 +11178,57 @@ Then open `docs/reports/phase-2-figma-06-differences.md` and compare `docs/repor
 - R4 (laptop): all five checks ok. The visual run uses one Docker container, which is removed when it ends.
 
 **Commit:** `test(visual): the project page's screens in both themes; Figma 06 differences; the theme follows you onto a project`
+
+### Step 2.9 — Close the phase: report, 0.6.0, the two due upgrades, PR (done by Claude)
+
+**Goal:** finish phase 2 so it can be reviewed and accepted: the two upgrade-later items that were due, the report, the release, and the pull request.
+
+**Upgrade-later 4, the web app's TypeScript settings split:**
+- `apps/web/tsconfig.json` is now a **solution file** that only lists three projects:
+  - `tsconfig.app.json`: the browser code. DOM and Vite's types, **no Node**, tests excluded.
+  - `tsconfig.node.json`: `vite.config.ts`, `scripts/`, and the changelog parser they share with the app. Node, no DOM.
+  - `tsconfig.test.json`: all of `src` with Node too, because tests run in Node under Vitest (one reads `CHANGELOG.md` from disk).
+- `pnpm typecheck` runs `tsc -b --noEmit`, which checks all three. Each needs `composite` (required for project references) and keeps its build info in `node_modules/.cache`.
+- **Proven:** a throwaway `process.env.HOME` in browser code fails the typecheck ("Cannot find name 'process'"). Under the old settings it passed, because Node's types applied everywhere.
+- **Concept, project references:** one folder, several sets of rules, each file checked under the rules of where it runs. ESLint's project service and Vite both understand the solution file. https://www.typescriptlang.org/docs/handbook/project-references.html
+
+**Upgrade-later 18, the bundle-size budget:**
+- `apps/web/scripts/bundle-size.ts` (run with `pnpm size` after a build), with no new dependency:
+  - **first load** is what `dist/index.html` loads: its script, preloads and stylesheets
+  - each **lazy chunk** is counted by name: the project page, the terminal
+  - everything is measured gzipped, as a browser downloads it
+- Budgets are set about 10% above today's sizes: first load 149.4 kB of 160 (with 0.6.0's changelog in it), the project page 82.3 of 95, the terminal 86.0 of 95.
+- Over budget, it fails and names the part. To raise a budget, change it in the script, in the same commit, and say why.
+- **CI** runs it after the build, and writes the table to the job's summary page.
+- **Proven:** with the project page's budget set to 50 kB, it failed with exit 1, "Over budget: ProjectPage".
+
+**Release:** `0.6.0` in `package.json` and `CHANGELOG.md` (What's new shows it); `docs/reports/phase-2.md`; `docs/STATUS.md` says "in review".
+
+**Phase 2 — run and check it (fresh clone):**
+```fish
+git clone https://github.com/ArmaanAhuja/Flowcanvas && cd Flowcanvas
+corepack enable && pnpm install
+cp .dev.vars.example .dev.vars          # then fill in your own values (never paste them anywhere)
+pnpm db:status && pnpm db:migrate       # must say the dev branch
+pnpm dev                                # http://localhost:5173
+```
+1. Sign in and click a project's name: its page opens at `/p/<id>`. Compare it with `docs/reports/phase-2/figma-06.png`.
+2. **Labs → Canvas stress test:** 500 example nodes and a banner saying they're examples.
+3. Scroll to pan, Ctrl + scroll to zoom, **F** to fit; click or drag a box to select.
+4. Collapse the panels from the rail and the top bar, and try full screen. Drag a panel's edge. Reload: the layout is kept.
+5. Click the workspace chip; open the workspace, then **Terminal** in the rail.
+
+**What proves it:**
+```fish
+pnpm test               # 632
+pnpm test:e2e           # 15 walkthroughs, recorded; phase 2's five among them
+pnpm test:visual        # 90 screenshots and axe, in Playwright's Docker image
+PERF_REAL=1 pnpm test:perf   # the 500 nodes in a real window (opens a browser for about 30 s)
+pnpm size               # after pnpm build: the bundle budgets
+```
+
+**Risks, closed:**
+- R2 is accepted with a known issue: close zoom, fixed by phase 42 (owner, 7 Nov).
+- R4 (laptop): all five checks ok throughout.
+
+**Commit:** `chore(release): phase 2 report, 0.6.0, in review; web TypeScript split and bundle budget`

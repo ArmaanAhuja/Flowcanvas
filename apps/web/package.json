@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "size": "node scripts/bundle-size.ts",
+    "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
     "lint": "eslint . && stylelint \"src/**/*.css\""
   },

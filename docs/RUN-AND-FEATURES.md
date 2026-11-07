@@ -2,9 +2,9 @@
 
 The one place to see how to run Flowcanvas, how to test it, and which features exist so far. It's updated at every build step. Details for each step live in `docs/build-steps.md`; phase status in `docs/STATUS.md`; how it's put together in `ARCHITECTURE.md`.
 
-- **Last updated:** 7 Nov 2026, phase 2 step 8 (branch `phase/2-canvas-app-shell`)
-- **Released (on staging):** `0.5.0`, phase 1d
-- **Progress:** phases 1, 1a, 1b and 1c are accepted; 1d is in review; phase 2 is in progress. That's 5 of the build plan's 96 phases. Stage 0's goal: open a repository in a workspace, see it on a canvas, edit it, and answer "what calls this?"
+- **Last updated:** 7 Nov 2026, phase 2 step 9: `0.6.0`, in review (branch `phase/2-canvas-app-shell`, pull request open)
+- **Released (on staging):** `0.5.0`, phase 1d. `0.6.0` (phase 2) reaches staging when its pull request merges
+- **Progress:** phases 1, 1a, 1b and 1c are accepted; 1d and 2 are in review. That's 6 of the build plan's 96 phases. Stage 0's goal: open a repository in a workspace, see it on a canvas, edit it, and answer "what calls this?"
 
 ## Where it runs
 
@@ -52,10 +52,11 @@ If the host can't start, its log line says why: the token, Docker, or another `p
 | `pnpm test:perf` | The canvas with 500 nodes, panned and zoomed: frame times, long tasks, input to paint. Headless (as on CI) only catches large regressions; `PERF_REAL=1 pnpm test:perf` opens a real window on your GPU for about 30 s, which is what decides | about 30 s |
 | `pnpm test:visual` | 90 screenshots in both themes against approved baselines, plus accessibility checks (axe): every catalogue story, and the project page's screens (empty, 1280 × 800, 500 nodes, review open, full screen, workspace popover) | about 2 min |
 | `pnpm --filter @flowcanvas/control-plane test:idle-real` | The 10-minute idle sleep in real time, nothing faked | about 12 min |
+| `pnpm size` | After `pnpm build`: the web bundle against its budgets (first load, the project page, the terminal) | instant |
 | `pnpm workspace:resources` | Your laptop against Flowcanvas's budget | instant |
 | `pnpm workspace:clean` | Removes test leftovers and old workspace images; `--all --yes` removes everything of Flowcanvas's | — |
 
-CI runs the checks, Docker, visual, canvas performance (headless) and walkthrough jobs on every pull request and every merge to `main`.
+CI runs the checks (with the bundle budget), Docker, visual, canvas performance (headless) and walkthrough jobs on every pull request and every merge to `main`.
 
 ## Features, and how far each is built
 
@@ -87,7 +88,7 @@ CI runs the checks, Docker, visual, canvas performance (headless) and walkthroug
 - ⬜ **Backups and restore history** (18a).
 - ⬜ **Running on your own computer from the hosted site** (48a).
 
-### The project page and the canvas (phase 2, in progress)
+### The project page and the canvas (phase 2, in review)
 - 🟡 **A project's own page** (`/p/<id>`) in the app shell, at Figma 06's sizes (tested to within 1/64 px at 1440 × 900 and 1280 × 800):
   - top bar
   - rail
@@ -121,7 +122,7 @@ CI runs the checks, Docker, visual, canvas performance (headless) and walkthroug
 - ✅ **A strict security policy:** no inline scripts or styles, previews per pull request, and telemetry off.
 
 ### Coming next
-- **Rest of phase 2:** closing the phase (report, 0.6.0, pull request).
+- **Phase 2:** your acceptance (report: `docs/reports/phase-2.md`).
 - **Phase 3:** the editor (Monaco), synced to the workspace, with autosave.
 - **Phase 4:** the indexer: every file parsed, symbols searchable in under 100 ms.
 - **Phase 5:** TypeScript call graphs: callers and callees.

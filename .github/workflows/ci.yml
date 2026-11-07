@@ -50,6 +50,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - name: Web bundle within its budget
+        run: pnpm --filter @flowcanvas/web size
       # The pinned test repos: public forks, commits on their branches, licences unchanged (corpus/manifest.json).
       - run: pnpm corpus:check
         env:

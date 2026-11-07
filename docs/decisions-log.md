@@ -385,3 +385,9 @@ GitHub Actions never ran on `ArmaanAhuja-7777` because of the account billing lo
 **Asked:** the 500-node test meets "smooth" everywhere except zooming in close (100% to 200%), where nodes enter and leave the page and the 95th-percentile frame is about 33 ms (target under 25 ms). Fix it now, or accept it?
 
 **Decided:** accepted as a **known issue** in the phase 2 report. The build plan's **phase 42** (the WebGL renderer with level of detail) is what fixes it. It's not an upgrade-later entry, because it's already planned. The performance test keeps its own, named limit for that one scene (`CLOSE_ZOOM_LIMITS`), so it can't get worse unnoticed.
+
+## 7 Nov 2026: the review bar stays at the bottom (owner decision)
+
+**Asked:** Figma 06, alone among the screens, has the review bar at the top (under the top bar). Every other screen, the generator script and the design brief have it at the bottom.
+
+**Decided:** **at the bottom**, as built. Figma 06's position is treated as a one-off; when the Figma file is next regenerated from the script, it will match.
