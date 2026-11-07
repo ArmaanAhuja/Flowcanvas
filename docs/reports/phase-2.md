@@ -3,7 +3,7 @@
 - Version: `0.6.0`
 - Branch: `phase/2-canvas-app-shell`; PR: see `docs/STATUS.md`
 - Dates: 7 Nov 2026
-- Status: **in review**, waiting for the owner's acceptance.
+- Status: **accepted** by the owner on 7 Nov 2026. Merged in PR #15 (`14d1c2e`).
 
 ## From the build plan
 

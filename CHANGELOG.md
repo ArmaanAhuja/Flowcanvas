@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
-## [0.6.0] — 2026-11-07 — Phase 2: canvas and app shell (in review)
+## [0.6.0] — 2026-11-07 — Phase 2: canvas and app shell
 
 A project now opens on its own page, laid out like the Figma design: a top bar, a rail of tools, side panels, the canvas and a review bar. The canvas is empty until a project is analysed (the next stage); the Labs switch **Canvas stress test** fills it with 500 example nodes.
 

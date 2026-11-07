@@ -2,9 +2,9 @@
 
 The one place to see how to run Flowcanvas, how to test it, and which features exist so far. It's updated at every build step. Details for each step live in `docs/build-steps.md`; phase status in `docs/STATUS.md`; how it's put together in `ARCHITECTURE.md`.
 
-- **Last updated:** 7 Nov 2026, phase 2 step 9: `0.6.0`, in review (branch `phase/2-canvas-app-shell`, pull request open)
-- **Released (on staging):** `0.5.0`, phase 1d. `0.6.0` (phase 2) reaches staging when its pull request merges
-- **Progress:** phases 1, 1a, 1b and 1c are accepted; 1d and 2 are in review. That's 6 of the build plan's 96 phases. Stage 0's goal: open a repository in a workspace, see it on a canvas, edit it, and answer "what calls this?"
+- **Last updated:** 7 Nov 2026: phase 2 accepted and merged (PR #15); phase 3 planning (branch `phase/3-open-repo-and-edit`)
+- **Released (on staging):** `0.6.0`, phase 2
+- **Progress:** phases 1, 1a, 1b, 1c and 2 are accepted; 1d is in review; phase 3 is being planned. That's 6 of the build plan's 96 phases. Stage 0's goal: open a repository in a workspace, see it on a canvas, edit it, and answer "what calls this?"
 
 ## Where it runs
 
@@ -88,7 +88,7 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 - ⬜ **Backups and restore history** (18a).
 - ⬜ **Running on your own computer from the hosted site** (48a).
 
-### The project page and the canvas (phase 2, in review)
+### The project page and the canvas (phase 2)
 - 🟡 **A project's own page** (`/p/<id>`) in the app shell, at Figma 06's sizes (tested to within 1/64 px at 1440 × 900 and 1280 × 800):
   - top bar
   - rail
@@ -122,7 +122,6 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 - ✅ **A strict security policy:** no inline scripts or styles, previews per pull request, and telemetry off.
 
 ### Coming next
-- **Phase 2:** your acceptance (report: `docs/reports/phase-2.md`).
 - **Phase 3:** the editor (Monaco), synced to the workspace, with autosave.
 - **Phase 4:** the indexer: every file parsed, symbols searchable in under 100 ms.
 - **Phase 5:** TypeScript call graphs: callers and callees.
