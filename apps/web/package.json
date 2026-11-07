@@ -16,8 +16,10 @@
     "@flowcanvas/ui": "workspace:*",
     "@xterm/addon-fit": "catalog:",
     "@xterm/xterm": "catalog:",
+    "@xyflow/react": "catalog:",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "react-resizable-panels": "catalog:"
   },
   "devDependencies": {
     "@testing-library/dom": "catalog:",

@@ -10677,8 +10677,8 @@ Both themes; 1440 × 900, checked at 1280 × 800.
 | # | Step | Status |
 | --- | --- | --- |
 | 0 | Record 1d's after-merge checks; the decisions; upgrade-later 40; branch | done (Claude, 7 Nov) |
-| 1 | Spike: React Flow and `react-resizable-panels` under the strict CSP; a first frame-time measurement with 500 nodes. ADR 0020 | *next* |
-| 2 | The project page (`/p/:id`) and the shell skeleton at Figma's sizes, with the geometry test | *planned* |
+| 1 | Spike: React Flow and `react-resizable-panels` under the strict CSP; a first frame-time measurement with 500 nodes. ADR 0020 | done (Claude, 7 Nov) |
+| 2 | The project page (`/p/:id`) and the shell skeleton at Figma's sizes, with the geometry test | *next* |
 | 3 | Shell components in the design system: top bar, rail, collapsible panel, review bar (catalogue and baselines) | *planned* |
 | 4 | Panels: collapse, resize, keyboard control; the layout remembered per browser; full-screen canvas | *planned* |
 | 5 | The canvas: dot grid, pan, zoom, minimap, selection, zoom controls, fit; `FlowNode` as a node type | *planned* |
@@ -10699,8 +10699,55 @@ Both themes; 1440 × 900, checked at 1280 × 800.
 
 | # | Risk | How we keep it in check | Status |
 | --- | --- | --- | --- |
-| R1 | A library injects inline styles, which our CSP blocks (as xterm.js did) | Step 1 checks both under the deployed CSP before anything is built on them | open: step 1 |
-| R2 | 500 nodes aren't smooth (React Flow renders DOM nodes) | Measured in step 1. React Flow renders only what's visible, and memoised node components keep each frame light. A WebGL layer is the build plan's later answer | open: step 1 |
+| R1 | A library injects inline styles, which our CSP blocks (as xterm.js did) | Step 1 checks both under the deployed CSP before anything is built on them | **closed (step 1):** no violations; React Flow uses a static CSS file, the panels constructed stylesheets |
+| R2 | 500 nodes aren't smooth (React Flow renders DOM nodes) | Measured in step 1. Memoised node components keep each frame light. A WebGL layer is the build plan's later answer | open: step 7 (painting with a GPU). **Step 1:** main thread at 60 fps with 500 nodes, worst frame 33 ms, no long tasks |
 | R3 | Frame times on CI aren't meaningful (no GPU, shared cores) | Laptop numbers decide; CI only catches large regressions | open: step 7 |
 | R4 | Laptop: Chromium in the performance test | Light; checked every step | open |
+
+### Step 2.1 — Spike: React Flow and the panels under our CSP; 500 nodes (done by Claude, ADR 0020)
+
+**Goal:** before building on two new libraries, prove they work under our Content-Security-Policy, and get a first measure of 500 nodes.
+
+**Concepts:**
+- **What our CSP blocks, and what it doesn't.**
+  - `style-src 'self'` blocks `<style>` elements and `style="…"` attributes in markup.
+  - It allows stylesheet files from our own origin, styles set from script (`element.style.x = …`, which is how React applies `style={…}`), and *constructed stylesheets* (`new CSSStyleSheet()`, `adoptedStyleSheets`).
+  - So the question for each library is whether it creates style elements.
+  - https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/style-src
+- **Main thread versus painting.**
+  - `requestAnimationFrame` fires once per main-thread frame, so its timing shows JavaScript and layout.
+  - The picture is painted later, by the compositor. In headless Chromium that happens in software, with no GPU.
+  - A page can tick at 60 fps on the main thread and still paint slowly. Long tasks (`PerformanceObserver` `longtask`, over 50 ms) show main-thread blocking.
+  - https://developer.mozilla.org/en-US/docs/Web/API/PerformanceLongTaskTiming
+- **Release age.** For a dependency that publishes daily, take a release that has been out for a while: it has had time to be reported if broken or compromised.
+
+**What was done:**
+1. Added `@xyflow/react` 12.12.0 (24 Sep) and `react-resizable-panels` 4.14.8 (20 Oct) to the catalog and the web app. Both are MIT, with no install scripts; React Flow brings `zustand`, `classcat` and `@xyflow/system`.
+2. **Read their built code** for style injection:
+   - React Flow: none in the ESM build. `innerHTML` appears only in its UMD builds, which Vite doesn't use.
+   - The panels: constructed stylesheets only.
+3. **A temporary spike page** (`#spike`, never committed): 500 `FlowNode`s in React Flow, with a minimap, controls and a dot grid, inside resizable panels. It was built, then checked by Playwright under the production headers.
+
+**Results:**
+- **CSP violations: none. Console errors: none.** React Flow's own stylesheet loads (the minimap is positioned).
+- **Frames:**
+
+  | Fast pan and zoom (300 moves, 40 wheel steps) | Median, p95, worst frame | Long tasks | Input time |
+  | --- | --- | --- | --- |
+  | 0 nodes | 16.7, 16.7, 16.8 ms | none | 6.4 s |
+  | 500 nodes | 16.7, 16.8, 33.4 ms (60 fps) | none | 11.8 s |
+
+  The main thread handles 500 nodes easily. The longer input time comes from Playwright waiting for each event to be painted, in software. Step 7 measures painting in a real window with a GPU.
+
+**Gotchas:**
+- **The try-it walkthroughs run with `slowMo: 500`** (half a second before each action, so the videos can be followed). The first timings measured that pause: 40 mouse moves took 20 s even on the plain projects page. Turn it off for anything timed.
+- **A sorting script reordered the catalog.** Adding entries by sorting the whole list moved existing lines and dropped a blank line. Insert only the new lines, and check `git diff` shows just them.
+
+**Docs:** this write-up; ADR 0020; risks R1 (closed) and R2.
+
+**Risks:**
+- R1 closed. R2: main thread proven, painting in step 7.
+- **Laptop:** all five checks ok (24.1 GiB memory available, 578 GiB disk free, load 0.7).
+
+**Commit:** `build(web): React Flow 12 and react-resizable-panels, checked under the CSP (ADR 0020)`
 
