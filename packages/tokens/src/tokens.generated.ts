@@ -110,6 +110,7 @@ export const vars = {
       "comfortable": "var(--size-row-comfortable)"
     },
     "bar": "var(--size-bar)",
+    "editor-tab": "var(--size-editor-tab)",
     "rail": "var(--size-rail)",
     "panel": {
       "left": "var(--size-panel-left)",
@@ -394,6 +395,7 @@ export const baseValues = {
   "--size-row-compact": "28px",
   "--size-row-comfortable": "32px",
   "--size-bar": "40px",
+  "--size-editor-tab": "36px",
   "--size-rail": "44px",
   "--size-panel-left": "248px",
   "--size-panel-right": "360px",

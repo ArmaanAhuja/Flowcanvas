@@ -26,7 +26,7 @@
   },
   "text": {
     "$type": "typography",
-    "$description": "Text styles from the Figma file (Display \u2026 Mono small)",
+    "$description": "Text styles from the Figma file (Display … Mono small)",
     "display": {
       "$value": {
         "fontFamily": "{font.family.sans}",
@@ -321,6 +321,13 @@
         "unit": "px"
       },
       "$description": "Top bar and review bar"
+    },
+    "editor-tab": {
+      "$description": "Editor tab height (Figma 11: 36 px, on the 4 px grid)",
+      "$value": {
+        "value": 36,
+        "unit": "px"
+      }
     },
     "rail": {
       "$value": {

@@ -2,7 +2,7 @@
 
 The one place to see how to run Flowcanvas, how to test it, and which features exist so far. It's updated at every build step. Details for each step live in `docs/build-steps.md`; phase status in `docs/STATUS.md`; how it's put together in `ARCHITECTURE.md`.
 
-- **Last updated:** 7 Nov 2026, phase 3 step 3: the file watcher and its events channel (branch `phase/3-open-repo-and-edit`)
+- **Last updated:** 8 Nov 2026, phase 3 step 4: the editor's components in the catalogue (branch `phase/3-open-repo-and-edit`)
 - **Released (on staging):** `0.6.0`, phase 2
 - **Progress:** phases 1, 1a, 1b, 1c and 2 are accepted; 1d is in review; phase 3 is being planned. That's 6 of the build plan's 96 phases. Stage 0's goal: open a repository in a workspace, see it on a canvas, edit it, and answer "what calls this?"
 
@@ -45,12 +45,12 @@ If the host can't start, its log line says why: the token, Docker, or another `p
 
 | Command | What it checks | Time |
 | --- | --- | --- |
-| `pnpm test` | 677 unit and component tests, with no Docker or network | about 20 s |
+| `pnpm test` | 694 unit and component tests, with no Docker or network | about 20 s |
 | `pnpm lint`, `pnpm typecheck`, `pnpm format:check` | Lint (with the design-token rules), strict TypeScript, formatting | — |
 | `pnpm test:docker` | 46 tests against real containers: isolation, the network allowlist, clone time, sleep and resume, the guard, no secret kept anywhere, and (phase 3) the file list, a save refused after a terminal edit, the journal surviving a restart, and a terminal edit reaching the page's events socket in about 160 ms. Needs Docker 28+ and the internet | about 1 min |
 | `pnpm test:e2e` | 15 recorded walkthroughs of each phase's *Try it*, under the production security policy (1 needs a real API: CI, or a running `pnpm dev`) | about 40 s |
 | `pnpm test:perf` | The canvas with 500 nodes, panned and zoomed: frame times, long tasks, input to paint. Headless (as on CI) only catches large regressions; `PERF_REAL=1 pnpm test:perf` opens a real window on your GPU for about 30 s, which is what decides | about 30 s |
-| `pnpm test:visual` | 90 screenshots in both themes against approved baselines, plus accessibility checks (axe): every catalogue story, and the project page's screens (empty, 1280 × 800, 500 nodes, review open, full screen, workspace popover) | about 2 min |
+| `pnpm test:visual` | 106 screenshots in both themes against approved baselines, plus accessibility checks (axe): every catalogue story, and the project page's screens (empty, 1280 × 800, 500 nodes, review open, full screen, workspace popover) | about 2 min |
 | `pnpm --filter @flowcanvas/control-plane test:idle-real` | The 10-minute idle sleep in real time, nothing faked | about 12 min |
 | `pnpm size` | After `pnpm build`: the web bundle against its budgets (first load, the project page, the terminal) | instant |
 | `pnpm workspace:resources` | Your laptop against Flowcanvas's budget | instant |
@@ -123,6 +123,7 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
   - Button, Tag, Input, Toggle, Menu, Tooltip, Tabs
   - Panel, Popover, Flow node, Workspace status
   - Top bar, Rail, Review bar, Canvas toolbar
+  - Editor tabs, File tree, Breadcrumb, Status bar (phase 3)
   - all in the catalogue
 - ✅ **What's new** (from the CHANGELOG), Labs switches (the first: Canvas stress test), and the build's version and commit on the page.
 - ✅ **A strict security policy:** no inline scripts or styles, previews per pull request, and telemetry off.

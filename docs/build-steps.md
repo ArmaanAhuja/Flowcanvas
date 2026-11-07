@@ -11282,8 +11282,8 @@ pnpm size               # after pnpm build: the bundle budgets
 | 1 | Spike: an editor under our CSP, and its size (Monaco, CodeMirror 6 and Ace compared; CodeMirror 6 chosen); the watcher's cost with Rallly's `node_modules`. ADR 0021 | done (Claude, 7 Nov) |
 | 2 | Agent: file list, versioned read and write, conflicts, journal operations | done (Claude, 7 Nov) |
 | 3 | The watcher and the events channel: agent → host → control plane WebSocket | done (Claude, 7 Nov) |
-| 4 | UI components: EditorTabs, FileTree, StatusBar, Breadcrumb (catalogue and baselines) | *next* |
-| 5 | The Code view: tree, CodeMirror in a shadow root, tabs, save, undo; binary, large and secret states; canvas shortcuts through shadow roots | *planned* |
+| 4 | UI components: EditorTabs, FileTree, StatusBar, Breadcrumb (catalogue and baselines) | done (Claude, 8 Nov) |
+| 5 | The Code view: tree, CodeMirror in a shadow root, tabs, save, undo; binary, large and secret states; canvas shortcuts through shadow roots | *next* |
 | 6 | Saving: autosave, the journal (workspace and IndexedDB), restore on reopen | *planned* |
 | 7 | Changes on disk (reload or banner) and quick-open | *planned* |
 | 8 | Walkthrough, screen baselines, Figma 11 differences, editor bundle budget | *planned* |
@@ -11443,3 +11443,52 @@ The logs record the operation and outcome only, never paths or content (tested w
 - **Laptop:** all five checks ok (load 12.3 of 14.4 right after a unit-test run, so the heavy suites ran one at a time). Test workspaces only; nothing was left behind.
 
 **Commit:** `feat(workspace): the file watcher and its events WebSocket, checked at every hop (ADR 0022)`
+
+### Step 3.4 — The editor's components in the design system (done by Claude)
+
+**Goal:** build the Code view's pieces in `packages/ui` first, with their variants, catalogue stories, screenshot baselines and accessibility checks, before any screen uses them (CLAUDE.md section 10, components first).
+
+| Component | What | Built on | Accessibility |
+| --- | --- | --- | --- |
+| `EditorTabs` | Open files: the shown one on the canvas surface, a neutral dot for unsaved changes, a close button (shown on hover or focus), middle click closes, scrolls sideways and keeps the shown tab in view | Our own markup | A `nav` of buttons; the shown one is `aria-current`; "unsaved changes" is in the name ("process.ts, unsaved changes"), not only the dot. Not ARIA tabs, because a tab list may hold only tabs |
+| `FileTree` | The project's files from the flat list `/tree` gives (`buildTree`): folders first, names ignoring case, numbers in order; reveals and selects the shown file; dots for unsaved files | React Aria `Tree` in a `Virtualizer` (only rows in view are in the page) | The WAI-ARIA tree grid: arrows move and open or close, Enter opens, levels announced, "unsaved changes" as a labelled image |
+| `Breadcrumb` | A path above the editor; long ones cut in the middle (`apps / … / polls / create / poll-form.tsx`), whole on hover | Semantic `nav` and `ol` | The last segment is `aria-current="location"`; chevrons hidden |
+| `StatusBar` | Items on the left (line and column, indentation, encoding, language), extras on the right (the autosave switch) | A plain bar | A named group, deliberately not a live region (it changes with every cursor move) |
+
+**New token:** `size.editor-tab` = 36 px (Figma 11's tab height, on the 4 px grid).
+
+**Concepts:**
+- **Components first.** A component is built and reviewed alone, in every state, then used. Problems are cheaper to see in the catalogue than in a busy screen.
+- **The tree-grid pattern.** A tree whose rows can also be acted on. React Aria implements the keyboard model and the ARIA attributes, which are easy to get subtly wrong. https://www.w3.org/WAI/ARIA/apg/patterns/treegrid/
+- **Virtualisation.** Only the visible rows exist in the page; the rest are computed when scrolled into view. That keeps 50,000 files fast. https://react-spectrum.adobe.com/react-aria/Virtualizer.html
+- **Label in name (WCAG 2.5.3).** An accessible name that differs from the visible text must start with it, so "process.ts, unsaved changes" is fine for a tab showing "process.ts".
+
+**Figma 11 differences (for the step 8 list):**
+- **Spacing onto Graphite's 4 px grid:** tab padding 14 → 12 and gap 6 → 8; tree indent 14 → 12; breadcrumb sides 20 → 16; status bar 26 → 28 tall.
+- **Text in `text/muted`, not Figma's `text/tertiary`,** which Graphite keeps for icons and lines (contrast).
+- **The tab and tree dots are neutral:** they mean "unsaved". Figma's amber and green show git change state, which arrives with change capture (stage 3).
+- **No error count in the status bar** until phase 33 (owner, 7 Nov); the autosave switch is there instead.
+- **No flow tag on the breadcrumb yet** (`flow · Save item`): flows arrive in stage 1.
+
+**Tests:**
+- 17 new unit tests:
+  - the tree model's order and nesting, and 50,000 paths in under a second
+  - the tree's mouse and keyboard behaviour, reveal and selection, the unsaved label, and the empty state
+  - the tabs' names, current tab, close, middle click, keyboard reach, and keeping the shown tab in view
+  - the breadcrumb's middle cut and current location
+  - the status bar not being a live region
+- **Mutation-checked:** disabling the reveal fails 2 tests.
+- **16 new screenshot baselines** (8 stories in both themes), all passing axe.
+
+**Results:** `pnpm test` 694 passed; `pnpm test:visual` 106 passed (78 catalogue stories plus the 16 new, and 12 screens); lint, typecheck and format clean; the bundle unchanged (nothing uses the components yet).
+
+**Gotchas:**
+- **jsdom has no layout:** the virtualiser renders no rows unless the test gives elements a size (`clientWidth` and `clientHeight`), and there's no `scrollIntoView`. Both are stubbed in the tests, never guarded in the component.
+- **`rowHeight` is deprecated** in this React Aria version; it's `rowSize`. Lint caught it.
+- **Baselines for new stories only:** `--update-snapshots=missing` creates missing ones and never overwrites an approved one.
+- **One unexplained visual failure.** The first full run ended with 105 passed and a failure exit, and its log wasn't kept; two full runs after it passed 106 of 106. To watch.
+
+**Risks:**
+- **Laptop:** all five checks ok. The visual runs use one Docker container at a time.
+
+**Commit:** `feat(ui): EditorTabs, FileTree, Breadcrumb and StatusBar for the Code view, catalogued with baselines`

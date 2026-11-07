@@ -1,0 +1,80 @@
+/*
+ * Figma 11 file tree: 28 px rows (Graphite compact), radius 4, a 14 px icon, the name in Mono small; the shown
+ * file on surface/selected in primary text. Each level indents 12 px (Figma's 14, onto the 4 px grid).
+ */
+.tree {
+  block-size: 100%;
+  overflow: auto;
+  outline: none;
+}
+
+.item {
+  box-sizing: border-box;
+  border-radius: var(--radius-control);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  outline: none;
+}
+
+.item[data-hovered] {
+  background: var(--color-surface-hover);
+}
+
+.item[data-selected] {
+  background: var(--color-surface-selected);
+  color: var(--color-text-primary);
+}
+
+.item[data-focus-visible] {
+  outline: var(--border-width-focus) solid var(--color-accent-solid);
+  outline-offset: calc(-1 * var(--border-width-focus));
+}
+
+.row {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+  block-size: var(--size-row-compact);
+  padding-inline: calc(var(--space-8) + (var(--tree-item-level) - 1) * var(--space-12))
+    var(--space-8);
+}
+
+.icon {
+  display: grid;
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+
+.item[data-selected] .icon {
+  color: var(--color-text-primary);
+}
+
+.name {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  font-weight: var(--text-mono-small-font-weight);
+  line-height: var(--text-mono-small-line-height);
+  letter-spacing: var(--text-mono-small-letter-spacing);
+}
+
+.unsaved {
+  flex: none;
+  inline-size: var(--space-8);
+  block-size: var(--space-8);
+  margin-inline-start: auto;
+  border-radius: var(--space-8);
+  background: var(--color-text-secondary);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-8);
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  line-height: var(--text-small-line-height);
+  color: var(--color-text-muted);
+}
