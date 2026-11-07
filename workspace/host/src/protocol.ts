@@ -70,6 +70,11 @@ export const PATHS = {
    */
   terminal: (ref: string, cols: number, rows: number) =>
     `/${PROTOCOL_VERSION}/workspaces/${encodeURIComponent(ref)}/terminal?cols=${String(cols)}&rows=${String(rows)}`,
+  /**
+   * A WebSocket (phase 3): the project's file watcher. Text frames only, one checked WatchEvent each
+   * (@flowcanvas/workspace-agent/protocol), from the host; the page sends nothing.
+   */
+  events: (ref: string) => `/${PROTOCOL_VERSION}/workspaces/${encodeURIComponent(ref)}/events`,
 } as const;
 
 export function isHostErrorKind(value: unknown): value is HostErrorKind {

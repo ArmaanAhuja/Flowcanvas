@@ -335,3 +335,74 @@ export function isAgentResponse(value: unknown): value is AgentResponse {
     (ERROR_CODES as readonly unknown[]).includes(response.error.code)
   );
 }
+
+// The watcher (phase 3 step 3): `main.js --watch` prints one event per line while it runs, and the host relays
+// them to the page. Paths are project-relative, never secret files, never inside the ignored folders.
+
+export const WATCH_LIMITS = {
+  /** Changes to one path within this long are reported once. */
+  coalesceMs: 50,
+  /** More changed paths than this at once (a git checkout, an install) become one `overflow`. */
+  pending: 500,
+  /** Folders watched at most: each takes one inotify watch from a pool the whole computer shares. */
+  folders: 20_000,
+} as const;
+
+export type WatchEvent =
+  /** Watching has started: how many folders and files it covers. */
+  | { readonly type: 'ready'; readonly folders: number; readonly files: number }
+  /**
+   * A file was created, changed or deleted. `version` is its new version, or null when it's deleted or too
+   * large to read (over 1 MB).
+   */
+  | {
+      readonly type: 'changed';
+      readonly path: string;
+      readonly deleted: boolean;
+      readonly version: Version | null;
+    }
+  /** Too much changed at once to list: reload the file list and re-check open files. */
+  | { readonly type: 'overflow' }
+  /** Watching stopped or can't cover everything; a sentence that's safe to show. */
+  | { readonly type: 'error'; readonly message: string };
+
+/** Checks an event from inside the workspace (untrusted) before it's passed on; undefined if it isn't one. */
+export function parseWatchEvent(value: unknown): WatchEvent | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const event = value as Record<string, unknown>;
+  switch (event.type) {
+    case 'ready':
+      return Number.isSafeInteger(event.folders) && Number.isSafeInteger(event.files)
+        ? { type: 'ready', folders: event.folders as number, files: event.files as number }
+        : undefined;
+    case 'changed': {
+      const path = event.path;
+      const version = event.version;
+      if (
+        typeof path !== 'string' ||
+        path === '' ||
+        path.length > LIMITS.pathLength ||
+        path.startsWith('/') ||
+        path.includes('\0') ||
+        path
+          .split('/')
+          .some((part) => part === '..' || part === '' || IGNORED_DIRECTORIES.includes(part)) ||
+        isSecretFile(path.split('/').pop() ?? '') ||
+        typeof event.deleted !== 'boolean' ||
+        !(version === null || (typeof version === 'string' && VERSION.test(version))) ||
+        (event.deleted && version !== null)
+      ) {
+        return undefined;
+      }
+      return { type: 'changed', path, deleted: event.deleted, version };
+    }
+    case 'overflow':
+      return { type: 'overflow' };
+    case 'error':
+      return typeof event.message === 'string' && event.message.length <= 300
+        ? { type: 'error', message: event.message }
+        : undefined;
+    default:
+      return undefined;
+  }
+}

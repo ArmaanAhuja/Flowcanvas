@@ -2,7 +2,7 @@
 
 The one place to see how to run Flowcanvas, how to test it, and which features exist so far. It's updated at every build step. Details for each step live in `docs/build-steps.md`; phase status in `docs/STATUS.md`; how it's put together in `ARCHITECTURE.md`.
 
-- **Last updated:** 7 Nov 2026, phase 3 step 2: the workspace's file list, versioned and conflict-safe saves, and the journal (branch `phase/3-open-repo-and-edit`)
+- **Last updated:** 7 Nov 2026, phase 3 step 3: the file watcher and its events channel (branch `phase/3-open-repo-and-edit`)
 - **Released (on staging):** `0.6.0`, phase 2
 - **Progress:** phases 1, 1a, 1b, 1c and 2 are accepted; 1d is in review; phase 3 is being planned. That's 6 of the build plan's 96 phases. Stage 0's goal: open a repository in a workspace, see it on a canvas, edit it, and answer "what calls this?"
 
@@ -45,9 +45,9 @@ If the host can't start, its log line says why: the token, Docker, or another `p
 
 | Command | What it checks | Time |
 | --- | --- | --- |
-| `pnpm test` | 651 unit and component tests, with no Docker or network | about 20 s |
+| `pnpm test` | 677 unit and component tests, with no Docker or network | about 20 s |
 | `pnpm lint`, `pnpm typecheck`, `pnpm format:check` | Lint (with the design-token rules), strict TypeScript, formatting | — |
-| `pnpm test:docker` | 45 tests against real containers: isolation, the network allowlist, clone time, sleep and resume, the guard, no secret kept anywhere, and (phase 3) the file list, a save refused after a terminal edit, and the journal surviving a restart. Needs Docker 28+ and the internet | about 1 min |
+| `pnpm test:docker` | 46 tests against real containers: isolation, the network allowlist, clone time, sleep and resume, the guard, no secret kept anywhere, and (phase 3) the file list, a save refused after a terminal edit, the journal surviving a restart, and a terminal edit reaching the page's events socket in about 160 ms. Needs Docker 28+ and the internet | about 1 min |
 | `pnpm test:e2e` | 15 recorded walkthroughs of each phase's *Try it*, under the production security policy (1 needs a real API: CI, or a running `pnpm dev`) | about 40 s |
 | `pnpm test:perf` | The canvas with 500 nodes, panned and zoomed: frame times, long tasks, input to paint. Headless (as on CI) only catches large regressions; `PERF_REAL=1 pnpm test:perf` opens a real window on your GPU for about 30 s, which is what decides | about 30 s |
 | `pnpm test:visual` | 90 screenshots in both themes against approved baselines, plus accessibility checks (axe): every catalogue story, and the project page's screens (empty, 1280 × 800, 500 nodes, review open, full screen, workspace popover) | about 2 min |
@@ -78,7 +78,7 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
   - the repository cloned at its pinned commit if it has one (Rallly opens in about 7 s)
 - 🟡 **A terminal in the page,** in the project row, and in the bottom dock on the project page.
 - 🟡 **Files and commands** through a typed API. It never reads `.env` files or leaves the project.
-- 🟡 **For the editor (phase 3, API only so far):** the project's file list from git; every read and save carries the file's version, so a save after someone else's change (the terminal, another tab) is refused instead of overwriting it; unsaved changes are kept in a journal in the workspace, outside the project, and survive a restart.
+- 🟡 **For the editor (phase 3, API only so far):** the project's file list from git; every read and save carries the file's version, so a save after someone else's change (the terminal, another tab) is refused instead of overwriting it; unsaved changes are kept in a journal in the workspace, outside the project, and survive a restart. A file watcher reports every change (a `sed` in the terminal arrives in about 160 ms) over a WebSocket, checked at every hop; an open page doesn't keep the workspace awake.
 - 🟡 **Network rules:** five allowed hosts, through a checking proxy. Workspaces can't reach each other, your laptop or your home network (tested).
 - 🟡 **Sleep and resume:**
   - sleep after 10 idle minutes; resume intact (proven in real time)

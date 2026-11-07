@@ -7,7 +7,13 @@ import type { Pressure } from './protocol.js';
 import { AGENT_PROTOCOL } from '@flowcanvas/workspace-agent/protocol';
 import { FakeDocker } from './test/fake-docker.js';
 import type { Engine } from './engine.js';
-import { CLONE_TIMEOUT_MS, MAX_TERMINALS, MESSAGES, WorkspaceHost } from './workspaces.js';
+import {
+  CLONE_TIMEOUT_MS,
+  MAX_TERMINALS,
+  MAX_WATCHERS,
+  MESSAGES,
+  WorkspaceHost,
+} from './workspaces.js';
 
 const IMAGE = 'flowcanvas-workspace:0123456789ab';
 const REPO = 'https://github.com/ArmaanAhuja-7777/rallly';
@@ -56,7 +62,31 @@ const fakeAgent: StartAgent = (ref) => {
   });
 };
 
+/** Watchers started, by ref; each can be ended from the test. */
+let watchers: { ref: string; killed: boolean; exit: () => void }[] = [];
+const fakeWatcher: StartAgent = (watchedRef) => {
+  const exits: (() => void)[] = [];
+  const record = {
+    ref: watchedRef,
+    killed: false,
+    exit: () => {
+      for (const listener of exits) listener();
+    },
+  };
+  watchers.push(record);
+  return Promise.resolve({
+    stdin: new PassThrough(),
+    stdout: new PassThrough(),
+    kill: () => {
+      record.killed = true;
+      record.exit();
+    },
+    onExit: (listener) => exits.push(listener),
+  });
+};
+
 beforeEach(() => {
+  watchers = [];
   docker = new FakeDocker();
   log = vi.fn<(line: string) => void>();
   agentStarts = [];
@@ -69,6 +99,7 @@ beforeEach(() => {
     log,
     agents: new Agents(fakeAgent),
     engine: fakeEngine,
+    watchers: fakeWatcher,
   });
 });
 
@@ -491,5 +522,36 @@ describe('terminal', () => {
     );
     await expectHostError(host.terminal('postgres', { cols: 80, rows: 24 }), 'gone');
     expect(execBodies).toEqual([]);
+  });
+});
+
+describe('watch (phase 3)', () => {
+  beforeEach(async () => {
+    await host.create({ workspaceId: id(1), repoUrl: REPO });
+  });
+
+  it(`starts a watcher per page, ${String(MAX_WATCHERS)} at most, and another once one ends`, async () => {
+    for (let n = 0; n < MAX_WATCHERS; n += 1) await host.watch(ref(1));
+    expect(watchers.map((w) => w.ref)).toEqual(Array(MAX_WATCHERS).fill(ref(1)));
+    await expectHostError(host.watch(ref(1)), 'refused', MESSAGES.tooManyWatchers);
+    watchers[0]?.exit();
+    await host.watch(ref(1));
+  });
+
+  it('refuses a workspace that is asleep, stopped or not ours', async () => {
+    await host.pause(ref(1));
+    await expectHostError(host.watch(ref(1)), 'refused', MESSAGES.asleep);
+    await host.resume(ref(1));
+    await host.stop(ref(1));
+    await expectHostError(host.watch(ref(1)), 'refused', MESSAGES.notRunning);
+    await expectHostError(host.watch('postgres'), 'gone');
+    expect(watchers).toEqual([]);
+  });
+
+  it('ends its watchers when the workspace stops', async () => {
+    await host.watch(ref(1));
+    await host.watch(ref(1));
+    await host.stop(ref(1));
+    expect(watchers.map((w) => w.killed)).toEqual([true, true]);
   });
 });

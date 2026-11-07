@@ -7,7 +7,7 @@ import {
   type WorkspaceProvider,
 } from '../workspaces/provider.js';
 
-type Method = 'create' | 'start' | 'pause' | 'resume' | 'stop' | 'agent' | 'terminal';
+type Method = 'create' | 'start' | 'pause' | 'resume' | 'stop' | 'agent' | 'terminal' | 'events';
 type FakeState = 'running' | 'paused' | 'stopped';
 
 export class FakeProvider implements WorkspaceProvider {
@@ -22,6 +22,8 @@ export class FakeProvider implements WorkspaceProvider {
   /** The workspace's side of each terminal opened, newest last. */
   readonly terminals: { ref: string; size: { cols: number; rows: number }; socket: FakeSocket }[] =
     [];
+  /** The workspace's side of each file-watcher socket opened, newest last (phase 3). */
+  readonly watchers: { ref: string; socket: FakeSocket }[] = [];
   /** What the "machine" is short of; the resource guard's answer (step 8a). Not recorded in `calls`. */
   pressureNow: PressureKind[] = [];
   private readonly failures = new Map<Method, Error>();
@@ -118,6 +120,14 @@ export class FakeProvider implements WorkspaceProvider {
     if (this.known(ref) !== 'running') throw new ProviderError('refused', 'Resume it first.');
     const socket = new FakeSocket();
     this.terminals.push({ ref, size, socket });
+    return socket;
+  }
+
+  async events(ref: string): Promise<TerminalSocket> {
+    await this.enter('events', ref);
+    if (this.known(ref) !== 'running') throw new ProviderError('refused', 'Resume it first.');
+    const socket = new FakeSocket();
+    this.watchers.push({ ref, socket });
     return socket;
   }
 }

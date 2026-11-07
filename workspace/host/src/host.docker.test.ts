@@ -251,6 +251,94 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
     }
   });
 
+  it('reports an edit made in the terminal over the events WebSocket, and leaves no watcher behind (phase 3, Done when)', async () => {
+    const token = randomBytes(32).toString('hex');
+    const probe = createHostServer({ host, token, port: 0, log: () => undefined });
+    await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
+    const port = (probe.address() as AddressInfo).port;
+    await new Promise((resolve) => probe.close(resolve));
+    const server = createHostServer({ host, token, port, log: (line) => lines.push(line) });
+    await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
+    try {
+      const socket = new WebSocket(`ws://127.0.0.1:${String(port)}${PATHS.events(ref)}`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      const events: {
+        type: string;
+        path?: string;
+        version?: string | null;
+        folders?: number;
+        at: number;
+      }[] = [];
+      socket.on('message', (data: Buffer) => {
+        events.push({ ...(JSON.parse(data.toString()) as { type: string }), at: Date.now() });
+      });
+      await new Promise((resolve) => socket.once('open', resolve));
+      const seen = async (match: (event: (typeof events)[number]) => boolean) => {
+        const started = Date.now();
+        for (;;) {
+          const found = events.find(match);
+          if (found !== undefined) return found;
+          if (Date.now() - started > 10_000) throw new Error(`not seen: ${JSON.stringify(events)}`);
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+      };
+      const ready = await seen((event) => event.type === 'ready');
+      // Rallly without node_modules or .git: hundreds of folders, a fraction of the inotify pool (ADR 0021).
+      expect(ready.folders).toBeGreaterThan(50);
+      expect(ready.folders).toBeLessThan(2000);
+      console.log(`Rallly: watching ${String(ready.folders)} folders`);
+
+      const asked = Date.now();
+      await sh(ref, 'cd /workspace/project && sed -i s/rallly/rallly-watched/ package.json');
+      const changed = await seen(
+        (event) => event.type === 'changed' && event.path === 'package.json',
+      );
+      const read = await host.agent(ref, { op: 'read', path: 'package.json' });
+      expect(changed.version).toBe(
+        read.ok && 'version' in read.result ? read.result.version : 'none',
+      );
+      // From asking Docker to run sed (about 100 ms of that is docker exec) to the event at the page's socket.
+      const ms = changed.at - asked;
+      console.log(`sed -i in the workspace to the event: ${String(ms)} ms`);
+      expect(ms).toBeLessThan(2000);
+
+      // Secrets and dependencies say nothing.
+      const before = events.length;
+      await sh(
+        ref,
+        'cd /workspace/project && echo CANARY=1 > .env && mkdir -p node_modules/x && echo 1 > node_modules/x/i.js',
+      );
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      expect(events.slice(before)).toEqual([]);
+
+      // Matched from the start of the command line: a looser pattern also matches the shell running pgrep.
+      const watching = () =>
+        sh(ref, 'pgrep -f "^node /tmp/flowcanvas-agent/main.js --watch" || true');
+      // While the page is open, the check finds the watcher, so its silence below means something.
+      expect((await watching()).out).toMatch(/^\d+$/);
+      const closed = new Promise((resolve) => socket.once('close', resolve));
+      socket.close();
+      await closed;
+      await sh(
+        ref,
+        'cd /workspace/project && git checkout -- package.json && rm -rf node_modules/x',
+      );
+      // The watcher ends with the page: nothing left running in the workspace.
+      const started = Date.now();
+      while ((await watching()).out !== '') {
+        if (Date.now() - started > 5000) {
+          throw new Error(
+            `the watcher is still running:\n${(await sh(ref, 'ps -eo pid,args')).out}`,
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
   it('reaches the allowlisted hosts only through the proxy, and nothing else at all', async () => {
     const through = await sh(ref, 'curl -sS -o /dev/null -w "%{http_code}" https://github.com');
     expect(through.out).toBe('200');

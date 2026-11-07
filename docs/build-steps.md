@@ -11281,8 +11281,8 @@ pnpm size               # after pnpm build: the bundle budgets
 | 0 | Record the decisions; this plan; branch | done (Claude, 7 Nov) |
 | 1 | Spike: an editor under our CSP, and its size (Monaco, CodeMirror 6 and Ace compared; CodeMirror 6 chosen); the watcher's cost with Rallly's `node_modules`. ADR 0021 | done (Claude, 7 Nov) |
 | 2 | Agent: file list, versioned read and write, conflicts, journal operations | done (Claude, 7 Nov) |
-| 3 | The watcher and the events channel: agent → host → control plane WebSocket | *next* |
-| 4 | UI components: EditorTabs, FileTree, StatusBar, Breadcrumb (catalogue and baselines) | *planned* |
+| 3 | The watcher and the events channel: agent → host → control plane WebSocket | done (Claude, 7 Nov) |
+| 4 | UI components: EditorTabs, FileTree, StatusBar, Breadcrumb (catalogue and baselines) | *next* |
 | 5 | The Code view: tree, CodeMirror in a shadow root, tabs, save, undo; binary, large and secret states; canvas shortcuts through shadow roots | *planned* |
 | 6 | Saving: autosave, the journal (workspace and IndexedDB), restore on reopen | *planned* |
 | 7 | Changes on disk (reload or banner) and quick-open | *planned* |
@@ -11308,7 +11308,7 @@ CI's walkthroughs use a fake workspace (staging has none until upgrade-later 33)
 | --- | --- | --- | --- |
 | R1 | The editor breaks our CSP | Step 1 spike before anything is built on it | **closed (step 1):** Monaco needed `style-src-attr 'unsafe-inline'`; CodeMirror 6 in a shadow root has 0 violations under the unchanged policy (owner chose it, ADR 0021). Step 5's walkthrough fails on any violation |
 | R2 | The editor's size | Lazy chunk with its own budget; only the languages a web project needs | **mostly closed (step 1):** CodeMirror 6 with TypeScript is 147 kB gzipped (Monaco 705). The budget is set in step 8 |
-| R3 | **Laptop:** inotify's limit is shared with the whole computer; watching `node_modules` could exhaust it | Watch without `node_modules`, `.git` and build output; measure in the spike | **understood (step 1):** Rallly is 599 folders without `node_modules` (0.1% of 524,288); the watcher skips it (step 3) |
+| R3 | **Laptop:** inotify's limit is shared with the whole computer; watching `node_modules` could exhaust it | Watch without `node_modules`, `.git` and build output; measure in the spike | **closed (step 3):** the watcher skips them; Rallly is 599 folders (0.1% of 524,288); a cap of 20,000 per watcher, with a visible error beyond it |
 | R4 | Lost edits (disconnect, sleep, closed tab) | Journal every 2 s and on page hide, an IndexedDB copy, tests for each case | open: **step 2:** the workspace journal exists and survives a restart (Docker test); the page's side is step 6 |
 | R5 | Silent overwrites when disk and editor disagree | Versioned writes; conflicts shown, never resolved silently | open: **step 2:** conflict-safe saves are refused after a terminal edit (Docker test); showing it is step 7 |
 
@@ -11398,3 +11398,48 @@ The logs record the operation and outcome only, never paths or content (tested w
 - **Laptop:** all five checks ok. The Docker runs used test workspaces only, and your sleeping workspace wasn't touched.
 
 **Commit:** `feat(workspace): file list, versioned conflict-safe saves and the journal (agent protocol 2)`
+
+### Step 3.3 — The file watcher, and its channel to the page (done by Claude; ADR 0022)
+
+**Goal:** an edit made anywhere in the workspace (the terminal, another tab, later an agent) reaches the page within a moment, so the editor can show it (step 7). This is the workspace half of the *Done when* "an edit made in the terminal appears in the editor".
+
+**How it fits together:**
+
+| Hop | What | File |
+| --- | --- | --- |
+| Watcher | `main.js --watch`: watches the project's folders (not `node_modules`, `.git` or build output), reports `ready`, `changed` (path, deleted, new version), `overflow` and `error`; never `.env` files | `workspace/agent/src/watch.ts` |
+| Host | `host.watch(ref)` starts one per open page (4 at most per workspace) and ends them when the workspace stops; `/v1/workspaces/:ref/events` relays checked events; when the page goes, stdin is ended and the process killed after 2 s | `workspace/host/src/workspaces.ts`, `events.ts`, `server.ts` |
+| Control plane | `GET /api/projects/:id/workspace/events` (same-origin, owner only): checks each event again and sends it on; nothing goes the other way; **not activity** | `services/control-plane/src/workspaces/events-routes.ts` |
+
+**Concepts:**
+- **inotify, folders not files.** Linux reports changes per watched folder. Watching a file breaks when a program replaces it (`sed -i`, most editors' "atomic save"), because the watch follows the old file. https://man7.org/linux/man-pages/man7/inotify.7.html
+- **Coalescing.** One save can raise several notifications. The watcher waits 50 ms, then reports each path once, and only if its content really changed.
+- **Overflow.** A `git checkout` or `pnpm install` can change thousands of files. Past 500 at once, the watcher sends one `overflow` and quietly catches up, and the page reloads what it shows.
+- **Defence in depth.** The workspace runs code we don't control, so its events are checked twice (host and control plane) before a page trusts them: relative paths only, never `..`, ignored folders or secret files, well-formed versions.
+- **Cost.** A page left open mustn't keep a workspace awake (CLAUDE.md section 7), so the events channel never counts as activity.
+
+**Measured (Docker test, a real Rallly workspace):** watching **599 folders**. `sed -i` to the event arriving at the page's socket: **162 ms**, about 100 ms of which is Docker starting `sed`.
+
+**Tests:**
+- **Watcher (11 new):**
+  - edits, the `sed -i` style replace (twice), new and deleted folders
+  - silence for `.env`, `node_modules` and same-content rewrites
+  - a large file without a version; overflow, then keeping up; too many folders
+  - the event checker refusing every misleading event
+  - mutation-checked: removing the secret filter or the dedupe fails its test
+- **Host (6 new):** events relayed and bad lines dropped (logged once, never the line); the watcher ended when the page closes and the page closed when the watcher ends; refusals; the cap of 4, asleep, stopped, and ended on stop.
+- **Control plane (9 new):** events checked and relayed one way; not activity; both sides closed; logs without file names; owner, same-origin and WebSocket only; the local host's upgrade with the token.
+- **Docker (1 new, the Done-when half):** `sed -i` produces the right event with the right version, `.env` and `node_modules` stay silent, and **no watcher is left after the page closes**. The check is shown to find the watcher while the page is open, so its silence afterwards means something.
+
+**Results:** `pnpm test` 677 passed; `pnpm test:docker` 46 passed, with no test containers left; lint and typecheck clean.
+
+**Gotchas:**
+- **`pgrep -f "main.js --watch"` matched itself.** The pattern is also in the command line of the `sh -c` running pgrep, so the watcher looked like it was still running. Match from the start (`^node /tmp/…`), and prove the check can see the process while it runs.
+- **Copying the agent in is now atomic** (write, then rename). The request agent and a watcher can be copied in at the same moment, and neither may start from a half-written file.
+- **Prettier reflows code, so text-based edit scripts miss.** An edit that silently didn't apply made a rerun prove nothing; it was caught by checking the script's result. For code, edit exact lines read from the file.
+
+**Risks:**
+- R3 (inotify): closed for Rallly, at 599 folders and a cap of 20,000 per watcher with a visible error beyond it.
+- **Laptop:** all five checks ok (load 12.3 of 14.4 right after a unit-test run, so the heavy suites ran one at a time). Test workspaces only; nothing was left behind.
+
+**Commit:** `feat(workspace): the file watcher and its events WebSocket, checked at every hop (ADR 0022)`
