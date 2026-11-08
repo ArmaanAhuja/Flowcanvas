@@ -18,7 +18,7 @@ export class FakeProvider implements WorkspaceProvider {
   readonly calls: string[] = [];
   /** Requests the agent received, and what it answers next (a hello by default). */
   readonly agentRequests: { ref: string; request: AgentRequest }[] = [];
-  agentAnswer: AgentResponse = { ok: true, result: { protocol: 1, node: 'v24' } };
+  agentAnswer: AgentResponse = { ok: true, result: { protocol: 1, node: 'v26' } };
   /** The workspace's side of each terminal opened, newest last. */
   readonly terminals: { ref: string; size: { cols: number; rows: number }; socket: FakeSocket }[] =
     [];

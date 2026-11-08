@@ -127,7 +127,7 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
       timeoutMs: 10_000,
     });
     expect(node).toMatchObject({ ok: true, result: { exitCode: 0 } });
-    expect(node.ok && 'stdout' in node.result && node.result.stdout).toMatch(/^v24\./);
+    expect(node.ok && 'stdout' in node.result && node.result.stdout).toMatch(/^v26\./);
     const who = await host.agent(ref, {
       op: 'exec',
       command: ['sh', '-c', 'id -u; pwd'],

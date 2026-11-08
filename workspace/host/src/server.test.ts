@@ -76,7 +76,7 @@ const fake: HostOperations = {
   agent: async (ref, request) => {
     calls.push(`agent ${ref} ${JSON.stringify(request)}`);
     if (failWith !== undefined) throw failWith;
-    return Promise.resolve({ ok: true, result: { protocol: 1, node: 'v24' } });
+    return Promise.resolve({ ok: true, result: { protocol: 1, node: 'v26' } });
   },
   watch: async (ref) => {
     calls.push(`watch ${ref}`);
@@ -243,7 +243,7 @@ describe('agent requests', () => {
     const body = JSON.stringify({ op: 'list', path: 'src' });
     expect(await call('POST', PATHS.agent(REF), { body })).toEqual({
       status: 200,
-      body: JSON.stringify({ ok: true, result: { protocol: 1, node: 'v24' } }),
+      body: JSON.stringify({ ok: true, result: { protocol: 1, node: 'v26' } }),
     });
     expect(calls).toEqual([`agent ${REF} {"op":"list","path":"src"}`]);
   });
