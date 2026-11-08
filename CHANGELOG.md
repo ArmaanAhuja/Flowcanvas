@@ -4,7 +4,43 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
-## [0.6.0] — 2026-11-07 — Phase 2: canvas and app shell (in review)
+## [0.7.0] — 2026-11-08 — Phase 3: open a repo and edit (in review)
+
+A project's files open in an editor in the page, and every change is kept safe: saved when you forget, kept when the tab closes, and never overwritten when the workspace changes underneath. Workspaces still run on your own computer (`pnpm dev`); on staging the Code view says so.
+
+### Try it
+
+1. Open a project with its workspace running, and click **Code**.
+2. Open a file from the tree and type a line.
+3. Close the browser tab at once, then open the project again: your line is still there, with a note.
+4. Change the file in the terminal: the editor shows it.
+
+### Added
+
+- **The Code view:**
+  - the project's files in a tree
+  - files in tabs, with their path and a status bar (cursor, indentation, encoding, language)
+  - syntax highlighting for TypeScript, JavaScript, JSON, CSS, HTML and Markdown
+- **Saving:**
+  - Ctrl/⌘+S
+  - autosave 5 seconds after you stop typing, and when you switch file, view or window, with a switch in the status bar
+  - unsaved changes kept in the workspace and in your browser, and restored when you come back
+- **Changes made in the workspace** (the terminal, another tab) appear in open files. With unsaved changes you choose: **Keep mine** or **Load the workspace's version**. A file deleted in the workspace says so.
+- **Quick-open:** Ctrl/⌘+P, then type part of a file's name.
+- **Design system:** Editor tabs, File tree, Breadcrumb, Status bar and Quick-open, in the catalogue; code colours from the tokens.
+
+### Changed
+
+- **The editor is CodeMirror 6, not Monaco.** It runs under the strict security policy unchanged, and is about a fifth of the size.
+- **Faster pages:** the editor, each language, the file tree and quick-open download only when used. The first load stays at 147 kB.
+
+### Security
+
+- **Saves never overwrite a change they haven't seen,** and changes from the workspace never replace unsaved text.
+- **`.env` files never appear** in the tree, quick-open, the journal or change events.
+- **Every change event is checked** at the host, the control plane and the page.
+
+## [0.6.0] — 2026-11-07 — Phase 2: canvas and app shell
 
 A project now opens on its own page, laid out like the Figma design: a top bar, a rail of tools, side panels, the canvas and a review bar. The canvas is empty until a project is analysed (the next stage); the Labs switch **Canvas stress test** fills it with 500 example nodes.
 

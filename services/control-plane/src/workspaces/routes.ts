@@ -15,6 +15,7 @@ import {
 } from './lifecycle.js';
 import { WORKSPACES_UNAVAILABLE, type WorkspaceProvider } from './provider.js';
 import { fileRoutes } from './file-routes.js';
+import { eventsRoutes } from './events-routes.js';
 import { terminalRoutes, workersAcceptWebSocket, type AcceptWebSocket } from './terminal-routes.js';
 
 export interface WorkspaceDependencies {
@@ -108,6 +109,10 @@ export function workspaceRoutes(deps: WorkspaceDependencies) {
   workspace.route(
     '/',
     terminalRoutes({ ...deps, acceptWebSocket: deps.acceptWebSocket ?? workersAcceptWebSocket }),
+  );
+  workspace.route(
+    '/',
+    eventsRoutes({ ...deps, acceptWebSocket: deps.acceptWebSocket ?? workersAcceptWebSocket }),
   );
 
   return workspace;

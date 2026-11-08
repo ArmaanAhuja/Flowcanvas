@@ -72,6 +72,7 @@
   --size-row-compact: 28px;
   --size-row-comfortable: 32px;
   --size-bar: 40px;
+  --size-editor-tab: 36px;
   --size-rail: 44px;
   --size-panel-left: 248px;
   --size-panel-right: 360px;
@@ -141,6 +142,11 @@
   --color-state-scope-text: #eca4cf;
   --color-edge-observed: #a3aab5;
   --color-edge-default: #6b7380;
+  --color-syntax-keyword: var(--color-text-secondary);
+  --color-syntax-string: var(--color-text-secondary);
+  --color-syntax-number: var(--color-text-primary);
+  --color-syntax-comment: var(--color-text-muted);
+  --color-syntax-plain: var(--color-text-primary);
   --color-preview-surface: #ffffff;
   --color-preview-ink: #1f2328;
   --color-preview-muted: #6e7781;
@@ -187,6 +193,11 @@
   --color-state-scope-text: #994c7d;
   --color-edge-observed: #5c6470;
   --color-edge-default: #868d98;
+  --color-syntax-keyword: var(--color-text-secondary);
+  --color-syntax-string: var(--color-text-secondary);
+  --color-syntax-number: var(--color-text-primary);
+  --color-syntax-comment: var(--color-text-muted);
+  --color-syntax-plain: var(--color-text-primary);
   --color-preview-surface: #ffffff;
   --color-preview-ink: #1f2328;
   --color-preview-muted: #6e7781;
@@ -234,6 +245,11 @@
     --color-state-scope-text: #994c7d;
     --color-edge-observed: #5c6470;
     --color-edge-default: #868d98;
+    --color-syntax-keyword: var(--color-text-secondary);
+    --color-syntax-string: var(--color-text-secondary);
+    --color-syntax-number: var(--color-text-primary);
+    --color-syntax-comment: var(--color-text-muted);
+    --color-syntax-plain: var(--color-text-primary);
     --color-preview-surface: #ffffff;
     --color-preview-ink: #1f2328;
     --color-preview-muted: #6e7781;

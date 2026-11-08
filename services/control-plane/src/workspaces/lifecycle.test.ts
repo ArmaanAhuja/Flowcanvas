@@ -485,6 +485,7 @@ describe('the resource guard (relievePressure)', () => {
       stop: (ref) => provider.stop(ref),
       agent: (ref, request) => provider.agent(ref, request),
       terminal: (ref, size) => provider.terminal(ref, size),
+      events: (ref) => provider.events(ref),
     };
     expect(await relievePressure({ ...ctx, provider: cloud })).toEqual({ action: 'none' });
   });

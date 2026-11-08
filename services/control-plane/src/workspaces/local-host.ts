@@ -61,6 +61,7 @@ function misconfigured(message: string): WorkspaceProvider {
     stop: refuse,
     agent: refuse,
     terminal: refuse,
+    events: refuse,
   };
 }
 
@@ -163,6 +164,19 @@ export function localHostProvider(options: {
       try {
         // Workers open an outgoing WebSocket with an ordinary fetch and an Upgrade header.
         response = await options.fetch(`${base}${PATHS.terminal(ref, size.cols, size.rows)}`, {
+          headers: { upgrade: 'websocket', authorization: `Bearer ${options.token}` },
+        });
+      } catch {
+        throw new ProviderError('unavailable', MESSAGES.notRunning);
+      }
+      const socket = (response as Response & { webSocket?: TerminalSocket | null }).webSocket;
+      if (response.status === 101 && socket) return socket;
+      throw await hostError(response, options.token);
+    },
+    async events(ref) {
+      let response: Response;
+      try {
+        response = await options.fetch(`${base}${PATHS.events(ref)}`, {
           headers: { upgrade: 'websocket', authorization: `Bearer ${options.token}` },
         });
       } catch {

@@ -6,7 +6,7 @@
 
 ## Context
 
-The web app is a heavy client-side tool (an infinite canvas, Monaco, WebSockets to the gateway) that talks to separate back-end services. It needs fast development feedback and a build that deploys anywhere, ideally as static files on a free host.
+The web app is a heavy client-side tool (an infinite canvas, a code editor (Monaco when this was written; CodeMirror 6 since ADR 0021), WebSockets to the gateway) that talks to separate back-end services. It needs fast development feedback and a build that deploys anywhere, ideally as static files on a free host.
 
 ## Options considered
 

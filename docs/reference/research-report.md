@@ -2,6 +2,8 @@
 
 Oct 12, 2026 · @Manan
 
+> **Note (7 Nov 2026):** the embedded editor is **CodeMirror 6**, not Monaco (owner decision, ADR 0021): Monaco can't run under the product's strict Content-Security-Policy without allowing inline style attributes, and it's much heavier per editor for code cards on the canvas. Where this report says Monaco, read CodeMirror 6; the reasoning about reusing an existing editor, language servers and a terminal still holds.
+
 ## Executive summary
 
 **Verdict: buildable as a canvas-first, AI-native development environment that replaces the IDE, provided it starts with one kind of project and earns trust through evidence-labelled flows.** The universal vision stays as the architecture direction; the first release targets web apps only.

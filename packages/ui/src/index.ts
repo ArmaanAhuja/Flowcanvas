@@ -67,3 +67,18 @@ export {
   type CanvasToolbarProps,
   type ToolbarButtonProps,
 } from './components/canvas-toolbar/CanvasToolbar';
+export {
+  EditorTabs,
+  type EditorTab,
+  type EditorTabsProps,
+} from './components/editor-tabs/EditorTabs';
+export { FileTree, type FileTreeProps } from './components/file-tree/FileTree';
+export { buildTree, ancestorsOf, type TreeNode } from './components/file-tree/tree-model';
+export {
+  Breadcrumb,
+  shownSegments,
+  type BreadcrumbProps,
+} from './components/breadcrumb/Breadcrumb';
+export { StatusBar, type StatusBarProps } from './components/status-bar/StatusBar';
+export { QuickOpen, type QuickOpenProps } from './components/quick-open/QuickOpen';
+export { rankPaths, scorePath, type Match } from './components/quick-open/fuzzy';

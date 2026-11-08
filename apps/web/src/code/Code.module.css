@@ -1,0 +1,103 @@
+/* The Code view (Figma 11) and its Files panel. */
+.code {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+  min-inline-size: 0;
+  background: var(--color-surface-canvas);
+}
+
+.centred {
+  margin: auto;
+  padding: var(--space-16);
+  font-family: var(--text-body-font-family);
+  font-size: var(--text-body-font-size);
+  line-height: var(--text-body-line-height);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.problem {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-16);
+  align-items: center;
+  margin: 0;
+  padding: var(--space-8) var(--space-16);
+  border-block-end: var(--border-width-default) solid var(--color-border-subtle);
+  background: var(--color-state-removed-tint);
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  line-height: var(--text-small-line-height);
+  color: var(--color-state-removed-text);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+  padding: var(--space-8);
+  box-sizing: border-box;
+}
+
+.panelHeader {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+  padding: var(--space-2) var(--space-8) var(--space-8);
+}
+
+.panelTitle {
+  margin: 0;
+  font-family: var(--text-small-strong-font-family);
+  font-size: var(--text-small-strong-font-size);
+  font-weight: var(--text-small-strong-font-weight);
+  line-height: var(--text-small-strong-line-height);
+  color: var(--color-text-primary);
+}
+
+.panelMeta {
+  margin-inline-start: auto;
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  font-weight: var(--text-caption-font-weight);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+}
+
+.tree {
+  flex: 1;
+  min-block-size: 0;
+}
+
+.note {
+  margin: 0;
+  padding: var(--space-8);
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  line-height: var(--text-small-line-height);
+  color: var(--color-text-muted);
+}
+
+.restored {
+  margin: 0;
+  padding: var(--space-8) var(--space-16);
+  border-block-end: var(--border-width-default) solid var(--color-border-subtle);
+  background: var(--color-accent-tint);
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  line-height: var(--text-small-line-height);
+  color: var(--color-accent-text);
+}
+
+.problemText {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  gap: var(--space-8);
+}

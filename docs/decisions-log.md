@@ -391,3 +391,57 @@ GitHub Actions never ran on `ArmaanAhuja-7777` because of the account billing lo
 **Asked:** Figma 06, alone among the screens, has the review bar at the top (under the top bar). Every other screen, the generator script and the design brief have it at the bottom.
 
 **Decided:** **at the bottom**, as built. Figma 06's position is treated as a one-off; when the Figma file is next regenerated from the script, it will match.
+
+## 7 Nov 2026: phase 2 accepted; phase 3 plan (owner decisions)
+
+**Phase 2:** accepted by the owner and merged (PR #15, `14d1c2e`).
+
+**Phase 3 answers:**
+1. **Autosave is for when a person forgets to save** (owner): an amalgamation of a save button and real autosave.
+   - **Ctrl/⌘+S** writes the file at once.
+   - **Autosave** writes it after **5 seconds without typing**, and at once when you switch to another file, leave the Code view, or the browser window loses focus.
+   - **The journal underneath:** unsaved changes go to the workspace every 2 seconds while typing and when the tab is hidden or closed (plus a copy in the browser's IndexedDB), so nothing is lost before an autosave or when the workspace can't be reached. Reopening restores them.
+   - **A switch** in the status bar, "Autosave: on/off", kept per browser; on by default.
+2. **The editor lives in the Code view** (Figma 11) in this phase. The editor as a card on the canvas (design brief §17) comes with phase 7.
+3. **No fake errors:** syntax highlighting only. The editor's own type checking (Monaco's, when this was written; see the next entry for CodeMirror 6) stays off, because without the project's types it would report wrong errors, and the status bar shows no error count until phase 33's language servers.
+
+## 7 Nov 2026: the code editor is CodeMirror 6, not Monaco (owner decision)
+
+**Found (phase 3 step 1 spike):** Monaco draws every line with inline `style` attributes, which our Content-Security-Policy forbids, so it would only work if the policy allowed `style-src-attr 'unsafe-inline'`.
+
+**Owner:** the editor doesn't have to be, or look like, VS Code; explore and pick what suits Flowcanvas best.
+
+**Compared** (each under our production policy, with the same tests): Monaco, CodeMirror 6 and Ace. The figures are in ADR 0021.
+
+**Decided:** **CodeMirror 6**, each editor in its own shadow root.
+- It runs under the unchanged strict policy.
+- It's about a fifth of Monaco's download (147 against 705 kB gzipped) and a third of its memory per editor, which matters for code cards on the canvas (phase 7).
+- It typed fastest in a 20,000-line file.
+- It takes colours straight from our CSS variables.
+- It has official packages for the diffs with accept and reject per change (stage 3), language servers (phase 33) and shared editing (phase 77).
+
+The build plan's technology table and phase 3, and CLAUDE.md's stack line, now say CodeMirror 6, pointing to ADR 0021. The owner asked for the replacement to be complete: Monaco and Ace are removed from the dependencies, and every document that named Monaco as our choice is updated or carries a dated note.
+
+## 8 Nov 2026: a faster working pace, the code palette, and the project page's budget (owner decisions)
+
+**Working pace** (CLAUDE.md section 4a, "Working pace"): faster, with every test type, document, decision record and Done-when proof kept.
+1. **Milestones of 2–3 steps,** reported once. The phase plan's "go" and the end-of-phase acceptance stay, and anything risky still stops at once.
+2. **Tiered testing:** tests for what changed while working; every suite once before a milestone's commits are pushed; CI again on the pull request; heavy suites in the background, one at a time.
+3. **Docs once per milestone, complete** (owner: "make it thorough… don't forget anything"): a fixed template for each step, checked step by step before reporting.
+4. **Questions up front; and whenever something unforeseen comes up mid-phase, ask, never decide** (owner). When the documents and decisions already settle a question (the source priority, Graphite, this log), apply them and report.
+5. **Careful edits:** exact lines read from a file, formatting before editing, every edit checked.
+
+**The code palette:** quiet. Keywords and strings in `text/secondary` (keywords semibold), comments in `text/muted`, everything else `text/primary`. Green, amber, red, violet and pink keep meaning change state, and blue keeps meaning selection and focus.
+- **Why it was asked:** no document defined colours for code, and Figma 11 used the state hues and the accent for it.
+- **Why it needn't have been:** Graphite outranks Figma, and its rules ("colour only carries meaning"; blue for selection and focus only) already pointed here. Rule 4 above now covers this case.
+
+**The project page's bundle budget:** 95 → 110 kB, chosen by Claude at the owner's request ("whatever is the best decision"). Phase 3's journal and autosave (93.1 kB now) must run whenever a project is open, the Graph view included, to keep unsaved work safe; loading them lazily would only delay that. The reason is in `apps/web/scripts/bundle-size.ts`.
+
+## 8 Nov 2026: a file deleted in the workspace while it's open (owner decision)
+
+**Asked** (at the start of the step 7 and 8 milestone, the one case the plan didn't cover): what happens when an open file is deleted in the workspace (`rm` in the terminal, another tab, later an agent)?
+
+**Decided:**
+- **Without unsaved changes:** the tab stays and says "This file was deleted in the workspace," with **Close**.
+- **With unsaved changes:** "This file was deleted in the workspace. Your changes are still here, not saved," with **Save it again** (which recreates the file) or **Close…**, which asks first ("Discard your changes and close the file?" with **Discard** or **Cancel**). Nothing is lost by one click.
+- **Autosave never recreates a deleted file by itself.**

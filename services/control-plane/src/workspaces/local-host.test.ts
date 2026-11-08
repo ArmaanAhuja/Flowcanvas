@@ -212,6 +212,21 @@ describe('localHostProvider', () => {
     });
   });
 
+  it('opens the file watcher as a WebSocket upgrade, with the token (phase 3)', async () => {
+    const socket = { binaryType: 'blob' };
+    const { fetcher, provider } = host(
+      () => ({ status: 101, webSocket: socket }) as unknown as Response,
+    );
+    expect(await provider.events(REF)).toBe(socket);
+    const [url, init] = fetcher.mock.calls[0] ?? [];
+    expect(url).toBe(`${URL_}/v1/workspaces/${REF}/events`);
+    expect(init?.headers).toEqual({ upgrade: 'websocket', authorization: `Bearer ${TOKEN}` });
+    const refusing = host(() =>
+      json(409, { error: { kind: 'refused', message: 'This project is open in 4 tabs already.' } }),
+    );
+    expect(await rejection(refusing.provider.events(REF))).toMatchObject({ kind: 'refused' });
+  });
+
   it("reads the resource guard's pressure, with the token, keeping only kinds it knows", async () => {
     const { provider, fetcher } = host(() =>
       json(200, {

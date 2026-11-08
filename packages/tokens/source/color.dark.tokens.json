@@ -134,6 +134,24 @@
         "$value": "#6B7380"
       }
     },
+    "syntax": {
+      "$description": "Code in the editor (phase 3): a quiet palette from the text colours, so green, amber, red, violet and pink keep meaning change state and blue means selection and focus (Graphite). Keywords are also set semibold in the editor. Owner decision, 8 Nov 2026.",
+      "keyword": {
+        "$value": "{color.text.secondary}"
+      },
+      "string": {
+        "$value": "{color.text.secondary}"
+      },
+      "number": {
+        "$value": "{color.text.primary}"
+      },
+      "comment": {
+        "$value": "{color.text.muted}"
+      },
+      "plain": {
+        "$value": "{color.text.primary}"
+      }
+    },
     "preview": {
       "surface": {
         "$value": "#FFFFFF"

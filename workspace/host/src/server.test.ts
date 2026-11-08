@@ -1,6 +1,6 @@
 import { request as httpRequest, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { Duplex } from 'node:stream';
+import { Duplex, PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import { HostError } from './errors.js';
@@ -18,6 +18,9 @@ let failWith: Error | undefined;
 let resizes: string[];
 let shell: Duplex | undefined;
 let pressure: Pressure[];
+/** The fake watcher process the last events socket got. */
+let watcher:
+  { stdout: PassThrough; stdin: PassThrough; killed: boolean; exit: () => void } | undefined;
 
 /** A fake shell that echoes what it's sent, and ends when sent 'exit'. */
 function echoShell(): Duplex {
@@ -74,6 +77,28 @@ const fake: HostOperations = {
     calls.push(`agent ${ref} ${JSON.stringify(request)}`);
     if (failWith !== undefined) throw failWith;
     return Promise.resolve({ ok: true, result: { protocol: 1, node: 'v24' } });
+  },
+  watch: async (ref) => {
+    calls.push(`watch ${ref}`);
+    if (failWith !== undefined) throw failWith;
+    const listeners: (() => void)[] = [];
+    const process = {
+      stdout: new PassThrough(),
+      stdin: new PassThrough(),
+      killed: false,
+      exit: () => {
+        for (const listener of listeners) listener();
+      },
+    };
+    watcher = process;
+    return Promise.resolve({
+      stdin: process.stdin,
+      stdout: process.stdout,
+      kill: () => {
+        process.killed = true;
+      },
+      onExit: (listener) => listeners.push(listener),
+    });
   },
   pressure: () => pressure,
 };
@@ -361,5 +386,75 @@ describe('errors', () => {
     await call('GET', PATHS.health);
     await call('GET', PATHS.health, { headers: { authorization: 'Bearer wrong' } });
     for (const [line] of log.mock.calls) expect(line).not.toContain(TOKEN);
+  });
+});
+
+describe('file watcher events', () => {
+  const version = 'c'.repeat(64);
+  const line = (event: unknown, v = 2) => `${JSON.stringify({ v, event })}\n`;
+
+  it('passes checked events on as text, and drops anything else', async () => {
+    const socket = await terminal(PATHS.events(REF));
+    if (!(socket instanceof WebSocket)) throw new Error(`refused: ${socket.body}`);
+    expect(calls).toEqual([`watch ${REF}`]);
+    const received: string[] = [];
+    socket.on('message', (data: Buffer) => received.push(data.toString()));
+    watcher?.stdout.write(line({ type: 'ready', folders: 3, files: 9 }));
+    watcher?.stdout.write(line({ type: 'changed', path: '.env', deleted: false, version }));
+    watcher?.stdout.write(
+      line({ type: 'changed', path: '../etc/passwd', deleted: false, version }),
+    );
+    watcher?.stdout.write(line({ type: 'ready', folders: 1, files: 1 }, 1));
+    watcher?.stdout.write('not json CANARY\n');
+    watcher?.stdout.write(`${'x'.repeat(5000)}\n`);
+    watcher?.stdout.write(line({ type: 'changed', path: 'src/a.ts', deleted: false, version }));
+    await vi.waitFor(() => {
+      expect(received).toHaveLength(2);
+    });
+    expect(received.map((text) => JSON.parse(text) as unknown)).toEqual([
+      { type: 'ready', folders: 3, files: 9 },
+      { type: 'changed', path: 'src/a.ts', deleted: false, version },
+    ]);
+    const lines = log.mock.calls.map(([text]) => text);
+    expect(lines.filter((text) => text.includes('not an event'))).toHaveLength(1);
+    expect(lines.join('\n')).not.toContain('CANARY');
+    socket.close();
+  });
+
+  it('ends the watcher when the page goes away, and closes the page when the watcher ends', async () => {
+    const socket = await terminal(PATHS.events(REF));
+    if (!(socket instanceof WebSocket)) throw new Error('refused');
+    const stdinEnded = new Promise((resolve) => watcher?.stdin.on('finish', resolve));
+    socket.close();
+    await stdinEnded;
+    await vi.waitFor(
+      () => {
+        expect(watcher?.killed).toBe(true);
+      },
+      { timeout: 4000 },
+    );
+    const again = await terminal(PATHS.events(REF));
+    if (!(again instanceof WebSocket)) throw new Error('refused');
+    const closed = new Promise<number>((resolve) => {
+      again.once('close', (code) => {
+        resolve(code);
+      });
+    });
+    watcher?.exit();
+    expect(await closed).toBe(1000);
+  });
+
+  it('says why when there is nothing to watch, and checks the caller first', async () => {
+    failWith = new HostError('refused', 'This workspace is asleep. Resume it first.');
+    expect(await terminal(PATHS.events(REF))).toEqual({
+      status: 409,
+      body: JSON.stringify({
+        error: { kind: 'refused', message: 'This workspace is asleep. Resume it first.' },
+      }),
+    });
+    failWith = undefined;
+    calls = [];
+    expect(await terminal(PATHS.events(REF), {})).toMatchObject({ status: 401 });
+    expect(calls).toEqual([]);
   });
 });

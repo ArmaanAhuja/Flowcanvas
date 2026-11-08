@@ -32,6 +32,11 @@ export interface WorkspaceProvider {
   /** A shell on a pty in a running workspace, as a WebSocket not yet accepted (ADR 0017). */
   terminal(ref: string, size: { cols: number; rows: number }): Promise<TerminalSocket>;
   /**
+   * The project's file watcher in a running workspace (phase 3), as a WebSocket not yet accepted: text frames,
+   * one WatchEvent each (@flowcanvas/workspace-agent/protocol), checked again here before the page sees them.
+   */
+  events(ref: string): Promise<TerminalSocket>;
+  /**
    * Whether the machine running the workspaces is short of something (the local resource guard, step 8a). A
    * provider without it (a cloud one, whose own limits apply) leaves it out, and nothing is relieved.
    */

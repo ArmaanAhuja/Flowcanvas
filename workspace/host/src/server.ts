@@ -16,13 +16,14 @@ import {
   type HostErrorBody,
   type PressureResponse,
 } from './protocol.js';
+import { relayEvents } from './events.js';
 import { TERMINAL_LIMITS, checkSize, relayTerminal } from './terminal.js';
 import type { WorkspaceHost } from './workspaces.js';
 
 /** The part of WorkspaceHost the server calls, so tests can pass a fake. */
 export type HostOperations = Pick<
   WorkspaceHost,
-  'create' | 'start' | 'pause' | 'resume' | 'stop' | 'agent' | 'terminal' | 'pressure'
+  'create' | 'start' | 'pause' | 'resume' | 'stop' | 'agent' | 'terminal' | 'watch' | 'pressure'
 >;
 
 export interface ServerOptions {
@@ -38,6 +39,7 @@ export const AGENT_BODY_MAX_BYTES = LIMITS.lineBytes;
 const ACTION_PATH = new RegExp(`^/${PROTOCOL_VERSION}/workspaces/([^/]+)/(${ACTIONS.join('|')})$`);
 const AGENT_PATH = new RegExp(`^/${PROTOCOL_VERSION}/workspaces/([^/]+)/agent$`);
 const TERMINAL_PATH = new RegExp(`^/${PROTOCOL_VERSION}/workspaces/([^/]+)/terminal$`);
+const EVENTS_PATH = new RegExp(`^/${PROTOCOL_VERSION}/workspaces/([^/]+)/events$`);
 
 const digest = (value: string) => createHash('sha256').update(value).digest();
 
@@ -198,6 +200,31 @@ export function createHostServer(options: ServerOptions): Server {
         return;
       }
       const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+      const events = EVENTS_PATH.exec(url.pathname);
+      if (events !== null) {
+        const ref = decodeURIComponent(events[1] ?? '');
+        let watcher;
+        try {
+          watcher = await options.host.watch(ref);
+        } catch (error) {
+          const known = error instanceof HostError ? error : undefined;
+          if (known === undefined) options.log(`watcher failed to start: ${String(error)}`);
+          answer(
+            known === undefined ? 422 : ERROR_STATUS[known.kind],
+            known?.kind ?? 'failed',
+            known?.userMessage ?? 'Changes in the workspace can’t be followed right now.',
+          );
+          return;
+        }
+        sockets.handleUpgrade(request, socket, head, (webSocket) => {
+          options.log(`watcher opened for ${ref}`);
+          relayEvents(webSocket, watcher, options.log);
+          webSocket.once('close', () => {
+            options.log(`watcher closed for ${ref}`);
+          });
+        });
+        return;
+      }
       const match = TERMINAL_PATH.exec(url.pathname);
       const size = checkSize(
         Number(url.searchParams.get('cols')),

@@ -33,4 +33,23 @@ describe('canvas shortcuts (F, V, H)', () => {
       expect(isCanvasShortcut(key(init)), JSON.stringify(init)).toBe(false);
     }
   });
+
+  it('never take a key typed in the code editor, which lives in a shadow root (ADR 0021)', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const editor = document.createElement('div');
+    editor.setAttribute('contenteditable', 'true');
+    host.attachShadow({ mode: 'open' }).append(editor);
+    let taken: boolean | undefined;
+    const listener = (event: KeyboardEvent) => {
+      // What a window listener sees: the host, not the editor.
+      expect(event.target).toBe(host);
+      taken = isCanvasShortcut(event);
+    };
+    window.addEventListener('keydown', listener);
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', bubbles: true, composed: true }));
+    window.removeEventListener('keydown', listener);
+    host.remove();
+    expect(taken).toBe(false);
+  });
 });

@@ -11,7 +11,13 @@ import {
   runArgs,
 } from '@flowcanvas/workspace-image';
 import type { AgentRequest, AgentResponse } from '@flowcanvas/workspace-agent/protocol';
-import { Agents, dockerAgent } from './agents.js';
+import {
+  Agents,
+  dockerAgent,
+  dockerWatcher,
+  type AgentProcess,
+  type StartAgent,
+} from './agents.js';
 import { DockerFailure, type Docker } from './docker-cli.js';
 import { socketEngine, type Engine } from './engine.js';
 import { openTerminal, type TerminalSession } from './terminal.js';
@@ -24,6 +30,8 @@ export const CLONE_TIMEOUT_MS = 120_000;
 export const PROJECT_DIR = '/workspace/project';
 /** Shells open at once in one workspace. */
 export const MAX_TERMINALS = 4;
+/** File watchers per workspace: one per open project page (phase 3). */
+export const MAX_WATCHERS = 4;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // Clones come from public GitHub repositories only for now (the egress proxy also allows package registries).
@@ -40,6 +48,7 @@ export const MESSAGES = {
   asleep: 'This workspace is asleep. Resume it first.',
   notRunning: 'This workspace isn’t running. Open it first.',
   tooManyTerminals: `This workspace already has ${String(MAX_TERMINALS)} terminals open. Close one first.`,
+  tooManyWatchers: `This project is open in ${String(MAX_WATCHERS)} tabs already. Close one, and changes will show here.`,
 } as const;
 
 const PROXY_SCRIPT = fileURLToPath(new URL('./egress/proxy.ts', import.meta.url));
@@ -58,6 +67,8 @@ export interface WorkspaceHostOptions {
   readonly limits?: Parameters<typeof runArgs>[0]['limits'];
   /** The agent connections; by default, the agent copied in and started with docker exec. */
   readonly agents?: Agents;
+  /** The file watchers (phase 3); by default, the agent with --watch through docker exec. */
+  readonly watchers?: StartAgent;
   /** The Docker Engine API, for terminals (ADR 0017); by default, Docker's own socket. */
   readonly engine?: Engine;
   /** What the resource guard last found (guard.ts); none by default. */
@@ -70,10 +81,13 @@ export class WorkspaceHost {
   readonly #agents: Agents;
   readonly #engine: Engine;
   readonly #terminals = new Map<string, number>();
+  readonly #watchers = new Map<string, Set<AgentProcess>>();
+  readonly #startWatcher: StartAgent;
 
   constructor(options: WorkspaceHostOptions) {
     this.#options = options;
     this.#agents = options.agents ?? new Agents(dockerAgent(options.docker));
+    this.#startWatcher = options.watchers ?? dockerWatcher(options.docker);
     this.#engine = options.engine ?? socketEngine();
   }
 
@@ -198,6 +212,29 @@ export class WorkspaceHost {
     }
   }
 
+  /** The project's file watcher, while the workspace runs; it ends when its stdin closes or it's killed. */
+  async watch(ref: string): Promise<AgentProcess> {
+    const state = await this.#known(ref);
+    if (state === 'paused') throw new HostError('refused', MESSAGES.asleep);
+    if (state !== 'running') throw new HostError('refused', MESSAGES.notRunning);
+    const open = this.#watchers.get(ref) ?? new Set<AgentProcess>();
+    if (open.size >= MAX_WATCHERS) throw new HostError('refused', MESSAGES.tooManyWatchers);
+    const watcher = await this.#startWatcher(ref);
+    open.add(watcher);
+    this.#watchers.set(ref, open);
+    watcher.onExit(() => {
+      open.delete(watcher);
+      if (open.size === 0 && this.#watchers.get(ref) === open) this.#watchers.delete(ref);
+    });
+    return watcher;
+  }
+
+  /** Ends a workspace's watchers (it's stopping). */
+  #endWatchers(ref: string): void {
+    for (const watcher of this.#watchers.get(ref) ?? []) watcher.kill();
+    this.#watchers.delete(ref);
+  }
+
   #release(ref: string): void {
     const open = (this.#terminals.get(ref) ?? 1) - 1;
     if (open <= 0) this.#terminals.delete(ref);
@@ -207,6 +244,7 @@ export class WorkspaceHost {
   async stop(ref: string): Promise<void> {
     await this.#locked(ref, async () => {
       this.#agents.close(ref);
+      this.#endWatchers(ref);
       const state = await this.#known(ref);
       if (state === 'paused') await this.#docker(['unpause', ref]);
       if (state === 'running' || state === 'paused' || state === 'restarting') {

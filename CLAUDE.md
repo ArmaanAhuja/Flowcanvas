@@ -61,7 +61,7 @@ The user wants to build this themselves. They have built projects before and are
 - **Every phase ends runnable and checkable by the user.** Before the steps, state the phase's expected outcome (what the user will see and be able to do). By the end, automated tests that verify the Done-when items must be in place and runnable with one command, and `docs/build-steps.md` must have a "Run and check it" section: exact commands to start it (and the preview or staging URL once deployed), what to click, what they should see, and which test command proves it. A phase isn't complete until that section works on a fresh clone.
 - **Free first.** Build with free tools and free tiers only. When a step needs a paid service, propose a free stand-in, say what's lost, and log the paid option in `docs/upgrade-later.md` with its trigger. Don't block on payment.
 - **Keep `docs/build-steps.md` current.** Every time you explain a step in chat, add the same step (goal, concepts with doc links, files with full contents, commands, verification, gotchas, commit message) to `docs/build-steps.md`, and update its status table when a step is done (commit SHA and who did it). This is the one teaching file that exists.
-- Teach one small step at a time (roughly 15–45 minutes of work each). Never dump a whole phase at once. After each step, stop and wait for the user to say "done" (or to paste their code or output) before moving on.
+- Teach one small step at a time (roughly 15–45 minutes of work each). Never dump a whole phase at once. When the user types, stop after each step and wait for "done" (or their code or output). When you do the steps, follow the working pace below: check in at milestones of 2–3 steps.
 - Explain the why, not just the what: what problem this step solves, how it fits the architecture, what the alternatives were and why we chose this one, and what is happening under the hood.
 - Assume general programming, TypeScript/JavaScript basics and Git basics. Don't over-explain basics; do explain anything new (pnpm workspaces, Turborepo, Vite internals, Playwright, CI pipelines, Firecracker sandboxes, ACP, tree-sitter, the TypeScript compiler API, OpenTelemetry, etc.). At the start, ask a short list of calibration questions and adjust to the answers.
 - Link to official documentation for each new tool or concept, so the user learns where to look things up.
@@ -86,6 +86,16 @@ The user wants to build this themselves. They have built projects before and are
 
 The quality bar in sections 4, 7 and 8 still applies (tests, strict TypeScript, security rules, provenance, design tokens only). Teaching mode changes who types, not how good the result must be. If the user takes a shortcut that would hurt the project, say so plainly and explain why.
 
+### Working pace (owner decision, 8 Nov 2026)
+
+Faster, with nothing dropped: every test type, document, decision record and Done-when proof stays.
+
+1. **Milestones, not single steps.** When you do the steps, work through 2–3 steps, then report once and wait. Still wait for "go" on the phase plan and for acceptance at the end. Stop at once for anything risky (security, money, deleting or overwriting something, outward-facing actions).
+2. **Tiered testing.** While working, run the tests for what changed. Before a milestone's commits are pushed, run every suite once: format, lint, typecheck, unit, walkthroughs, visual, and Docker when the workspace changed. CI runs them all again on the pull request. Heavy suites can run in the background while docs are written, one at a time (the laptop's budget). Never push with a failing or skipped suite, and never claim a result that wasn't run.
+3. **Docs once per milestone, complete.** Write each step's `docs/build-steps.md` entry with a fixed template: goal; what a person can do now; files; concepts with links; what was found and fixed; tests (counts, mutation checks); run and check it; risks and laptop; commit. Update STATUS, RUN-AND-FEATURES, ARCHITECTURE, ADRs, the decisions log and upgrade-later in the same milestone. Before reporting, check each step against the template so nothing is left out. Chat reports are a summary plus whatever needs the owner's decision.
+4. **Questions up front, and whenever something new comes up.** At the phase start, list every product question you can foresee. If something unforeseen comes up mid-phase that the documents and decisions don't already settle, stop and ask: never decide a product question yourself. If the documents do settle it (the source priority in section 2, Graphite's rules, the decisions log), apply it and say so in the report instead of asking.
+5. **Careful edits.** Edit the exact lines read from a file; don't run text-replacement scripts over code that Prettier may have reflowed. Format before editing, and check that every edit applied.
+
 **Naming.** "Flowcanvas" is a working name (shortlist: Throughline, Cutaway). Use it and the `@flowcanvas/*` package scope so a rename later is mechanical. Never use "Glassbox" in code or package names (trademark conflict); the folder name does not matter.
 
 ## 5. How to run each phase
@@ -109,7 +119,7 @@ Give the overview lesson in chat (section 4a), covering the plan template in sec
 
 ### Step 2 — Build in small, taught steps
 
-- One step at a time, in the format from section 4a; stop after each step for "done" or for the user's code and output, then review it.
+- In the format from section 4a. When the user types: one step at a time, stopping for "done" or their code and output, then review. When you do the steps: milestones of 2–3 steps (section 4a, working pace).
 - The user works on a branch `phase/<number>-<slug>` and commits in small logical steps with conventional commit messages (`feat(engine): …`, `test(connectors): …`); suggest the message for each step.
 - Tests are written alongside the code, not at the end.
 - The app stays runnable after every commit.
@@ -135,7 +145,7 @@ Recap what was built and learned, walk the user through the *Done when* checks a
 
 ## 6. Technology and repository structure
 
-Use the stack from the build plan unless you raise a decision record and the user agrees: a React + TypeScript web app, React Flow (later a WebGL layer), ELK, Monaco, LSP and DAP clients, xterm.js in the browser with a pty in the workspace, tree-sitter, the TypeScript compiler API, SQLite per workspace, git CLI with shadow refs, Agent Client Protocol client, MCP server (official SDK), SWC/Babel element stamping, OpenTelemetry, Vitest/Jest/Playwright, a provider-neutral model gateway; for the cloud: Firecracker-style workspace VMs (a managed sandbox provider at first), a TypeScript control-plane service with Postgres, a WebSocket gateway and authenticated preview proxy, S3-compatible snapshot storage plus a private backup git remote, GitHub and Google sign-in, usage-based billing, an encrypted secrets vault, and GitHub Actions for continuous deployment with per-PR preview URLs.
+Use the stack from the build plan unless you raise a decision record and the user agrees: a React + TypeScript web app, React Flow (later a WebGL layer), ELK, CodeMirror 6 (chosen over Monaco, owner decision 7 Nov 2026, ADR 0021), LSP and DAP clients, xterm.js in the browser with a pty in the workspace, tree-sitter, the TypeScript compiler API, SQLite per workspace, git CLI with shadow refs, Agent Client Protocol client, MCP server (official SDK), SWC/Babel element stamping, OpenTelemetry, Vitest/Jest/Playwright, a provider-neutral model gateway; for the cloud: Firecracker-style workspace VMs (a managed sandbox provider at first), a TypeScript control-plane service with Postgres, a WebSocket gateway and authenticated preview proxy, S3-compatible snapshot storage plus a private backup git remote, GitHub and Google sign-in, usage-based billing, an encrypted secrets vault, and GitHub Actions for continuous deployment with per-PR preview URLs.
 
 Suggested monorepo (pnpm workspaces + Turborepo); adjust with a decision record if needed:
 

@@ -1,0 +1,6 @@
+/* The editor fills its region; CodeMirror's own look is in editor-setup.ts (tokens through CSS variables). */
+.editor {
+  flex: 1;
+  min-block-size: 0;
+  overflow: hidden;
+}

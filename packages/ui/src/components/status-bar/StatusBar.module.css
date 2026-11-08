@@ -1,0 +1,31 @@
+/* Figma 11 status bar: panel surface, top border, Caption in muted (Figma's tertiary is for icons, not text),
+ * 16 px apart and 16 px sides; 28 px tall (size/row-compact, Figma about 26). */
+.bar {
+  display: flex;
+  gap: var(--space-16);
+  align-items: center;
+  box-sizing: border-box;
+  block-size: var(--size-row-compact);
+  padding-inline: var(--space-16);
+  border-block-start: var(--border-width-default) solid var(--color-border-subtle);
+  background: var(--color-surface-panel);
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  font-weight: var(--text-caption-font-weight);
+  line-height: var(--text-caption-line-height);
+  letter-spacing: var(--text-caption-letter-spacing);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.item {
+  display: flex;
+  flex: none;
+  gap: var(--space-8);
+  align-items: center;
+  white-space: nowrap;
+}
+
+.spacer {
+  flex: 1;
+}

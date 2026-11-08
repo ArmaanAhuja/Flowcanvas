@@ -82,9 +82,12 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
 
   it('lists, reads and writes the project through the agent', async () => {
     const list = await host.agent(ref, { op: 'list', path: '' });
-    expect(list.ok && 'entries' in list.result && list.result.entries.map((e) => e.name)).toEqual(
-      expect.arrayContaining(['package.json', 'apps']),
-    );
+    expect(
+      list.ok &&
+        'truncated' in list.result &&
+        'entries' in list.result &&
+        list.result.entries.map((e) => e.name),
+    ).toEqual(expect.arrayContaining(['package.json', 'apps']));
     const read = await host.agent(ref, { op: 'read', path: 'package.json' });
     expect(read.ok && 'content' in read.result && read.result.content).toContain('"name"');
     expect(
@@ -143,6 +146,67 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
     expect(git).toMatchObject({ ok: true, result: { exitCode: 0 } });
   });
 
+  it('lists every project file from git, never a .env file (phase 3)', async () => {
+    const tree = await host.agent(ref, { op: 'files' });
+    expect(tree).toMatchObject({ ok: true, result: { source: 'git', truncated: false } });
+    const files = tree.ok && 'files' in tree.result ? tree.result.files : [];
+    expect(files).toEqual(expect.arrayContaining(['package.json', 'flowcanvas-note.md']));
+    expect(files.length).toBeGreaterThan(100);
+    // The .env planted above, and nothing from node_modules or .git.
+    expect(files.filter((path) => /(^|\/)\.env$/.test(path))).toEqual([]);
+    expect(files.filter((path) => /(^|\/)(node_modules|\.git)\//.test(path))).toEqual([]);
+    expect(JSON.stringify(tree)).not.toContain('CANARY');
+  });
+
+  it('refuses a save from an old version after an edit in the terminal (phase 3)', async () => {
+    const before = await host.agent(ref, { op: 'read', path: 'package.json' });
+    const version = before.ok && 'version' in before.result ? before.result.version : '';
+    expect(version).toMatch(/^[0-9a-f]{64}$/);
+    // The terminal's way of editing: sed -i writes a new file and renames it over the old one.
+    await sh(ref, 'cd /workspace/project && sed -i s/rallly/rallly-terminal/ package.json');
+    const save = await host.agent(ref, {
+      op: 'write',
+      path: 'package.json',
+      content: 'the editor’s stale copy',
+      encoding: 'utf8',
+      baseVersion: version,
+    });
+    expect(save).toMatchObject({ ok: false, error: { code: 'conflict' } });
+    const after = await host.agent(ref, { op: 'read', path: 'package.json' });
+    expect(after.ok && 'content' in after.result && after.result.content).toContain(
+      'rallly-terminal',
+    );
+    expect(after.ok && 'version' in after.result && after.result.version).not.toBe(version);
+    await sh(ref, 'cd /workspace/project && git checkout -- package.json');
+  });
+
+  it('keeps unsaved changes in the journal, outside the project and private to the workspace user (phase 3)', async () => {
+    expect(
+      await host.agent(ref, {
+        op: 'journal-put',
+        path: 'apps/web/draft.ts',
+        content: 'export const draft = true;\n',
+        baseVersion: null,
+        revision: 1,
+      }),
+    ).toMatchObject({ ok: true, result: { revision: 1 } });
+    expect(
+      (
+        await sh(
+          ref,
+          'stat -c "%a %u" /workspace/.flowcanvas/journal /workspace/.flowcanvas/journal/*.json',
+        )
+      ).out,
+    ).toBe('700 1000\n600 1000');
+    // git, and so the dev server and the file list, never see it.
+    expect(
+      (await sh(ref, 'cd /workspace/project && git status --porcelain --untracked-files=all')).out,
+    ).not.toContain('flowcanvas/journal');
+    expect((await sh(ref, 'test -e /workspace/project/apps/web/draft.ts || echo absent')).out).toBe(
+      'absent',
+    );
+  });
+
   it('gives a real shell over the WebSocket: input, output, resize and exit code', async () => {
     const token = randomBytes(32).toString('hex');
     const probe = createHostServer({ host, token, port: 0, log: () => undefined });
@@ -182,6 +246,94 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
       socket.send(Buffer.from('exit 3\r'), { binary: true });
       await closed;
       expect(exit).toEqual({ type: 'exit', code: 3 });
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
+  it('reports an edit made in the terminal over the events WebSocket, and leaves no watcher behind (phase 3, Done when)', async () => {
+    const token = randomBytes(32).toString('hex');
+    const probe = createHostServer({ host, token, port: 0, log: () => undefined });
+    await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
+    const port = (probe.address() as AddressInfo).port;
+    await new Promise((resolve) => probe.close(resolve));
+    const server = createHostServer({ host, token, port, log: (line) => lines.push(line) });
+    await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
+    try {
+      const socket = new WebSocket(`ws://127.0.0.1:${String(port)}${PATHS.events(ref)}`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      const events: {
+        type: string;
+        path?: string;
+        version?: string | null;
+        folders?: number;
+        at: number;
+      }[] = [];
+      socket.on('message', (data: Buffer) => {
+        events.push({ ...(JSON.parse(data.toString()) as { type: string }), at: Date.now() });
+      });
+      await new Promise((resolve) => socket.once('open', resolve));
+      const seen = async (match: (event: (typeof events)[number]) => boolean) => {
+        const started = Date.now();
+        for (;;) {
+          const found = events.find(match);
+          if (found !== undefined) return found;
+          if (Date.now() - started > 10_000) throw new Error(`not seen: ${JSON.stringify(events)}`);
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+      };
+      const ready = await seen((event) => event.type === 'ready');
+      // Rallly without node_modules or .git: hundreds of folders, a fraction of the inotify pool (ADR 0021).
+      expect(ready.folders).toBeGreaterThan(50);
+      expect(ready.folders).toBeLessThan(2000);
+      console.log(`Rallly: watching ${String(ready.folders)} folders`);
+
+      const asked = Date.now();
+      await sh(ref, 'cd /workspace/project && sed -i s/rallly/rallly-watched/ package.json');
+      const changed = await seen(
+        (event) => event.type === 'changed' && event.path === 'package.json',
+      );
+      const read = await host.agent(ref, { op: 'read', path: 'package.json' });
+      expect(changed.version).toBe(
+        read.ok && 'version' in read.result ? read.result.version : 'none',
+      );
+      // From asking Docker to run sed (about 100 ms of that is docker exec) to the event at the page's socket.
+      const ms = changed.at - asked;
+      console.log(`sed -i in the workspace to the event: ${String(ms)} ms`);
+      expect(ms).toBeLessThan(2000);
+
+      // Secrets and dependencies say nothing.
+      const before = events.length;
+      await sh(
+        ref,
+        'cd /workspace/project && echo CANARY=1 > .env && mkdir -p node_modules/x && echo 1 > node_modules/x/i.js',
+      );
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      expect(events.slice(before)).toEqual([]);
+
+      // Matched from the start of the command line: a looser pattern also matches the shell running pgrep.
+      const watching = () =>
+        sh(ref, 'pgrep -f "^node /tmp/flowcanvas-agent/main.js --watch" || true');
+      // While the page is open, the check finds the watcher, so its silence below means something.
+      expect((await watching()).out).toMatch(/^\d+$/);
+      const closed = new Promise((resolve) => socket.once('close', resolve));
+      socket.close();
+      await closed;
+      await sh(
+        ref,
+        'cd /workspace/project && git checkout -- package.json && rm -rf node_modules/x',
+      );
+      // The watcher ends with the page: nothing left running in the workspace.
+      const started = Date.now();
+      while ((await watching()).out !== '') {
+        if (Date.now() - started > 5000) {
+          throw new Error(
+            `the watcher is still running:\n${(await sh(ref, 'ps -eo pid,args')).out}`,
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
     } finally {
       await new Promise((resolve) => server.close(resolve));
     }
@@ -238,6 +390,11 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
     expect(await host.agent(ref, { op: 'read', path: 'flowcanvas-note.md' })).toMatchObject({
       ok: true,
       result: { content: '# Hi\n' },
+    });
+    // Unsaved changes survive the workspace stopping: the journal is in its volume (phase 3).
+    expect(await host.agent(ref, { op: 'journal-get', path: 'apps/web/draft.ts' })).toMatchObject({
+      ok: true,
+      result: { content: 'export const draft = true;\n', revision: 1 },
     });
   });
 

@@ -1,0 +1,159 @@
+/*
+ * Figma 16's command palette, for files: 640 px wide (a min with the window), 10 px radius, panel surface, control
+ * border, popover shadow, about 120 px from the top. Rows: radius 6, a 14 px icon, the name in Small and the folder
+ * in Mono small. Figma's 10 and 14 px gaps moved onto the 4 px grid.
+ */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-block-start: calc(var(--space-32) * 3 + var(--space-24));
+}
+
+.modal {
+  inline-size: min(calc(var(--space-32) * 20), calc(100vw - var(--space-32)));
+  outline: none;
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: var(--border-width-default) solid var(--color-border-control);
+  border-radius: var(--radius-frame);
+  background: var(--color-surface-panel);
+  box-shadow: var(--shadow-popover);
+  outline: none;
+}
+
+.search {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+  padding: var(--space-12) var(--space-16);
+  border-block-end: var(--border-width-default) solid var(--color-border-subtle);
+}
+
+.searchIcon {
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+
+.input {
+  flex: 1;
+  min-inline-size: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--text-body-font-family);
+  font-size: var(--text-body-font-size);
+  line-height: var(--text-body-line-height);
+  color: var(--color-text-primary);
+  outline: none;
+}
+
+/* The search row shows focus (its bottom border in the accent), so the field doesn't add the page's outline:
+   a visible focus indicator that matches Figma 16 (WCAG 2.4.7). */
+.search:focus-within {
+  border-block-end-color: var(--color-accent-solid);
+}
+
+.input:focus-visible {
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.results {
+  max-block-size: calc(var(--size-row-comfortable) * 10);
+  margin: 0;
+  padding: var(--space-4) var(--space-8) var(--space-8);
+  overflow-y: auto;
+  outline: none;
+}
+
+.row {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+  min-block-size: var(--size-row-comfortable);
+  padding-inline: var(--space-8);
+  border-radius: var(--radius-node);
+  cursor: pointer;
+  outline: none;
+}
+
+.row[data-focused],
+.row[data-hovered] {
+  background: var(--color-surface-selected);
+}
+
+.icon {
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+
+.row[data-focused] .icon {
+  color: var(--color-text-primary);
+}
+
+.name {
+  flex: none;
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  line-height: var(--text-small-line-height);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.folder {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: start;
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  line-height: var(--text-mono-small-line-height);
+  color: var(--color-text-muted);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-12) var(--space-8);
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  color: var(--color-text-muted);
+}
+
+.footer {
+  display: flex;
+  gap: var(--space-16);
+  align-items: center;
+  padding: var(--space-8) var(--space-16);
+  border-block-start: var(--border-width-default) solid var(--color-border-subtle);
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+}
+
+.kbd {
+  margin-inline-end: var(--space-4);
+  padding: 0 var(--space-4);
+  border: var(--border-width-default) solid var(--color-border-control);
+  border-radius: var(--radius-control);
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  color: var(--color-text-secondary);
+}

@@ -41,28 +41,53 @@ export interface AgentProcess {
 
 export type StartAgent = (ref: string) => Promise<AgentProcess>;
 
+/**
+ * Copies the built agent into the workspace. Each file is written under a temporary name and renamed into place,
+ * so the request agent and a watcher copied in at the same moment never start from a half-written file.
+ */
+async function copyAgent(docker: Docker, ref: string): Promise<void> {
+  for (const name of AGENT_FILES) {
+    const source = await readFile(new URL(name, AGENT_DIR), 'utf8');
+    // The names are our own constants; the content goes in on stdin, never on the command line.
+    await docker(
+      [
+        'exec',
+        '-i',
+        ref,
+        'sh',
+        '-c',
+        `mkdir -p ${AGENT_HOME} && cat > ${AGENT_HOME}/${name}.$$ && mv ${AGENT_HOME}/${name}.$$ ${AGENT_HOME}/${name}`,
+      ],
+      { input: source },
+    );
+  }
+}
+
+function startNode(ref: string, args: readonly string[]): AgentProcess {
+  const child = spawn('docker', ['exec', '-i', ref, 'node', `${AGENT_HOME}/main.js`, ...args], {
+    stdio: ['pipe', 'pipe', 'ignore'],
+  });
+  return {
+    stdin: child.stdin,
+    stdout: child.stdout,
+    kill: () => child.kill(),
+    onExit: (listener) => child.on('exit', listener),
+  };
+}
+
 /** Copies the built agent into the workspace and starts it with `docker exec -i`. */
 export function dockerAgent(docker: Docker): StartAgent {
   return async (ref) => {
-    for (const name of AGENT_FILES) {
-      const source = await readFile(new URL(name, AGENT_DIR), 'utf8');
-      // The names are our own constants; the content goes in on stdin, never on the command line.
-      await docker(
-        ['exec', '-i', ref, 'sh', '-c', `mkdir -p ${AGENT_HOME} && cat > ${AGENT_HOME}/${name}`],
-        {
-          input: source,
-        },
-      );
-    }
-    const child = spawn('docker', ['exec', '-i', ref, 'node', `${AGENT_HOME}/main.js`], {
-      stdio: ['pipe', 'pipe', 'ignore'],
-    });
-    return {
-      stdin: child.stdin,
-      stdout: child.stdout,
-      kill: () => child.kill(),
-      onExit: (listener) => child.on('exit', listener),
-    };
+    await copyAgent(docker, ref);
+    return startNode(ref, []);
+  };
+}
+
+/** The project's file watcher (phase 3): the same agent, started with `--watch`, one event per line. */
+export function dockerWatcher(docker: Docker): StartAgent {
+  return async (ref) => {
+    await copyAgent(docker, ref);
+    return startNode(ref, ['--watch']);
   };
 }
 

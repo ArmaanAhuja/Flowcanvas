@@ -9,11 +9,24 @@
 import { appendFileSync, readFileSync, readdirSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 
-/** kB gzipped (1 kB = 1000 bytes, as Vite reports). Set 7 Nov 2026 at about 10% above the sizes then. */
+/** kB gzipped (1 kB = 1000 bytes, as Vite reports). Set at about 10% above the sizes when each part was added. */
 export const BUDGETS: Readonly<Record<string, number>> = {
+  // 7 Nov 2026 (phase 2): 149.4 kB then; 143.0 since phase 3 marked packages/ui free of side effects.
   'First load': 160,
-  ProjectPage: 95,
+  // Raised 95 → 110 on 8 Nov 2026 (owner: "choose the best"): phase 3's journal and autosave (93.1 kB) must run
+  // whenever a project is open, the Graph view included, to keep unsaved work safe; loading them lazily would only
+  // delay that protection.
+  ProjectPage: 110,
   WorkspaceTerminal: 95,
+  // 8 Nov 2026 (phase 3): the editor's core, only with the Code view (115.5 kB; ADR 0021 estimated about 150 with
+  // a language).
+  codemirror: 130,
+  // Every language's parser together (74.8 kB); each loads on its own, with its first file (JavaScript 33.7 kB).
+  lang: 85,
+  // The file tree (React Aria's Tree and virtualizer), only when Files is shown (24.9 kB).
+  FilesPanel: 30,
+  // 8 Nov 2026 (phase 3 step 7): quick-open, fetched once the workspace runs (11.8 kB).
+  QuickOpenDialog: 14,
   'Other lazy chunks': 20,
 };
 

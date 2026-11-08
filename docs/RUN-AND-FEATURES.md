@@ -2,9 +2,9 @@
 
 The one place to see how to run Flowcanvas, how to test it, and which features exist so far. It's updated at every build step. Details for each step live in `docs/build-steps.md`; phase status in `docs/STATUS.md`; how it's put together in `ARCHITECTURE.md`.
 
-- **Last updated:** 7 Nov 2026, phase 2 step 9: `0.6.0`, in review (branch `phase/2-canvas-app-shell`, pull request open)
-- **Released (on staging):** `0.5.0`, phase 1d. `0.6.0` (phase 2) reaches staging when its pull request merges
-- **Progress:** phases 1, 1a, 1b and 1c are accepted; 1d and 2 are in review. That's 6 of the build plan's 96 phases. Stage 0's goal: open a repository in a workspace, see it on a canvas, edit it, and answer "what calls this?"
+- **Last updated:** 8 Nov 2026, phase 3 step 9: `0.7.0`, in review (branch `phase/3-open-repo-and-edit`, pull request open)
+- **Released (on staging):** `0.6.0`, phase 2. `0.7.0` (phase 3) reaches staging when its pull request merges
+- **Progress:** phases 1, 1a, 1b, 1c and 2 are accepted; 1d and 3 are in review. That's 6 of the build plan's 96 phases. Stage 0's goal: open a repository in a workspace, see it on a canvas, edit it, and answer "what calls this?"
 
 ## Where it runs
 
@@ -45,12 +45,12 @@ If the host can't start, its log line says why: the token, Docker, or another `p
 
 | Command | What it checks | Time |
 | --- | --- | --- |
-| `pnpm test` | 632 unit and component tests, with no Docker or network | about 20 s |
+| `pnpm test` | 747 unit and component tests, with no Docker or network | about 20 s |
 | `pnpm lint`, `pnpm typecheck`, `pnpm format:check` | Lint (with the design-token rules), strict TypeScript, formatting | — |
-| `pnpm test:docker` | 42 tests against real containers: isolation, the network allowlist, clone time, sleep and resume, the guard, no secret kept anywhere. Needs Docker 28+ and the internet | about 1 min |
-| `pnpm test:e2e` | 15 recorded walkthroughs of each phase's *Try it*, under the production security policy (1 needs a real API: CI, or a running `pnpm dev`) | about 40 s |
+| `pnpm test:docker` | 46 tests against real containers: isolation, the network allowlist, clone time, sleep and resume, the guard, no secret kept anywhere, and (phase 3) the file list, a save refused after a terminal edit, the journal surviving a restart, and a terminal edit reaching the page's events socket in about 160 ms. Needs Docker 28+ and the internet | about 1 min |
+| `pnpm test:e2e` | 18 recorded walkthroughs of each phase's *Try it*, under the production security policy (1 needs a real API: CI, or a running `pnpm dev`) | about 40 s |
 | `pnpm test:perf` | The canvas with 500 nodes, panned and zoomed: frame times, long tasks, input to paint. Headless (as on CI) only catches large regressions; `PERF_REAL=1 pnpm test:perf` opens a real window on your GPU for about 30 s, which is what decides | about 30 s |
-| `pnpm test:visual` | 90 screenshots in both themes against approved baselines, plus accessibility checks (axe): every catalogue story, and the project page's screens (empty, 1280 × 800, 500 nodes, review open, full screen, workspace popover) | about 2 min |
+| `pnpm test:visual` | 114 screenshots in both themes against approved baselines, plus accessibility checks (axe): every catalogue story, and the project page's screens (empty, 1280 × 800, 500 nodes, review open, full screen, workspace popover; the Code view, a conflict, quick-open) | about 2 min |
 | `pnpm --filter @flowcanvas/control-plane test:idle-real` | The 10-minute idle sleep in real time, nothing faked | about 12 min |
 | `pnpm size` | After `pnpm build`: the web bundle against its budgets (first load, the project page, the terminal) | instant |
 | `pnpm workspace:resources` | Your laptop against Flowcanvas's budget | instant |
@@ -78,6 +78,7 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
   - the repository cloned at its pinned commit if it has one (Rallly opens in about 7 s)
 - 🟡 **A terminal in the page,** in the project row, and in the bottom dock on the project page.
 - 🟡 **Files and commands** through a typed API. It never reads `.env` files or leaves the project.
+- 🟡 **For the editor (phase 3, API only so far):** the project's file list from git; every read and save carries the file's version, so a save after someone else's change (the terminal, another tab) is refused instead of overwriting it; unsaved changes are kept in a journal in the workspace, outside the project, and survive a restart. A file watcher reports every change (a `sed` in the terminal arrives in about 160 ms) over a WebSocket, checked at every hop; an open page doesn't keep the workspace awake.
 - 🟡 **Network rules:** five allowed hosts, through a checking proxy. Workspaces can't reach each other, your laptop or your home network (tested).
 - 🟡 **Sleep and resume:**
   - sleep after 10 idle minutes; resume intact (proven in real time)
@@ -88,7 +89,7 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 - ⬜ **Backups and restore history** (18a).
 - ⬜ **Running on your own computer from the hosted site** (48a).
 
-### The project page and the canvas (phase 2, in review)
+### The project page and the canvas (phase 2)
 - 🟡 **A project's own page** (`/p/<id>`) in the app shell, at Figma 06's sizes (tested to within 1/64 px at 1440 × 900 and 1280 × 800):
   - top bar
   - rail
@@ -109,6 +110,11 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 - 🟡 **The workspace chip in the top bar** opens its facts (status, machine, since when, this month's usage, any reason) and actions (Open, Sleep now, Resume, Stop). The bottom dock's terminal follows the workspace's state.
 - 🟡 **500 nodes are smooth,** measured on real hardware: panning at 120 or 60 fps, with no long tasks. Zooming in close (100% to 200%) still drops occasional frames (the build plan's phase 42, the WebGL renderer, fixes it).
 
+### The editor (phase 3, in review)
+- 🟡 **The Code view** (Figma 11): the file tree, tabs, CodeMirror 6 with syntax highlighting (TypeScript, JavaScript, JSON, CSS, HTML, Markdown), save (Ctrl/⌘+S) that never overwrites a change made in the workspace, undo, honest binary and `.env` states, tabs remembered. Quick-open: Ctrl/⌘+P, type part of a file's name.
+- 🟡 **Autosave** for when you forget: after 5 s without typing, and on switching file, view or window (a switch in the status bar). Unsaved changes are also kept in the workspace and the browser, so closing the tab loses nothing: reopening restores them, with a note.
+- 🟡 **Changes from the terminal** appear in the editor at once; with unsaved changes, a banner offers **Keep mine** or **Load the workspace's version**, and nothing is overwritten silently. A file deleted in the workspace says so (Close, or Save it again). New and deleted files show in the tree.
+
 ### Design system and quality (phases 1a, 1b)
 - ✅ **Graphite tokens:**
   - generated from `packages/tokens/source` into CSS, plus TypeScript values for code that needs numbers
@@ -117,13 +123,13 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
   - Button, Tag, Input, Toggle, Menu, Tooltip, Tabs
   - Panel, Popover, Flow node, Workspace status
   - Top bar, Rail, Review bar, Canvas toolbar
+  - Editor tabs, File tree, Breadcrumb, Status bar (phase 3)
   - all in the catalogue
 - ✅ **What's new** (from the CHANGELOG), Labs switches (the first: Canvas stress test), and the build's version and commit on the page.
 - ✅ **A strict security policy:** no inline scripts or styles, previews per pull request, and telemetry off.
 
 ### Coming next
-- **Phase 2:** your acceptance (report: `docs/reports/phase-2.md`).
-- **Phase 3:** the editor (Monaco), synced to the workspace, with autosave.
+- **Phase 3:** your acceptance (report: `docs/reports/phase-3.md`). Then Node 26 (upgrade-later 2), in its own small pull request.
 - **Phase 4:** the indexer: every file parsed, symbols searchable in under 100 ms.
 - **Phase 5:** TypeScript call graphs: callers and callees.
 - **After that:** stage 1 draws real flows from code, and stage 2 adds live frames of the running app.

@@ -1,0 +1,120 @@
+/*
+ * Figma 11 editor tabs: panel surface with a bottom border; each tab Mono small with a border on its right; the
+ * shown one on the canvas surface in primary text. 36 px tall (size/editor-tab), 12 px sides, 8 px gaps (Figma's
+ * 14 and 6 moved onto the 4 px grid).
+ */
+.tabs {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-block-end: var(--border-width-default) solid var(--color-border-subtle);
+  background: var(--color-surface-panel);
+  scrollbar-width: thin;
+}
+
+.list {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tab {
+  display: flex;
+  flex: none;
+  gap: var(--space-8);
+  align-items: center;
+  box-sizing: border-box;
+  block-size: var(--size-editor-tab);
+  padding-inline: var(--space-12) var(--space-8);
+  border-inline-end: var(--border-width-default) solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
+}
+
+.tab:hover {
+  background: var(--color-surface-hover);
+}
+
+.tab[data-active] {
+  background: var(--color-surface-canvas);
+  color: var(--color-text-primary);
+}
+
+.name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  font-weight: var(--text-mono-small-font-weight);
+  line-height: var(--text-mono-small-line-height);
+  letter-spacing: var(--text-mono-small-letter-spacing);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* The close button and the unsaved dot share one slot: the dot shows until the tab is hovered or focused. */
+.end {
+  display: grid;
+  place-items: center;
+  inline-size: var(--size-icon-sm);
+  block-size: var(--size-icon-sm);
+}
+
+.end > * {
+  grid-area: 1 / 1;
+}
+
+.dot {
+  inline-size: var(--space-8);
+  block-size: var(--space-8);
+  border-radius: var(--space-8);
+  background: var(--color-text-secondary);
+}
+
+.close {
+  display: grid;
+  place-items: center;
+  inline-size: var(--size-icon-sm);
+  block-size: var(--size-icon-sm);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.tab[data-active] .close,
+.tab:hover .close,
+.close:focus-visible {
+  opacity: 1;
+}
+
+.close:hover {
+  background: var(--color-surface-selected);
+  color: var(--color-text-primary);
+}
+
+/* With unsaved changes, the dot stands in for the close button until the tab is hovered or the button focused. */
+.tab[data-unsaved] .close {
+  opacity: 0;
+}
+
+.tab[data-unsaved]:hover .close,
+.tab[data-unsaved] .close:focus-visible {
+  opacity: 1;
+}
+
+.tab[data-unsaved]:hover .dot,
+.tab[data-unsaved]:has(.close:focus-visible) .dot {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .close,
+  .dot {
+    transition: opacity var(--duration-hover) ease-out;
+  }
+}

@@ -16,7 +16,7 @@ import type { WorkspaceDependencies } from './routes.js';
 
 type FileContext = Context<SignedInEnv>;
 
-const AGENT_STATUS: Record<AgentErrorCode, 400 | 403 | 404 | 413 | 502> = {
+const AGENT_STATUS: Record<AgentErrorCode, 400 | 403 | 404 | 409 | 413 | 502> = {
   invalid_request: 400,
   not_found: 404,
   not_a_directory: 400,
@@ -25,6 +25,8 @@ const AGENT_STATUS: Record<AgentErrorCode, 400 | 403 | 404 | 413 | 502> = {
   secret_file: 403,
   too_large: 413,
   not_allowed: 403,
+  // Someone (the terminal, another tab, an agent) changed the file since it was opened: the page decides.
+  conflict: 409,
   failed: 502,
 };
 
@@ -38,8 +40,9 @@ const PROVIDER_STATUS: Record<ProviderErrorKind, 409 | 502 | 503> = {
 export const NOT_RUNNING = 'Open the workspace first.';
 
 /**
- * The project's files and commands, through the workspace agent (phase 1d step 5). Mounted inside the workspace
- * routes: /api/projects/:projectId/workspace/{files,file,exec}. Only the project's owner, only while running.
+ * The project's files and commands, through the workspace agent (phase 1d step 5; phase 3 step 2 added the
+ * file list, versions and the journal). Mounted inside the workspace routes:
+ * /api/projects/:projectId/workspace/{files,file,tree,journal,exec}. Only the project's owner, only while running.
  */
 export function fileRoutes(deps: WorkspaceDependencies) {
   const files = new Hono<SignedInEnv>();
@@ -104,6 +107,8 @@ export function fileRoutes(deps: WorkspaceDependencies) {
 
   files.get('/files', (c) => ask(c, { op: 'list', path: c.req.query('path') ?? '' }));
   files.get('/file', (c) => ask(c, { op: 'read', path: c.req.query('path') }));
+  // Every file in the project, for the file tree and quick-open (never .env files).
+  files.get('/tree', (c) => ask(c, { op: 'files' }));
 
   files.put(
     '/file',
@@ -117,9 +122,39 @@ export function fileRoutes(deps: WorkspaceDependencies) {
         path: c.req.query('path'),
         content: body.content,
         encoding: body.encoding,
+        // Only when sent: without it, the write is unconditional (phase 1d).
+        ...('baseVersion' in body ? { baseVersion: body.baseVersion } : {}),
       });
     },
   );
+
+  // The journal: unsaved editor buffers, kept in the workspace outside the project (phase 3).
+  files.get('/journal', (c) => ask(c, { op: 'journal-list' }));
+  files.get('/journal/entry', (c) => ask(c, { op: 'journal-get', path: c.req.query('path') }));
+  files.put(
+    '/journal/entry',
+    requireSameOrigin,
+    bodyLimit({ maxSize: LIMITS.lineBytes, onError: tooLarge }),
+    async (c) => {
+      const body = await jsonBody(c);
+      if (body instanceof Response) return body;
+      return ask(c, {
+        op: 'journal-put',
+        path: c.req.query('path'),
+        content: body.content,
+        baseVersion: body.baseVersion,
+        revision: body.revision,
+      });
+    },
+  );
+  files.delete('/journal/entry', requireSameOrigin, (c) => {
+    const revision = Number(c.req.query('revision'));
+    return ask(c, {
+      op: 'journal-drop',
+      path: c.req.query('path'),
+      revision: c.req.query('revision') === undefined ? undefined : revision,
+    });
+  });
 
   files.post(
     '/exec',

@@ -76,7 +76,8 @@ describe('ProjectPage', () => {
     );
     expect(screen.getByRole('tab', { name: 'Graph' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole<HTMLButtonElement>('tab', { name: 'Sequence' }).disabled).toBe(true);
-    expect(screen.getByRole<HTMLButtonElement>('tab', { name: 'Code' }).disabled).toBe(true);
+    // Code works since phase 3; Sequence arrives with its phase.
+    expect(screen.getByRole<HTMLButtonElement>('tab', { name: 'Code' }).disabled).toBe(false);
   });
 
   it('puts only working tools on the rail', async () => {
@@ -89,6 +90,7 @@ describe('ProjectPage', () => {
     const rail = await screen.findByRole('navigation', { name: 'Tools' });
     expect([...rail.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual([
       'Entry points',
+      'Files',
       'Terminal',
     ]);
   });

@@ -110,6 +110,7 @@ export const vars = {
       "comfortable": "var(--size-row-comfortable)"
     },
     "bar": "var(--size-bar)",
+    "editor-tab": "var(--size-editor-tab)",
     "rail": "var(--size-rail)",
     "panel": {
       "left": "var(--size-panel-left)",
@@ -216,6 +217,13 @@ export const vars = {
       "observed": "var(--color-edge-observed)",
       "default": "var(--color-edge-default)"
     },
+    "syntax": {
+      "keyword": "var(--color-syntax-keyword)",
+      "string": "var(--color-syntax-string)",
+      "number": "var(--color-syntax-number)",
+      "comment": "var(--color-syntax-comment)",
+      "plain": "var(--color-syntax-plain)"
+    },
     "preview": {
       "surface": "var(--color-preview-surface)",
       "ink": "var(--color-preview-ink)",
@@ -268,6 +276,11 @@ export const themeValues = {
     "--color-state-scope-text": "#eca4cf",
     "--color-edge-observed": "#a3aab5",
     "--color-edge-default": "#6b7380",
+    "--color-syntax-keyword": "var(--color-text-secondary)",
+    "--color-syntax-string": "var(--color-text-secondary)",
+    "--color-syntax-number": "var(--color-text-primary)",
+    "--color-syntax-comment": "var(--color-text-muted)",
+    "--color-syntax-plain": "var(--color-text-primary)",
     "--color-preview-surface": "#ffffff",
     "--color-preview-ink": "#1f2328",
     "--color-preview-muted": "#6e7781",
@@ -312,6 +325,11 @@ export const themeValues = {
     "--color-state-scope-text": "#994c7d",
     "--color-edge-observed": "#5c6470",
     "--color-edge-default": "#868d98",
+    "--color-syntax-keyword": "var(--color-text-secondary)",
+    "--color-syntax-string": "var(--color-text-secondary)",
+    "--color-syntax-number": "var(--color-text-primary)",
+    "--color-syntax-comment": "var(--color-text-muted)",
+    "--color-syntax-plain": "var(--color-text-primary)",
     "--color-preview-surface": "#ffffff",
     "--color-preview-ink": "#1f2328",
     "--color-preview-muted": "#6e7781",
@@ -394,6 +412,7 @@ export const baseValues = {
   "--size-row-compact": "28px",
   "--size-row-comfortable": "32px",
   "--size-bar": "40px",
+  "--size-editor-tab": "36px",
   "--size-rail": "44px",
   "--size-panel-left": "248px",
   "--size-panel-right": "360px",

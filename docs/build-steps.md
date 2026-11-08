@@ -11240,3 +11240,534 @@ pnpm size               # after pnpm build: the bundle budgets
 **Found at the merge:** GitHub refused the merge ("the base branch policy prohibits the merge") with every check green. Main's ruleset requires checks **by job name**, and step 8 had renamed the visual job, so the required one never reported. The name is back, with a comment in `ci.yml`. **Gotcha:** renaming a required CI job needs the ruleset changed in the same go (Settings → Rules).
 
 **Commit:** `fix(ci): keep the visual job's name, a required check on main`
+
+## Phase 3 — Open a repo and edit
+
+**From the build plan:**
+- **Build:** CodeMirror 6 in the browser (the plan said Monaco; ADR 0021) with the buffer synced to the workspace; tabs, save, undo, quick-open; autosave journal every few seconds; file watcher.
+- **Done when:** edits survive closing the tab and reopening; an edit made in the terminal appears in the editor.
+- **Try it:** edit a file in Rallly, close the tab, reopen it: the change is still there.
+
+**Owner decisions (7 Nov 2026, decisions log):**
+- **Saving:** Ctrl/⌘+S at once; autosave after 5 s without typing and on switching file, leaving the view or the window losing focus; the journal every 2 s and on hiding the tab; an "Autosave: on/off" switch, on by default.
+- **The Code view** (Figma 11); the editor card on the canvas is phase 7.
+- **Syntax highlighting only;** no error count until phase 33.
+
+**Expected outcome:** on a project's page, the **Code** switch opens the Code view, laid out like Figma 11:
+- a file tree in the left panel
+- tabs, with a dot on unsaved files
+- a breadcrumb, the editor, and a status bar (line and column, indentation, encoding, language, autosave)
+- **Ctrl/⌘+S** saves, **Ctrl/⌘+P** opens a file by name, undo works, and autosave catches what you forget
+- close the browser tab mid-edit and reopen it: your changes are there
+- `sed` in the terminal: the open file updates in front of you
+
+**Concepts this phase introduces** (each gets a primer in its step):
+- CodeMirror 6: state, views, transactions and extensions: https://codemirror.net/docs/guide/
+- Shadow DOM, where each editor lives so its styles stay within our CSP: https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_shadow_DOM
+- Content-Security-Policy for styles and workers: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy
+- File watching with inotify, and its limits: https://man7.org/linux/man-pages/man7/inotify.7.html
+- Optimistic concurrency (versioned writes): https://developer.mozilla.org/en-US/docs/Web/HTTP/Conditional_requests
+- IndexedDB, for the browser's copy of the journal: https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API
+- Saving when a page goes away (`visibilitychange`, `pagehide`, `fetch` with `keepalive`): https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API
+
+**Scope:**
+- **In:** the Code view; the file tree; CodeMirror 6 with syntax highlighting; tabs, save, undo, quick-open; autosave and the journal; the file watcher and changes on disk; honest states (binary, too large, secret file, workspace asleep).
+- **Out:** language servers (phase 33); global search (phase 4); the editor card on the canvas (phase 7); git markers and the git panel (phase 34); inline agent diffs (stage 3); split view; backups and restore history (phase 20a).
+
+### Steps (planned)
+
+| # | Step | Status |
+| --- | --- | --- |
+| 0 | Record the decisions; this plan; branch | done (Claude, 7 Nov) |
+| 1 | Spike: an editor under our CSP, and its size (Monaco, CodeMirror 6 and Ace compared; CodeMirror 6 chosen); the watcher's cost with Rallly's `node_modules`. ADR 0021 | done (Claude, 7 Nov) |
+| 2 | Agent: file list, versioned read and write, conflicts, journal operations | done (Claude, 7 Nov) |
+| 3 | The watcher and the events channel: agent → host → control plane WebSocket | done (Claude, 7 Nov) |
+| 4 | UI components: EditorTabs, FileTree, StatusBar, Breadcrumb (catalogue and baselines) | done (Claude, 8 Nov) |
+| 5 | The Code view: tree, CodeMirror in a shadow root, tabs, save, undo; binary, large and secret states; canvas shortcuts through shadow roots | done (Claude, 8 Nov) |
+| 6 | Saving: autosave, the journal (workspace and IndexedDB), restore on reopen | done (Claude, 8 Nov) |
+| 7 | Changes on disk (reload or banner) and quick-open | done (Claude, 8 Nov) |
+| 8 | Walkthrough, screen baselines, Figma 11 differences, editor bundle budget | done (Claude, 8 Nov) |
+| 9 | Close: report, 0.7.0, PR | done (Claude, 8 Nov) |
+
+### How each Done-when item is proven
+
+| Item | Test |
+| --- | --- |
+| Edits survive closing the tab and reopening | Docker test: the journal written and read back in a real container. Walkthrough: type, close the page, open a new one, the text is back |
+| An edit made in the terminal appears in the editor | Docker test: `sed -i` in a real container produces a watcher event with the new version. Walkthrough: the event updates a clean buffer; an unsaved one shows "Changed on disk" |
+| Tabs, save, undo, quick-open, autosave | Component and unit tests; walkthrough |
+| Never lose work | Unit tests: save failures, workspace asleep, the IndexedDB fallback |
+| Secrets | Canary: a `.env` never appears in the tree, quick-open, the journal or events |
+| Looks like Figma 11 | Screen baselines in both themes, axe, and the differences list |
+
+CI's walkthroughs use a fake workspace (staging has none until upgrade-later 33); the real-container half is proven by Docker tests and by the owner on `pnpm dev`, as in 1d.
+
+### Risks (checked at every step)
+
+| # | Risk | How we keep it in check | Status |
+| --- | --- | --- | --- |
+| R1 | The editor breaks our CSP | Step 1 spike before anything is built on it | **closed (step 1):** Monaco needed `style-src-attr 'unsafe-inline'`; CodeMirror 6 in a shadow root has 0 violations under the unchanged policy (owner chose it, ADR 0021). Step 5's walkthrough fails on any violation |
+| R2 | The editor's size | Lazy chunk with its own budget; only the languages a web project needs | **mostly closed (step 1):** CodeMirror 6 with TypeScript is 147 kB gzipped (Monaco 705). The budget is set in step 8 |
+| R3 | **Laptop:** inotify's limit is shared with the whole computer; watching `node_modules` could exhaust it | Watch without `node_modules`, `.git` and build output; measure in the spike | **closed (step 3):** the watcher skips them; Rallly is 599 folders (0.1% of 524,288); a cap of 20,000 per watcher, with a visible error beyond it |
+| R4 | Lost edits (disconnect, sleep, closed tab) | Journal every 2 s and on page hide, an IndexedDB copy, tests for each case | **closed (step 6):** two copies (the workspace, every 2 s and on close; the browser, within 300 ms), restore on open, autosave; the Try it walkthrough proves it |
+| R5 | Silent overwrites when disk and editor disagree | Versioned writes; conflicts shown, never resolved silently | **closed (step 7):** saves never overwrite an unseen change; changes never replace unsaved text; the person chooses (Keep mine, or Load the workspace's version); tested both ways, mutation-checked |
+
+### Step 3.1 — Spike: which editor, under our CSP; and the watcher's cost (done by Claude; ADR 0021)
+
+**Goal:** before building on an editor, prove it runs under our Content-Security-Policy and is light enough for many editors on the canvas; and measure what a file watcher costs on the owner's laptop.
+
+**Concepts:**
+- **Content-Security-Policy (CSP):** a header that tells the browser what a page may load and run. Ours allows scripts, styles, images, fonts and connections only from our own site, and no inline code or styles. It's our main defence against cross-site scripting: even if an attacker's text slipped into the page as HTML, it couldn't run. https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP
+- **`style-src-elem` versus `style-src-attr`:** `<style>` elements and `style="…"` attributes are checked separately. Setting `element.style.top` from a script (the CSS object model) and constructed stylesheets (`new CSSStyleSheet()`, `adoptedStyleSheets`) are allowed, because only our own scripts can do them.
+- **Shadow DOM:** a separate DOM tree attached to an element. Styles inside don't leak out, page styles don't leak in, and CSS variables and fonts still pass through. https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_shadow_DOM
+- **inotify:** how Linux reports file changes. One watch per folder, from a pool shared by the whole computer. https://man7.org/linux/man-pages/man7/inotify.7.html
+
+**What happened:**
+1. **Monaco** (the plan's choice) under our policy: broken, with 70 violations. Routing its `<style>` elements into constructed stylesheets and loading its worker from our own site removed all but the `style="…"` attributes, which it puts on every line it draws (`viewLine.js:135`, via `innerHTML`). It only worked with `style-src-attr 'unsafe-inline'`. That needed the owner's decision.
+2. **The owner:** "it's not necessary to be fixated on one or make it look like VS Code; explore what's best suited for us."
+3. **Monaco, CodeMirror 6 and Ace** were compared on the same tests under the unchanged policy (figures in ADR 0021). CodeMirror 6 had 0 violations with each editor in a shadow root (its styling library only uses constructed stylesheets there), was about a fifth of Monaco's size, used a third of its memory for 21 editors, and typed fastest.
+4. **The owner chose CodeMirror 6** and asked for the replacement to be complete:
+   - Monaco and Ace are removed from the dependencies (none left in the lockfile).
+   - The CodeMirror packages we use are in the catalog, all MIT.
+   - CLAUDE.md, the build plan, the decisions log, this plan and RUN-AND-FEATURES say CodeMirror 6. The research report and ADR 0002 carry dated notes.
+5. **The watcher:** Rallly's code is 599 folders (0.1% of the laptop's 524,288 inotify watches), and `node_modules` must be skipped. `sed -i` was noticed in a median of 3.6 ms in a workspace container. Watch folders, not files.
+
+**Gotchas:**
+- **`style-mod` only uses constructed stylesheets in a shadow root.** On the main document it writes a `<style>` element, which our CSP blocks, and the editor looks unstyled with just one violation reported.
+- **Events from inside a shadow root are retargeted.** A `window` listener sees the host element as `event.target`, so the canvas shortcuts must look at `event.composedPath()[0]` (step 5, with a test).
+- **Spike measurements are headless (software rendering):** they compare the editors with each other; they aren't real-world times.
+
+**Risks:**
+- R1 and R2 are closed or mostly closed (see the table).
+- R3 (inotify) is understood: watch without `node_modules`.
+- **Laptop:** all five checks ok. Two measuring containers ran read-only, with no network, labelled `org.flowcanvas.role=measure`, and were removed. The sleeping workspace wasn't touched.
+
+**Commit:** `build(web): CodeMirror 6 replaces Monaco as the editor, checked under the CSP (ADR 0021)`
+
+### Step 3.2 — The workspace agent: file list, versions, conflict-safe saves, the journal (done by Claude)
+
+**Goal:** give the editor what it needs from the workspace, before any editor code exists: a list of the project's files, a version with every read and save so nothing is silently overwritten, and a journal that keeps unsaved changes safe in the workspace.
+
+**Agent protocol 2** (`workspace/agent/src/protocol.ts`; the host copies the agent in on every connection, so the host and agent always match):
+
+| Operation | What it does |
+| --- | --- |
+| `files` | Every file of the project, from `git ls-files` (tracked and untracked, not ignored, not deleted), or a walk that skips `node_modules`, `.git` and build output when it isn't a repository. Never `.env` files. Up to 50,000 |
+| `read` | As before, plus `version`: the SHA-256 of the bytes |
+| `write` | As before, plus `version`. With `baseVersion` it's conflict-safe: refused with `conflict` if the file isn't that version any more. `null` means the file mustn't exist yet |
+| `journal-put` | Keeps an unsaved buffer (with the version it was edited from and a rising `revision`); an older revision never replaces a newer one |
+| `journal-list`, `journal-get` | What's unsaved, and the content |
+| `journal-drop` | Removes an entry after a save, unless it has newer edits than that save |
+
+**Where the journal lives:** `/workspace/.flowcanvas/journal`, in the workspace's volume (so it survives sleep, stop and start) but outside the project, so git, the dev server and the file list never see it. One file per buffer, named by a hash of its path, written whole and renamed into place, with mode 600 in a 700 folder.
+
+**Control plane routes** (`services/control-plane/src/workspaces/file-routes.ts`), owner only, while running, same-origin for changes:
+- `GET /tree`
+- `PUT /file` with `baseVersion` (a conflict answers **409**)
+- `GET /journal`
+- `GET`, `PUT` and `DELETE /journal/entry`
+
+The logs record the operation and outcome only, never paths or content (tested with a canary).
+
+**Concepts:**
+- **Optimistic concurrency.** Instead of locking a file while you edit, remember which version you started from, and refuse the save if it changed. HTTP does the same with `If-Match`. https://developer.mozilla.org/en-US/docs/Web/HTTP/Conditional_requests
+- **Content hashes as versions.** The same bytes always give the same SHA-256, so a version means "exactly this content", whatever the clock or the file system says.
+- **Write, then rename.** `rename()` replaces a file in one step, so a crash leaves the old entry or the new one, never half of one.
+- **Serialising per key.** Two saves of the same file at once could both pass the version check. The agent runs them one after the other, so exactly one wins (tested).
+
+**Tests:**
+- **Agent (34, 16 new):** versions; conflicts after a change, a new file and a deletion; two saves from one version where exactly one wins; the file list with and without git; the journal (restart, revisions, drops, limits, damaged entries, secrets, paths).
+- **Mutation-checked:** removing the conflict check fails 4 tests, and each revision guard fails its own.
+- **Routes (3 new):** the operations each route sends, 409 for a conflict, same-origin and malformed requests refused, the journal never logged.
+- **Docker (3 new, in a real Rallly workspace):**
+  - the file list comes from git and has no `.env`
+  - **a `sed -i` in the terminal makes a save from the old version fail, keeping the terminal's change**
+  - the journal is outside the project (git doesn't see it), mode 600, and survives the workspace stopping and starting
+
+**Results:** `pnpm test` 651 passed; `pnpm test:docker` 45 passed; lint and typecheck clean.
+
+**Gotchas:**
+- **The control plane reads the agent's protocol from `dist/`.** After changing `protocol.ts`, build the agent (`pnpm --filter @flowcanvas/workspace-agent build`); turbo does this before tests in CI.
+- **Tests with the protocol version written in as a literal broke on the bump.** They use `AGENT_PROTOCOL` now.
+- **Narrowing by a field name.** `'entries' in result` stopped meaning "a folder listing" once the journal list also had `entries`; TypeScript caught it.
+- **One Docker run left `fc-test-*` containers behind.** A clean full run afterwards left none. To watch; `pnpm workspace:clean` removes them, and nothing else.
+
+**Risks:**
+- R4 (lost edits): the journal exists and is proven to survive a restart.
+- R5 (silent overwrites): conflict-safe saves exist and are proven against a terminal edit.
+- **Laptop:** all five checks ok. The Docker runs used test workspaces only, and your sleeping workspace wasn't touched.
+
+**Commit:** `feat(workspace): file list, versioned conflict-safe saves and the journal (agent protocol 2)`
+
+### Step 3.3 — The file watcher, and its channel to the page (done by Claude; ADR 0022)
+
+**Goal:** an edit made anywhere in the workspace (the terminal, another tab, later an agent) reaches the page within a moment, so the editor can show it (step 7). This is the workspace half of the *Done when* "an edit made in the terminal appears in the editor".
+
+**How it fits together:**
+
+| Hop | What | File |
+| --- | --- | --- |
+| Watcher | `main.js --watch`: watches the project's folders (not `node_modules`, `.git` or build output), reports `ready`, `changed` (path, deleted, new version), `overflow` and `error`; never `.env` files | `workspace/agent/src/watch.ts` |
+| Host | `host.watch(ref)` starts one per open page (4 at most per workspace) and ends them when the workspace stops; `/v1/workspaces/:ref/events` relays checked events; when the page goes, stdin is ended and the process killed after 2 s | `workspace/host/src/workspaces.ts`, `events.ts`, `server.ts` |
+| Control plane | `GET /api/projects/:id/workspace/events` (same-origin, owner only): checks each event again and sends it on; nothing goes the other way; **not activity** | `services/control-plane/src/workspaces/events-routes.ts` |
+
+**Concepts:**
+- **inotify, folders not files.** Linux reports changes per watched folder. Watching a file breaks when a program replaces it (`sed -i`, most editors' "atomic save"), because the watch follows the old file. https://man7.org/linux/man-pages/man7/inotify.7.html
+- **Coalescing.** One save can raise several notifications. The watcher waits 50 ms, then reports each path once, and only if its content really changed.
+- **Overflow.** A `git checkout` or `pnpm install` can change thousands of files. Past 500 at once, the watcher sends one `overflow` and quietly catches up, and the page reloads what it shows.
+- **Defence in depth.** The workspace runs code we don't control, so its events are checked twice (host and control plane) before a page trusts them: relative paths only, never `..`, ignored folders or secret files, well-formed versions.
+- **Cost.** A page left open mustn't keep a workspace awake (CLAUDE.md section 7), so the events channel never counts as activity.
+
+**Measured (Docker test, a real Rallly workspace):** watching **599 folders**. `sed -i` to the event arriving at the page's socket: **162 ms**, about 100 ms of which is Docker starting `sed`.
+
+**Tests:**
+- **Watcher (11 new):**
+  - edits, the `sed -i` style replace (twice), new and deleted folders
+  - silence for `.env`, `node_modules` and same-content rewrites
+  - a large file without a version; overflow, then keeping up; too many folders
+  - the event checker refusing every misleading event
+  - mutation-checked: removing the secret filter or the dedupe fails its test
+- **Host (6 new):** events relayed and bad lines dropped (logged once, never the line); the watcher ended when the page closes and the page closed when the watcher ends; refusals; the cap of 4, asleep, stopped, and ended on stop.
+- **Control plane (9 new):** events checked and relayed one way; not activity; both sides closed; logs without file names; owner, same-origin and WebSocket only; the local host's upgrade with the token.
+- **Docker (1 new, the Done-when half):** `sed -i` produces the right event with the right version, `.env` and `node_modules` stay silent, and **no watcher is left after the page closes**. The check is shown to find the watcher while the page is open, so its silence afterwards means something.
+
+**Results:** `pnpm test` 677 passed; `pnpm test:docker` 46 passed, with no test containers left; lint and typecheck clean.
+
+**Gotchas:**
+- **`pgrep -f "main.js --watch"` matched itself.** The pattern is also in the command line of the `sh -c` running pgrep, so the watcher looked like it was still running. Match from the start (`^node /tmp/…`), and prove the check can see the process while it runs.
+- **Copying the agent in is now atomic** (write, then rename). The request agent and a watcher can be copied in at the same moment, and neither may start from a half-written file.
+- **Prettier reflows code, so text-based edit scripts miss.** An edit that silently didn't apply made a rerun prove nothing; it was caught by checking the script's result. For code, edit exact lines read from the file.
+
+**Risks:**
+- R3 (inotify): closed for Rallly, at 599 folders and a cap of 20,000 per watcher with a visible error beyond it.
+- **Laptop:** all five checks ok (load 12.3 of 14.4 right after a unit-test run, so the heavy suites ran one at a time). Test workspaces only; nothing was left behind.
+
+**Commit:** `feat(workspace): the file watcher and its events WebSocket, checked at every hop (ADR 0022)`
+
+### Step 3.4 — The editor's components in the design system (done by Claude)
+
+**Goal:** build the Code view's pieces in `packages/ui` first, with their variants, catalogue stories, screenshot baselines and accessibility checks, before any screen uses them (CLAUDE.md section 10, components first).
+
+| Component | What | Built on | Accessibility |
+| --- | --- | --- | --- |
+| `EditorTabs` | Open files: the shown one on the canvas surface, a neutral dot for unsaved changes, a close button (shown on hover or focus), middle click closes, scrolls sideways and keeps the shown tab in view | Our own markup | A `nav` of buttons; the shown one is `aria-current`; "unsaved changes" is in the name ("process.ts, unsaved changes"), not only the dot. Not ARIA tabs, because a tab list may hold only tabs |
+| `FileTree` | The project's files from the flat list `/tree` gives (`buildTree`): folders first, names ignoring case, numbers in order; reveals and selects the shown file; dots for unsaved files | React Aria `Tree` in a `Virtualizer` (only rows in view are in the page) | The WAI-ARIA tree grid: arrows move and open or close, Enter opens, levels announced, "unsaved changes" as a labelled image |
+| `Breadcrumb` | A path above the editor; long ones cut in the middle (`apps / … / polls / create / poll-form.tsx`), whole on hover | Semantic `nav` and `ol` | The last segment is `aria-current="location"`; chevrons hidden |
+| `StatusBar` | Items on the left (line and column, indentation, encoding, language), extras on the right (the autosave switch) | A plain bar | A named group, deliberately not a live region (it changes with every cursor move) |
+
+**New token:** `size.editor-tab` = 36 px (Figma 11's tab height, on the 4 px grid).
+
+**Concepts:**
+- **Components first.** A component is built and reviewed alone, in every state, then used. Problems are cheaper to see in the catalogue than in a busy screen.
+- **The tree-grid pattern.** A tree whose rows can also be acted on. React Aria implements the keyboard model and the ARIA attributes, which are easy to get subtly wrong. https://www.w3.org/WAI/ARIA/apg/patterns/treegrid/
+- **Virtualisation.** Only the visible rows exist in the page; the rest are computed when scrolled into view. That keeps 50,000 files fast. https://react-spectrum.adobe.com/react-aria/Virtualizer.html
+- **Label in name (WCAG 2.5.3).** An accessible name that differs from the visible text must start with it, so "process.ts, unsaved changes" is fine for a tab showing "process.ts".
+
+**Figma 11 differences (for the step 8 list):**
+- **Spacing onto Graphite's 4 px grid:** tab padding 14 → 12 and gap 6 → 8; tree indent 14 → 12; breadcrumb sides 20 → 16; status bar 26 → 28 tall.
+- **Text in `text/muted`, not Figma's `text/tertiary`,** which Graphite keeps for icons and lines (contrast).
+- **The tab and tree dots are neutral:** they mean "unsaved". Figma's amber and green show git change state, which arrives with change capture (stage 3).
+- **No error count in the status bar** until phase 33 (owner, 7 Nov); the autosave switch is there instead.
+- **No flow tag on the breadcrumb yet** (`flow · Save item`): flows arrive in stage 1.
+
+**Tests:**
+- 17 new unit tests:
+  - the tree model's order and nesting, and 50,000 paths in under a second
+  - the tree's mouse and keyboard behaviour, reveal and selection, the unsaved label, and the empty state
+  - the tabs' names, current tab, close, middle click, keyboard reach, and keeping the shown tab in view
+  - the breadcrumb's middle cut and current location
+  - the status bar not being a live region
+- **Mutation-checked:** disabling the reveal fails 2 tests.
+- **16 new screenshot baselines** (8 stories in both themes), all passing axe.
+
+**Results:** `pnpm test` 694 passed; `pnpm test:visual` 106 passed (78 catalogue stories plus the 16 new, and 12 screens); lint, typecheck and format clean; the bundle unchanged (nothing uses the components yet).
+
+**Gotchas:**
+- **jsdom has no layout:** the virtualiser renders no rows unless the test gives elements a size (`clientWidth` and `clientHeight`), and there's no `scrollIntoView`. Both are stubbed in the tests, never guarded in the component.
+- **`rowHeight` is deprecated** in this React Aria version; it's `rowSize`. Lint caught it.
+- **Baselines for new stories only:** `--update-snapshots=missing` creates missing ones and never overwrites an approved one.
+- **One unexplained visual failure.** The first full run ended with 105 passed and a failure exit, and its log wasn't kept; two full runs after it passed 106 of 106. To watch.
+
+**Risks:**
+- **Laptop:** all five checks ok. The visual runs use one Docker container at a time.
+
+**Commit:** `feat(ui): EditorTabs, FileTree, Breadcrumb and StatusBar for the Code view, catalogued with baselines`
+
+### Step 3.5 — The Code view: open, edit and save files in CodeMirror (done by Claude)
+
+**Goal:** the **Code** switch works. The project's files are on the left; a file opens in CodeMirror with its tab, path and status; Ctrl/⌘+S saves it from the version it was opened at; and a change made in the workspace meanwhile is never overwritten.
+
+**What a person can do now** (`pnpm dev`, a running workspace):
+- **Code** in the top bar, or **Files** on the rail, shows the project's files: folders first, `.env` files never listed.
+- **Click a file** to open it in a tab, with its path above and the cursor, indentation, encoding and language below. Binary files say what they are, and refused files (`.env`) say why, in the workspace's words.
+- **Type,** and the tab and the tree row get a dot ("unsaved changes" in their names). Undoing back to the saved text clears it.
+- **Ctrl/⌘+S saves** ("Saving…", then "Saved"). If the file changed in the workspace since it was opened (the terminal, another tab), the save is refused, a message says so, and the changes stay in the editor.
+- **Closing a tab** with unsaved changes saves it first; if that fails, the tab stays open.
+- **Open tabs and the view are remembered** per project in this browser.
+- **F, V and H typed in the editor are letters,** never canvas shortcuts.
+
+**Code** (`apps/web/src/code/`):
+
+| File | What |
+| --- | --- |
+| `api.ts` | The file list, reads (text with a version, binary, or a refusal), saves (`saved`, `conflict` or `failed`) |
+| `languages.ts` | The language by extension, each parser loaded on demand; the indentation a file uses |
+| `editor-setup.ts` | Each file's `EditorState` (text, undo history, keys: Mod-s, Tab indents, search); the theme and highlighting from tokens |
+| `CodeEditor.tsx` | One `EditorView` in an open shadow root; switching files swaps the state |
+| `useCodeFiles.ts` | Open files, unsaved tracking (against the saved text), saving from the opened version, remembering tabs |
+| `FilesPanel.tsx`, `CodeView.tsx` | The left panel and the Code view (Figma 11) |
+
+Also: `ProjectPage.tsx` (the view switch, the rail's Files button; Files and the editor load lazily); `FlowCanvas.tsx` (`isCanvasShortcut` uses `event.composedPath()[0]`).
+
+**Concepts:**
+- **An `EditorState` per file.** CodeMirror keeps a document, its selection and its undo history in one immutable state. Keeping one per file and swapping it into a single view gives every tab its own undo, cheaply. https://codemirror.net/docs/guide/#state
+- **Not re-rendering while typing.** The latest state per file lives in a React ref. React state changes only when something shown changes (a dot, the status, another file), so typing in a large file doesn't re-render the page.
+- **Esc, then Tab.** Tab indents in the editor (as code editors do), so keyboard users leave with Esc then Tab, CodeMirror's built-in escape. The status bar's description says so.
+- **Code splitting by intent.** The page downloads what you use: the editor's core with the Code view, each language with its first file, the file tree with Files. The bundle budget enforces it. https://vite.dev/guide/features#dynamic-import
+
+**Found and fixed on the way:**
+1. **The file tree stopped responding after the first file.** With selection on, React Aria turns a click into a selection change once something is selected, and the "replace" behaviour selects on every arrow key instead. The tree now has no selection: a click or Enter acts, arrows only move, and the open file is in the row's name ("open in the editor") and styled by `data-current`. React Aria drops `aria-current`, so the name carries it. Regression tests cover both cases.
+2. **Tree rows didn't update** when the open file or its unsaved state changed: React Aria caches rows by item until its `dependencies` prop changes. Caught by the real-browser walkthrough, not by jsdom; regression test added.
+3. **A labelled dot inside a tree row was never announced:** a row's accessible name is its `textValue`. "Unsaved changes" is now in that name.
+4. **CodeMirror was in the project page's chunk** (82 → 271 kB) **and the file tree in the first load** (+25 kB). The bundle budget caught both before anything shipped. The fixes: a dynamic `import()`, `sideEffects` in `packages/ui`, a lazy Files panel, and named chunk groups. The first load ended at 143 kB, below phase 2's 149.
+5. **The token test caught Prettier rewriting generated files.** Generated files are exactly what the generator writes, and are never formatted by hand.
+
+**New budgets** (`apps/web/scripts/bundle-size.ts`): `codemirror` 130 kB (114 now); `lang` 85 (73 for all, each loading alone); `FilesPanel` 30 (25).
+
+**New tokens:** `color.syntax.keyword`, `string`, `number`, `comment` and `plain`. First set to Figma 11's colours; on 8 Nov 2026 the owner chose the quiet palette (keywords and strings `text/secondary`, keywords semibold, comments `text/muted`), so green and amber keep meaning "added" and "modified" (decisions log).
+
+**Tests:**
+- **Unit:** 711 passed in all, 17 new:
+  - the file API's mapping
+  - languages and indentation
+  - the Code view through the page (open, edit, Ctrl+S from the opened version and then the new one, undo clearing the dot, a conflict keeping the text, binary and `.env` states, remembered tabs, workspace not running)
+  - canvas shortcuts from a shadow root
+  - the tree's regressions
+- **Walkthrough (new, `e2e/try-it/phase-3.spec.ts`):** in a real browser under the production CSP, against a fake workspace with real versions and real conflict checks. It opens a file, types (including F, V and H), saves, is refused after a "terminal" change with the text kept, and shows a binary file, with no CSP violations. All 16 walkthroughs pass.
+- **Visual:** 106 passed. 14 baselines were re-approved after reviewing each diff: the rail's Files button and Code enabled (12 screens), and the syntax tokens on the tokens page (2).
+
+**Run and check it:**
+```fish
+pnpm dev            # open a project with a running workspace, then Code
+pnpm test           # 711
+pnpm test:e2e       # 16, the phase 3 walkthrough among them
+pnpm build && pnpm size
+```
+
+**Risks:**
+- R1 (CSP): closed in the page too, with 0 violations in the walkthrough.
+- R2 (size): within the new budgets.
+- R5 (overwrites): the page refuses to overwrite, and keeps the text.
+- **Laptop:** all five checks ok.
+
+**Commit:** `feat(web): the Code view — files, CodeMirror in a shadow root, tabs, conflict-safe saves; lazy editor chunks`
+
+### Step 3.6 — Autosave, the journal, and restoring unsaved changes (done by Claude; ADR 0022 addendum)
+
+**Goal:** the phase's *Done when*: edits survive closing the tab and reopening. Plus the owner's autosave: for when you forget to save.
+
+**What a person sees** (`pnpm dev`, a running workspace):
+- **Autosave** is on (a switch in the status bar, remembered per browser). The file is written 5 s after you stop typing, and at once when you switch file, leave the Code view, or leave the window.
+- **Close the tab mid-edit and reopen it:** the file opens with your changes, marked unsaved, and a note says "Restored unsaved changes from 14:02."
+- **Open the project in another browser:** files with unsaved changes in the workspace open there too, restored.
+- **If the file changed in the workspace after your edit,** the restored changes are shown with a message that the file changed since. They're never saved over the newer file.
+- **Windows-style files keep their `\r\n` line breaks** when saved.
+
+**Code:**
+- `apps/web/src/code/journal.ts`: the workspace journal through the API; the browser's copy in IndexedDB (an in-memory one for tests); `nextRevision`; `newest`
+- `useCodeFiles.ts`: autosave, the two journals, restore on open, flush on leaving, hide and close handlers
+- `CodeView.tsx`: the autosave switch, the restored note
+- `editor-setup.ts`: line breaks kept
+
+**Concepts:**
+- **`visibilitychange` and `pagehide`:** the last moments a page can act before it's hidden or closed. https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API
+- **`fetch` with `keepalive`:** a request the browser finishes even after the page is gone, up to 64 KiB. https://developer.mozilla.org/en-US/docs/Web/API/RequestInit#keepalive
+- **IndexedDB:** the browser's own database, which works when the network doesn't. https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API
+- **Debounce versus throttle:** autosave waits for a pause (each keystroke restarts the wait); the journal writes at most every 2 s while you type.
+
+**Found and fixed on the way:**
+1. **Restored changes were autosaved the moment you arrived in the Code view:** the view switch flushed on every change of view, not only when leaving. Found by the other-browser walkthrough; a regression test fails with the old line.
+2. **CRLF files would have been converted to `\n` on save** (a step 5 gap). `doc.toString()` always uses `\n`; `state.sliceDoc()` keeps the file's separator. A test failed before the fix.
+3. **A tab closed right after typing** relied on the close-time writes alone. The browser's copy is now written within 300 ms of each edit.
+4. **The walkthrough can't observe `keepalive` requests** (Playwright can't intercept them), so it checks that the workspace got the 2-second write or that the page sent the close-time one, and that reopening restores either way.
+
+**Tests:**
+- **Unit:** 727 in all, 16 new.
+  - **Autosave:** after the pause, the wait restarting, on switching file, off (remembered) with the journal still writing, CRLF kept.
+  - **The journal:** both copies with rising revisions, dropped when undone back, keepalive on `pagehide`.
+  - **Restore:** reopening with the changes and saving from their base; files from another tab; the newer copy winning; a stale restore shown as a conflict and never written; a copy equal to the file dropped.
+  - **On the page:** the restored note, the autosave switch, and no save on arriving.
+- **Mutation-checked:** saving a stale restore against the disk version, or not marking it as a conflict, fails the test.
+- **Walkthrough (new, the phase's Try it):** edit, close the tab at once, reopen: the change is there, unsaved, with the note; autosave writes it after 5 s; a fresh browser restores from the workspace. It passed three times in a row, and all 17 walkthroughs pass.
+- **Visual:** 106 passed, unchanged.
+
+**Bundle:** the project page is 93.1 of 95 kB (the journal code). The editor's chunks are unchanged.
+
+**Run and check it:**
+```fish
+pnpm dev     # open a file in the Code view, type, close the tab at once, reopen the project
+pnpm test:e2e -- try-it/phase-3.spec.ts
+```
+
+**Risks:**
+- R4 (lost edits): closed in the browser; the walkthrough proves the Done when.
+- **The project page's budget is nearly full:** the next feature that adds to it should load lazily.
+- **Laptop:** all five checks ok.
+
+**Commit:** `feat(web): autosave, the journal in the workspace and the browser, and restoring unsaved changes`
+
+### Step 3.7 — Changes in the workspace reach the editor; quick-open (done by Claude; ADR 0022 addendum)
+
+**Goal:** the phase's other *Done when*: an edit made in the terminal appears in the editor. Never silently overwrite either side. Plus quick-open (Ctrl/⌘+P), from the build plan.
+
+**What a person can do now** (`pnpm dev`, a running workspace, the Code view):
+- **Edit a file in the terminal** (`sed`, `git checkout`, anything): an open file without unsaved changes shows the new text within a moment.
+- **If you have unsaved changes there,** a banner says the file changed while you were editing, with **Keep mine** (your text replaces theirs, knowingly) or **Load the workspace's version** (your changes go). The same banner resolves a refused save and a stale restore.
+- **Delete a file in the terminal** and its tab says so: **Close**; or, with unsaved changes, **Save it again** or **Close…**, which asks first (owner, 8 Nov).
+- **New and deleted files** appear and disappear in the tree.
+- **Ctrl/⌘+P** opens any file by typing part of its name: letters in order, best matches first, Enter opens. The browser's print dialog doesn't appear.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `apps/web/src/code/events.ts` | The events WebSocket (reconnects; a re-check after a reconnect); `versionOf` (SHA-256 in the browser) |
+| `apps/web/src/code/useCodeFiles.ts` | `onDiskEvent` (follow, conflict, deleted, overflow), `keepMine`, `loadDisk`, `discard`; own-save echoes; changes during a save checked after it |
+| `apps/web/src/code/CodeView.tsx` | The conflict and deleted banners with their buttons |
+| `apps/web/src/code/FilesPanel.tsx` | Lists again on request, and reports its listing |
+| `apps/web/src/project/ProjectPage.tsx` | Events while running; the tree refresh; Ctrl/⌘+P; quick-open fetched in the background |
+| `apps/web/src/code/QuickOpenDialog.ts` | Quick-open by name, so it's its own chunk |
+| `packages/ui/src/components/quick-open/` | `QuickOpen` (React Aria Modal, Dialog, Autocomplete, SearchField, ListBox) and `fuzzy.ts` (ranking), with tests and a story |
+
+**Concepts:**
+- **Optimistic concurrency, seen from the page.** The page knows the version it last saw. A change event with another version means someone else wrote, unless it's the version the page itself just wrote, which it knows because it hashes what it sends.
+- **Races between a request and an event.** An event can overtake the answer to the request that caused it. Here an event during a save waits for the save's answer before it's judged.
+- **Fuzzy matching:** the typed letters in order, with bonuses for the file name, word starts and runs, so `pform` finds `poll-form.tsx`.
+- **Autocomplete with virtual focus:** the field keeps keyboard focus while arrow keys move through the results (`aria-activedescendant`). https://react-spectrum.adobe.com/react-aria/Autocomplete.html
+
+**Found and fixed on the way:**
+1. **A change by someone else during our save was hidden by the save's answer:** the conflict it raised was replaced by "Saved". Changes during a save are now checked after its answer. Found by mutation-testing the echo rule; regression test added.
+2. **The echo rule had no test that could fail:** the echo test sent its event after the save's answer, where another check also covers it. A new test holds the answer back, and fails without the rule.
+3. **Quick-open's first letters were lost on first use:** it loaded on the keypress, so letters typed before it appeared went nowhere, or into the editor. It's now fetched in the background once the workspace runs. Found by the screen test.
+4. **`import('@flowcanvas/ui')` pulled quick-open into the first load** (143 → 159 kB, within 1 kB of the budget). A tiny module that imports it by name keeps it in its own chunk. Found by the bundle budget.
+5. **The page's focus ring inside quick-open's field:** replaced by the search row's accent border (still a visible focus indicator).
+6. **A closed tab's browser-copy timer wasn't cleared** (a step 6 slip): one helper now removes a tab with all three timers.
+
+**Tests:**
+- **Unit:** 747 in all, 20 new.
+  - **events:** what passes the check; reconnecting with a re-check; not connecting while asleep; `versionOf` equal to Node's SHA-256, including non-ASCII text and `\r\n`
+  - **useCodeFiles:** following the disk; echoes, including one before the answer; a conflict that autosave never overwrites, then Keep mine; Load the workspace's version dropping the journal; deleted with and without changes, Save it again, discard; overflow re-checking; a change during a save
+  - **quick-open:** ranking (and 50,000 paths in under 0.5 s), the dialog's focus, typing, Enter, Escape, empty states
+- **Mutation-checked:** removing the echo rule, the unsaved-text rule, or the deferral during a save fails its test.
+- **Walkthrough (new, the Done when in a real browser under the production CSP):** the terminal edits a file and the editor shows it; with unsaved changes, the banner and Load the workspace's version; Ctrl+P, "pack", Enter; the terminal deletes a file, and Close. It passed twice.
+
+**Run and check it:**
+```fish
+pnpm dev     # Code view, open a file; in the dock's terminal: sed -i 's/a/b/' <that file>
+pnpm test:e2e -- try-it/phase-3.spec.ts
+```
+
+**Risks:**
+- R5 (silent overwrites): closed in both directions. Saves never overwrite a change they haven't seen; changes never replace unsaved text.
+- **Laptop:** all five checks ok.
+
+**Commit:** with step 8.
+
+### Step 3.8 — Screen baselines, quick-open's story, and the Figma 11 and 16 differences (done by Claude)
+
+**Goal:** the screens a person sees in phase 3 are approved and protected, and every way they differ from Figma is listed for the owner.
+
+**What a person can do now:** review `docs/reports/phase-3-figma-differences.md`, with Figma 11 and 16 beside the built screens in `docs/reports/phase-3/`.
+
+**Files:**
+- `e2e/visual/screens.spec.ts`:
+  - three Code view screens in both themes: a file open, a restored change in conflict, quick-open
+  - a running workspace in its fake, with files and versions
+  - a quiet events socket
+- `packages/ui/src/components/quick-open/QuickOpen.stories.tsx`: the story, baselined in both themes.
+- `apps/web/scripts/bundle-size.ts`: a `QuickOpenDialog` budget of 14 kB (11.8 now).
+
+**Concepts:**
+- **A screen test waits like a person:** for the editor's text, the tree, the language in the status bar, and the search field's focus before typing. A screenshot taken any earlier would vary.
+- **Review each baseline before approving it:** each new screen was viewed. One wasn't approved as it stood (the focus ring in quick-open) and was fixed first.
+
+**Found and fixed on the way:** quick-open's lost first letters, and the focus ring (step 3.7, items 3 and 5).
+
+**Tests:** 8 new baselines (3 screens and 1 story, in both themes), each repeated twice before approval, all passing axe. The full visual suite ran once before pushing (see the milestone report).
+
+**Bundle:** first load 147.2 kB (143.0 at step 6: React Aria parts that quick-open shares with menus moved into the shared chunk); project page 94.6 of 110; quick-open 11.8 of 14.
+
+**Run and check it:**
+```fish
+pnpm test:visual    # 114: 80 catalogue stories, 15 screens, in both themes, with axe
+```
+Then compare `docs/reports/phase-3/figma-11.png` with `built-code-view-dark.png`, and `figma-16.png` with `built-quick-open-dark.png`.
+
+**Risks:**
+- **The first load is at 147.2 of 160 kB.** The next shared component should be checked for what it adds.
+- **Laptop:** all five checks ok.
+
+**Commit:** `feat(web): an edit in the workspace reaches the editor; conflicts and deleted files resolved by the person; quick-open; Code view baselines`
+
+### Step 3.9 — Close the phase: report, 0.7.0, the upgrade-later review, PR (done by Claude)
+
+**Goal:** finish phase 3 so it can be reviewed and accepted.
+
+**What a person can do now:**
+- read the report (`docs/reports/phase-3.md`) and the Figma differences
+- see 0.7.0 in What's new
+- review the pull request: its preview, test report and recordings
+
+**Files:**
+- `docs/reports/phase-3.md`
+- `CHANGELOG.md` (0.7.0, which What's new reads)
+- `package.json` (0.7.0)
+- `docs/STATUS.md` (in review)
+- `docs/upgrade-later.md` (item 2 due)
+- `docs/RUN-AND-FEATURES.md`
+
+**Concepts:**
+- **Release notes for people:** the changelog says what someone can now do, not which files changed.
+- **The upgrade-later review checks triggers against facts, not memory.** Node 26's status came from nodejs.org on the day.
+
+**Found and fixed on the way:**
+- **Upgrade-later 2 (Node 26 LTS) is due.** Node 26 became LTS on 28 Oct 2026. It changes the workspace image, CI, `.nvmrc` and Cloudflare's build, so it's its own pull request right after this phase merges, keeping this one focused.
+- The rest of the review found nothing due, and nothing was added this phase.
+
+**Tests (all run once before pushing):**
+- format, lint and typecheck: clean
+- unit: 747 passed
+- walkthroughs: 18 passed
+- visual: 114 passed
+- Docker: 46 passed, with no test containers left behind
+- bundle: every budget within
+
+**Run and check it (phase 3, fresh clone):**
+```fish
+git clone https://github.com/ArmaanAhuja/Flowcanvas && cd Flowcanvas
+corepack enable && pnpm install
+cp .dev.vars.example .dev.vars          # then fill in your own values (never paste them anywhere)
+pnpm db:status && pnpm db:migrate       # must say the dev branch
+pnpm dev                                # http://localhost:5173
+```
+1. Sign in, open a project, and open its workspace. Click **Code**.
+2. Open a file, type a line, close the browser tab at once, and open the project again: the line is there, with a note.
+3. Wait 5 seconds: "Saved".
+4. In the **Terminal**, change the file (`sed -i 's/a/b/' <file>`): the editor shows it.
+5. Type, then change it in the terminal again: **Keep mine** or **Load the workspace's version**.
+6. Press **Ctrl/⌘+P**, type part of a name, and press Enter.
+7. `rm` an open file: its tab says it was deleted.
+
+**What proves it:**
+```fish
+pnpm test               # 747
+pnpm test:e2e           # 18, phase 3's three among them (the Try it, terminal edits, saving and conflicts)
+pnpm test:visual        # 114
+pnpm test:docker        # 46 (the watcher, versions and the journal in real containers)
+pnpm build && pnpm size
+```
+
+**Risks:**
+- **Laptop:** all five checks ok.
+
+**Commit:** `chore(release): phase 3 report, 0.7.0, in review`
