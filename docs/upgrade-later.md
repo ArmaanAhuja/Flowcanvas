@@ -13,7 +13,6 @@ Entries keep their numbers, because the docs and code refer to them. Removed num
 
 | # | Item | Now | Later | Trigger | Added |
 | --- | --- | --- | --- | --- | --- |
-| 2 | **Node 26 LTS** | Repo pins Node 24 (`.nvmrc`, `engines >=24.11`, `@types/node` 24) because Node 26 wasn't LTS yet. | Switch `.nvmrc` to 26, update `engines`, `@types/node` and the Docker base image, run the full suite. | **Due now (8 Nov 2026):** Node 26 is "Latest LTS" (v26.13.0, updated 28 Oct 2026). Done in its own pull request right after phase 3 merges (the workspace image, CI, `.nvmrc`, Cloudflare's build). Node 26 shows "Active LTS" on https://nodejs.org/en/about/previous-releases. | 26 Oct 2026 · phase 1 step 1 |
 | 3 | **TypeScript 7 (native compiler)** | Pinned to TypeScript 6.0.x: TS 7's JavaScript API is only published as `typescript/unstable/*`, and typescript-eslint supports `<6.1`. | Move to TS 7 (much faster type-checking) once its programmatic API is stable and typescript-eslint supports it. Phase 5 depends on the compiler API, so check that first. | TS 7 API marked stable, and typescript-eslint's peer range includes 7. | 26 Oct 2026 · phase 1 step 3 |
 | 6 | **Narrow Turbo `build` inputs** | Changing a test file also invalidates the package's `build` cache (Turbo hashes all package files). | Add `"inputs": ["$TURBO_DEFAULT$", "!src/**/*.test.ts", "!src/**/*.test.tsx"]` to `build` tasks. | When builds get slow enough for this to matter. | 26 Oct 2026 · phase 1 step 4 |
 | 7 | **Shared Turbo remote cache in CI** | Each CI run rebuilds from scratch (only the pnpm store is cached). | Add a remote cache (self-hosted or Vercel's) so CI and laptops share build results. | When CI time per push exceeds about 5 minutes. | 26 Oct 2026 · phase 1 step 10 |
@@ -46,6 +45,7 @@ Entries keep their numbers, because the docs and code refer to them. Removed num
 Kept here so references to these numbers still lead somewhere.
 
 - **1:** closed 31 Oct 2026: branch protection is on.
+- **2:** closed 8 Nov 2026: Node 26 LTS (`.nvmrc`, `engines >=26.13`, `@types/node` 26.6.5, the workspace image `node:26-slim` by digest), every suite passing; its own pull request after phase 3.
 - **4:** closed 7 Nov 2026 (phase 2 step 9): the web app has `tsconfig.app.json` (browser only), `tsconfig.node.json` (the Vite config and scripts) and `tsconfig.test.json` (tests, which run in Node). Node APIs in browser code no longer type-check.
 - **5:** closed 31 Oct 2026: CI tests the merge result.
 - **8:** closed 31 Oct 2026: the GitHub billing lock is resolved.

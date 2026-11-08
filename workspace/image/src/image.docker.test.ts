@@ -70,11 +70,11 @@ afterAll(async () => {
 }, 60_000);
 
 describe('workspace image', { timeout: 60_000 }, () => {
-  it('has Node 24, pnpm and git', async () => {
+  it('has Node 26, pnpm and git', async () => {
     const { name } = await start();
     const { code, out } = await sh(name, 'node -v && pnpm -v && git --version');
     expect(code).toBe(0);
-    expect(out).toMatch(/^v24\.\d+\.\d+\n12\.15\.0\ngit version /);
+    expect(out).toMatch(/^v26\.\d+\.\d+\n12\.15\.0\ngit version /);
   });
 
   it('runs as uid 1000 with no capabilities and no way to gain privileges', async () => {

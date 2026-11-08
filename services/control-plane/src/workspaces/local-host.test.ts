@@ -164,7 +164,7 @@ describe('localHostProvider', () => {
   });
 
   it('asks the agent and checks its answer, with time for the command on top', async () => {
-    const answer = { ok: true, result: { protocol: 1, node: 'v24' } };
+    const answer = { ok: true, result: { protocol: 1, node: 'v26' } };
     const { fetcher, provider } = host(() => json(200, answer));
     expect(await provider.agent(REF, { op: 'hello' })).toEqual(answer);
     const [url, init] = fetcher.mock.calls[0] ?? [];

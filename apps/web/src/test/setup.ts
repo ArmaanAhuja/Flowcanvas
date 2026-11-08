@@ -16,3 +16,15 @@ class NoResizeObserver {
 if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = NoResizeObserver;
 }
+
+// jsdom has no Range geometry, which CodeMirror reads when it measures the cursor and selection. Without it, the
+// Code view's tests log TypeErrors from CodeMirror's measuring (they fail nothing, but would hide a real error).
+// Empty geometry, as for a page that isn't laid out; real layout is tested in the browser (the walkthroughs).
+const emptyRects = (): DOMRectList => {
+  const list: DOMRect[] = [];
+  return Object.assign(list, { item: (index: number) => list[index] ?? null });
+};
+if (typeof Range !== 'undefined' && typeof Range.prototype.getClientRects !== 'function') {
+  Range.prototype.getClientRects = emptyRects;
+  Range.prototype.getBoundingClientRect = () => new DOMRect(0, 0, 0, 0);
+}

@@ -102,12 +102,16 @@ const renderPage = (fetcher: typeof fetch) =>
 
 /** The CodeMirror view inside the editor's shadow root. */
 async function editorView(): Promise<EditorView> {
-  const host = await waitFor(() => {
-    const element = document.querySelector('[data-region="editor"]');
-    const editor = element?.shadowRoot?.querySelector('.cm-editor');
-    if (!(editor instanceof HTMLElement)) throw new Error('no editor yet');
-    return editor;
-  });
+  // The first editor loads CodeMirror (a cold dynamic import): allow for every package's tests running at once.
+  const host = await waitFor(
+    () => {
+      const element = document.querySelector('[data-region="editor"]');
+      const editor = element?.shadowRoot?.querySelector('.cm-editor');
+      if (!(editor instanceof HTMLElement)) throw new Error('no editor yet');
+      return editor;
+    },
+    { timeout: 10_000 },
+  );
   const view = EditorView.findFromDOM(host);
   if (view === null) throw new Error('no view');
   return view;

@@ -2,8 +2,8 @@
 # The tag is a hash of this file (src/spec.ts), so any change here builds a new image.
 # Build it with `pnpm workspace:image` from the repository root.
 
-# Node 24 LTS (matches .nvmrc), pinned by digest so a rebuild gets the same base.
-FROM node:24-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c
+# Node 26 LTS (matches .nvmrc; upgrade-later 2, 8 Nov 2026), pinned by digest so a rebuild gets the same base.
+FROM node:26-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072
 
 # git for clones; ca-certificates for HTTPS; curl, which people expect in a terminal; procps (ps, pkill)
 # for the process API and the terminal.

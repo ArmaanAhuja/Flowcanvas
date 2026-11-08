@@ -47,7 +47,7 @@ const fakeAgent: StartAgent = (ref) => {
       .split('\n')
       .filter((l) => l !== '')) {
       const { id } = JSON.parse(line) as { id: number };
-      const result = { protocol: AGENT_PROTOCOL, node: 'v24' };
+      const result = { protocol: AGENT_PROTOCOL, node: 'v26' };
       stdout.write(`${JSON.stringify({ v: AGENT_PROTOCOL, id, body: { ok: true, result } })}\n`);
     }
   });
@@ -445,7 +445,7 @@ describe('agent', () => {
   it('passes requests to the running workspace’s agent', async () => {
     expect(await host.agent(ref(1), { op: 'hello' })).toEqual({
       ok: true,
-      result: { protocol: AGENT_PROTOCOL, node: 'v24' },
+      result: { protocol: AGENT_PROTOCOL, node: 'v26' },
     });
     expect(agentStarts).toEqual([ref(1)]);
   });

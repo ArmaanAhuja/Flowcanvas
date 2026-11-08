@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
-## [0.7.0] — 2026-11-08 — Phase 3: open a repo and edit (in review)
+## [0.7.0] — 2026-11-08 — Phase 3: open a repo and edit
 
 A project's files open in an editor in the page, and every change is kept safe: saved when you forget, kept when the tab closes, and never overwritten when the workspace changes underneath. Workspaces still run on your own computer (`pnpm dev`); on staging the Code view says so.
 

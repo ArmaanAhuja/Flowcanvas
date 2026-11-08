@@ -445,3 +445,15 @@ The build plan's technology table and phase 3, and CLAUDE.md's stack line, now s
 - **Without unsaved changes:** the tab stays and says "This file was deleted in the workspace," with **Close**.
 - **With unsaved changes:** "This file was deleted in the workspace. Your changes are still here, not saved," with **Save it again** (which recreates the file) or **Close…**, which asks first ("Discard your changes and close the file?" with **Discard** or **Cancel**). Nothing is lost by one click.
 - **Autosave never recreates a deleted file by itself.**
+
+## 8 Nov 2026: phase 3 accepted; Node 26
+
+**Phase 3:** accepted by the owner and merged (PR #16, `aa6364a`). Staging serves 0.7.0.
+
+**Node 26 LTS** (upgrade-later 2, due at the phase 3 review): the repository moves from Node 24 to 26 in its own pull request (`.nvmrc`, `engines`, `@types/node`, the workspace image's base by digest). The new workspace image is used by workspaces created from now on; existing ones keep theirs until they're recreated (the agent works on both).
+
+**A correction on release age** (CLAUDE.md working-pace rule 4: settled by the docs, so applied and reported): ADR 0006's rule is pnpm's minimum release age, which isn't set in this repository, so pnpm 12's default of **one day** applies ("brand-new releases wait about a day"). Claude had been applying two weeks out of habit, which is stricter and harmless, but not the project's rule. The `node:26-slim` base image (built 5 Nov 2026) meets the one-day rule and is pinned by digest.
+
+**Cloudflare's builds failed at first** (`ERR_PNPM_UNSUPPORTED_ENGINE`): Cloudflare installs Node from its own build variable `NODE_VERSION`, still `24`, not from `.nvmrc`. The owner sets it to `26.13.0` in both Cloudflare projects (ADR 0004 addendum), which are account settings.
+
+**Also found on the way:** a timing-dependent unit test, where the first test of a file waited at most 1 s for CodeMirror's first load. It now allows 10 s, and jsdom gets empty Range geometry so CodeMirror's measuring stops logging errors. Three full parallel runs are clean.

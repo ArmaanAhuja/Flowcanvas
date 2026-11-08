@@ -114,9 +114,14 @@ async function opened(result: Hook, path = P) {
   act(() => {
     result.current.open(path);
   });
-  await waitFor(() => {
-    expect(result.current.files.find((file) => file.path === path)?.view.kind).toBe('text');
-  });
+  // The first file loads CodeMirror (a cold dynamic import): with every package's tests running at once that took
+  // over waitFor's default 1 s, and the first test failed now and then (found 8 Nov 2026).
+  await waitFor(
+    () => {
+      expect(result.current.files.find((file) => file.path === path)?.view.kind).toBe('text');
+    },
+    { timeout: 10_000 },
+  );
 }
 
 /** Types into the file, as the editor would report it. */

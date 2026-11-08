@@ -1792,6 +1792,7 @@ E2E_BASE_URL=http://127.0.0.1:8787 pnpm --filter @flowcanvas/e2e test:e2e   # 1 
 
 **Gotchas:**
 - **Build fails with `pnpm: command not found` or a lockfile error:** check `SKIP_DEPENDENCY_INSTALL=true` and that the build command starts with `corepack enable`.
+- **Build fails with `ERR_PNPM_UNSUPPORTED_ENGINE`:** Cloudflare's `NODE_VERSION` build variable is older than `engines` in `package.json`. Since 8 Nov 2026 it must be `26.13.0`, in **both** Cloudflare projects (ADR 0004 addendum). Cloudflare doesn't read `.nvmrc`.
 - **Deploy fails with "Missing entry-point" or "no assets directory":** `wrangler.jsonc` isn't on the branch yet, or the build didn't produce `apps/web/dist`.
 - **Name mismatch between dashboard and `wrangler.jsonc`:** Cloudflare warns or fails. Keep both `flowcanvas`.
 - **Blank page on the preview:** check the browser console for CSP "Refused to load …" errors.
