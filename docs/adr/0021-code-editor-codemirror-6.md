@@ -90,4 +90,4 @@ Each editor on its own page, built by Vite and served with our production header
 
   So a TypeScript file costs about 150 kB, as the spike estimated, and nothing of the editor is in the first load.
 - **`packages/ui` is marked free of side effects** (`"sideEffects": ["**/*.css"]`), so unused components are left out of a page's bundle. The first load fell from 149.4 to 143.0 kB.
-- **Syntax colours have their own tokens** (`color.syntax.*`), set to Figma 11's for now. Whether green and amber, the "added" and "modified" hues, should also colour strings and numbers is an owner question (8 Nov 2026).
+- **Syntax colours have their own tokens** (`color.syntax.*`). Owner decision, 8 Nov 2026: a quiet palette from the text colours (keywords and strings `text/secondary`, keywords semibold, comments `text/muted`), so the state hues keep meaning change and blue keeps meaning selection (Graphite outranks Figma 11, which used them for code).

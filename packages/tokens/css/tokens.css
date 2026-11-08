@@ -142,9 +142,9 @@
   --color-state-scope-text: #eca4cf;
   --color-edge-observed: #a3aab5;
   --color-edge-default: #6b7380;
-  --color-syntax-keyword: var(--color-accent-text);
-  --color-syntax-string: var(--color-state-added-text);
-  --color-syntax-number: var(--color-state-modified-text);
+  --color-syntax-keyword: var(--color-text-secondary);
+  --color-syntax-string: var(--color-text-secondary);
+  --color-syntax-number: var(--color-text-primary);
   --color-syntax-comment: var(--color-text-muted);
   --color-syntax-plain: var(--color-text-primary);
   --color-preview-surface: #ffffff;
@@ -193,9 +193,9 @@
   --color-state-scope-text: #994c7d;
   --color-edge-observed: #5c6470;
   --color-edge-default: #868d98;
-  --color-syntax-keyword: var(--color-accent-text);
-  --color-syntax-string: var(--color-state-added-text);
-  --color-syntax-number: var(--color-state-modified-text);
+  --color-syntax-keyword: var(--color-text-secondary);
+  --color-syntax-string: var(--color-text-secondary);
+  --color-syntax-number: var(--color-text-primary);
   --color-syntax-comment: var(--color-text-muted);
   --color-syntax-plain: var(--color-text-primary);
   --color-preview-surface: #ffffff;
@@ -245,9 +245,9 @@
     --color-state-scope-text: #994c7d;
     --color-edge-observed: #5c6470;
     --color-edge-default: #868d98;
-    --color-syntax-keyword: var(--color-accent-text);
-    --color-syntax-string: var(--color-state-added-text);
-    --color-syntax-number: var(--color-state-modified-text);
+    --color-syntax-keyword: var(--color-text-secondary);
+    --color-syntax-string: var(--color-text-secondary);
+    --color-syntax-number: var(--color-text-primary);
     --color-syntax-comment: var(--color-text-muted);
     --color-syntax-plain: var(--color-text-primary);
     --color-preview-surface: #ffffff;

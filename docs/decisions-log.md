@@ -421,3 +421,18 @@ GitHub Actions never ran on `ArmaanAhuja-7777` because of the account billing lo
 - It has official packages for the diffs with accept and reject per change (stage 3), language servers (phase 33) and shared editing (phase 77).
 
 The build plan's technology table and phase 3, and CLAUDE.md's stack line, now say CodeMirror 6, pointing to ADR 0021. The owner asked for the replacement to be complete: Monaco and Ace are removed from the dependencies, and every document that named Monaco as our choice is updated or carries a dated note.
+
+## 8 Nov 2026: a faster working pace, the code palette, and the project page's budget (owner decisions)
+
+**Working pace** (CLAUDE.md section 4a, "Working pace"): faster, with every test type, document, decision record and Done-when proof kept.
+1. **Milestones of 2–3 steps,** reported once. The phase plan's "go" and the end-of-phase acceptance stay, and anything risky still stops at once.
+2. **Tiered testing:** tests for what changed while working; every suite once before a milestone's commits are pushed; CI again on the pull request; heavy suites in the background, one at a time.
+3. **Docs once per milestone, complete** (owner: "make it thorough… don't forget anything"): a fixed template for each step, checked step by step before reporting.
+4. **Questions up front; and whenever something unforeseen comes up mid-phase, ask, never decide** (owner). When the documents and decisions already settle a question (the source priority, Graphite, this log), apply them and report.
+5. **Careful edits:** exact lines read from a file, formatting before editing, every edit checked.
+
+**The code palette:** quiet. Keywords and strings in `text/secondary` (keywords semibold), comments in `text/muted`, everything else `text/primary`. Green, amber, red, violet and pink keep meaning change state, and blue keeps meaning selection and focus.
+- **Why it was asked:** no document defined colours for code, and Figma 11 used the state hues and the accent for it.
+- **Why it needn't have been:** Graphite outranks Figma, and its rules ("colour only carries meaning"; blue for selection and focus only) already pointed here. Rule 4 above now covers this case.
+
+**The project page's bundle budget:** 95 → 110 kB, chosen by Claude at the owner's request ("whatever is the best decision"). Phase 3's journal and autosave (93.1 kB now) must run whenever a project is open, the Graph view included, to keep unsaved work safe; loading them lazily would only delay that. The reason is in `apps/web/scripts/bundle-size.ts`.

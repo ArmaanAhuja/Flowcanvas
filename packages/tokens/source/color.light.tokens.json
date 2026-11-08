@@ -135,15 +135,15 @@
       }
     },
     "syntax": {
-      "$description": "Code highlighting in the editor (phase 3). Set to Figma 11's colours for now; their own tokens so the palette can change in one place (owner question, 8 Nov 2026).",
+      "$description": "Code in the editor (phase 3): a quiet palette from the text colours, so green, amber, red, violet and pink keep meaning change state and blue means selection and focus (Graphite). Keywords are also set semibold in the editor. Owner decision, 8 Nov 2026.",
       "keyword": {
-        "$value": "{color.accent.text}"
+        "$value": "{color.text.secondary}"
       },
       "string": {
-        "$value": "{color.state.added.text}"
+        "$value": "{color.text.secondary}"
       },
       "number": {
-        "$value": "{color.state.modified.text}"
+        "$value": "{color.text.primary}"
       },
       "comment": {
         "$value": "{color.text.muted}"

@@ -13,7 +13,10 @@ import { gzipSync } from 'node:zlib';
 export const BUDGETS: Readonly<Record<string, number>> = {
   // 7 Nov 2026 (phase 2): 149.4 kB then; 143.0 since phase 3 marked packages/ui free of side effects.
   'First load': 160,
-  ProjectPage: 95,
+  // Raised 95 → 110 on 8 Nov 2026 (owner: "choose the best"): phase 3's journal and autosave (93.1 kB) must run
+  // whenever a project is open, the Graph view included, to keep unsaved work safe; loading them lazily would only
+  // delay that protection.
+  ProjectPage: 110,
   WorkspaceTerminal: 95,
   // 8 Nov 2026 (phase 3): the editor's core, only with the Code view (115.5 kB; ADR 0021 estimated about 150 with
   // a language).

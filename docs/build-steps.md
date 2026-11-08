@@ -11534,7 +11534,7 @@ Also: `ProjectPage.tsx` (the view switch, the rail's Files button; Files and the
 
 **New budgets** (`apps/web/scripts/bundle-size.ts`): `codemirror` 130 kB (114 now); `lang` 85 (73 for all, each loading alone); `FilesPanel` 30 (25).
 
-**New tokens:** `color.syntax.keyword`, `string`, `number`, `comment` and `plain`, set to Figma 11's colours. **Owner question:** strings and numbers use the green and amber that also mean "added" and "modified". Keep them, or a quieter code palette?
+**New tokens:** `color.syntax.keyword`, `string`, `number`, `comment` and `plain`. First set to Figma 11's colours; on 8 Nov 2026 the owner chose the quiet palette (keywords and strings `text/secondary`, keywords semibold, comments `text/muted`), so green and amber keep meaning "added" and "modified" (decisions log).
 
 **Tests:**
 - **Unit:** 711 passed in all, 17 new:

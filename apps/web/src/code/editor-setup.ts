@@ -107,11 +107,16 @@ export const flowcanvasTheme = EditorView.theme({
   },
 });
 
-/** Code colours (the syntax tokens; owner question on the palette, 8 Nov 2026). Everything else is plain. */
+/**
+ * Code colours: the quiet syntax tokens (owner, 8 Nov 2026), so the state hues keep meaning change and blue means
+ * selection. Keywords are semibold too, so they differ from strings by weight, not colour alone. JetBrains Mono's
+ * weights share one width, so bold keywords never shift the text.
+ */
 export const flowcanvasHighlight = HighlightStyle.define([
   {
     tag: [tags.keyword, tags.modifier, tags.operatorKeyword, tags.controlKeyword],
     color: 'var(--color-syntax-keyword)',
+    fontWeight: 'var(--font-weight-semibold)',
   },
   {
     tag: [tags.string, tags.special(tags.string), tags.regexp, tags.character],
