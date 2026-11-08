@@ -436,3 +436,12 @@ The build plan's technology table and phase 3, and CLAUDE.md's stack line, now s
 - **Why it needn't have been:** Graphite outranks Figma, and its rules ("colour only carries meaning"; blue for selection and focus only) already pointed here. Rule 4 above now covers this case.
 
 **The project page's bundle budget:** 95 → 110 kB, chosen by Claude at the owner's request ("whatever is the best decision"). Phase 3's journal and autosave (93.1 kB now) must run whenever a project is open, the Graph view included, to keep unsaved work safe; loading them lazily would only delay that. The reason is in `apps/web/scripts/bundle-size.ts`.
+
+## 8 Nov 2026: a file deleted in the workspace while it's open (owner decision)
+
+**Asked** (at the start of the step 7 and 8 milestone, the one case the plan didn't cover): what happens when an open file is deleted in the workspace (`rm` in the terminal, another tab, later an agent)?
+
+**Decided:**
+- **Without unsaved changes:** the tab stays and says "This file was deleted in the workspace," with **Close**.
+- **With unsaved changes:** "This file was deleted in the workspace. Your changes are still here, not saved," with **Save it again** (which recreates the file) or **Close…**, which asks first ("Discard your changes and close the file?" with **Discard** or **Cancel**). Nothing is lost by one click.
+- **Autosave never recreates a deleted file by itself.**

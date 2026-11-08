@@ -18,6 +18,10 @@
 }
 
 .problem {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-16);
+  align-items: center;
   margin: 0;
   padding: var(--space-8) var(--space-16);
   border-block-end: var(--border-width-default) solid var(--color-border-subtle);
@@ -84,4 +88,16 @@
   font-size: var(--text-small-font-size);
   line-height: var(--text-small-line-height);
   color: var(--color-accent-text);
+}
+
+.problemText {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  gap: var(--space-8);
 }

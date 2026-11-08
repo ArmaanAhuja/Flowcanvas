@@ -25,6 +25,8 @@ export const BUDGETS: Readonly<Record<string, number>> = {
   lang: 85,
   // The file tree (React Aria's Tree and virtualizer), only when Files is shown (24.9 kB).
   FilesPanel: 30,
+  // 8 Nov 2026 (phase 3 step 7): quick-open, fetched once the workspace runs (11.8 kB).
+  QuickOpenDialog: 14,
   'Other lazy chunks': 20,
 };
 

@@ -1,5 +1,5 @@
 import { FileTree } from '@flowcanvas/ui';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { isProblem } from '../projects/api';
 import { fetchTree, type FileList } from './api';
 import { FILES_TEXT } from './texts';
@@ -18,6 +18,8 @@ export function FilesPanel({
   selected,
   unsaved,
   onOpen,
+  refresh = 0,
+  onList,
   fetcher,
 }: {
   readonly projectId: string;
@@ -26,16 +28,24 @@ export function FilesPanel({
   readonly selected: string | undefined;
   readonly unsaved: ReadonlySet<string>;
   readonly onOpen: (path: string) => void;
+  /** Rises when the tree should be listed again (a file appeared or went in the workspace). */
+  readonly refresh?: number;
+  /** Every listing's paths, for the page to tell new files from known ones. */
+  readonly onList?: (files: readonly string[]) => void;
   readonly fetcher: typeof fetch;
 }) {
   const [tree, setTree] = useState<Tree>({ kind: 'loading' });
+  const onListRef = useRef(onList);
+  onListRef.current = onList;
 
   useEffect(() => {
     if (!running) return;
     let current = true;
-    setTree({ kind: 'loading' });
+    // A refresh keeps the tree shown while it lists again (no flash of "Listing…").
+    if (refresh === 0) setTree({ kind: 'loading' });
     void fetchTree(projectId, fetcher).then((result) => {
       if (!current) return;
+      if (!isProblem(result)) onListRef.current?.(result.files);
       setTree(
         isProblem(result)
           ? { kind: 'problem', message: result.message }
@@ -45,7 +55,7 @@ export function FilesPanel({
     return () => {
       current = false;
     };
-  }, [projectId, fetcher, running]);
+  }, [projectId, fetcher, running, refresh]);
 
   return (
     <section className={styles.panel} aria-labelledby="files-heading">

@@ -1,4 +1,4 @@
-import { Breadcrumb, EditorTabs, StatusBar, Toggle } from '@flowcanvas/ui';
+import { Breadcrumb, Button, EditorTabs, StatusBar, Toggle } from '@flowcanvas/ui';
 import type { EditorState } from '@codemirror/state';
 import { useState } from 'react';
 import { CodeEditor } from './CodeEditor';
@@ -17,6 +17,16 @@ export const CODE_TEXT = {
   unsaved: 'Unsaved changes',
   keyboard: 'In the editor, Tab indents. Press Escape, then Tab, to move on.',
   autosave: 'Autosave',
+  keepMine: 'Keep mine',
+  loadDisk: 'Load the workspace’s version',
+  deleted: 'This file was deleted in the workspace.',
+  deletedUnsaved: 'This file was deleted in the workspace. Your changes are still here, not saved.',
+  saveAgain: 'Save it again',
+  close: 'Close',
+  closeAsk: 'Close…',
+  discardAsk: 'Discard your changes and close the file?',
+  discard: 'Discard',
+  cancel: 'Cancel',
 } as const;
 
 const statusOf = (file: OpenFile): string | undefined =>
@@ -29,6 +39,75 @@ const statusOf = (file: OpenFile): string | undefined =>
         : file.save.kind === 'saved'
           ? CODE_TEXT.saved
           : undefined;
+
+/** A file deleted in the workspace while open (owner, 8 Nov 2026): close it, or, with unsaved changes, save it
+ * again or discard them after a second step. Nothing is lost by one click. */
+function DeletedBanner({ file, files }: { readonly file: OpenFile; readonly files: CodeFiles }) {
+  const [asking, setAsking] = useState(false);
+  if (!file.unsaved) {
+    return (
+      <div className={styles.problem} role="alert">
+        <p className={styles.problemText}>{CODE_TEXT.deleted}</p>
+        <span className={styles.actions}>
+          <Button
+            size="sm"
+            onClick={() => {
+              files.discard(file.path);
+            }}
+          >
+            {CODE_TEXT.close}
+          </Button>
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className={styles.problem} role="alert">
+      <p className={styles.problemText}>
+        {asking ? CODE_TEXT.discardAsk : CODE_TEXT.deletedUnsaved}
+      </p>
+      <span className={styles.actions}>
+        {asking ? (
+          <>
+            <Button
+              size="sm"
+              kind="danger"
+              onClick={() => {
+                files.discard(file.path);
+              }}
+            >
+              {CODE_TEXT.discard}
+            </Button>
+            <Button
+              size="sm"
+              kind="ghost"
+              onClick={() => {
+                setAsking(false);
+              }}
+            >
+              {CODE_TEXT.cancel}
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button size="sm" onClick={() => void files.keepMine(file.path)}>
+              {CODE_TEXT.saveAgain}
+            </Button>
+            <Button
+              size="sm"
+              kind="ghost"
+              onClick={() => {
+                setAsking(true);
+              }}
+            >
+              {CODE_TEXT.closeAsk}
+            </Button>
+          </>
+        )}
+      </span>
+    </div>
+  );
+}
 
 const clock = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
 
@@ -96,13 +175,29 @@ export function CodeView({
               {restoredText(active.restored.at)}
             </p>
           )}
-          {(active.save.kind === 'conflict' || active.save.kind === 'failed') && (
-            <p className={styles.problem} role="alert">
-              {active.save.message}
-              {active.save.kind === 'conflict' &&
-                !active.save.message.endsWith('not saved.') &&
-                ' Your changes are still here, not saved.'}
-            </p>
+          {active.deleted === true ? (
+            <DeletedBanner file={active} files={files} />
+          ) : (
+            (active.save.kind === 'conflict' || active.save.kind === 'failed') && (
+              <div className={styles.problem} role="alert">
+                <p className={styles.problemText}>
+                  {active.save.message}
+                  {active.save.kind === 'conflict' &&
+                    !active.save.message.endsWith('not saved.') &&
+                    ' Your changes are still here, not saved.'}
+                </p>
+                {active.save.kind === 'conflict' && (
+                  <span className={styles.actions}>
+                    <Button size="sm" onClick={() => void files.keepMine(active.path)}>
+                      {CODE_TEXT.keepMine}
+                    </Button>
+                    <Button size="sm" kind="ghost" onClick={() => void files.loadDisk(active.path)}>
+                      {CODE_TEXT.loadDisk}
+                    </Button>
+                  </span>
+                )}
+              </div>
+            )
           )}
           {active.view.kind === 'loading' ? (
             <p className={styles.centred} role="status">

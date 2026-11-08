@@ -85,3 +85,17 @@ An open events channel never touches `last_active_at`, so a page left open overn
 - **Autosave** (owner, 7 Nov 2026), on by default, with a switch in the status bar remembered per browser: 5 s after the last keystroke, and when you switch file, **leave** the Code view or leave the window. Never for a file in conflict, and never on arriving (restored changes stay unsaved until you act or leave). A save drops the journal's copies up to its own revision.
 - **Line breaks:** a file with `\r\n` keeps them. CodeMirror's `doc.toString()` always joins lines with `\n`, so saves and the journal use `state.sliceDoc()`, which honours the file's separator.
 - **Tested in a real browser:** edit, close the tab at once, reopen: the change is back, marked unsaved, with a note; autosave writes it after 5 s; a fresh browser restores from the workspace's copy alone. Playwright can't intercept `keepalive` requests, so the walkthrough checks that the workspace received the 2-second write or that the page sent the close-time one (recorded, test-only).
+
+## Addendum (8 Nov 2026, phase 3 step 7): the page follows the workspace
+
+- **The page listens** to `/api/projects/:id/workspace/events` while the workspace runs (`apps/web/src/code/events.ts`). It reconnects after a drop (1, 2, 5, then every 10 s), and after reconnecting it re-checks every open file, because changes may have happened while it was away. Events are checked a third time in the page.
+- **An open file without unsaved changes follows the disk:** the workspace's text replaces it as one undoable change, and becomes the saved text.
+- **With unsaved changes** it's a conflict ("This file changed in the workspace while you were editing it."), never autosaved, until the person chooses:
+  - **Keep mine:** the save is checked against the version there now, so it replaces it knowingly
+  - **Load the workspace's version:** drops the changes and their journal copies
+
+  The same choice resolves a refused save (step 5) and a stale restore (step 6).
+- **A deleted file** says so (owner, 8 Nov 2026): Close; or, with unsaved changes, Save it again or Close… (asks first). It's never recreated by autosave.
+- **Our own saves' echoes:** the page computes the SHA-256 of what it's about to write before sending it, so the change event it causes is recognised even when it arrives before the save's answer.
+- **A change by someone else** that arrives while a save is on its way is checked after the save's answer, so the answer can't hide it.
+- **The file tree is listed again** when a file appears or goes, or after an overflow, once per burst (300 ms).

@@ -6,9 +6,12 @@
 //   is hidden; reopening a file restores the newest copy if it differs from the file on disk.
 // - Autosave (owner, 7 Nov 2026) writes the file after a pause in typing, and when you switch file, view or
 //   window. A file in conflict is never autosaved.
+// - Changes in the workspace (step 7: the terminal, another tab) reach open files: one without unsaved changes
+//   follows the disk; one with them says so and waits for "Keep mine" or "Load the workspace's version".
 import type { EditorState, Text } from '@codemirror/state';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { readFile, saveFile, type OpenedFile } from './api';
+import { versionOf, type DiskEvent } from './events';
 import {
   indexedDbJournal,
   newest,
@@ -36,10 +39,14 @@ export interface OpenFile {
   readonly save: SaveStatus;
   /** Unsaved changes brought back from the journal when the file opened: when they were made. */
   readonly restored?: { readonly at: number };
+  /** Deleted in the workspace while open (the terminal, another tab, an agent). */
+  readonly deleted?: boolean;
 }
 
 export const CONFLICT_ON_RESTORE =
   'This file changed in the workspace since these unsaved changes were made. They’re here, not saved.';
+export const CHANGED_ON_DISK =
+  'This file changed in the workspace while you were editing it. Your changes are still here, not saved.';
 
 /** How long autosave waits after the last keystroke, and how often unsaved changes go to the journal. */
 export interface Timings {
@@ -104,6 +111,14 @@ export interface CodeFiles {
   readonly flush: () => void;
   readonly autosave: boolean;
   readonly setAutosave: (on: boolean) => void;
+  /** A change in the workspace (events.ts): open files follow it, or say so if they have unsaved changes. */
+  readonly onDiskEvent: (event: DiskEvent) => void;
+  /** Resolving a conflict: write my text over the workspace's version, knowingly. */
+  readonly keepMine: (path: string) => Promise<void>;
+  /** Resolving a conflict: drop my changes and show the workspace's version. */
+  readonly loadDisk: (path: string) => Promise<void>;
+  /** Closing without saving (a file deleted in the workspace whose changes the person chose to drop). */
+  readonly discard: (path: string) => void;
 }
 
 export interface CodeFilesOptions {
@@ -150,8 +165,16 @@ export function useCodeFiles(
     return state !== undefined && base !== undefined && !state.doc.eq(base.doc);
   };
 
-  const inConflict = (path: string) =>
-    filesRef.current.find((file) => file.path === path)?.save.kind === 'conflict';
+  /** In conflict with the workspace, or deleted there: never autosaved (a save would overwrite or recreate it). */
+  const inConflict = (path: string) => {
+    const file = filesRef.current.find((f) => f.path === path);
+    return file?.save.kind === 'conflict' || file?.deleted === true;
+  };
+  /** Versions our own saves are writing: their change events are echoes, not someone else's edit. */
+  const ownVersions = useRef(new Map<string, Set<string>>());
+  /** Files that changed in the workspace while a save of them was on its way, and recheck() for after it. */
+  const recheckAfterSave = useRef(new Set<string>());
+  const recheckRef = useRef<(path: string) => Promise<void>>(() => Promise.resolve());
 
   /** Sends the file's unsaved text to both journals, unless that revision is there already. */
   const journalNow = useCallback(
@@ -287,7 +310,13 @@ export function useCodeFiles(
       const doc = state.doc;
       const revision = revisions.current.get(path) ?? 0;
       patch(path, (file) => ({ ...file, save: { kind: 'saving' } }));
-      const result = await saveFile(projectId, path, state.sliceDoc(), base.version, fetcher);
+      const content = state.sliceDoc();
+      // Known before the save is sent: its change event can arrive before its answer.
+      const expected = await versionOf(content);
+      const mine = ownVersions.current.get(path) ?? new Set<string>();
+      mine.add(expected);
+      ownVersions.current.set(path, mine);
+      const result = await saveFile(projectId, path, content, base.version, fetcher);
       if (result.kind === 'saved') {
         saved.current.set(path, { version: result.version, doc });
         // The journal's copies up to this text are written now; newer edits (typed during the save) stay.
@@ -303,6 +332,9 @@ export function useCodeFiles(
       } else {
         patch(path, (file) => ({ ...file, save: result }));
       }
+      // Someone else's change that arrived while this save was on its way: checked now that the save's result is
+      // known, so its answer can't hide it.
+      if (recheckAfterSave.current.delete(path)) void recheckRef.current(path);
     },
     [projectId, fetcher, patch, dropJournal],
   );
@@ -332,30 +364,165 @@ export function useCodeFiles(
     [settle],
   );
 
-  const close = useCallback((path: string) => {
-    void (async () => {
-      // Never lose work: a file with unsaved changes is saved before it closes, and stays open if it can't be.
-      if (isUnsaved(path)) {
-        await saveRef.current(path);
-        if (isUnsaved(path)) return;
-      }
-      for (const timers of [journalTimers.current, autosaveTimers.current]) {
-        const timer = timers.get(path);
-        if (timer !== undefined) clearTimeout(timer);
-        timers.delete(path);
-      }
-      latestStates.current.delete(path);
-      saved.current.delete(path);
-      openPaths.current.delete(path);
-      const now = filesRef.current;
-      const index = now.findIndex((f) => f.path === path);
-      const next = now.filter((f) => f.path !== path);
-      setFiles((current) => current.filter((f) => f.path !== path));
-      setActivePath((current) =>
-        current === path ? (next[Math.min(index, next.length - 1)]?.path ?? null) : current,
-      );
-    })();
+  /** Takes a tab away: its timers (all three), its state, and the next tab shown if it was the shown one. */
+  const removeTab = useCallback((path: string) => {
+    for (const timers of [journalTimers.current, autosaveTimers.current, localTimers.current]) {
+      const timer = timers.get(path);
+      if (timer !== undefined) clearTimeout(timer);
+      timers.delete(path);
+    }
+    latestStates.current.delete(path);
+    saved.current.delete(path);
+    openPaths.current.delete(path);
+    const now = filesRef.current;
+    const index = now.findIndex((f) => f.path === path);
+    const next = now.filter((f) => f.path !== path);
+    setFiles((current) => current.filter((f) => f.path !== path));
+    setActivePath((current) =>
+      current === path ? (next[Math.min(index, next.length - 1)]?.path ?? null) : current,
+    );
   }, []);
+
+  const close = useCallback(
+    (path: string) => {
+      void (async () => {
+        // Never lose work: a file with unsaved changes is saved before it closes, and stays open if it can't be.
+        if (isUnsaved(path)) {
+          await saveRef.current(path);
+          if (isUnsaved(path)) return;
+        }
+        removeTab(path);
+      })();
+    },
+    [removeTab],
+  );
+
+  /** Puts the workspace's text into an open file, as one undoable change, and makes it the saved text. */
+  const showDiskText = useCallback(
+    async (path: string, content: string, version: string) => {
+      const state = latestStates.current.get(path);
+      if (state === undefined) return;
+      const { docOf } = await import('./editor-setup');
+      const next = state.update({
+        changes: { from: 0, to: state.doc.length, insert: docOf(content) },
+      }).state;
+      saved.current.set(path, { version, doc: next.doc });
+      latestStates.current.set(path, next);
+      const revision = nextRevision(revisions.current.get(path) ?? 0);
+      revisions.current.set(path, revision);
+      dropJournal(path, revision);
+      patch(path, (file) => ({
+        path: file.path,
+        view: file.view,
+        unsaved: false,
+        save: { kind: 'idle' },
+      }));
+    },
+    [patch, dropJournal],
+  );
+
+  /** Reads the file again; follows it if this tab has no unsaved changes, else says it changed. */
+  const recheck = useCallback(
+    async (path: string) => {
+      const file = filesRef.current.find((f) => f.path === path);
+      if (file === undefined) return;
+      if (file.view.kind !== 'text') {
+        void load(path);
+        return;
+      }
+      const opened = await readFile(projectId, path, fetcher);
+      const base = saved.current.get(path);
+      if (base === undefined) return;
+      if (opened.kind === 'refused' && opened.code === 'not_found') {
+        patch(path, (f) => ({ ...f, deleted: true }));
+        return;
+      }
+      if (opened.kind !== 'text' || opened.version === base.version) return;
+      if (!isUnsaved(path)) {
+        await showDiskText(path, opened.content, opened.version);
+      } else {
+        patch(path, (f) => ({ ...f, save: { kind: 'conflict', message: CHANGED_ON_DISK } }));
+      }
+    },
+    [projectId, fetcher, patch, load, showDiskText],
+  );
+
+  recheckRef.current = recheck;
+
+  const onDiskEvent = useCallback(
+    (event: DiskEvent) => {
+      if (event.type === 'overflow') {
+        for (const file of filesRef.current) void recheck(file.path);
+        return;
+      }
+      const file = filesRef.current.find((f) => f.path === event.path);
+      if (file === undefined) return;
+      if (event.deleted) {
+        // A tab without unsaved changes says so too, and keeps its text until it's closed (owner, 8 Nov 2026).
+        patch(event.path, (f) => ({ ...f, deleted: true }));
+        return;
+      }
+      if (file.deleted === true) patch(event.path, (f) => ({ ...f, deleted: false }));
+      const mine = ownVersions.current.get(event.path);
+      if (event.version !== null && mine?.has(event.version) === true) {
+        mine.delete(event.version);
+        return;
+      }
+      if (event.version !== null && event.version === saved.current.get(event.path)?.version)
+        return;
+      // A save on its way: check once it's answered (save() does), not against a version about to change.
+      if (file.save.kind === 'saving') {
+        recheckAfterSave.current.add(event.path);
+        return;
+      }
+      void recheck(event.path);
+    },
+    [patch, recheck],
+  );
+
+  /** Writes my text over the workspace's version, knowingly: the save is checked against what's there now. */
+  const keepMine = useCallback(
+    async (path: string) => {
+      const opened = await readFile(projectId, path, fetcher);
+      const base = saved.current.get(path);
+      if (base === undefined) return;
+      // The file may have been deleted: then the save creates it again (owner, 8 Nov 2026).
+      base.version = opened.kind === 'text' ? opened.version : null;
+      if (opened.kind !== 'text' && !(opened.kind === 'refused' && opened.code === 'not_found')) {
+        patch(path, (f) => ({
+          ...f,
+          save: {
+            kind: 'failed',
+            message: opened.kind === 'refused' ? opened.message : 'This file isn’t text any more.',
+          },
+        }));
+        return;
+      }
+      patch(path, (f) => ({ ...f, deleted: false, save: { kind: 'idle' } }));
+      await saveRef.current(path);
+    },
+    [projectId, fetcher, patch],
+  );
+
+  /** Drops my changes and shows the workspace's version. */
+  const loadDisk = useCallback(
+    async (path: string) => {
+      const opened = await readFile(projectId, path, fetcher);
+      if (opened.kind === 'text') await showDiskText(path, opened.content, opened.version);
+      else if (opened.kind === 'refused' && opened.code === 'not_found')
+        patch(path, (f) => ({ ...f, deleted: true }));
+    },
+    [projectId, fetcher, showDiskText, patch],
+  );
+
+  /** Closes without saving: the person chose to drop the changes of a file deleted in the workspace. */
+  const discard = useCallback(
+    (path: string) => {
+      dropJournal(path, Number.MAX_SAFE_INTEGER);
+      removeTab(path);
+    },
+    [dropJournal, removeTab],
+  );
 
   const updated = useCallback(
     (path: string, state: EditorState) => {
@@ -484,5 +651,9 @@ export function useCodeFiles(
     flush,
     autosave,
     setAutosave,
+    onDiskEvent,
+    keepMine,
+    loadDisk,
+    discard,
   };
 }

@@ -11285,9 +11285,9 @@ pnpm size               # after pnpm build: the bundle budgets
 | 4 | UI components: EditorTabs, FileTree, StatusBar, Breadcrumb (catalogue and baselines) | done (Claude, 8 Nov) |
 | 5 | The Code view: tree, CodeMirror in a shadow root, tabs, save, undo; binary, large and secret states; canvas shortcuts through shadow roots | done (Claude, 8 Nov) |
 | 6 | Saving: autosave, the journal (workspace and IndexedDB), restore on reopen | done (Claude, 8 Nov) |
-| 7 | Changes on disk (reload or banner) and quick-open | *next* |
-| 8 | Walkthrough, screen baselines, Figma 11 differences, editor bundle budget | *planned* |
-| 9 | Close: report, 0.7.0, PR | *planned* |
+| 7 | Changes on disk (reload or banner) and quick-open | done (Claude, 8 Nov) |
+| 8 | Walkthrough, screen baselines, Figma 11 differences, editor bundle budget | done (Claude, 8 Nov) |
+| 9 | Close: report, 0.7.0, PR | *next* |
 
 ### How each Done-when item is proven
 
@@ -11310,7 +11310,7 @@ CI's walkthroughs use a fake workspace (staging has none until upgrade-later 33)
 | R2 | The editor's size | Lazy chunk with its own budget; only the languages a web project needs | **mostly closed (step 1):** CodeMirror 6 with TypeScript is 147 kB gzipped (Monaco 705). The budget is set in step 8 |
 | R3 | **Laptop:** inotify's limit is shared with the whole computer; watching `node_modules` could exhaust it | Watch without `node_modules`, `.git` and build output; measure in the spike | **closed (step 3):** the watcher skips them; Rallly is 599 folders (0.1% of 524,288); a cap of 20,000 per watcher, with a visible error beyond it |
 | R4 | Lost edits (disconnect, sleep, closed tab) | Journal every 2 s and on page hide, an IndexedDB copy, tests for each case | **closed (step 6):** two copies (the workspace, every 2 s and on close; the browser, within 300 ms), restore on open, autosave; the Try it walkthrough proves it |
-| R5 | Silent overwrites when disk and editor disagree | Versioned writes; conflicts shown, never resolved silently | open: **step 2:** conflict-safe saves are refused after a terminal edit (Docker test); showing it is step 7 |
+| R5 | Silent overwrites when disk and editor disagree | Versioned writes; conflicts shown, never resolved silently | **closed (step 7):** saves never overwrite an unseen change; changes never replace unsaved text; the person chooses (Keep mine, or Load the workspace's version); tested both ways, mutation-checked |
 
 ### Step 3.1 — Spike: which editor, under our CSP; and the watcher's cost (done by Claude; ADR 0021)
 
@@ -11615,3 +11615,96 @@ pnpm test:e2e -- try-it/phase-3.spec.ts
 - **Laptop:** all five checks ok.
 
 **Commit:** `feat(web): autosave, the journal in the workspace and the browser, and restoring unsaved changes`
+
+### Step 3.7 — Changes in the workspace reach the editor; quick-open (done by Claude; ADR 0022 addendum)
+
+**Goal:** the phase's other *Done when*: an edit made in the terminal appears in the editor. Never silently overwrite either side. Plus quick-open (Ctrl/⌘+P), from the build plan.
+
+**What a person can do now** (`pnpm dev`, a running workspace, the Code view):
+- **Edit a file in the terminal** (`sed`, `git checkout`, anything): an open file without unsaved changes shows the new text within a moment.
+- **If you have unsaved changes there,** a banner says the file changed while you were editing, with **Keep mine** (your text replaces theirs, knowingly) or **Load the workspace's version** (your changes go). The same banner resolves a refused save and a stale restore.
+- **Delete a file in the terminal** and its tab says so: **Close**; or, with unsaved changes, **Save it again** or **Close…**, which asks first (owner, 8 Nov).
+- **New and deleted files** appear and disappear in the tree.
+- **Ctrl/⌘+P** opens any file by typing part of its name: letters in order, best matches first, Enter opens. The browser's print dialog doesn't appear.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `apps/web/src/code/events.ts` | The events WebSocket (reconnects; a re-check after a reconnect); `versionOf` (SHA-256 in the browser) |
+| `apps/web/src/code/useCodeFiles.ts` | `onDiskEvent` (follow, conflict, deleted, overflow), `keepMine`, `loadDisk`, `discard`; own-save echoes; changes during a save checked after it |
+| `apps/web/src/code/CodeView.tsx` | The conflict and deleted banners with their buttons |
+| `apps/web/src/code/FilesPanel.tsx` | Lists again on request, and reports its listing |
+| `apps/web/src/project/ProjectPage.tsx` | Events while running; the tree refresh; Ctrl/⌘+P; quick-open fetched in the background |
+| `apps/web/src/code/QuickOpenDialog.ts` | Quick-open by name, so it's its own chunk |
+| `packages/ui/src/components/quick-open/` | `QuickOpen` (React Aria Modal, Dialog, Autocomplete, SearchField, ListBox) and `fuzzy.ts` (ranking), with tests and a story |
+
+**Concepts:**
+- **Optimistic concurrency, seen from the page.** The page knows the version it last saw. A change event with another version means someone else wrote, unless it's the version the page itself just wrote, which it knows because it hashes what it sends.
+- **Races between a request and an event.** An event can overtake the answer to the request that caused it. Here an event during a save waits for the save's answer before it's judged.
+- **Fuzzy matching:** the typed letters in order, with bonuses for the file name, word starts and runs, so `pform` finds `poll-form.tsx`.
+- **Autocomplete with virtual focus:** the field keeps keyboard focus while arrow keys move through the results (`aria-activedescendant`). https://react-spectrum.adobe.com/react-aria/Autocomplete.html
+
+**Found and fixed on the way:**
+1. **A change by someone else during our save was hidden by the save's answer:** the conflict it raised was replaced by "Saved". Changes during a save are now checked after its answer. Found by mutation-testing the echo rule; regression test added.
+2. **The echo rule had no test that could fail:** the echo test sent its event after the save's answer, where another check also covers it. A new test holds the answer back, and fails without the rule.
+3. **Quick-open's first letters were lost on first use:** it loaded on the keypress, so letters typed before it appeared went nowhere, or into the editor. It's now fetched in the background once the workspace runs. Found by the screen test.
+4. **`import('@flowcanvas/ui')` pulled quick-open into the first load** (143 → 159 kB, within 1 kB of the budget). A tiny module that imports it by name keeps it in its own chunk. Found by the bundle budget.
+5. **The page's focus ring inside quick-open's field:** replaced by the search row's accent border (still a visible focus indicator).
+6. **A closed tab's browser-copy timer wasn't cleared** (a step 6 slip): one helper now removes a tab with all three timers.
+
+**Tests:**
+- **Unit:** 747 in all, 20 new.
+  - **events:** what passes the check; reconnecting with a re-check; not connecting while asleep; `versionOf` equal to Node's SHA-256, including non-ASCII text and `\r\n`
+  - **useCodeFiles:** following the disk; echoes, including one before the answer; a conflict that autosave never overwrites, then Keep mine; Load the workspace's version dropping the journal; deleted with and without changes, Save it again, discard; overflow re-checking; a change during a save
+  - **quick-open:** ranking (and 50,000 paths in under 0.5 s), the dialog's focus, typing, Enter, Escape, empty states
+- **Mutation-checked:** removing the echo rule, the unsaved-text rule, or the deferral during a save fails its test.
+- **Walkthrough (new, the Done when in a real browser under the production CSP):** the terminal edits a file and the editor shows it; with unsaved changes, the banner and Load the workspace's version; Ctrl+P, "pack", Enter; the terminal deletes a file, and Close. It passed twice.
+
+**Run and check it:**
+```fish
+pnpm dev     # Code view, open a file; in the dock's terminal: sed -i 's/a/b/' <that file>
+pnpm test:e2e -- try-it/phase-3.spec.ts
+```
+
+**Risks:**
+- R5 (silent overwrites): closed in both directions. Saves never overwrite a change they haven't seen; changes never replace unsaved text.
+- **Laptop:** all five checks ok.
+
+**Commit:** with step 8.
+
+### Step 3.8 — Screen baselines, quick-open's story, and the Figma 11 and 16 differences (done by Claude)
+
+**Goal:** the screens a person sees in phase 3 are approved and protected, and every way they differ from Figma is listed for the owner.
+
+**What a person can do now:** review `docs/reports/phase-3-figma-differences.md`, with Figma 11 and 16 beside the built screens in `docs/reports/phase-3/`.
+
+**Files:**
+- `e2e/visual/screens.spec.ts`:
+  - three Code view screens in both themes: a file open, a restored change in conflict, quick-open
+  - a running workspace in its fake, with files and versions
+  - a quiet events socket
+- `packages/ui/src/components/quick-open/QuickOpen.stories.tsx`: the story, baselined in both themes.
+- `apps/web/scripts/bundle-size.ts`: a `QuickOpenDialog` budget of 14 kB (11.8 now).
+
+**Concepts:**
+- **A screen test waits like a person:** for the editor's text, the tree, the language in the status bar, and the search field's focus before typing. A screenshot taken any earlier would vary.
+- **Review each baseline before approving it:** each new screen was viewed. One wasn't approved as it stood (the focus ring in quick-open) and was fixed first.
+
+**Found and fixed on the way:** quick-open's lost first letters, and the focus ring (step 3.7, items 3 and 5).
+
+**Tests:** 8 new baselines (3 screens and 1 story, in both themes), each repeated twice before approval, all passing axe. The full visual suite ran once before pushing (see the milestone report).
+
+**Bundle:** first load 147.2 kB (143.0 at step 6: React Aria parts that quick-open shares with menus moved into the shared chunk); project page 94.6 of 110; quick-open 11.8 of 14.
+
+**Run and check it:**
+```fish
+pnpm test:visual    # 114: 80 catalogue stories, 15 screens, in both themes, with axe
+```
+Then compare `docs/reports/phase-3/figma-11.png` with `built-code-view-dark.png`, and `figma-16.png` with `built-quick-open-dark.png`.
+
+**Risks:**
+- **The first load is at 147.2 of 160 kB.** The next shared component should be checked for what it adds.
+- **Laptop:** all five checks ok.
+
+**Commit:** `feat(web): an edit in the workspace reaches the editor; conflicts and deleted files resolved by the person; quick-open; Code view baselines`

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Page, type Route, type WebSocketRoute } from '@playwright/test';
 import { watchForPageProblems } from './support.js';
 
 // Phase 3 · Try it: edit a file in Rallly, close the tab, reopen it: the change is still there. Built up step by
@@ -51,6 +51,28 @@ class FakeWorkspace {
    * closes (keepalive) outlives the page, and the page's own routes go with it. */
   watch(page: Page): void {
     void page.context().route('**/api/**', (route) => this.answer(route));
+    // The workspace's file watcher (step 3), as the control plane relays it: one checked event per message.
+    void page.context().routeWebSocket(/\/workspace\/events$/, (socket) => {
+      this.watchers.push(socket);
+    });
+  }
+
+  /** Pages listening to the file watcher. */
+  readonly watchers: WebSocketRoute[] = [];
+
+  /** An edit made in the workspace's terminal: the file changes, and the watcher says so. */
+  terminalWrites(path: string, content: string): void {
+    this.files.set(path, content);
+    for (const socket of this.watchers) {
+      socket.send(JSON.stringify({ type: 'changed', path, deleted: false, version: sha(content) }));
+    }
+  }
+
+  terminalDeletes(path: string): void {
+    this.files.delete(path);
+    for (const socket of this.watchers) {
+      socket.send(JSON.stringify({ type: 'changed', path, deleted: true, version: null }));
+    }
   }
 
   private reply(route: Route, body: unknown, status = 200) {
@@ -228,9 +250,13 @@ test('phase 3: open a file in the Code view, edit it, save it, and see a conflic
     );
     await page.keyboard.type('!');
     await page.keyboard.press('Control+s');
-    await expect(page.getByRole('alert')).toHaveText(
+    const alert = page.getByRole('alert');
+    await expect(alert).toContainText(
       'This file changed in the workspace since you opened it. Your changes are still here, not saved.',
     );
+    // The two ways out (step 7); choosing is the step 7 walkthrough's.
+    await expect(alert.getByRole('button', { name: 'Keep mine' })).toBeVisible();
+    await expect(alert.getByRole('button', { name: 'Load the workspace’s version' })).toBeVisible();
     expect(workspace.files.get('apps/web/src/utils/greeting.ts')).toBe(
       'export const greeting = "Hi from the terminal";\n',
     );
@@ -355,4 +381,66 @@ test('phase 3 · Try it: edit a file, close the tab, reopen it: the change is st
     await expect(elsewhere.locator('.cm-content')).toContainText('"private": true');
     await other.close();
   });
+});
+
+test('phase 3: an edit made in the terminal appears in the editor; quick-open; a deleted file', async ({
+  page,
+}) => {
+  const watch = watchForPageProblems(page);
+  const workspace = new FakeWorkspace(page);
+  const greeting = 'apps/web/src/utils/greeting.ts';
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/p/${PROJECT.id}`);
+  await page.getByRole('tab', { name: 'Code' }).click();
+  for (const folder of ['apps', 'web', 'src', 'utils']) await row(page, folder).click();
+  await row(page, 'greeting.ts').click();
+  await expect(page.locator('.cm-content')).toContainText('export const greeting = "Hello";');
+  await expect.poll(() => workspace.watchers.length).toBeGreaterThan(0);
+
+  await test.step('The terminal edits the file: the editor shows it (Done when)', async () => {
+    workspace.terminalWrites(greeting, 'export const greeting = "Hello from the terminal";\n');
+    await expect(page.locator('.cm-content')).toContainText('"Hello from the terminal"');
+    await expect(page.getByRole('button', { name: 'greeting.ts', exact: true })).toBeVisible();
+  });
+
+  await test.step('With unsaved changes, it says so instead, and the person chooses', async () => {
+    await page.locator('.cm-line').first().click();
+    await page.keyboard.press('End');
+    await page.keyboard.type(' // mine');
+    workspace.terminalWrites(greeting, 'export const greeting = "Theirs";\n');
+    const alert = page.getByRole('alert');
+    await expect(alert).toContainText(
+      'This file changed in the workspace while you were editing it.',
+    );
+    await alert.getByRole('button', { name: 'Load the workspace’s version' }).click();
+    await expect(page.locator('.cm-content')).toContainText('"Theirs"');
+    await expect(page.locator('.cm-content')).not.toContainText('// mine');
+    await expect(page.getByRole('alert')).toHaveCount(0);
+  });
+
+  await test.step('Ctrl+P opens any file by name', async () => {
+    await page.keyboard.press('Control+p');
+    const dialog = page.getByRole('dialog', { name: 'Open a file' });
+    await expect(dialog).toBeVisible();
+    await page.keyboard.type('pack');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'package.json', exact: true })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+    await expect(page.locator('.cm-content')).toContainText('"name": "rallly"');
+  });
+
+  await test.step('A file deleted in the terminal says so, and closes', async () => {
+    await page.getByRole('button', { name: 'greeting.ts', exact: true }).click();
+    workspace.terminalDeletes(greeting);
+    const alert = page.getByRole('alert');
+    await expect(alert).toContainText('This file was deleted in the workspace.');
+    await alert.getByRole('button', { name: 'Close' }).click();
+    await expect(page.getByRole('button', { name: 'greeting.ts', exact: true })).toHaveCount(0);
+  });
+
+  expect(watch.problems()).toEqual([]);
 });

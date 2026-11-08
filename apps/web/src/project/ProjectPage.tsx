@@ -1,6 +1,8 @@
 import { Button, Rail, RailButton, ReviewBar, Tabs, TopBar } from '@flowcanvas/ui';
 import { FileText, Maximize2, Minimize2, PanelRight, SquareTerminal, Target } from 'lucide-react';
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import { fetchTree } from '../code/api';
+import { useWorkspaceEvents } from '../code/events';
 import { useCodeFiles } from '../code/useCodeFiles';
 import { fetchProjects, isProblem, type Project } from '../projects/api';
 import { FlowCanvas } from '../canvas/FlowCanvas';
@@ -16,6 +18,10 @@ import styles from './ProjectPage.module.css';
 // each in its own chunk, so a project page that never opens them doesn't download them.
 const FilesPanel = lazy(async () => ({ default: (await import('../code/FilesPanel')).FilesPanel }));
 const CodeView = lazy(async () => ({ default: (await import('../code/CodeView')).CodeView }));
+// Quick-open (Ctrl/⌘+P): its own chunk, fetched in the background once the workspace runs, so it's there before the
+// first Ctrl+P. Loading it on that keypress lost the first letters typed (found by the screen test, step 8).
+const loadQuickOpen = () => import('../code/QuickOpenDialog');
+const QuickOpen = lazy(loadQuickOpen);
 
 // xterm.js only when the dock opens a terminal.
 const WorkspaceTerminal = lazy(async () => ({
@@ -143,6 +149,53 @@ function ReadyProject({
     () => new Set(code.files.filter((file) => file.unsaved).map((file) => file.path)),
     [code.files],
   );
+  // Changes in the workspace: open files follow them (useCodeFiles), and the file tree is listed again when a file
+  // appears or goes. The tree's paths are known here from its last listing.
+  const [treeRefresh, setTreeRefresh] = useState(0);
+  const listed = useRef<ReadonlySet<string>>(new Set());
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useWorkspaceEvents(project.id, running, (event) => {
+    code.onDiskEvent(event);
+    if (event.type === 'overflow' || event.deleted || !listed.current.has(event.path)) {
+      // A burst (a checkout, an install) lists once.
+      if (refreshTimer.current !== undefined) clearTimeout(refreshTimer.current);
+      refreshTimer.current = setTimeout(() => {
+        setTreeRefresh((n) => n + 1);
+      }, 300);
+    }
+  });
+
+  useEffect(() => {
+    if (running) void loadQuickOpen();
+  }, [running]);
+
+  // Quick-open, Ctrl/⌘+P: the browser's print is not what anyone wants here.
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickFiles, setQuickFiles] = useState<readonly string[]>([]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === 'p'
+      ) {
+        event.preventDefault();
+        if (!running) return;
+        setQuickFiles([...listed.current]);
+        setQuickOpen(true);
+        // The freshest list: the tree may not have been shown yet.
+        void fetchTree(project.id, fetcher).then((result) => {
+          if ('files' in result) setQuickFiles(result.files);
+        });
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, { capture: true });
+    };
+  }, [running, project.id, fetcher]);
+
   const setView = (next: ProjectView) => {
     // Leaving the Code view settles its files: autosaved, or journalled with autosave off. Only leaving it:
     // arriving must not save anything (restored changes would be written the moment they appear).
@@ -181,6 +234,10 @@ function ReadyProject({
                 if (view !== 'code') setView('code');
                 code.open(path);
               }}
+              refresh={treeRefresh}
+              onList={(files) => {
+                listed.current = new Set(files);
+              }}
               fetcher={fetcher}
             />
           </Suspense>
@@ -194,13 +251,28 @@ function ReadyProject({
         )
       }
       canvas={
-        view === 'code' ? (
-          <Suspense fallback={<p className={styles.empty}>Loading the editor…</p>}>
-            <CodeView files={code} running={running} />
-          </Suspense>
-        ) : (
-          <ProjectCanvas />
-        )
+        <>
+          {quickOpen && (
+            <Suspense fallback={null}>
+              <QuickOpen
+                isOpen
+                onOpenChange={setQuickOpen}
+                files={quickFiles}
+                onOpen={(path) => {
+                  if (view !== 'code') setView('code');
+                  code.open(path);
+                }}
+              />
+            </Suspense>
+          )}
+          {view === 'code' ? (
+            <Suspense fallback={<p className={styles.empty}>Loading the editor…</p>}>
+              <CodeView files={code} running={running} />
+            </Suspense>
+          ) : (
+            <ProjectCanvas />
+          )}
+        </>
       }
       right={
         <section className={styles.panel} aria-labelledby="inspector">

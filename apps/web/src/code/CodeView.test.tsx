@@ -216,9 +216,15 @@ describe('the Code view', () => {
     const view = await editorView();
     view.dispatch({ changes: { from: 0, insert: 'mine ' } });
     fireEvent.keyDown(view.contentDOM, { key: 's', ctrlKey: true });
-    expect((await screen.findByRole('alert')).textContent).toBe(
+    const alert = await screen.findByRole('alert');
+    expect(alert.querySelector('p')?.textContent).toBe(
       'This file changed in the workspace since you opened it. Your changes are still here, not saved.',
     );
+    // The two ways out (step 7).
+    expect(within(alert).getByRole('button', { name: 'Keep mine' })).toBeTruthy();
+    expect(
+      within(alert).getByRole('button', { name: 'Load the workspace’s version' }),
+    ).toBeTruthy();
     expect(view.state.doc.toString()).toBe('mine export const answer = 42;\n');
     expect(screen.getByRole('button', { name: 'index.ts, unsaved changes' })).toBeTruthy();
   });
