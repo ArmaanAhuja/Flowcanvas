@@ -11287,7 +11287,7 @@ pnpm size               # after pnpm build: the bundle budgets
 | 6 | Saving: autosave, the journal (workspace and IndexedDB), restore on reopen | done (Claude, 8 Nov) |
 | 7 | Changes on disk (reload or banner) and quick-open | done (Claude, 8 Nov) |
 | 8 | Walkthrough, screen baselines, Figma 11 differences, editor bundle budget | done (Claude, 8 Nov) |
-| 9 | Close: report, 0.7.0, PR | *next* |
+| 9 | Close: report, 0.7.0, PR | done (Claude, 8 Nov) |
 
 ### How each Done-when item is proven
 
@@ -11708,3 +11708,66 @@ Then compare `docs/reports/phase-3/figma-11.png` with `built-code-view-dark.png`
 - **Laptop:** all five checks ok.
 
 **Commit:** `feat(web): an edit in the workspace reaches the editor; conflicts and deleted files resolved by the person; quick-open; Code view baselines`
+
+### Step 3.9 — Close the phase: report, 0.7.0, the upgrade-later review, PR (done by Claude)
+
+**Goal:** finish phase 3 so it can be reviewed and accepted.
+
+**What a person can do now:**
+- read the report (`docs/reports/phase-3.md`) and the Figma differences
+- see 0.7.0 in What's new
+- review the pull request: its preview, test report and recordings
+
+**Files:**
+- `docs/reports/phase-3.md`
+- `CHANGELOG.md` (0.7.0, which What's new reads)
+- `package.json` (0.7.0)
+- `docs/STATUS.md` (in review)
+- `docs/upgrade-later.md` (item 2 due)
+- `docs/RUN-AND-FEATURES.md`
+
+**Concepts:**
+- **Release notes for people:** the changelog says what someone can now do, not which files changed.
+- **The upgrade-later review checks triggers against facts, not memory.** Node 26's status came from nodejs.org on the day.
+
+**Found and fixed on the way:**
+- **Upgrade-later 2 (Node 26 LTS) is due.** Node 26 became LTS on 28 Oct 2026. It changes the workspace image, CI, `.nvmrc` and Cloudflare's build, so it's its own pull request right after this phase merges, keeping this one focused.
+- The rest of the review found nothing due, and nothing was added this phase.
+
+**Tests (all run once before pushing):**
+- format, lint and typecheck: clean
+- unit: 747 passed
+- walkthroughs: 18 passed
+- visual: 114 passed
+- Docker: 46 passed, with no test containers left behind
+- bundle: every budget within
+
+**Run and check it (phase 3, fresh clone):**
+```fish
+git clone https://github.com/ArmaanAhuja/Flowcanvas && cd Flowcanvas
+corepack enable && pnpm install
+cp .dev.vars.example .dev.vars          # then fill in your own values (never paste them anywhere)
+pnpm db:status && pnpm db:migrate       # must say the dev branch
+pnpm dev                                # http://localhost:5173
+```
+1. Sign in, open a project, and open its workspace. Click **Code**.
+2. Open a file, type a line, close the browser tab at once, and open the project again: the line is there, with a note.
+3. Wait 5 seconds: "Saved".
+4. In the **Terminal**, change the file (`sed -i 's/a/b/' <file>`): the editor shows it.
+5. Type, then change it in the terminal again: **Keep mine** or **Load the workspace's version**.
+6. Press **Ctrl/⌘+P**, type part of a name, and press Enter.
+7. `rm` an open file: its tab says it was deleted.
+
+**What proves it:**
+```fish
+pnpm test               # 747
+pnpm test:e2e           # 18, phase 3's three among them (the Try it, terminal edits, saving and conflicts)
+pnpm test:visual        # 114
+pnpm test:docker        # 46 (the watcher, versions and the journal in real containers)
+pnpm build && pnpm size
+```
+
+**Risks:**
+- **Laptop:** all five checks ok.
+
+**Commit:** `chore(release): phase 3 report, 0.7.0, in review`
