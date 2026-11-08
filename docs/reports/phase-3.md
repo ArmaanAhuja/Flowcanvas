@@ -3,7 +3,7 @@
 - Version: `0.7.0`
 - Branch: `phase/3-open-repo-and-edit`; PR: see `docs/STATUS.md`
 - Dates: 7–8 Nov 2026
-- Status: **in review**, waiting for the owner's acceptance.
+- Status: **accepted** by the owner on 8 Nov 2026. Merged in PR #16 (`aa6364a`).
 
 ## From the build plan
 
@@ -116,6 +116,8 @@ Like phase 1d, **workspaces run only on the owner's computer** until a cloud pro
 - None of the rest is due; nothing was added this phase.
 
 ## After the merge (owner)
+
+**Results (8 Nov 2026):** `main`'s CI passed on the merge (`aa6364a`), and staging serves `0.7.0` at that commit (checked from its build). The checks below are the owner's.
 
 There are no database migrations. On staging, check:
 1. What's new shows 0.7.0.

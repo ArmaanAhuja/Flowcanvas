@@ -2,9 +2,9 @@
 
 The one place to see how to run Flowcanvas, how to test it, and which features exist so far. It's updated at every build step. Details for each step live in `docs/build-steps.md`; phase status in `docs/STATUS.md`; how it's put together in `ARCHITECTURE.md`.
 
-- **Last updated:** 8 Nov 2026, phase 3 step 9: `0.7.0`, in review (branch `phase/3-open-repo-and-edit`, pull request open)
-- **Released (on staging):** `0.6.0`, phase 2. `0.7.0` (phase 3) reaches staging when its pull request merges
-- **Progress:** phases 1, 1a, 1b, 1c and 2 are accepted; 1d and 3 are in review. That's 6 of the build plan's 96 phases. Stage 0's goal: open a repository in a workspace, see it on a canvas, edit it, and answer "what calls this?"
+- **Last updated:** 8 Nov 2026: phase 3 accepted and merged (PR #16); Node 26 (branch `chore/node-26`)
+- **Released (on staging):** `0.7.0`, phase 3
+- **Progress:** phases 1, 1a, 1b, 1c, 2 and 3 are accepted; 1d is in review (until a cloud provider). That's 7 of the build plan's 96 phases. Stage 0's goal: open a repository in a workspace, see it on a canvas, edit it, and answer "what calls this?"
 
 ## Where it runs
 
@@ -21,7 +21,7 @@ The one place to see how to run Flowcanvas, how to test it, and which features e
 ## Run it on your computer
 
 **Needs:**
-- Node 24 (`.nvmrc`) and pnpm 12.15 (`corepack enable`)
+- Node 26 (`.nvmrc`) and pnpm 12.15 (`corepack enable`)
 - Docker 28 or newer, for workspaces
 - a `.dev.vars` file in the repository root, copied from `.dev.vars.example`. It holds `DATABASE_URL` (your Neon `dev` branch), `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, `VAULT_KEY` and `WORKSPACE_HOST_TOKEN`. It's git-ignored, and its values are never pasted anywhere.
 
@@ -110,7 +110,7 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 - 🟡 **The workspace chip in the top bar** opens its facts (status, machine, since when, this month's usage, any reason) and actions (Open, Sleep now, Resume, Stop). The bottom dock's terminal follows the workspace's state.
 - 🟡 **500 nodes are smooth,** measured on real hardware: panning at 120 or 60 fps, with no long tasks. Zooming in close (100% to 200%) still drops occasional frames (the build plan's phase 42, the WebGL renderer, fixes it).
 
-### The editor (phase 3, in review)
+### The editor (phase 3)
 - 🟡 **The Code view** (Figma 11): the file tree, tabs, CodeMirror 6 with syntax highlighting (TypeScript, JavaScript, JSON, CSS, HTML, Markdown), save (Ctrl/⌘+S) that never overwrites a change made in the workspace, undo, honest binary and `.env` states, tabs remembered. Quick-open: Ctrl/⌘+P, type part of a file's name.
 - 🟡 **Autosave** for when you forget: after 5 s without typing, and on switching file, view or window (a switch in the status bar). Unsaved changes are also kept in the workspace and the browser, so closing the tab loses nothing: reopening restores them, with a note.
 - 🟡 **Changes from the terminal** appear in the editor at once; with unsaved changes, a banner offers **Keep mine** or **Load the workspace's version**, and nothing is overwritten silently. A file deleted in the workspace says so (Close, or Save it again). New and deleted files show in the tree.
@@ -129,7 +129,6 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 - ✅ **A strict security policy:** no inline scripts or styles, previews per pull request, and telemetry off.
 
 ### Coming next
-- **Phase 3:** your acceptance (report: `docs/reports/phase-3.md`). Then Node 26 (upgrade-later 2), in its own small pull request.
 - **Phase 4:** the indexer: every file parsed, symbols searchable in under 100 ms.
 - **Phase 5:** TypeScript call graphs: callers and callees.
 - **After that:** stage 1 draws real flows from code, and stage 2 adds live frames of the running app.
