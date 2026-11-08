@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LabsProvider } from '../labs/LabsProvider';
 import type { Project } from '../projects/api';
 import { ProjectPage } from '../project/ProjectPage';
-import { CODE_TEXT } from './CodeView';
+import { CODE_TEXT, restoredText } from './CodeView';
 import { FILES_TEXT } from './texts';
 
 const V1 = '1'.repeat(64);
@@ -34,6 +34,8 @@ const FILES: Record<string, unknown> = {
 };
 
 let saves: { path: string; body: unknown }[];
+/** The workspace's journal: unsaved changes from an earlier visit. */
+let journal: Map<string, unknown>;
 let saveAnswer: { status: number; body: unknown };
 
 function fakeApi(state: 'running' | 'sleeping' = 'running'): typeof fetch {
@@ -50,6 +52,10 @@ function fakeApi(state: 'running' | 'sleeping' = 'running'): typeof fetch {
         files: ['.env.example', 'public/logo.png', 'src/index.ts', 'src/.env'],
         truncated: false,
       });
+    }
+    if (url.pathname.endsWith('/workspace/journal/entry') && init?.method !== 'PUT') {
+      const entry = journal.get(url.searchParams.get('path') ?? '');
+      return entry === undefined ? json({ error: 'none', code: 'not_found' }, 404) : json(entry);
     }
     if (url.pathname.endsWith('/workspace/file')) {
       const path = url.searchParams.get('path') ?? '';
@@ -75,6 +81,7 @@ function fakeApi(state: 'running' | 'sleeping' = 'running'): typeof fetch {
 // jsdom has no layout: give the file tree's virtualizer a viewport.
 beforeEach(() => {
   saves = [];
+  journal = new Map();
   saveAnswer = { status: 200, body: { path: 'src/index.ts', size: 27, version: V2 } };
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(248);
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
@@ -250,5 +257,60 @@ describe('the Code view', () => {
     renderPage(fakeApi('sleeping'));
     await openCode();
     expect(screen.getAllByText(FILES_TEXT.notRunning)).toHaveLength(2);
+  });
+
+  it('reopens a file with the unsaved changes from last time, and says so', async () => {
+    const at = Date.UTC(2026, 10, 8, 14, 2);
+    journal.set('src/index.ts', {
+      path: 'src/index.ts',
+      content: 'export const answer = 43; // unsaved\n',
+      baseVersion: V1,
+      revision: 7,
+      updatedAt: at,
+    });
+    localStorage.setItem(
+      'flowcanvas-code-p-1',
+      JSON.stringify({ open: ['src/index.ts'], active: 'src/index.ts' }),
+    );
+    localStorage.setItem('flowcanvas-view-p-1', 'code');
+    renderPage(fakeApi());
+    const view = await editorView();
+    expect(view.state.doc.toString()).toBe('export const answer = 43; // unsaved\n');
+    expect(await screen.findByText(restoredText(at))).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'index.ts, unsaved changes' })).toBeTruthy();
+  });
+
+  it('has an autosave switch, on by default and remembered', async () => {
+    renderPage(fakeApi());
+    const user = await openCode();
+    await screen.findByRole('treegrid', { name: 'Files' });
+    await user.click(row('src'));
+    await user.click(row('index.ts'));
+    await editorView();
+    const toggle = screen.getByRole('switch', { name: 'Autosave' });
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    await user.click(toggle);
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(localStorage.getItem('flowcanvas-autosave')).toBe('off');
+  });
+
+  it('does not save restored changes just by arriving in the Code view (regression)', async () => {
+    journal.set('src/index.ts', {
+      path: 'src/index.ts',
+      content: 'restored, not saved\n',
+      baseVersion: V1,
+      revision: 9,
+      updatedAt: Date.UTC(2026, 10, 8, 14, 2),
+    });
+    localStorage.setItem(
+      'flowcanvas-code-p-1',
+      JSON.stringify({ open: ['src/index.ts'], active: 'src/index.ts' }),
+    );
+    renderPage(fakeApi());
+    await openCode();
+    await editorView();
+    expect(await screen.findByRole('button', { name: 'index.ts, unsaved changes' })).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(saves).toEqual([]);
   });
 });

@@ -144,6 +144,9 @@ function ReadyProject({
     [code.files],
   );
   const setView = (next: ProjectView) => {
+    // Leaving the Code view settles its files: autosaved, or journalled with autosave off. Only leaving it:
+    // arriving must not save anything (restored changes would be written the moment they appear).
+    if (view === 'code' && next !== 'code') code.flush();
     setViewState(next);
     // As on Figma 11: the Code view's left panel is the file tree, the Graph view's the entry points.
     setLeftTool(next === 'code' ? 'files' : 'entry-points');

@@ -1,4 +1,4 @@
-import { Breadcrumb, EditorTabs, StatusBar } from '@flowcanvas/ui';
+import { Breadcrumb, EditorTabs, StatusBar, Toggle } from '@flowcanvas/ui';
 import type { EditorState } from '@codemirror/state';
 import { useState } from 'react';
 import { CodeEditor } from './CodeEditor';
@@ -16,6 +16,7 @@ export const CODE_TEXT = {
   saved: 'Saved',
   unsaved: 'Unsaved changes',
   keyboard: 'In the editor, Tab indents. Press Escape, then Tab, to move on.',
+  autosave: 'Autosave',
 } as const;
 
 const statusOf = (file: OpenFile): string | undefined =>
@@ -28,6 +29,18 @@ const statusOf = (file: OpenFile): string | undefined =>
         : file.save.kind === 'saved'
           ? CODE_TEXT.saved
           : undefined;
+
+const clock = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
+
+/** "Restored unsaved changes from 14:02." (or the date, if it wasn't today). */
+export function restoredText(at: number, now: number = Date.now()): string {
+  const when = new Date(at);
+  const today = new Date(now).toDateString() === when.toDateString();
+  const label = today
+    ? clock.format(when)
+    : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(when);
+  return `Restored unsaved changes from ${label}.`;
+}
 
 /** The Code view (Figma 11), where the canvas is in the Graph view: tabs, the path, the editor, the status. */
 export function CodeView({
@@ -78,10 +91,17 @@ export function CodeView({
       ) : (
         <>
           <Breadcrumb aria-label="File path" segments={active.path.split('/')} />
+          {active.restored !== undefined && active.save.kind !== 'conflict' && (
+            <p className={styles.restored} role="status">
+              {restoredText(active.restored.at)}
+            </p>
+          )}
           {(active.save.kind === 'conflict' || active.save.kind === 'failed') && (
             <p className={styles.problem} role="alert">
               {active.save.message}
-              {active.save.kind === 'conflict' && ' Your changes are still here, not saved.'}
+              {active.save.kind === 'conflict' &&
+                !active.save.message.endsWith('not saved.') &&
+                ' Your changes are still here, not saved.'}
             </p>
           )}
           {active.view.kind === 'loading' ? (
@@ -110,7 +130,17 @@ export function CodeView({
                     languageFor(active.path).name,
                   ]
             }
-            {...(status === undefined ? {} : { end: <span role="status">{status}</span> })}
+            end={
+              <>
+                {status !== undefined && <span role="status">{status}</span>}
+                <span id="autosave-label">{CODE_TEXT.autosave}</span>
+                <Toggle
+                  aria-labelledby="autosave-label"
+                  checked={files.autosave}
+                  onCheckedChange={files.setAutosave}
+                />
+              </>
+            }
           />
         </>
       )}

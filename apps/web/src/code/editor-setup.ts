@@ -9,7 +9,7 @@ import {
   syntaxHighlighting,
 } from '@codemirror/language';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
-import { EditorState, type Extension } from '@codemirror/state';
+import { EditorState, type Extension, type Text } from '@codemirror/state';
 import {
   EditorView,
   drawSelection,
@@ -127,12 +127,22 @@ export const flowcanvasHighlight = HighlightStyle.define([
   { tag: tags.invalid, textDecoration: 'underline wavy var(--color-state-removed-solid)' },
 ]);
 
+/** The file's own line breaks: Windows-style files keep \r\n when saved (CodeMirror would otherwise write \n). */
+const lineBreaks = (text: string): Extension =>
+  text.includes('\r\n') ? EditorState.lineSeparator.of('\r\n') : [];
+
+/** A document built as the editor builds it, to compare a file's text on disk with the editor's. */
+export function docOf(text: string): Text {
+  return EditorState.create({ doc: text, extensions: lineBreaks(text) }).doc;
+}
+
 /** A file's editor state: its text, language, indentation, undo history and keys. The language's parser loads
- * on demand, so this waits for it. */
+ * on demand, so this waits for it. `lineBreaksOf` is the text on disk, whose line breaks the file keeps. */
 export async function fileState(
   path: string,
   text: string,
   actions: EditorActions,
+  lineBreaksOf: string = text,
 ): Promise<EditorState> {
   const indent = detectIndent(text);
   const language = await languageFor(path).load();
@@ -145,6 +155,7 @@ export async function fileState(
     bracketMatching(),
     indentOnInput(),
     highlightSelectionMatches(),
+    lineBreaks(lineBreaksOf),
     indentUnit.of(indent.unit),
     EditorState.tabSize.of(indent.unit === '\t' ? 4 : indent.unit.length),
     language,

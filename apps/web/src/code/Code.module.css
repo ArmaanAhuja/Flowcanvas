@@ -74,3 +74,14 @@
   line-height: var(--text-small-line-height);
   color: var(--color-text-muted);
 }
+
+.restored {
+  margin: 0;
+  padding: var(--space-8) var(--space-16);
+  border-block-end: var(--border-width-default) solid var(--color-border-subtle);
+  background: var(--color-accent-tint);
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  line-height: var(--text-small-line-height);
+  color: var(--color-accent-text);
+}

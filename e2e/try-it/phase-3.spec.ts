@@ -31,8 +31,26 @@ class FakeWorkspace {
     ['apps/web/public/logo.png', '\u0089PNG'],
   ]);
 
+  /** The workspace's journal of unsaved changes, with the agent's rule: an older revision never replaces a newer. */
+  readonly journal = new Map<
+    string,
+    {
+      path: string;
+      content: string;
+      baseVersion: string | null;
+      revision: number;
+      updatedAt: number;
+    }
+  >();
+
   constructor(page: Page) {
-    void page.route('**/api/**', (route) => this.answer(route));
+    this.watch(page);
+  }
+
+  /** Serves a page from this workspace. Routed on the browser context, not the page: a request sent as a page
+   * closes (keepalive) outlives the page, and the page's own routes go with it. */
+  watch(page: Page): void {
+    void page.context().route('**/api/**', (route) => this.answer(route));
   }
 
   private reply(route: Route, body: unknown, status = 200) {
@@ -57,6 +75,47 @@ class FakeWorkspace {
         truncated: false,
         source: 'git',
       });
+    }
+    if (url.pathname.endsWith('/workspace/journal')) {
+      return this.reply(route, {
+        entries: [...this.journal.values()].map((entry) => ({
+          path: entry.path,
+          revision: entry.revision,
+        })),
+      });
+    }
+    if (url.pathname.endsWith('/workspace/journal/entry')) {
+      const method = route.request().method();
+      if (method === 'PUT') {
+        const body = route.request().postDataJSON() as {
+          content: string;
+          baseVersion: string | null;
+          revision: number;
+        };
+        const existing = this.journal.get(path);
+        if (existing === undefined || existing.revision <= body.revision) {
+          this.journal.set(path, { path, ...body, updatedAt: Date.now() });
+        }
+        return this.reply(route, { path, revision: body.revision });
+      }
+      if (method === 'DELETE') {
+        const existing = this.journal.get(path);
+        if (
+          existing !== undefined &&
+          existing.revision <= Number(url.searchParams.get('revision'))
+        ) {
+          this.journal.delete(path);
+        }
+        return this.reply(route, { path, dropped: true });
+      }
+      const entry = this.journal.get(path);
+      return entry === undefined
+        ? this.reply(
+            route,
+            { error: 'There are no unsaved changes for that file.', code: 'not_found' },
+            404,
+          )
+        : this.reply(route, entry);
     }
     if (url.pathname.endsWith('/workspace/file')) {
       if (path.split('/').pop() === '.env.example') {
@@ -189,4 +248,111 @@ test('phase 3: open a file in the Code view, edit it, save it, and see a conflic
   });
 
   expect(watch.problems()).toEqual([]);
+});
+
+test('phase 3 · Try it: edit a file, close the tab, reopen it: the change is still there', async ({
+  browser,
+  page,
+}) => {
+  const watch = watchForPageProblems(page);
+  const workspace = new FakeWorkspace(page);
+  const greeting = 'apps/web/src/utils/greeting.ts';
+  // Test-only: records requests sent with keepalive (as the page closes) in the app's own storage, for the
+  // reopened tab to read: Playwright's routing can't see them.
+  await page.context().addInitScript(() => {
+    const original = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      if (init?.keepalive === true) {
+        const log = JSON.parse(localStorage.getItem('e2e-keepalive') ?? '[]') as unknown[];
+        log.push({ url: input instanceof Request ? input.url : input.toString(), body: init.body });
+        localStorage.setItem('e2e-keepalive', JSON.stringify(log));
+      }
+      return original(input, init);
+    };
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/p/${PROJECT.id}`);
+
+  await test.step('Edit a file in Rallly', async () => {
+    await page.getByRole('tab', { name: 'Code' }).click();
+    for (const folder of ['apps', 'web', 'src', 'utils']) await row(page, folder).click();
+    await row(page, 'greeting.ts').click();
+    await page.locator('.cm-line').first().click();
+    await page.keyboard.press('End');
+    await page.keyboard.type(' // kept');
+    await expect(
+      page.getByRole('button', { name: 'greeting.ts, unsaved changes', exact: true }),
+    ).toBeVisible();
+  });
+
+  await test.step('Close the tab at once, before autosave: the changes go out as it closes', async () => {
+    expect(watch.problems()).toEqual([]);
+    await page.close({ runBeforeUnload: true });
+    expect(workspace.files.get(greeting)).toBe('export const greeting = "Hello";\n');
+  });
+
+  await test.step('Reopen it: the change is still there, marked unsaved, and says so', async () => {
+    const reopened = await page.context().newPage();
+    const reopenedWatch = watchForPageProblems(reopened);
+    await reopened.setViewportSize({ width: 1440, height: 900 });
+    await reopened.goto(`/p/${PROJECT.id}`);
+    await expect(reopened.locator('.cm-content')).toContainText(
+      'export const greeting = "Hello"; // kept',
+    );
+    await expect(
+      reopened.getByRole('button', { name: 'greeting.ts, unsaved changes', exact: true }),
+    ).toBeVisible();
+    await expect(reopened.getByText(/^Restored unsaved changes from /)).toBeVisible();
+    // The workspace's copy: the 2-second write if the tab lived that long, else the write sent as it closed
+    // (a keepalive request, which outlives the page; Playwright can't intercept those, so the page records the
+    // attempt, test-only, below).
+    const sentOnClose = await reopened.evaluate(
+      () =>
+        JSON.parse(localStorage.getItem('e2e-keepalive') ?? '[]') as {
+          url: string;
+          body: string;
+        }[],
+    );
+    const kept = 'export const greeting = "Hello"; // kept\n';
+    expect(
+      workspace.journal.get(greeting)?.content === kept ||
+        sentOnClose.some(
+          (sent) =>
+            sent.url.includes('/journal/entry') &&
+            (JSON.parse(sent.body) as { content: string }).content === kept,
+        ),
+    ).toBe(true);
+    await test.step('Autosave writes it after 5 seconds without typing', async () => {
+      await reopened.locator('.cm-line').first().click();
+      await reopened.keyboard.press('End');
+      await reopened.keyboard.type('!');
+      await expect
+        .poll(() => workspace.files.get(greeting), { timeout: 12_000 })
+        .toBe('export const greeting = "Hello"; // kept!\n');
+      await expect(reopened.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+      await expect.poll(() => workspace.journal.has(greeting)).toBe(false);
+    });
+    expect(reopenedWatch.problems()).toEqual([]);
+    await reopened.close();
+  });
+
+  await test.step('Another browser (nothing kept in it) restores from the workspace alone', async () => {
+    workspace.journal.set('package.json', {
+      path: 'package.json',
+      content: '{\n  "name": "rallly",\n  "private": true\n}\n',
+      baseVersion: createHash('sha256').update('{\n  "name": "rallly"\n}\n').digest('hex'),
+      revision: Date.now(),
+      updatedAt: Date.now(),
+    });
+    const other = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const elsewhere = await other.newPage();
+    workspace.watch(elsewhere);
+    await elsewhere.goto(`/p/${PROJECT.id}`);
+    await elsewhere.getByRole('tab', { name: 'Code' }).click();
+    await expect(
+      elsewhere.getByRole('button', { name: 'package.json, unsaved changes', exact: true }),
+    ).toBeVisible();
+    await expect(elsewhere.locator('.cm-content')).toContainText('"private": true');
+    await other.close();
+  });
 });

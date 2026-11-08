@@ -1,9 +1,22 @@
-// The Code view's open files (phase 3 step 5): which are open, what each shows, and saving with the version
-// it was opened at. The editor's latest state per file is kept in a ref, not React state, so typing doesn't
-// re-render the page; React state changes only when what's shown changes (a dot, a status, another file).
+// The Code view's open files (phase 3, steps 5 and 6): which are open, what each shows, saving with the version
+// it was opened at, autosave, and the journal that keeps unsaved changes safe (ADR 0022).
+//
+// - The editor's latest state per file is in a ref, not React state, so typing doesn't re-render the page.
+// - Unsaved changes go to the journal (the workspace and this browser) every couple of seconds and when the page
+//   is hidden; reopening a file restores the newest copy if it differs from the file on disk.
+// - Autosave (owner, 7 Nov 2026) writes the file after a pause in typing, and when you switch file, view or
+//   window. A file in conflict is never autosaved.
 import type { EditorState, Text } from '@codemirror/state';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { readFile, saveFile, type OpenedFile } from './api';
+import {
+  indexedDbJournal,
+  newest,
+  nextRevision,
+  workspaceJournal,
+  type JournalEntry,
+  type LocalJournal,
+} from './journal';
 
 export type SaveStatus =
   | { readonly kind: 'idle' }
@@ -21,27 +34,40 @@ export interface OpenFile {
     | Exclude<OpenedFile, { kind: 'text' }>;
   readonly unsaved: boolean;
   readonly save: SaveStatus;
+  /** Unsaved changes brought back from the journal when the file opened: when they were made. */
+  readonly restored?: { readonly at: number };
 }
 
+export const CONFLICT_ON_RESTORE =
+  'This file changed in the workspace since these unsaved changes were made. They’re here, not saved.';
+
+/** How long autosave waits after the last keystroke, and how often unsaved changes go to the journal. */
+export interface Timings {
+  readonly autosaveMs: number;
+  readonly journalMs: number;
+}
+export const TIMINGS: Timings = { autosaveMs: 5000, journalMs: 2000 };
+
+/** The browser's copy is written this soon after an edit (it's local and cheap), so a tab closed right after
+ * typing still has it, even if the browser cuts the close-time writes short. */
+const LOCAL_COPY_MS = 300;
+
 interface Saved {
-  /** The version on disk this file's text was opened or last saved at. */
-  version: string;
-  /** That text, to tell unsaved changes from an undo back to it. */
+  /** The version a save is checked against: the file's version on disk, or an older one for a stale restore. */
+  version: string | null;
+  /** The text on disk, to tell unsaved changes from an undo back to it. */
   doc: Text;
 }
 
 const storageKey = (projectId: string) => `flowcanvas-code-${projectId}`;
+const AUTOSAVE_KEY = 'flowcanvas-autosave';
 
-interface Remembered {
-  readonly open: readonly string[];
-  readonly active: string | null;
-}
-
-function remembered(projectId: string): Remembered {
+function remembered(projectId: string): { open: string[]; active: string | null } {
   try {
-    const value = JSON.parse(
-      window.localStorage.getItem(storageKey(projectId)) ?? 'null',
-    ) as Partial<Remembered> | null;
+    const value = JSON.parse(window.localStorage.getItem(storageKey(projectId)) ?? 'null') as {
+      open?: unknown;
+      active?: unknown;
+    } | null;
     const open = Array.isArray(value?.open)
       ? value.open.filter((path): path is string => typeof path === 'string')
       : [];
@@ -52,6 +78,14 @@ function remembered(projectId: string): Remembered {
     return { open: open.slice(0, 30), active };
   } catch {
     return { open: [], active: null };
+  }
+}
+
+function rememberedAutosave(): boolean {
+  try {
+    return window.localStorage.getItem(AUTOSAVE_KEY) !== 'off';
+  } catch {
+    return true;
   }
 }
 
@@ -66,40 +100,137 @@ export interface CodeFiles {
   readonly latest: (path: string) => EditorState | undefined;
   /** Every change from the editor of the shown file. */
   readonly updated: (path: string, state: EditorState) => void;
+  /** Leaving the files (another view): autosave them, or journal them with autosave off. */
+  readonly flush: () => void;
+  readonly autosave: boolean;
+  readonly setAutosave: (on: boolean) => void;
+}
+
+export interface CodeFilesOptions {
+  readonly timings?: Timings;
+  /** The browser's journal; IndexedDB by default. */
+  readonly local?: LocalJournal;
 }
 
 export function useCodeFiles(
   projectId: string,
   fetcher: typeof fetch,
   enabled: boolean,
+  options: CodeFilesOptions = {},
 ): CodeFiles {
+  const timings = options.timings ?? TIMINGS;
+  const local = options.local ?? indexedDbJournal;
   const [files, setFiles] = useState<readonly OpenFile[]>([]);
   const [activePath, setActivePath] = useState<string | null>(null);
+  const [autosave, setAutosaveState] = useState(rememberedAutosave);
+  const autosaveOn = useRef(autosave);
+  autosaveOn.current = autosave;
+  const filesRef = useRef(files);
+  filesRef.current = files;
+  const activeRef = useRef(activePath);
+  activeRef.current = activePath;
+
   const latestStates = useRef(new Map<string, EditorState>());
   const saved = useRef(new Map<string, Saved>());
+  /** The revision of each file's latest text, and the last one sent to the journal. */
+  const revisions = useRef(new Map<string, number>());
+  const journaled = useRef(new Map<string, number>());
+  const journalTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const localTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const autosaveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const saveRef = useRef<(path: string) => Promise<void>>(() => Promise.resolve());
 
   const patch = useCallback((path: string, change: (file: OpenFile) => OpenFile) => {
     setFiles((now) => now.map((file) => (file.path === path ? change(file) : file)));
   }, []);
 
+  const isUnsaved = (path: string) => {
+    const state = latestStates.current.get(path);
+    const base = saved.current.get(path);
+    return state !== undefined && base !== undefined && !state.doc.eq(base.doc);
+  };
+
+  const inConflict = (path: string) =>
+    filesRef.current.find((file) => file.path === path)?.save.kind === 'conflict';
+
+  /** Sends the file's unsaved text to both journals, unless that revision is there already. */
+  const journalNow = useCallback(
+    async (path: string, keepalive = false) => {
+      const timer = journalTimers.current.get(path);
+      if (timer !== undefined) clearTimeout(timer);
+      journalTimers.current.delete(path);
+      const state = latestStates.current.get(path);
+      const base = saved.current.get(path);
+      const revision = revisions.current.get(path) ?? 0;
+      if (state === undefined || base === undefined || state.doc.eq(base.doc)) return;
+      if (journaled.current.get(path) === revision) return;
+      journaled.current.set(path, revision);
+      const entry: JournalEntry = {
+        path,
+        // sliceDoc keeps the file's own line breaks; doc.toString() would always write \n.
+        content: state.sliceDoc(),
+        baseVersion: base.version,
+        revision,
+        updatedAt: Date.now(),
+      };
+      await Promise.all([
+        workspaceJournal.put(projectId, entry, fetcher, keepalive),
+        local.put(projectId, entry).catch(() => undefined),
+      ]);
+    },
+    [projectId, fetcher, local],
+  );
+
+  const dropJournal = useCallback(
+    (path: string, revision: number) => {
+      void workspaceJournal.drop(projectId, path, revision, fetcher);
+      void local.drop(projectId, path, revision).catch(() => undefined);
+    },
+    [projectId, fetcher, local],
+  );
+
   const load = useCallback(
     async (path: string) => {
-      const opened = await readFile(projectId, path, fetcher);
+      const [opened, fromWorkspace, fromBrowser] = await Promise.all([
+        readFile(projectId, path, fetcher),
+        workspaceJournal.get(projectId, path, fetcher),
+        local.get(projectId, path).catch(() => undefined),
+      ]);
       if (opened.kind !== 'text') {
         patch(path, (file) => ({ ...file, view: opened }));
         return;
       }
       // CodeMirror loads with the editor, not with the project page (the bundle budget caught it, step 5).
-      const { fileState } = await import('./editor-setup');
-      const state = await fileState(path, opened.content, {
-        save: () => void saveRef.current(path),
-      });
+      const { docOf, fileState } = await import('./editor-setup');
+      const disk = docOf(opened.content);
+      const entry = newest(fromWorkspace, fromBrowser);
+      const restore = entry !== undefined && !docOf(entry.content).eq(disk) ? entry : undefined;
+      if (entry !== undefined && restore === undefined) dropJournal(path, entry.revision);
+      // A restore whose base isn't the file on disk any more must not overwrite it: its save is checked against
+      // that older base, so the workspace refuses it instead (a conflict, shown at once).
+      const stale = restore !== undefined && restore.baseVersion !== opened.version;
+      const state = await fileState(
+        path,
+        restore?.content ?? opened.content,
+        { save: () => void saveRef.current(path) },
+        opened.content,
+      );
       latestStates.current.set(path, state);
-      saved.current.set(path, { version: opened.version, doc: state.doc });
-      patch(path, (file) => ({ ...file, view: { kind: 'text', initial: state }, unsaved: false }));
+      saved.current.set(path, {
+        version: stale ? (restore.baseVersion ?? null) : opened.version,
+        doc: disk,
+      });
+      revisions.current.set(path, restore?.revision ?? 0);
+      if (restore !== undefined) journaled.current.set(path, restore.revision);
+      patch(path, (file) => ({
+        ...file,
+        view: { kind: 'text', initial: state },
+        unsaved: restore !== undefined,
+        save: stale ? { kind: 'conflict', message: CONFLICT_ON_RESTORE } : file.save,
+        ...(restore === undefined ? {} : { restored: { at: restore.updatedAt } }),
+      }));
     },
-    [projectId, fetcher, patch],
+    [projectId, fetcher, local, patch, dropJournal],
   );
 
   // Paths open or being opened, so two quick opens of one file make one tab (updaters must stay pure).
@@ -118,18 +249,23 @@ export function useCodeFiles(
     [load],
   );
 
-  // The tabs open when the page was last here, once the workspace runs.
-  const restored = useRef(false);
+  // Once the workspace runs: the tabs open when the page was last here, and any file with unsaved changes in the
+  // workspace's journal (from another tab or computer), so nothing unsaved is out of sight.
+  const restoredTabs = useRef(false);
   useEffect(() => {
-    if (!enabled || restored.current) return;
-    restored.current = true;
+    if (!enabled || restoredTabs.current) return;
+    restoredTabs.current = true;
     const { open: paths, active } = remembered(projectId);
     for (const path of paths) open(path);
     if (active !== null) setActivePath(active);
-  }, [enabled, projectId, open]);
+    void workspaceJournal.paths(projectId, fetcher).then((unsaved) => {
+      for (const path of unsaved) if (!openPaths.current.has(path)) open(path);
+      if (active === null && unsaved[0] !== undefined) setActivePath(unsaved[0]);
+    });
+  }, [enabled, projectId, fetcher, open]);
 
   useEffect(() => {
-    if (!restored.current) return;
+    if (!restoredTabs.current) return;
     try {
       window.localStorage.setItem(
         storageKey(projectId),
@@ -145,66 +281,193 @@ export function useCodeFiles(
       const state = latestStates.current.get(path);
       const base = saved.current.get(path);
       if (state === undefined || base === undefined) return;
+      const timer = autosaveTimers.current.get(path);
+      if (timer !== undefined) clearTimeout(timer);
+      autosaveTimers.current.delete(path);
       const doc = state.doc;
+      const revision = revisions.current.get(path) ?? 0;
       patch(path, (file) => ({ ...file, save: { kind: 'saving' } }));
-      const result = await saveFile(projectId, path, doc.toString(), base.version, fetcher);
+      const result = await saveFile(projectId, path, state.sliceDoc(), base.version, fetcher);
       if (result.kind === 'saved') {
         saved.current.set(path, { version: result.version, doc });
-        // Typing during the save leaves the newer text unsaved.
+        // The journal's copies up to this text are written now; newer edits (typed during the save) stay.
+        dropJournal(path, revision);
         const now = latestStates.current.get(path)?.doc ?? doc;
-        patch(path, (file) => ({ ...file, unsaved: !now.eq(doc), save: { kind: 'saved' } }));
+        // Saved: whatever was restored is written now, so the note goes.
+        patch(path, (file) => ({
+          path: file.path,
+          view: file.view,
+          unsaved: !now.eq(doc),
+          save: { kind: 'saved' },
+        }));
       } else {
         patch(path, (file) => ({ ...file, save: result }));
       }
     },
-    [projectId, fetcher, patch],
+    [projectId, fetcher, patch, dropJournal],
   );
   saveRef.current = save;
 
-  const close = useCallback(
+  /** Autosave now (when it's on and the file isn't in conflict), else journal it. */
+  const settle = useCallback(
     (path: string) => {
-      void (async () => {
-        const file = files.find((f) => f.path === path);
-        // Never lose work: a file with unsaved changes is saved before it closes, and stays open if it can't be.
-        if (file?.unsaved === true) {
-          await saveRef.current(path);
-          const after = latestStates.current.get(path);
-          const base = saved.current.get(path);
-          if (after === undefined || base === undefined || !after.doc.eq(base.doc)) return;
-        }
-        latestStates.current.delete(path);
-        saved.current.delete(path);
-        openPaths.current.delete(path);
-        const index = files.findIndex((f) => f.path === path);
-        const next = files.filter((f) => f.path !== path);
-        setFiles((now) => now.filter((f) => f.path !== path));
-        setActivePath((current) =>
-          current === path ? (next[Math.min(index, next.length - 1)]?.path ?? null) : current,
-        );
-      })();
+      if (!isUnsaved(path)) return;
+      if (autosaveOn.current && !inConflict(path)) void saveRef.current(path);
+      else void journalNow(path);
     },
-    [files],
+    [journalNow],
   );
 
-  const updated = useCallback((path: string, state: EditorState) => {
-    const previous = latestStates.current.get(path);
-    latestStates.current.set(path, state);
-    if (previous?.doc === state.doc) return;
-    const base = saved.current.get(path);
-    const unsaved = base !== undefined && !state.doc.eq(base.doc);
-    setFiles((now) =>
-      now.some((file) => file.path === path && file.unsaved !== unsaved)
-        ? now.map((file) =>
-            file.path === path
-              ? {
-                  ...file,
-                  unsaved,
-                  save: file.save.kind === 'saved' ? { kind: 'idle' } : file.save,
-                }
-              : file,
-          )
-        : now,
-    );
+  const flush = useCallback(() => {
+    for (const file of filesRef.current) settle(file.path);
+  }, [settle]);
+
+  const show = useCallback(
+    (path: string) => {
+      // Switching file: the one being left is autosaved (owner, 7 Nov 2026).
+      const leaving = activeRef.current;
+      if (leaving !== null && leaving !== path) settle(leaving);
+      setActivePath(path);
+    },
+    [settle],
+  );
+
+  const close = useCallback((path: string) => {
+    void (async () => {
+      // Never lose work: a file with unsaved changes is saved before it closes, and stays open if it can't be.
+      if (isUnsaved(path)) {
+        await saveRef.current(path);
+        if (isUnsaved(path)) return;
+      }
+      for (const timers of [journalTimers.current, autosaveTimers.current]) {
+        const timer = timers.get(path);
+        if (timer !== undefined) clearTimeout(timer);
+        timers.delete(path);
+      }
+      latestStates.current.delete(path);
+      saved.current.delete(path);
+      openPaths.current.delete(path);
+      const now = filesRef.current;
+      const index = now.findIndex((f) => f.path === path);
+      const next = now.filter((f) => f.path !== path);
+      setFiles((current) => current.filter((f) => f.path !== path));
+      setActivePath((current) =>
+        current === path ? (next[Math.min(index, next.length - 1)]?.path ?? null) : current,
+      );
+    })();
+  }, []);
+
+  const updated = useCallback(
+    (path: string, state: EditorState) => {
+      const previous = latestStates.current.get(path);
+      latestStates.current.set(path, state);
+      if (previous?.doc === state.doc) return;
+      revisions.current.set(path, nextRevision(revisions.current.get(path) ?? 0));
+      const unsaved = isUnsaved(path);
+      setFiles((now) =>
+        now.some((file) => file.path === path && file.unsaved !== unsaved)
+          ? now.map((file) =>
+              file.path === path
+                ? {
+                    ...file,
+                    unsaved,
+                    save: file.save.kind === 'saved' ? { kind: 'idle' } : file.save,
+                  }
+                : file,
+            )
+          : now,
+      );
+      if (!unsaved) {
+        // Undone back to the file on disk: nothing to keep, nothing to save.
+        const timer = autosaveTimers.current.get(path);
+        if (timer !== undefined) clearTimeout(timer);
+        autosaveTimers.current.delete(path);
+        if (journaled.current.has(path)) dropJournal(path, revisions.current.get(path) ?? 0);
+        return;
+      }
+      if (!localTimers.current.has(path)) {
+        localTimers.current.set(
+          path,
+          setTimeout(() => {
+            localTimers.current.delete(path);
+            const latest = latestStates.current.get(path);
+            const base = saved.current.get(path);
+            if (latest === undefined || base === undefined || latest.doc.eq(base.doc)) return;
+            void local
+              .put(projectId, {
+                path,
+                content: latest.sliceDoc(),
+                baseVersion: base.version,
+                revision: revisions.current.get(path) ?? 0,
+                updatedAt: Date.now(),
+              })
+              .catch(() => undefined);
+          }, LOCAL_COPY_MS),
+        );
+      }
+      if (!journalTimers.current.has(path)) {
+        journalTimers.current.set(
+          path,
+          setTimeout(() => void journalNow(path), timings.journalMs),
+        );
+      }
+      if (autosaveOn.current && !inConflict(path)) {
+        const timer = autosaveTimers.current.get(path);
+        if (timer !== undefined) clearTimeout(timer);
+        autosaveTimers.current.set(
+          path,
+          setTimeout(() => {
+            autosaveTimers.current.delete(path);
+            if (autosaveOn.current && !inConflict(path) && isUnsaved(path))
+              void saveRef.current(path);
+          }, timings.autosaveMs),
+        );
+      }
+    },
+    [journalNow, dropJournal, timings, local, projectId],
+  );
+
+  // Leaving the window autosaves; the page being hidden or closed journals everything at once (a keepalive
+  // request outlives the page, and the browser's copy is written too).
+  useEffect(() => {
+    const onBlur = () => {
+      flush();
+    };
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') {
+        for (const file of filesRef.current) void journalNow(file.path, true);
+      }
+    };
+    const onPageHide = () => {
+      for (const file of filesRef.current) void journalNow(file.path, true);
+    };
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  }, [flush, journalNow]);
+
+  // Timers end with the page.
+  useEffect(
+    () => () => {
+      for (const timers of [journalTimers.current, autosaveTimers.current, localTimers.current]) {
+        for (const timer of timers.values()) clearTimeout(timer);
+      }
+    },
+    [],
+  );
+
+  const setAutosave = useCallback((on: boolean) => {
+    setAutosaveState(on);
+    try {
+      window.localStorage.setItem(AUTOSAVE_KEY, on ? 'on' : 'off');
+    } catch {
+      // Not remembering the choice is fine.
+    }
   }, []);
 
   const active = useMemo(() => files.find((file) => file.path === activePath), [files, activePath]);
@@ -213,10 +476,13 @@ export function useCodeFiles(
     files,
     active,
     open,
-    show: setActivePath,
+    show,
     close,
     save,
     latest: (path) => latestStates.current.get(path),
     updated,
+    flush,
+    autosave,
+    setAutosave,
   };
 }

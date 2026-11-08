@@ -74,3 +74,14 @@ An open events channel never touches `last_active_at`, so a page left open overn
 - **Protocol 2** of the agent. The host copies the agent in on every connection, and copies are now atomic, so the request agent and a watcher never start from a half-written file.
 - **A cloud provider** (upgrade-later 33) implements `events(ref)` like `terminal(ref)`.
 - **The page's side** (showing changes, conflicts and restores) is steps 5 to 7.
+
+## Addendum (8 Nov 2026, phase 3 step 6): the page's side of the journal, and autosave
+
+- **Two copies of unsaved changes:**
+  - **the workspace's journal,** every 2 s while a file has unsaved changes, and once more as the page is hidden or closed (a `keepalive` request, which outlives the page; at most 60 KiB, the browser's limit)
+  - **this browser's IndexedDB,** within 300 ms of each edit (it's local and cheap, so a tab closed right after typing still has it), and at every journal write
+- **Revisions are times** (`max(previous + 1, now)`): they keep rising across reloads, so the newer of two copies always wins.
+- **Restoring:** when a file opens, the newer copy is used if its text differs from the file on disk; a copy equal to the file is dropped. If the copy's base isn't the file's version any more (the file changed after the edit), its saves are checked against that old base. The workspace then refuses them, and the page shows the conflict at once. A restore never overwrites a newer change. Files in the workspace's journal open too, even if they weren't open in this browser.
+- **Autosave** (owner, 7 Nov 2026), on by default, with a switch in the status bar remembered per browser: 5 s after the last keystroke, and when you switch file, **leave** the Code view or leave the window. Never for a file in conflict, and never on arriving (restored changes stay unsaved until you act or leave). A save drops the journal's copies up to its own revision.
+- **Line breaks:** a file with `\r\n` keeps them. CodeMirror's `doc.toString()` always joins lines with `\n`, so saves and the journal use `state.sliceDoc()`, which honours the file's separator.
+- **Tested in a real browser:** edit, close the tab at once, reopen: the change is back, marked unsaved, with a note; autosave writes it after 5 s; a fresh browser restores from the workspace's copy alone. Playwright can't intercept `keepalive` requests, so the walkthrough checks that the workspace received the 2-second write or that the page sent the close-time one (recorded, test-only).

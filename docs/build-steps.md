@@ -11284,8 +11284,8 @@ pnpm size               # after pnpm build: the bundle budgets
 | 3 | The watcher and the events channel: agent → host → control plane WebSocket | done (Claude, 7 Nov) |
 | 4 | UI components: EditorTabs, FileTree, StatusBar, Breadcrumb (catalogue and baselines) | done (Claude, 8 Nov) |
 | 5 | The Code view: tree, CodeMirror in a shadow root, tabs, save, undo; binary, large and secret states; canvas shortcuts through shadow roots | done (Claude, 8 Nov) |
-| 6 | Saving: autosave, the journal (workspace and IndexedDB), restore on reopen | *next* |
-| 7 | Changes on disk (reload or banner) and quick-open | *planned* |
+| 6 | Saving: autosave, the journal (workspace and IndexedDB), restore on reopen | done (Claude, 8 Nov) |
+| 7 | Changes on disk (reload or banner) and quick-open | *next* |
 | 8 | Walkthrough, screen baselines, Figma 11 differences, editor bundle budget | *planned* |
 | 9 | Close: report, 0.7.0, PR | *planned* |
 
@@ -11309,7 +11309,7 @@ CI's walkthroughs use a fake workspace (staging has none until upgrade-later 33)
 | R1 | The editor breaks our CSP | Step 1 spike before anything is built on it | **closed (step 1):** Monaco needed `style-src-attr 'unsafe-inline'`; CodeMirror 6 in a shadow root has 0 violations under the unchanged policy (owner chose it, ADR 0021). Step 5's walkthrough fails on any violation |
 | R2 | The editor's size | Lazy chunk with its own budget; only the languages a web project needs | **mostly closed (step 1):** CodeMirror 6 with TypeScript is 147 kB gzipped (Monaco 705). The budget is set in step 8 |
 | R3 | **Laptop:** inotify's limit is shared with the whole computer; watching `node_modules` could exhaust it | Watch without `node_modules`, `.git` and build output; measure in the spike | **closed (step 3):** the watcher skips them; Rallly is 599 folders (0.1% of 524,288); a cap of 20,000 per watcher, with a visible error beyond it |
-| R4 | Lost edits (disconnect, sleep, closed tab) | Journal every 2 s and on page hide, an IndexedDB copy, tests for each case | open: **step 2:** the workspace journal exists and survives a restart (Docker test); the page's side is step 6 |
+| R4 | Lost edits (disconnect, sleep, closed tab) | Journal every 2 s and on page hide, an IndexedDB copy, tests for each case | **closed (step 6):** two copies (the workspace, every 2 s and on close; the browser, within 300 ms), restore on open, autosave; the Try it walkthrough proves it |
 | R5 | Silent overwrites when disk and editor disagree | Versioned writes; conflicts shown, never resolved silently | open: **step 2:** conflict-safe saves are refused after a terminal edit (Docker test); showing it is step 7 |
 
 ### Step 3.1 — Spike: which editor, under our CSP; and the watcher's cost (done by Claude; ADR 0021)
@@ -11561,3 +11561,57 @@ pnpm build && pnpm size
 - **Laptop:** all five checks ok.
 
 **Commit:** `feat(web): the Code view — files, CodeMirror in a shadow root, tabs, conflict-safe saves; lazy editor chunks`
+
+### Step 3.6 — Autosave, the journal, and restoring unsaved changes (done by Claude; ADR 0022 addendum)
+
+**Goal:** the phase's *Done when*: edits survive closing the tab and reopening. Plus the owner's autosave: for when you forget to save.
+
+**What a person sees** (`pnpm dev`, a running workspace):
+- **Autosave** is on (a switch in the status bar, remembered per browser). The file is written 5 s after you stop typing, and at once when you switch file, leave the Code view, or leave the window.
+- **Close the tab mid-edit and reopen it:** the file opens with your changes, marked unsaved, and a note says "Restored unsaved changes from 14:02."
+- **Open the project in another browser:** files with unsaved changes in the workspace open there too, restored.
+- **If the file changed in the workspace after your edit,** the restored changes are shown with a message that the file changed since. They're never saved over the newer file.
+- **Windows-style files keep their `\r\n` line breaks** when saved.
+
+**Code:**
+- `apps/web/src/code/journal.ts`: the workspace journal through the API; the browser's copy in IndexedDB (an in-memory one for tests); `nextRevision`; `newest`
+- `useCodeFiles.ts`: autosave, the two journals, restore on open, flush on leaving, hide and close handlers
+- `CodeView.tsx`: the autosave switch, the restored note
+- `editor-setup.ts`: line breaks kept
+
+**Concepts:**
+- **`visibilitychange` and `pagehide`:** the last moments a page can act before it's hidden or closed. https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API
+- **`fetch` with `keepalive`:** a request the browser finishes even after the page is gone, up to 64 KiB. https://developer.mozilla.org/en-US/docs/Web/API/RequestInit#keepalive
+- **IndexedDB:** the browser's own database, which works when the network doesn't. https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API
+- **Debounce versus throttle:** autosave waits for a pause (each keystroke restarts the wait); the journal writes at most every 2 s while you type.
+
+**Found and fixed on the way:**
+1. **Restored changes were autosaved the moment you arrived in the Code view:** the view switch flushed on every change of view, not only when leaving. Found by the other-browser walkthrough; a regression test fails with the old line.
+2. **CRLF files would have been converted to `\n` on save** (a step 5 gap). `doc.toString()` always uses `\n`; `state.sliceDoc()` keeps the file's separator. A test failed before the fix.
+3. **A tab closed right after typing** relied on the close-time writes alone. The browser's copy is now written within 300 ms of each edit.
+4. **The walkthrough can't observe `keepalive` requests** (Playwright can't intercept them), so it checks that the workspace got the 2-second write or that the page sent the close-time one, and that reopening restores either way.
+
+**Tests:**
+- **Unit:** 727 in all, 16 new.
+  - **Autosave:** after the pause, the wait restarting, on switching file, off (remembered) with the journal still writing, CRLF kept.
+  - **The journal:** both copies with rising revisions, dropped when undone back, keepalive on `pagehide`.
+  - **Restore:** reopening with the changes and saving from their base; files from another tab; the newer copy winning; a stale restore shown as a conflict and never written; a copy equal to the file dropped.
+  - **On the page:** the restored note, the autosave switch, and no save on arriving.
+- **Mutation-checked:** saving a stale restore against the disk version, or not marking it as a conflict, fails the test.
+- **Walkthrough (new, the phase's Try it):** edit, close the tab at once, reopen: the change is there, unsaved, with the note; autosave writes it after 5 s; a fresh browser restores from the workspace. It passed three times in a row, and all 17 walkthroughs pass.
+- **Visual:** 106 passed, unchanged.
+
+**Bundle:** the project page is 93.1 of 95 kB (the journal code). The editor's chunks are unchanged.
+
+**Run and check it:**
+```fish
+pnpm dev     # open a file in the Code view, type, close the tab at once, reopen the project
+pnpm test:e2e -- try-it/phase-3.spec.ts
+```
+
+**Risks:**
+- R4 (lost edits): closed in the browser; the walkthrough proves the Done when.
+- **The project page's budget is nearly full:** the next feature that adds to it should load lazily.
+- **Laptop:** all five checks ok.
+
+**Commit:** `feat(web): autosave, the journal in the workspace and the browser, and restoring unsaved changes`
