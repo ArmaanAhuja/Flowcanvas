@@ -11772,3 +11772,69 @@ pnpm build && pnpm size
 - **Laptop:** all five checks ok.
 
 **Commit:** `chore(release): phase 3 report, 0.7.0, in review`
+
+## Phase 4 — Indexer
+
+**From the build plan:**
+- **Build:** engine inside the workspace; tree-sitter parse of every file; symbols into SQLite; symbol search; re-index changed files on save.
+- **Done when:** both forks index in under 30 s; symbol search under 100 ms.
+- **Try it:** press ⌘K and jump to any function in Rallly.
+
+**Decisions (decisions log, 9 Nov 2026):**
+- **Every file of a language we ship a grammar for:** TS, TSX, JS, JSX, CSS, JSON, HTML and Markdown. Others are listed and counted.
+- **Both forks:** Rallly and Documenso.
+- **⌘K** is the command palette (Symbols and Files); Ctrl/⌘+P stays files.
+- **A symbol opens in the Code view at its line.**
+- **100 ms** in the engine and in the browser.
+
+**Expected outcome:**
+- When a workspace opens, the engine indexes the project in the background, and the page says so ("Indexing 1,240 of 2,031 files…").
+- **⌘K**, or the top bar's **Search ⌘K**, opens the command palette. Type part of a name to find functions, components, classes, types and constants, with their kind and file. Enter opens the Code view at that line.
+- Saving a file, or changing it in the terminal, updates its symbols within a moment.
+
+**Concepts this phase introduces** (each with a primer in its step):
+- tree-sitter, incremental parsing into a syntax tree: https://tree-sitter.github.io/tree-sitter/
+- WebAssembly, the parser and its grammars as portable binaries: https://developer.mozilla.org/en-US/docs/WebAssembly
+- SQLite and full-text search (FTS5) in Node 26's built-in `node:sqlite`: https://nodejs.org/api/sqlite.html and https://www.sqlite.org/fts5.html
+- Content hashes for incremental work: only changed files are parsed again
+
+**Scope:**
+- **In:** the engine process in the workspace; parsing; symbol extraction; the SQLite index; search; re-indexing on change; indexing status; the command palette with Symbols and Files; the top-bar search field.
+- **Out:**
+  - name resolution and call graphs (phase 5)
+  - the graph model (phase 6)
+  - global text search across code (a later phase)
+  - commands, nodes and screens in the palette (their phases)
+  - other languages' grammars (later waves)
+
+### Steps (planned)
+
+| # | Step | Milestone | Status |
+| --- | --- | --- | --- |
+| 0 | The plan and decisions; branch | A | done (Claude, 9 Nov) |
+| 1 | Spike: tree-sitter as WebAssembly and its grammars in the workspace image; `node:sqlite` with FTS5; Rallly's parse time; CPU and memory. ADR 0023 | A | *next* |
+| 2 | The engine: parse every file, extract symbols, store them in SQLite; incremental by content hash | A | *planned* |
+| 3 | The engine's API (status, search) through the host and control plane; re-indexing on watcher events | B | *planned* |
+| 4 | UI: the command palette in the design system (Symbols and Files); the top-bar search field | B | *planned* |
+| 5 | The page: ⌘K, jumping to a symbol, indexing status | C | *planned* |
+| 6 | Corpus tests (Rallly and Documenso under 30 s, all six reported), performance tests, the walkthrough, baselines, the Figma differences | C | *planned* |
+| 7 | Close: report, 0.8.0, PR | C | *planned* |
+
+### How each Done-when item is proven
+
+| Item | Test |
+| --- | --- |
+| Both forks index in under 30 s | Docker corpus test: Rallly and Documenso at their pins, a cold index timed in a real workspace (2 CPUs, 4 GiB) |
+| Symbol search under 100 ms | The engine's query p95 over hundreds of queries on Rallly; the browser's keypress to results |
+| Try it | Walkthrough: ⌘K, a function's name, Enter, the Code view at that line |
+| Symbols are right | Unit tests on fixtures for each kind; corpus spot checks against hand-picked Rallly functions |
+| Re-index on save | Docker test: `sed` adds a function, and search finds it within a second |
+
+### Risks (checked at every milestone)
+
+| # | Risk | How we keep it in check | Status |
+| --- | --- | --- | --- |
+| R1 | tree-sitter in WebAssembly is too slow for 30 s on Documenso | Measured in the spike on both forks before building on it | open |
+| R2 | **Laptop:** indexing uses the workspace's CPU and memory | Measured in the spike; within the container's limits; the resource guard still applies | open |
+| R3 | The workspace image grows by the grammars | Measured; only the eight grammars | open |
+| R4 | `node:sqlite` lacks something we need | The spike tests FTS5, transactions and speed | open |

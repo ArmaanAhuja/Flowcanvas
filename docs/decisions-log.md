@@ -457,3 +457,18 @@ The build plan's technology table and phase 3, and CLAUDE.md's stack line, now s
 **Cloudflare's builds failed at first** (`ERR_PNPM_UNSUPPORTED_ENGINE`): Cloudflare installs Node from its own build variable `NODE_VERSION`, still `24`, not from `.nvmrc`. The owner sets it to `26.13.0` in both Cloudflare projects (ADR 0004 addendum), which are account settings.
 
 **Also found on the way:** a timing-dependent unit test, where the first test of a file waited at most 1 s for CodeMirror's first load. It now allows 10 s, and jsdom gets empty Range geometry so CodeMirror's measuring stops logging errors. Three full parallel runs are clean.
+
+## 9 Nov 2026: phase 4 plan (owner decisions); Node 26 merged
+
+**Node 26** is merged (PR #17, `4829ac5`), with both Cloudflare projects' `NODE_VERSION` set to 26.13.0 by the owner. All checks passed, both Cloudflare builds included.
+
+**Phase 4, the indexer:**
+1. **"A tree-sitter parse of every file"** means every file of a language we ship a grammar for: TypeScript, TSX, JavaScript, JSX, CSS, JSON, HTML and Markdown (owner, Claude's recommendation). Other files are still listed and counted, and the page says honestly how many weren't parsed and why.
+2. **Go** for milestone A.
+
+**Settled by the documents** (applied, CLAUDE.md working-pace rule 4):
+- "Both forks" means **Rallly and Documenso**, stage 0's test repos (build plan, stage 0). All six are measured and reported.
+- **⌘K (Ctrl+K) is the command palette** (design brief §22, Figma 16). In this phase it has Symbols and Files groups. Ctrl/⌘+P stays files only (phase 3).
+- **A symbol opens in the Code view at its line;** the canvas shows code once flows exist (phase 7).
+- **Indexing is not activity:** it never keeps a workspace awake.
+- **"Under 100 ms" is measured both ways,** the engine's query (p95) and the browser's keypress to results; both must pass.
