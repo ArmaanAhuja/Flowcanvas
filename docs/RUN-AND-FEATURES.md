@@ -129,6 +129,7 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 - ✅ **A strict security policy:** no inline scripts or styles, previews per pull request, and telemetry off.
 
 ### Coming next
-- **Phase 4:** the indexer: every file parsed, symbols searchable in under 100 ms.
+- **Phase 4 (in progress):** the indexer: every file parsed, symbols searchable in under 100 ms.
+  - 🟡 Step 1 done: the engine loads all eight grammars (TS, TSX, JS and JSX, CSS, JSON, HTML, Markdown and MDX) and parses any file; `pnpm --filter @flowcanvas/engine test`. Nothing in the app yet.
 - **Phase 5:** TypeScript call graphs: callers and callees.
 - **After that:** stage 1 draws real flows from code, and stage 2 adds live frames of the running app.

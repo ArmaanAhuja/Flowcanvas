@@ -11812,8 +11812,8 @@ pnpm build && pnpm size
 | # | Step | Milestone | Status |
 | --- | --- | --- | --- |
 | 0 | The plan and decisions; branch | A | done (Claude, 9 Nov) |
-| 1 | Spike: tree-sitter as WebAssembly and its grammars in the workspace image; `node:sqlite` with FTS5; Rallly's parse time; CPU and memory. ADR 0023 | A | *next* |
-| 2 | The engine: parse every file, extract symbols, store them in SQLite; incremental by content hash | A | *planned* |
+| 1 | Spike: tree-sitter as WebAssembly and its grammars in the workspace image; `node:sqlite` with FTS5; Rallly's parse time; CPU and memory. ADR 0023 | A | done (Claude, 9 Nov) |
+| 2 | The engine: parse every file, extract symbols, store them in SQLite; incremental by content hash | A | *next* |
 | 3 | The engine's API (status, search) through the host and control plane; re-indexing on watcher events | B | *planned* |
 | 4 | UI: the command palette in the design system (Symbols and Files); the top-bar search field | B | *planned* |
 | 5 | The page: ⌘K, jumping to a symbol, indexing status | C | *planned* |
@@ -11834,7 +11834,76 @@ pnpm build && pnpm size
 
 | # | Risk | How we keep it in check | Status |
 | --- | --- | --- | --- |
-| R1 | tree-sitter in WebAssembly is too slow for 30 s on Documenso | Measured in the spike on both forks before building on it | open |
-| R2 | **Laptop:** indexing uses the workspace's CPU and memory | Measured in the spike; within the container's limits; the resource guard still applies | open |
-| R3 | The workspace image grows by the grammars | Measured; only the eight grammars | open |
-| R4 | `node:sqlite` lacks something we need | The spike tests FTS5, transactions and speed | open |
+| R1 | tree-sitter in WebAssembly is too slow for 30 s on Documenso | Measured in the spike on both forks before building on it | **closed:** 3.1 s on Documenso, 1.6 s on Rallly (ADR 0023) |
+| R2 | **Laptop:** indexing uses the workspace's CPU and memory | Measured in the spike; within the container's limits; the resource guard still applies | **measured:** one thread, under 150 MB; re-checked in step 6 |
+| R3 | The workspace image grows by the grammars | Measured; only the eight grammars | **measured:** about 4.2 MB of `.wasm`; confirmed when step 3 adds them to the image |
+| R4 | `node:sqlite` lacks something we need | The spike tests FTS5, transactions and speed | **closed:** FTS5 trigram p95 18 ms at 100,000 symbols |
+
+### Step 4.1 — Spike: tree-sitter as WebAssembly, the eight grammars, `node:sqlite` with FTS5 (done by Claude; ADR 0023)
+
+**Goal:** prove, before building on it, that tree-sitter can parse every file of both forks well inside 30 s in a workspace's limits, that `node:sqlite` can answer symbol searches well inside 100 ms, and that every grammar we ship loads. Settle where each grammar comes from.
+
+**What a person can do now:**
+- **Load all eight grammars and parse any file** with `@flowcanvas/engine`'s `loadGrammars()` and `languageOf(path)`. Nothing is visible in the app yet; the engine arrives in step 2 and the page in step 5.
+- **Rebuild the Markdown grammar** and check it matches what's committed: `tools/grammars/build-markdown.sh --check`.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `tools/grammars/build-markdown.sh` | Builds the Markdown grammar (block and inline) as WebAssembly from its C source. Pinned, checksummed inputs; a container with no network; `--check` compares a fresh build |
+| `packages/engine/grammars/` | The built `tree-sitter-markdown.wasm` and `tree-sitter-markdown-inline.wasm`, their `markdown.sha256`, and the grammar's licence |
+| `packages/engine/src/grammars.ts` | `GRAMMAR_FILES` (where each grammar's `.wasm` is), `languageOf(path)`, `limitationOf(path)` (`mdx-components`), `loadGrammars()` (once per process) |
+| `packages/engine/src/grammars.test.ts` | Extensions, limitations, each grammar parsing a sample, the committed checksums |
+| `packages/engine/package.json`, `tsconfig.json` | `web-tree-sitter` and the five grammar packages; Node's types; `grammars/` is published with `dist/` |
+| `pnpm-workspace.yaml` | The six packages in the catalog; the grammars' install scripts denied (`allowBuilds: false`) |
+| `docs/adr/0023-tree-sitter-webassembly-and-sqlite.md` | The decisions and the measurements |
+
+**Concepts:**
+- **tree-sitter:** a parser generator. A grammar becomes a C parser that builds a concrete syntax tree quickly, recovers from syntax errors (a half-typed file still gives a tree), and can re-parse incrementally after an edit. https://tree-sitter.github.io/tree-sitter/
+- **WebAssembly (`.wasm`):** a portable binary format any JavaScript runtime runs at near-native speed. Here the parser's runtime is one `.wasm` file and each grammar is another, so nothing is compiled when packages install. https://developer.mozilla.org/en-US/docs/WebAssembly
+- **wasi-sdk:** clang set up to compile C to WebAssembly. tree-sitter 0.27's CLI uses it (and binaryen's `wasm-opt` to shrink the result) to turn a grammar's `parser.c` and `scanner.c` into a `.wasm`. https://github.com/WebAssembly/wasi-sdk
+- **Queries:** tree-sitter's pattern language, which picks nodes out of a tree, for example `(function_declaration name: (identifier) @name)`. Step 2 uses them to extract symbols. https://tree-sitter.github.io/tree-sitter/using-parsers/queries/
+- **`node:sqlite` and FTS5:** SQLite built into Node 26, so there's no native addon. FTS5 is SQLite's full-text index; its `trigram` tokenizer matches any three or more letters inside a name. https://nodejs.org/api/sqlite.html and https://www.sqlite.org/fts5.html
+- **Reproducible builds:** the same pinned inputs always give byte-identical outputs, so anyone can check that a committed binary is what the script makes. https://reproducible-builds.org/
+
+**Found and fixed on the way:**
+1. **No package ships Markdown as WebAssembly** (not the grammar's package, not `tree-sitter-wasms`). The owner chose to build it ourselves; the script does it reproducibly. Two builds are byte-identical.
+2. **tree-sitter 0.27 no longer uses Emscripten:** it downloads wasi-sdk and binaryen at build time. The script downloads the exact versions the CLI names, checks their SHA-256, and points the CLI at them, so the container needs no network. This avoids an 825 MB Emscripten image.
+3. **188 `.mdx` files in the forks,** which the agreed list didn't cover. Asked; the owner chose parsing them as Markdown, marked as partly read (decisions log, 9 Nov 2026).
+4. **The grammar packages have native-build install scripts** (node-gyp). Denied, since we load their `.wasm`.
+5. **Docker on this laptop can't mount anything under `/home`** (it can under `/tmp`). The spike ran from copies in the scratchpad. Step 3 copies the engine into the workspace, as the agent already is (ADR 0016), so nothing depends on a mount.
+
+**Tests:**
+- **Unit:** 25 in `@flowcanvas/engine`, 24 new:
+  - **`languageOf`:** 10 paths, including `.mts`, `.mjs`, `.jsx`, `README.MD` and `.mdx`
+  - **no grammar:** 6 paths (Prisma, SQL, PNG, `Dockerfile`, `.gitignore`, a dot in a folder name)
+  - **`limitationOf`:** 5 paths (MDX, and four with nothing to say)
+  - **loading:** every grammar loads, and a sample of each parses to the right root with no errors
+  - **loaded once per process**
+  - **our Markdown build** matches its recorded checksums
+- **Mutation-checked:** dropping the case-insensitive match fails `README.MD`; changing one character of a recorded checksum fails the checksum test.
+- **Spike measurements** (in the workspace image: 2 CPUs, 4 GiB, read-only root, no network; ADR 0023):
+
+  | | Rallly | Documenso |
+  | --- | --- | --- |
+  | Files parsed | 1,472 of 1,959 | 2,510 of 2,986 |
+  | Parse and query time | 1.6 s | 3.1 s |
+  | Memory | 130 MB | 147 MB |
+
+  `node:sqlite` with 100,000 symbols: insert 0.4 s; trigram search p95 18 ms.
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/engine test     # 25 tests: grammars load and parse; checksums match
+tools/grammars/build-markdown.sh --check  # optional: rebuilds Markdown (about 300 MB of downloads, 1.5 min)
+```
+
+**Risks:**
+- R1 (speed): closed.
+- R4 (`node:sqlite`): closed.
+- R2 (laptop): measured; re-checked in step 6.
+- R3 (image size): about 4.2 MB; confirmed in step 3.
+- **Laptop:** load stayed under 3 during the spike (8 cores). Every container was labelled and removed with `--rm`. 577 GB free disk.
+
+**Commit:** `feat(engine): tree-sitter grammars as WebAssembly, with a reproducible Markdown build` (with this step's docs).

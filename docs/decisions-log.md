@@ -472,3 +472,10 @@ The build plan's technology table and phase 3, and CLAUDE.md's stack line, now s
 - **A symbol opens in the Code view at its line;** the canvas shows code once flows exist (phase 7).
 - **Indexing is not activity:** it never keeps a workspace awake.
 - **"Under 100 ms" is measured both ways,** the engine's query (p95) and the browser's keypress to results; both must pass.
+
+**Phase 4, milestone A** (asked during step 1):
+3. **Markdown: we build the grammar ourselves** (owner). No published package ships it as WebAssembly. `tools/grammars/build-markdown.sh` builds it reproducibly from the grammar's own C source, with every input pinned and checked by SHA-256. It compiles in a container with no network, and the outputs' checksums are committed (ADR 0023).
+4. **MDX is parsed as Markdown** (owner, Claude's recommendation). There are 188 `.mdx` files in the two forks (45 in Rallly, 143 in Documenso), and no maintained MDX grammar. Headings and text are read; embedded JSX components aren't. The engine marks each one as partly read (`mdx-components`), and the page says so.
+
+**Settled by the documents** (applied):
+- `.mts`/`.cts` are TypeScript and `.mjs`/`.cjs` JavaScript (the same languages), `.htm` is HTML, and extensions match without regard to case (`README.MD`).
