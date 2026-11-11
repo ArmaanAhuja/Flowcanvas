@@ -11945,6 +11945,7 @@ tools/grammars/build-markdown.sh --check  # optional: rebuilds Markdown (about 3
    The code was right in both.
 4. **`docs/.env.md` is treated as a secret** by the agent's shared rule. The engine follows it rather than having its own rule. The test was corrected.
 5. **The laptop restarted between sessions,** which cleared the scratchpad and its fork clones. They were cloned again at their pins.
+6. **One visual test failed once** (the flow-node combinations story, dark theme) with no UI change on this branch. It passed alone, and then in a second full run (114 of 114). The diff image was lost when the rerun cleared the results, so the cause is unknown. Watched in CI; if it happens again, the diff is kept and investigated.
 
 **Tests:**
 - **Unit:** 69 in `@flowcanvas/engine`, 44 new:
