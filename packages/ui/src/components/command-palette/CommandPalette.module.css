@@ -39,3 +39,33 @@
 [data-hovered] > .kind {
   color: var(--color-text-secondary);
 }
+
+/* The top result, which Enter opens until the person moves with the arrow keys: shown as highlighted, the same
+   as React Aria's own highlight (QuickOpen.module.css's .row[data-focused]). */
+.top {
+  background: var(--color-surface-selected);
+}
+
+.top svg {
+  color: var(--color-text-primary);
+}
+
+.top > .kind,
+.top > .place {
+  color: var(--color-text-secondary);
+}
+
+/* For screen readers only: the search field's description. */
+.hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The search row's key handler (CommandPalette.tsx): in the DOM, with no box of its own. */
+.keys {
+  display: contents;
+}

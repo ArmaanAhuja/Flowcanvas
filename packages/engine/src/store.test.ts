@@ -224,25 +224,4 @@ describe('IndexStore.search', () => {
     expect(store.search('poll', 2).map((s) => s.name)).toEqual(['poll', 'pollExact']);
     store.close();
   });
-
-  it('answers within the 100 ms target on 100,000 symbols', () => {
-    const words = ['create', 'poll', 'user', 'sign', 'field', 'team', 'use', 'render', 'dialog'];
-    const symbols = Array.from({ length: 100_000 }, (_, i) =>
-      hit(`${words[i % 9] ?? ''}${(words[(i * 7) % 9] ?? '').toUpperCase()}${String(i)}`),
-    );
-    const store = storeWith({ 'a.ts': symbols });
-    const times = ['po', 'poll', 'create poll', 'usePoll', 'dialog', 'x'].flatMap((q) =>
-      Array.from({ length: 10 }, () => {
-        const started = performance.now();
-        store.search(q);
-        return performance.now() - started;
-      }),
-    );
-    times.sort((a, b) => a - b);
-    // p95; generous against slow CI machines, still well under 100 ms.
-    expect(times[Math.floor(times.length * 0.95)]).toBeLessThan(100);
-    store.close();
-    // Writing 100,000 symbols takes seconds when every package's tests run at once; only the
-    // searches above are timed, so the setup gets room (it once passed the 5 s default under load).
-  }, 30_000);
 });

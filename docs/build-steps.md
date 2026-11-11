@@ -11816,9 +11816,9 @@ pnpm build && pnpm size
 | 2 | The engine: parse every file, extract symbols, store them in SQLite; incremental by content hash | A | done (Claude, 11 Nov) |
 | 3 | The engine's API (status, search) through the host and control plane; re-indexing on watcher events | B | done (Claude, 11 Nov) |
 | 4 | UI: the command palette in the design system (Symbols and Files); the top-bar search field | B | done (Claude, 11 Nov) |
-| 5 | The page: ⌘K, jumping to a symbol, indexing status | C | *next* |
-| 6 | Corpus tests (Rallly and Documenso under 30 s, all six reported), performance tests, the walkthrough, baselines, the Figma differences | C | *planned* |
-| 7 | Close: report, 0.8.0, PR | C | *planned* |
+| 5 | The page: ⌘K, jumping to a symbol, indexing status | C | done (Claude, 11 Nov) |
+| 6 | Corpus tests (Rallly and Documenso under 30 s, all six reported), performance tests, the walkthrough, baselines, the Figma differences | C | done (Claude, 11 Nov) |
+| 7 | Close: report, 0.8.0, PR | C | done (Claude, 11 Nov); in review |
 
 ### How each Done-when item is proven
 
@@ -12053,7 +12053,7 @@ pnpm --filter @flowcanvas/engine test   # 69 tests
 - **Unit:**
   - **engine:** 109 tests, 40 new:
     - **protocol (23):** what each request accepts and refuses; answers refused for an unknown state, a negative count, a missing or extra status, a long message, more results than asked, an absolute path, an unknown kind, line 0, an empty or huge name, a non-boolean, an unknown error code
-    - **search (7):** the ranking tiers; exported, kind and length; case and every word; LIKE and FTS syntax taken literally; the limit; the best matches past the candidate limit; p95 under 100 ms on 100,000 symbols
+    - **search (7):** the ranking tiers; exported, kind and length; case and every word; LIKE and FTS syntax taken literally; the limit; the best matches past the candidate limit; p95 under 100 ms on 100,000 symbols (moved to its own performance test in step 6: see there)
     - **service and serve (10):**
       - ready after the first pass
       - changes gathered into one refresh
@@ -12167,3 +12167,209 @@ pnpm test:visual
 - **Laptop:** two catalogue runs (2.4 min each), one at a time; load under 3.1.
 
 **Commit:** `dcdea61` `feat(ui): the command palette (Symbols and Files) and the top bar's search`.
+
+### Step 4.5 — ⌘K in the page: a symbol opens in the Code view at its line; the index's progress (done by Claude)
+
+**Goal:** the phase's Try it in the app. Press ⌘K, type part of a function's name, press Enter, and the Code view opens at that line. While the project indexes, the page says how far it has got.
+
+**What a person can do now** (`pnpm dev`, a running workspace):
+- **⌘K (Ctrl+K) or Search in the top bar** opens the palette. Typing lists symbols from the index, then files; `#` lists files only.
+- **Enter (or a click) on a symbol** switches to the Code view and opens the file with the cursor on the name, scrolled to the middle, with the editor focused.
+- **While the first index runs,** a chip says "Indexing 61%" under Entry points and on the canvas, with "Indexing 1,240 of 2,031 files…" as its tooltip. The Code view's status bar says the same, and the palette notes it above the results. The chip goes once the index is ready.
+- **If the index stopped,** the chip says so ("Index stopped"), with the engine's own sentence. If symbols can't be searched, the palette says why. If the workspace isn't running, it says to open it.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `apps/web/src/symbols/api.ts` | `fetchIndexStatus`, `searchSymbols` (cancellable) |
+| `apps/web/src/symbols/useProjectIndex.ts` | `useProjectIndex`: asks for the status once a second while indexing, every 5 s after a problem, then stops; `useSymbolSearch`: a search per change, the one typed past cancelled, late answers dropped |
+| `apps/web/src/symbols/texts.ts` | `indexChip` (label and detail), `paletteNote` |
+| `apps/web/src/symbols/IndexChip.tsx` | The chip, from the design system's Tag |
+| `apps/web/src/symbols/SearchDialogs.ts` | Quick-open and the palette in one lazy chunk |
+| `apps/web/src/project/ProjectPage.tsx` | ⌘K, the top bar's search, the palette, the chip in three places, opening a symbol at its line |
+| `apps/web/src/code/{useCodeFiles,CodeEditor,CodeView}.tsx` | `open(path, at)`, `reveal`, `positionOf` (kept inside the document), the status bar's index note |
+| `apps/web/src/canvas/FlowCanvas.tsx` | A `status` slot, top left |
+| `packages/ui/src/components/command-palette/prefixes.ts` | `FILES_PREFIX` in a module of its own |
+| `apps/web/scripts/bundle-size.ts` | `SearchDialogs` budget 15 kB (13.7 kB) |
+| `apps/web/src/symbols/{palette,texts}.test.ts(x)`, `apps/web/src/test/setup.ts` | 13 tests; jsdom's missing `document.execCommand` |
+
+**Concepts:**
+- **Cancelling stale requests:** each search passes an `AbortSignal`. When the query changes, the old request is aborted, and an answer that still arrives for an older query is dropped by a sequence number, so the results always match the field. https://developer.mozilla.org/en-US/docs/Web/API/AbortController
+- **Polling politely:** one status request at a time (the next only after the answer), and none once the index is ready. Status never counts as activity, so polling can't keep a workspace awake.
+- **Moving the cursor in CodeMirror:** a transaction with a `selection` and `EditorView.scrollIntoView(pos, { y: 'center' })`. Lines and columns become an offset with `doc.line(n).from + column - 1`, clamped in case the file changed since it was indexed. https://codemirror.net/docs/ref/#view.EditorView%5EscrollIntoView
+- **Keeping shared code out of the page's chunk:** two lazy chunks that share modules make the bundler put the shared part where both are loaded. One chunk for both dialogs, and a constant in its own module, keep React Aria's search parts out of every project page.
+
+**Found and fixed on the way:**
+1. **The page's chunk grew 94.6 → 108.7 kB** (budget 110). The page imported `FILES_PREFIX` from the palette's module, which pulled in the palette and React Aria's search parts. The constant is now in its own module, and both dialogs share one lazy chunk: the page is at 96.3 kB, and the dialogs at 13.7 kB. Found by the bundle budget.
+2. **CI failed on step 5's push:** every screen baseline changes because of the top bar's new Search button. The baselines were regenerated and reviewed in step 6.
+
+**Tests:**
+- **Unit:** web 168 tests, 14 new.
+  - **Palette on the page (7):**
+    - the chip while indexing, gone when ready, polling stopping
+    - the stopped state in the engine's words
+    - no requests while asleep
+    - ⌘K and the top bar's search
+    - Enter on `createPoll` opening the file with the cursor on the name and "Ln 3, Col 17"
+    - a failed search explained
+    - not running explained
+  - **Texts (3):** the chip's label and detail; the palette's note in order
+  - **Search hook (1):** a late answer for an older query dropped; `#` and blank queries not sent
+  - **`positionOf` (2):** UTF-16 columns; kept inside the document
+  - **Canvas shortcuts (1):** the step 6 fix, below
+- **Mutation-checked:** removing the late-answer check fails the search hook test.
+- **Bundle budget:** every part within budget.
+
+**Run and check it:**
+```fish
+pnpm dev     # open a project with its workspace running; ⌘K (Ctrl+K), type part of a function's name, Enter
+pnpm --filter @flowcanvas/web test
+pnpm size
+```
+
+**Risks:**
+- **Laptop:** unit runs only; load under 2.
+
+**Commit:** `19f16f4` `feat(web): ⌘K opens symbols in the Code view at their line; the index's progress`.
+
+### Step 4.6 — Proof: the corpus in real workspaces, the walkthrough, screens and the Figma differences (done by Claude)
+
+**Goal:** prove the Done-when items with named automated tests:
+- both forks index in under 30 s
+- symbol search answers in under 100 ms, in the engine and in the browser
+- the Try it works in a real browser
+
+Report all six corpus forks, and check the symbols against hand-picked ones.
+
+**What a person can do now:**
+- `pnpm corpus:fetch` keeps the six corpus forks at their pins in `~/.cache/flowcanvas/corpus`, outside `/tmp`, so a restart doesn't lose them (owner, 11 Nov 2026).
+- `pnpm test:docker` (and CI) opens each fork in a real workspace and prints the corpus report.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `workspace/host/src/corpus.docker.test.ts` | The six forks at their pins in real workspaces: readiness, labels, search speed, a report; each workspace removed after |
+| `corpus/labels/symbols.json` | 21 hand-picked symbols (11 Rallly, 10 Documenso): name, kind, container, path, line, and the column computed from the source line's text |
+| `corpus/src/cache.ts`, `corpus/scripts/fetch-corpus.ts` | The cache's place, and shallow fetches of exactly each pin, checked |
+| `e2e/try-it/phase-4.spec.ts` | The walkthrough, with keypress-to-results measured in the page |
+| `e2e/visual/screens.spec.ts` | Index routes in the fake API; screens `project-indexing` and `code-palette` |
+| `e2e/visual/__screenshots__/screens-*` | 4 new baselines, 18 changed (the top bar's search) |
+| `apps/web/src/canvas/FlowCanvas.tsx` | Canvas shortcuts skip keys inside a dialog, list or menu |
+| `packages/ui/src/components/{quick-open,command-palette}/*.module.css` | Readable text on a highlighted row |
+| `docs/reports/phase-4-figma-differences.md`, `docs/reports/phase-4/*.png` | Figma 16 and 06 against what's built |
+
+**Concepts:**
+- **Hand-labelled ground truth:** the expected symbols come from reading the source, not from the engine. The column is computed from the line's own text, so a mistake in the engine can't be copied into the test.
+- **Measuring inside the page:** a `keydown` listener and a `MutationObserver` time the keypress to the row appearing in the browser itself. Playwright's own round trips aren't counted. The fake API answers only whole names, so the row can appear only because of that key.
+- **The cost of a real workspace:** the corpus test times from the first request: copying the engine in, starting it, listing, parsing and storing. That's what a person waits for.
+
+**Found and fixed on the way:**
+1. **The letter "v" was lost in the palette** (and in quick-open) in the Graph view. React Aria's Autocomplete passes each typed key to its list as a copy of the event. The canvas listener saw the copy's target (the list, not the field), took it as V (select), and cancelled it, which cancelled the letter. Canvas shortcuts now skip keys inside a dialog, list or menu (a regression test, plus the walkthrough's "calendarservice" query). Found by the walkthrough.
+2. **axe: `color-contrast` on the highlighted row.** Muted text on `surface/selected` fails AA. Quick-open had the same flaw, never captured because its screen had no highlighted row. The folder and kind step up to `text/secondary` there. Found by the new `code-palette` screen.
+3. **The first timing method was wrong:** two of five came out negative, because the row was already on screen before the last key. The fake API now answers whole names only, and timing starts at the keydown.
+4. **One of Claude's labels was wrong:** the heading "🐳 Self-hosting" sits under Rallly's "# Rallly", so its container is "Rallly". The engine was right.
+5. **Two walkthrough expectations were wrong:**
+   - the first Escape clears the field and the second closes, as in quick-open
+   - the timing loop reopened the palette before checking focus
+
+   Both are fixed in the test.
+6. **`pnpm … fetch` ran pnpm's own `fetch`** (it fills the store) instead of the script, which is now `fetch-forks`. Also, `execFileSync`'s 1 MB default buffer was too small for Medusa's file list.
+7. **CI: Enter could open a file instead of the top symbol** (the `code-palette` screen showed the file row highlighted).
+   - **Reproduced:** 1 in 20 in Playwright's pinned image.
+   - **The cause:** React Aria's Autocomplete highlights the row that's first when a letter is typed, up to half a second later, and keeps it. Files are ranked at once, so when the symbols' answer comes later, that row is a file.
+   - **Rejected fix:** remounting the list once the answer arrives broke Enter altogether.
+   - **The fix:** the automatic highlight is off (`disableAutoFocusFirst`, public). Until the person moves with the arrow keys, the palette marks the top result itself and opens it on Enter. After an arrow key, React Aria's highlight is what Enter opens. The field's description says "Enter opens the top result".
+   - **Also found by the new test:** rows kept their old mark until `dependencies` re-rendered them.
+   - **Proof:** 40 of 40 repeats pass in the pinned image (before: 1 in 20 failed); unit tests for symbols after 700 ms, the mark, and arrow keys then Enter; two mutants caught.
+8. **CI: the 100,000-symbol search timing failed once (122 ms against 100).**
+   - **The cause:** the same queries take 14 ms on the laptop. On CI a 2-CPU machine was running every package's tests at once, so the test measured the load.
+   - **The fix:** it's now its own performance test (`search.perf.test.ts`): realistic seeded names, 38 queries, a warm-up and three passes, run alone by `pnpm test:perf` in CI's performance job (ADR 0025 addendum). It runs at p95 13.6 ms.
+
+**Tests:**
+- **The corpus** (`corpus.docker.test.ts`, local run 11 Nov 2026, the workspace's limits of 2 CPUs and 4 GiB):
+
+  | Fork | Files | Parsed | Symbols | Ready after the first request | Engine pass | Search p95, engine / round trip | Labels |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | **Rallly** | 1,958 | 1,472 | 5,633 | **2.8 s** | 1.1 s | **4 ms** / 40 ms | 11 of 11 |
+  | **Documenso** | 2,986 | 2,508 | 9,886 | **4.1 s** | 2.2 s | **8 ms** / 43 ms | 10 of 10 |
+  | LibreChat | 6,675 | 6,406 | 40,702 | 12.0 s | 9.6 s | 34 ms / 69 ms | — |
+  | Twenty | 37,879 | 36,054 | 112,855 | 26.3 s | 19.8 s | 36 ms / 65 ms | — |
+  | Excalidraw | 1,312 | 861 | 5,053 | 3.3 s | 1.4 s | 14 ms / 46 ms | — |
+  | Medusa | 24,260 | 21,611 | 49,819 | 20.8 s | 15.5 s | 25 ms / 58 ms | — |
+
+  Rallly and Documenso: 312 and 318 searches each (every prefix of every label, twice, plus common words). The other four: 20 each.
+- **The browser** (walkthrough): 20–31 ms from keypress to results.
+- **Walkthrough** `try-it/phase-4.spec.ts`:
+  - the chip, then gone
+  - the top bar's search and `#`
+  - five timed queries
+  - Enter to the Code view at "Ln 98, Col 14", with the line on screen and typing going in at the name
+  - no CSP problems
+- **Screens:** 130 checks pass (both themes, with axe), and the new baselines were reviewed by eye.
+- **Unit:** corpus 12 (2 new: the cache's place); web 168, including the shortcut regression test.
+
+**Run and check it:**
+```fish
+pnpm corpus:fetch                                    # the six forks into ~/.cache/flowcanvas/corpus
+pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts   # real Docker, about 3 min
+pnpm test:e2e -- try-it/phase-4.spec.ts
+pnpm test:visual
+```
+
+**Risks:**
+- R2 (laptop): Twenty, the largest fork, indexes in 26 s within the workspace's limits.
+- **Laptop:**
+  - the corpus run took about 3 minutes, with load under 2.5
+  - every test workspace was removed after its fork
+  - the cache is 1.4 GB (576 GB free)
+  - heavy suites ran one at a time
+
+**Commit:** `2c5ae21` `test: phase 4 corpus, walkthrough and screens; the "v" lost in the palette; contrast on highlighted rows`.
+
+### Step 4.7 — Close the phase: report, 0.8.0, ready for review (done by Claude)
+
+**Goal:** the phase report, the Figma differences, version 0.8.0 with its CHANGELOG entry (which feeds What's new), every document brought up to date, and PR #18 marked ready for the owner's review.
+
+**What a person can do now:**
+- Read `docs/reports/phase-4.md` (the result, how to try it, the evidence, the corpus table) and `docs/reports/phase-4-figma-differences.md`.
+- After the merge, What's new shows 0.8.0.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `docs/reports/phase-4.md` | The report (CLAUDE.md §13.2) |
+| `docs/reports/phase-4-figma-differences.md`, `docs/reports/phase-4/*.png` | Figma 16 and 06 against the built palette and the progress chip |
+| `CHANGELOG.md`, `package.json` | 0.8.0 |
+| `docs/STATUS.md`, `docs/RUN-AND-FEATURES.md`, `ARCHITECTURE.md`, `docs/adr/0025-*.md` (addendum) | Brought up to date |
+| `packages/engine/src/search.perf.test.ts`, `packages/engine/package.json`, `package.json` | Search speed timed on its own, in `pnpm test:perf` |
+| `packages/ui/src/components/command-palette/` | The top result marked and opened by the palette itself |
+
+**Concepts:**
+- **What a red CI is for:** the two failures at the close (a highlight race and a timing measured under load) were both real. One was a bug a person would hit on a slow day. The other was a test measuring the wrong thing. Neither was rerun until green: both were reproduced, explained, fixed and proven (step 6, items 7 and 8).
+- **Owning a behaviour instead of relying on a library's timing:** "Enter opens the top result" is now decided by our code, from the data, rather than by when React Aria's highlight lands.
+
+**Found and fixed on the way:** see step 6, items 7 and 8 (both found by CI on the draft pull request).
+
+**Tests:**
+- **Fast suites on the laptop:**
+  - format, lint and typecheck: all pass
+  - unit: 903 tests, including UI 120 with 2 new, for symbols after 700 ms and the top-result mark
+  - performance: the search check passes at p95 13.6 ms
+- **Heavy suites:** CI on PR #18 for the closing commit (recorded in the report).
+- **Investigations run on the laptop:**
+  - the `code-palette` screen: 40 of 40 repeats in the pinned image
+  - the phase 3 and 4 walkthroughs: 4 passed
+
+**Run and check it:**
+```fish
+pnpm test && pnpm test:perf
+pnpm test:e2e -- try-it/phase-4.spec.ts
+```
+
+**Risks:**
+- **Laptop:** heavy runs were for investigation only, one at a time; load under 3.
+
+**Commit:** `chore(release): phase 4 report, 0.8.0, in review` (with the fixes from CI).

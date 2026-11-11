@@ -247,6 +247,8 @@ inside the workspace: the agent's watcher (in process) ──► refresh ──�
 - **On start,** it starts its watcher, then indexes every file the agent lists (git's files, never secret ones). After that, reported changes are re-indexed within about 300 ms, whether or not a page is open; an overflow runs a full pass.
 - **Every file is counted** by what happened to it (parsed, no grammar, too large, binary, unreadable). Symbols come from syntax alone: TS/JS declarations and Markdown headings.
 - **The workspace is untrusted:** the host and the control plane both check each answer's exact shape. Logs never contain the query.
+- **The page** (`apps/web/src/symbols/`): ⌘K and the top bar's search open the command palette (`packages/ui`). Symbols come from the engine, a search per keystroke, with the one typed past cancelled and late answers dropped; files are ranked in the browser. Enter opens the top result, which the palette marks itself until the arrow keys are used. A symbol opens in the Code view at its line (`useCodeFiles.open(path, at)`). The status is polled only while indexing, and shows as a chip with the entry points and on the canvas, and in the Code view's status bar. Quick-open and the palette share one lazy chunk (`SearchDialogs`).
+- **Proof:** `workspace/host/src/corpus.docker.test.ts` indexes all six corpus forks in real workspaces; `packages/engine/src/search.perf.test.ts` times search on 100,000 names, run alone in CI's performance job.
 
 ## Workspace lifecycle (phase 1d, step 3)
 

@@ -151,6 +151,39 @@ describe('CommandPalette', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it('opens the top symbol with Enter when files match at once and symbols arrive later (found by CI)', async () => {
+    const user = userEvent.setup();
+    const onOpenSymbol = vi.fn();
+    const onOpenFile = vi.fn();
+    render(<Harness delayMs={60} onOpenSymbol={onOpenSymbol} onOpenFile={onOpenFile} />);
+    // "poll" matches files at once (ranked here) and symbols only after the "search" answers.
+    await user.keyboard('poll');
+    await act(() => new Promise((resolve) => setTimeout(resolve, 120)));
+    expect(within(results()).getAllByRole('option')[0]?.getAttribute('aria-label')).toBe(
+      'createPoll, function, apps/web/src/features/poll/mutations.ts:98',
+    );
+    await user.keyboard('{Enter}');
+    expect(onOpenSymbol).toHaveBeenCalledWith(SYMBOLS[0]);
+    expect(onOpenFile).not.toHaveBeenCalled();
+  });
+
+  it('marks the top result until the person moves, then opens what they moved to', async () => {
+    const user = userEvent.setup();
+    const onOpenSymbol = vi.fn();
+    render(<Harness delayMs={700} onOpenSymbol={onOpenSymbol} />);
+    await user.keyboard('poll');
+    // Slower than React Aria's half-second highlight delay, as on a busy CI machine.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 800)));
+    const options = within(results()).getAllByRole('option');
+    expect(options[0]?.className).toMatch(/top/);
+    // Only the first: the file that was on top before the symbols came no longer is.
+    expect(options.slice(1).some((o) => o.className.includes('top'))).toBe(false);
+    await user.keyboard('{ArrowDown}{ArrowDown}');
+    expect(within(results()).getAllByRole('option')[0]?.className).not.toMatch(/top/);
+    await user.keyboard('{Enter}');
+    expect(onOpenSymbol).toHaveBeenCalledWith(SYMBOLS[1]);
+  });
+
   it('opens a file chosen with the arrow keys', async () => {
     const user = userEvent.setup();
     const onOpenFile = vi.fn();

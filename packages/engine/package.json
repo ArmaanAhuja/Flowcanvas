@@ -24,8 +24,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsx scripts/bundle.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "lint": "eslint ."
+    "test": "vitest run --exclude '**/*.perf.test.ts'",
+    "lint": "eslint .",
+    "test:perf": "vitest run perf.test"
   },
   "dependencies": {
     "@flowcanvas/workspace-agent": "workspace:*",

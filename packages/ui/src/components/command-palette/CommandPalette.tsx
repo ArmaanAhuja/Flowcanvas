@@ -12,7 +12,7 @@ import {
   Type,
   type LucideIcon,
 } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState, type KeyboardEvent } from 'react';
 import {
   Autocomplete,
   Collection,
@@ -88,6 +88,7 @@ export interface CommandPaletteProps {
 }
 
 const MOST_FILES = 20;
+const TOP_HINT_ID = 'command-palette-top-hint';
 
 type Row =
   | { readonly id: string; readonly type: 'symbol'; readonly symbol: PaletteSymbol }
@@ -95,11 +96,19 @@ type Row =
 
 const symbolId = (s: PaletteSymbol) => `symbol:${s.path}:${String(s.line)}:${String(s.column)}`;
 
+/** Keys that move through the results: after one, the person's own choice is what Enter opens. */
+const MOVES = new Set(['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End']);
+
 /**
  * The command palette (⌘K; Figma 16, design brief §22). Phase 4 has two groups: Symbols from the project index,
- * first, and Files; `#` searches files only. A modal dialog: focus moves to the search field, arrow keys move
- * through the results (virtual focus), the first result is highlighted so Enter opens it, Escape closes and
+ * first, and Files; `#` searches files only. A modal dialog: focus moves to the search field, Escape closes and
  * focus returns to where it was.
+ *
+ * **Enter opens the top result** (the Try it: "⌘K, a function's name, Enter"). The top result is marked as such
+ * and opened by the palette itself until the person moves with the arrow keys; from then on, React Aria's own
+ * highlight (virtual focus) is what Enter opens. React Aria's automatic first-row highlight is off: it marks the
+ * row that's first when a letter is typed and keeps it, so when the symbols arrived later than half a second,
+ * it stayed on a file and Enter opened that (found by CI, phase 4 step 6).
  */
 export function CommandPalette({
   isOpen,
@@ -141,10 +150,18 @@ export function CommandPalette({
     () => new Map([...symbolRows, ...fileRows].map((row) => [row.id, row])),
     [symbolRows, fileRows],
   );
+  // Whether the person has moved through the results since they last typed.
+  const [moved, setMoved] = useState(false);
+  const top = moved ? undefined : (symbolRows[0] ?? fileRows[0]);
 
   const close = () => {
     onQueryChange('');
     onOpenChange(false);
+  };
+  const open = (row: Row) => {
+    if (row.type === 'symbol') onOpenSymbol(row.symbol);
+    else onOpenFile(row.path);
+    close();
   };
 
   return (
@@ -159,18 +176,40 @@ export function CommandPalette({
     >
       <Modal className={classNames(quickOpen.modal)}>
         <Dialog aria-label="Command palette" className={classNames(quickOpen.dialog)}>
-          <Autocomplete inputValue={query} onInputChange={onQueryChange}>
-            <SearchField
-              aria-label="Search symbols and files"
-              autoFocus
-              className={classNames(quickOpen.search)}
+          <Autocomplete
+            inputValue={query}
+            onInputChange={(value) => {
+              setMoved(false);
+              onQueryChange(value);
+            }}
+            disableAutoFocusFirst
+          >
+            {/* Keys reach this wrapper before React Aria's own handlers (display: contents: no box of its own). */}
+            <div
+              className={classNames(styles.keys)}
+              onKeyDownCapture={(event: KeyboardEvent<HTMLDivElement>) => {
+                if (MOVES.has(event.key)) setMoved(true);
+                else if (event.key === 'Enter' && top !== undefined) {
+                  // Before React Aria sees it: nothing of its own is highlighted yet.
+                  event.preventDefault();
+                  event.stopPropagation();
+                  open(top);
+                }
+              }}
             >
-              <Search size={16} className={classNames(quickOpen.searchIcon)} aria-hidden="true" />
-              <Input
-                className={classNames(quickOpen.input)}
-                placeholder="Search symbols and files"
-              />
-            </SearchField>
+              <SearchField
+                aria-label="Search symbols and files"
+                aria-describedby={TOP_HINT_ID}
+                autoFocus
+                className={classNames(quickOpen.search)}
+              >
+                <Search size={16} className={classNames(quickOpen.searchIcon)} aria-hidden="true" />
+                <Input
+                  className={classNames(quickOpen.input)}
+                  placeholder="Search symbols and files"
+                />
+              </SearchField>
+            </div>
             {showSymbols && symbolsNote !== undefined && (
               // Outside the list: a listbox may hold only options and groups.
               <p className={classNames(styles.note)} role="status">
@@ -191,30 +230,38 @@ export function CommandPalette({
               )}
               onAction={(key) => {
                 const row = byId.get(String(key));
-                if (row === undefined) return;
-                if (row.type === 'symbol') onOpenSymbol(row.symbol);
-                else onOpenFile(row.path);
-                close();
+                if (row !== undefined) open(row);
               }}
             >
               {symbolRows.length > 0 && (
                 <ListBoxSection id="symbols" className={classNames(styles.section)}>
                   <Header className={classNames(styles.header)}>Symbols</Header>
-                  <Collection items={symbolRows}>
-                    {(row) => (row.type === 'symbol' ? <SymbolRow symbol={row.symbol} /> : null)}
+                  <Collection items={symbolRows} dependencies={[top?.id]}>
+                    {(row) =>
+                      row.type === 'symbol' ? (
+                        <SymbolRow symbol={row.symbol} isTop={row.id === top?.id} />
+                      ) : null
+                    }
                   </Collection>
                 </ListBoxSection>
               )}
               {fileRows.length > 0 && (
                 <ListBoxSection id="files" className={classNames(styles.section)}>
                   <Header className={classNames(styles.header)}>Files</Header>
-                  <Collection items={fileRows}>
-                    {(row) => (row.type === 'file' ? <FileRow path={row.path} /> : null)}
+                  <Collection items={fileRows} dependencies={[top?.id]}>
+                    {(row) =>
+                      row.type === 'file' ? (
+                        <FileRow path={row.path} isTop={row.id === top?.id} />
+                      ) : null
+                    }
                   </Collection>
                 </ListBoxSection>
               )}
             </ListBox>
           </Autocomplete>
+          <p id={TOP_HINT_ID} className={classNames(styles.hidden)}>
+            Enter opens the top result.
+          </p>
           <footer className={classNames(quickOpen.footer)} aria-hidden="true">
             <span>
               <kbd className={classNames(quickOpen.kbd)}>↑↓</kbd> move
@@ -235,7 +282,7 @@ export function CommandPalette({
   );
 }
 
-function SymbolRow({ symbol }: { readonly symbol: PaletteSymbol }) {
+function SymbolRow({ symbol, isTop }: { readonly symbol: PaletteSymbol; readonly isTop: boolean }) {
   const { icon: Icon, label } = KINDS[symbol.kind];
   const where = `${symbol.path}:${String(symbol.line)}`;
   const detail = symbol.container === null ? where : `${symbol.container} · ${where}`;
@@ -245,17 +292,17 @@ function SymbolRow({ symbol }: { readonly symbol: PaletteSymbol }) {
       textValue={symbol.name}
       // The accessible name: what it is and where, with pauses, rather than the row's text run together.
       aria-label={`${symbol.name}, ${label.toLowerCase()}, ${detail}`}
-      className={classNames(quickOpen.row)}
+      className={classNames(quickOpen.row, isTop && styles.top)}
     >
       <Icon size={14} className={classNames(quickOpen.icon)} aria-hidden="true" />
       <span className={classNames(quickOpen.name)}>{symbol.name}</span>
       <span className={classNames(styles.kind)}>{label}</span>
-      <span className={classNames(quickOpen.folder)}>{detail}</span>
+      <span className={classNames(quickOpen.folder, styles.place)}>{detail}</span>
     </ListBoxItem>
   );
 }
 
-function FileRow({ path }: { readonly path: string }) {
+function FileRow({ path, isTop }: { readonly path: string; readonly isTop: boolean }) {
   const slash = path.lastIndexOf('/');
   const name = path.slice(slash + 1);
   const folder = slash === -1 ? '' : path.slice(0, slash);
@@ -264,11 +311,13 @@ function FileRow({ path }: { readonly path: string }) {
       id={`file:${path}`}
       textValue={path}
       aria-label={folder === '' ? name : `${name}, ${folder}`}
-      className={classNames(quickOpen.row)}
+      className={classNames(quickOpen.row, isTop && styles.top)}
     >
       <FileText size={14} className={classNames(quickOpen.icon)} aria-hidden="true" />
       <span className={classNames(quickOpen.name)}>{name}</span>
-      {folder !== '' && <span className={classNames(quickOpen.folder)}>{folder}</span>}
+      {folder !== '' && (
+        <span className={classNames(quickOpen.folder, styles.place)}>{folder}</span>
+      )}
     </ListBoxItem>
   );
 }

@@ -4,6 +4,42 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-11-11 — Phase 4: the indexer
+
+Every project is indexed inside its workspace, so you can jump to any function, component or heading by typing part of its name. The index follows your edits as you make them. Workspaces still run on your own computer (`pnpm dev`).
+
+### Try it
+
+1. Open a project with its workspace running. While it indexes, a chip says how far it has got ("Indexing 61%").
+2. Press **⌘K** (Ctrl+K), or click **Search** in the top bar.
+3. Type part of a function's name, such as `createpoll` in Rallly, and press **Enter**: the Code view opens the file with the cursor on the name.
+
+### Added
+
+- **The command palette (⌘K):**
+  - **Symbols:** functions, components, classes, methods, interfaces, types, enums, constants and Markdown headings, each with its kind and place
+  - **Files**
+  - `#` searches files only
+  - Enter opens the top result
+- **Search** in the top bar opens the palette.
+- **The project index:**
+  - every TypeScript, JavaScript, CSS, JSON, HTML, Markdown and MDX file is parsed in the workspace, and every other file is counted
+  - only changed files are parsed again
+  - edits are searchable within about a third of a second
+- **The index's progress:** a chip with the entry points and on the canvas, and a line in the Code view's status bar, while it indexes.
+- **Design system:** Command palette and Search trigger, in the catalogue.
+
+### Fixed
+
+- **Quick-open lost the letters "v", "h" and "f"** when opened from the Graph view: the canvas took them as its shortcuts.
+- **Quick-open's rows are read out properly** by screen readers ("poll-form.tsx, apps/web/src/components"), and a highlighted row's folder text is readable (WCAG AA).
+
+### Security
+
+- **`.env` files are never read or indexed,** not even their names.
+- **Every answer from the workspace is checked twice,** by the workspace host and by the API, before it reaches the page.
+- **Asking how far indexing has got never keeps a workspace awake.**
+
 ## [0.7.0] — 2026-11-08 — Phase 3: open a repo and edit
 
 A project's files open in an editor in the page, and every change is kept safe: saved when you forget, kept when the tab closes, and never overwritten when the workspace changes underneath. Workspaces still run on your own computer (`pnpm dev`); on staging the Code view says so.

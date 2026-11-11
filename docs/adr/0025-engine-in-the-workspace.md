@@ -69,7 +69,7 @@ The host's JSON-lines connection (`lines.ts`) is now shared by the agent and the
 | | |
 | --- | --- |
 | Rallly in a real workspace (`host.docker.test.ts`) | indexed 2.4–2.8 s after the first request (the pass itself about 1.0 s); an edit searchable after about 300 ms (5 runs) |
-| Search, engine side | 1–2 ms on Rallly; p95 under 100 ms on 100,000 symbols (unit test) |
+| Search, engine side | 1–2 ms on Rallly; p95 13.6 ms on 100,000 realistic names (`search.perf.test.ts`, run alone in CI's performance job) |
 | The bundle | 10 files, about 4.5 MB; copied once per container |
 
 ## Consequences
@@ -77,3 +77,13 @@ The host's JSON-lines connection (`lines.ts`) is now shared by the agent and the
 - **Re-indexing works with or without a page open.** Its cost is one watched folder per project folder (Rallly: 599), on top of each open page's watcher.
 - **No new image is needed for engine changes,** only a copy of about 4.5 MB when a workspace starts with a new engine.
 - **The Worker never contains the parser or SQLite:** checked with a `wrangler deploy --dry-run` bundle.
+
+## Addendum (11 Nov 2026, phase 4 step 6): the search-speed check runs alone
+
+The 100,000-symbol timing first sat in the unit tests. On CI it once measured 122 ms at p95: a 2-CPU machine running every package's tests at once measures the load, not the search (14 ms on the laptop for the same queries). It's now `packages/engine/src/search.perf.test.ts`:
+- **realistic compound names,** from a fixed seed, so every run times the same names
+- **38 typed queries,** a warm-up, then three timed passes
+- **run alone** by `pnpm test:perf`, in CI's performance job
+
+The unit tests keep every search *behaviour* check. The forks' own search speed is measured in real workspaces by the corpus test.
+
