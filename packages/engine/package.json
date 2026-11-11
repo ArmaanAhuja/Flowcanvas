@@ -35,6 +35,7 @@
     "tree-sitter-javascript": "catalog:",
     "tree-sitter-json": "catalog:",
     "tree-sitter-typescript": "catalog:",
+    "typescript": "catalog:",
     "web-tree-sitter": "catalog:"
   },
   "devDependencies": {
@@ -42,7 +43,6 @@
     "esbuild": "catalog:",
     "eslint": "catalog:",
     "tsx": "catalog:",
-    "typescript": "catalog:",
     "vitest": "catalog:"
   }
 }

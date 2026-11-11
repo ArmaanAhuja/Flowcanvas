@@ -4,13 +4,16 @@
 import type { WatchEvent } from '@flowcanvas/workspace-agent/protocol';
 import type { Indexer } from './indexer.js';
 import type {
+  CodePosition,
   EngineRequest,
   EngineResults,
   EngineState,
   EngineStatus,
   SearchResult,
+  SemanticOp,
 } from './protocol.js';
 import { ENGINE_PROTOCOL } from './protocol.js';
+import { emptyAnswer } from './semantics/client.js';
 import type { IndexStore } from './store.js';
 
 export interface EngineServiceOptions {
@@ -22,6 +25,15 @@ export interface EngineServiceOptions {
   readonly watch: (emit: (event: WatchEvent) => void) => Promise<{ close(): void }>;
   /** Changes are gathered this long before they're re-indexed, so a save that writes many files is one pass. */
   readonly refreshDelayMs?: number;
+  /** TypeScript's answers (phase 5, ADR 0026): the semantic worker's client. Kept current with the same events. */
+  readonly semantics?: Semantics;
+}
+
+/** What the engine needs from the semantic worker's client (semantics/client.ts). */
+export interface Semantics {
+  ask<Op extends SemanticOp>(op: Op, position: CodePosition): Promise<EngineResults[Op]>;
+  changed(paths: readonly string[], files?: readonly string[]): void;
+  close(): Promise<void>;
 }
 
 export interface EngineService {
@@ -39,6 +51,9 @@ export const NOT_FOLLOWING =
   'Changes to files aren’t being followed. Reopen the project to update the index.';
 
 const REFRESH_DELAY_MS = 200;
+
+/** Where no semantic worker was given (tests of the index alone). */
+export const NO_SEMANTICS = 'TypeScript’s answers aren’t available here.';
 
 export function startEngineService(options: EngineServiceOptions): EngineService {
   const { store, indexer } = options;
@@ -85,6 +100,13 @@ export function startEngineService(options: EngineServiceOptions): EngineService
     void enqueue(async () => {
       try {
         await indexer.refresh(changes);
+        // The semantic worker re-checks the same files; with the fresh list, it notices new and deleted ones.
+        if (options.semantics !== undefined) {
+          options.semantics.changed(
+            changes.map((c) => c.path),
+            await options.listFiles(),
+          );
+        }
       } catch {
         // The full index is still there; the next change or a reopen tries again.
         message = NOT_FOLLOWING;
@@ -103,6 +125,15 @@ export function startEngineService(options: EngineServiceOptions): EngineService
         // Too many changes at once (a checkout, an install): look at everything again.
         pending.clear();
         void fullPass();
+        if (options.semantics !== undefined) {
+          const semantics = options.semantics;
+          void options.listFiles().then(
+            (files) => {
+              semantics.changed([], files);
+            },
+            () => undefined,
+          );
+        }
         return;
       case 'error':
         message = NOT_FOLLOWING;
@@ -150,6 +181,15 @@ export function startEngineService(options: EngineServiceOptions): EngineService
           return Promise.resolve(status());
         case 'search':
           return Promise.resolve(search(request.query, request.limit));
+        case 'definition':
+        case 'references':
+        case 'callers':
+        case 'callees': {
+          const { path, line, column } = request;
+          return options.semantics === undefined
+            ? Promise.resolve(emptyAnswer(request.op, NO_SEMANTICS) as EngineResults[SemanticOp])
+            : options.semantics.ask(request.op, { path, line, column });
+        }
       }
     },
     settled: async () => {
@@ -167,6 +207,7 @@ export function startEngineService(options: EngineServiceOptions): EngineService
       closed = true;
       if (timer !== undefined) clearTimeout(timer);
       watcher?.close();
+      void options.semantics?.close();
     },
   };
 }

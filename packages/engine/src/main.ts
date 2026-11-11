@@ -1,15 +1,17 @@
 // Started by the workspace host inside the workspace container (ADR 0025): `node /tmp/flowcanvas-engine/main.js`,
-// bundled with its WebAssembly files beside it, with the host on the other end of stdin and stdout. It indexes
+// bundled with its WebAssembly files, the semantic worker and TypeScript beside it, with the host on the other end of stdin and stdout. It indexes
 // the project, follows its changes, and ends when the host closes stdin.
 import { mkdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAgent } from '@flowcanvas/workspace-agent/agent';
 import { PROJECT_ROOT } from '@flowcanvas/workspace-agent/protocol';
 import { startWatcher } from '@flowcanvas/workspace-agent/watch';
+import { ENGINE_SEMANTICS_WORKER } from './bundle-files.js';
 import { useGrammarDirectory } from './grammars.js';
 import { Indexer } from './indexer.js';
 import { INDEX_FILE } from './protocol.js';
+import { SemanticClient, threadWorker } from './semantics/client.js';
 import { serveEngine } from './serve.js';
 import { startEngineService } from './service.js';
 import { IndexStore } from './store.js';
@@ -22,15 +24,26 @@ await mkdir(dirname(INDEX_FILE), { recursive: true, mode: 0o700 });
 const agent = createAgent({ root: PROJECT_ROOT });
 const store = new IndexStore(INDEX_FILE);
 const indexer = new Indexer({ root: PROJECT_ROOT, store });
+const listFiles = async () => {
+  const result = await agent.handle({ op: 'files' });
+  if (!('files' in result)) throw new Error('no file list');
+  return result.files;
+};
+// TypeScript's answers (phase 5, ADR 0026): a worker thread with a heap cap, started on the first question, with
+// TypeScript unpacked beside this script by the host.
+const here = dirname(fileURLToPath(import.meta.url));
+const semantics = new SemanticClient({
+  root: PROJECT_ROOT,
+  typescriptPath: join(here, 'typescript', 'typescript.js'),
+  start: threadWorker(new URL(`./${ENGINE_SEMANTICS_WORKER}`, import.meta.url)),
+  listFiles,
+});
 const service = startEngineService({
   store,
   indexer,
-  listFiles: async () => {
-    const result = await agent.handle({ op: 'files' });
-    if (!('files' in result)) throw new Error('no file list');
-    return result.files;
-  },
+  listFiles,
   watch: (emit) => startWatcher({ root: PROJECT_ROOT, emit }),
+  semantics,
 });
 
 await serveEngine(service, process.stdin, process.stdout);

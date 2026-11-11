@@ -7,6 +7,7 @@ import {
   ENGINE_BUNDLE_DIR,
   ENGINE_BUNDLE_FILES,
   ENGINE_BUNDLE_VERSION_FILE,
+  ENGINE_TYPESCRIPT_ARCHIVE,
 } from '@flowcanvas/engine/bundle';
 import {
   ENGINE_HOME,
@@ -36,6 +37,10 @@ export type StartEngine = (ref: string) => Promise<WorkspaceProcess>;
 const copyCommand = (name: string) =>
   `mkdir -p ${ENGINE_HOME} && cat > ${ENGINE_HOME}/${name}.$$ && mv ${ENGINE_HOME}/${name}.$$ ${ENGINE_HOME}/${name}`;
 
+/** TypeScript's archive (phase 5): unpacked into `typescript/`, replacing an older copy, then removed. */
+const unpackCommand = (name: string) =>
+  `mkdir -p ${ENGINE_HOME} && cat > ${ENGINE_HOME}/${name}.$$ && rm -rf ${ENGINE_HOME}/typescript && mkdir ${ENGINE_HOME}/typescript && tar -xf ${ENGINE_HOME}/${name}.$$ -C ${ENGINE_HOME}/typescript && rm ${ENGINE_HOME}/${name}.$$`;
+
 /**
  * Copies the bundle into the workspace unless the same version is already there. The version file goes in
  * last, so a copy cut short is never taken for a complete one.
@@ -56,7 +61,8 @@ async function copyEngine(docker: Docker, ref: string): Promise<void> {
   if (there === version) return;
   for (const name of ENGINE_BUNDLE_FILES) {
     const content = await readFile(new URL(name, ENGINE_BUNDLE_DIR));
-    await docker(['exec', '-i', ref, 'sh', '-c', copyCommand(name)], { input: content });
+    const command = name === ENGINE_TYPESCRIPT_ARCHIVE ? unpackCommand(name) : copyCommand(name);
+    await docker(['exec', '-i', ref, 'sh', '-c', command], { input: content, timeoutMs: 120_000 });
   }
   await docker(['exec', '-i', ref, 'sh', '-c', copyCommand(ENGINE_BUNDLE_VERSION_FILE)], {
     input: `${version}\n`,
