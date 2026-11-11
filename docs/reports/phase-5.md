@@ -133,7 +133,7 @@ The draft PR (#19) ran CI on every push.
   - the walkthrough's selector for editor tabs (buttons, not tabs), which then found the status-bar bug
 
   Each was investigated to its cause and fixed.
-- **Closing commit:** see the PR's checks; the milestone is reported only with every job green.
+- **Closing commit `9e53ff3`: every job green** (run 43113208453): lint, typecheck, unit tests and build; visual and accessibility; walkthroughs on the deployed preview; canvas performance; real Docker, with the corpus (Rallly and Documenso ready in 3.1 s; calls 10 of 10 each; first question 1.6 s and 4.2 s).
 
 ## Next phase preview
 

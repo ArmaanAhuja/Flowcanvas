@@ -12434,7 +12434,7 @@ pnpm test:e2e -- try-it/phase-4.spec.ts
 | 4 | UI: the editor's context menu, and the Calls tab in the design system | B | done (Claude, 12 Nov) |
 | 5 | The page: right-click → Callers or Callees; F12; Shift+F12; rows open their place | B | done (Claude, 12 Nov) |
 | 6 | Corpus: 20 hand-labelled functions in real workspaces; the walkthrough, screens, Figma differences | B | done (Claude, 12 Nov) |
-| 7 | Close: report, 0.9.0 | B | *next* |
+| 7 | Close: report, 0.9.0 | B | done (Claude, 12 Nov) |
 
 ### How each Done-when item is proven
 
@@ -12813,3 +12813,36 @@ pnpm test:visual
 **Risks:** R1 updated (the DOM library's cost). **Laptop:** one visual run in Docker at a time, load under 4; the corpus Docker test ran on CI only.
 
 **Commits:** `268cdce` `fix(engine): callees as labelled`; `2d7ab85` `test(corpus): 20 hand-labelled functions' callers and callees`; `3953f66` `test(e2e): phase 5 walkthrough and screens`; `2a426bd` `test(web): the Calls tests open the file as the page remembers it`; `99b5d52` `fix(web): the status bar shows the shown file's cursor after switching files`.
+
+### Step 5.7 — Close the phase: report, 0.9.0, ready for review (done by Claude)
+
+**Goal:** the phase written up for the owner's acceptance, with every check green.
+
+**What a person can do now:** read `docs/reports/phase-5.md` (how to try it, the evidence, deviations, known issues) and `docs/reports/phase-5-figma-differences.md`; What's new shows 0.9.0.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `docs/reports/phase-5.md` | The report |
+| `docs/reports/phase-5-figma-differences.md`, `docs/reports/phase-5/` | For review by eye |
+| `CHANGELOG.md`, `package.json` | 0.9.0 |
+| `docs/STATUS.md`, `docs/RUN-AND-FEATURES.md`, `ARCHITECTURE.md` | Phase 5 in review; how to run and check it; the page side and the callee rules |
+
+**Concepts:** none new.
+
+**Found and fixed on the way:** none at close.
+
+**Tests:** CI on the closing commit `9e53ff3` (run 43113208453), every job green: lint, typecheck, unit tests and build; visual and accessibility; walkthroughs on the deployed preview; canvas performance; real Docker with the corpus (Rallly ready in 3.1 s, calls 10 of 10, first question 1.6 s; Documenso ready in 3.1 s, calls 10 of 10, first question 4.2 s).
+
+**Upgrade-later review:** nothing new deferred; 3 (TypeScript 7) re-checked, not met; 33 unchanged.
+
+**Run and check it:**
+```fish
+pnpm dev   # Rallly, Code view, right-click createPoll (mutations.ts:98) → Callers
+pnpm test && pnpm test:e2e && pnpm test:visual && pnpm test:docker
+```
+
+**Risks:** none new. **Laptop:** nothing heavy at close.
+
+**Commit:** `9e53ff3` `docs: phase 5 milestone B and close (steps 4-7)`; this entry in the next commit.
