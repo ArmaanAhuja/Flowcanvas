@@ -12351,12 +12351,20 @@ pnpm test:visual
 - **What a red CI is for:** the two failures at the close (a highlight race and a timing measured under load) were both real. One was a bug a person would hit on a slow day. The other was a test measuring the wrong thing. Neither was rerun until green: both were reproduced, explained, fixed and proven (step 6, items 7 and 8).
 - **Owning a behaviour instead of relying on a library's timing:** "Enter opens the top result" is now decided by our code, from the data, rather than by when React Aria's highlight lands.
 
-**Found and fixed on the way:** see step 6, items 7 and 8 (both found by CI on the draft pull request).
+**Found and fixed on the way:**
+- **Step 6, items 7 and 8**, both found by CI on the draft pull request.
+- **CI on the closing commit:**
+  1. **A broken pipe could crash the workspace host.**
+     - **The cause:** when a process in the workspace (the agent or the engine) exits, a request written to its stdin can fail with `EPIPE` before the exit event arrives. Nothing listened for errors on that stream, so it was an uncaught exception: a failed unit run on CI, and in the real host, the host process ending.
+     - **The bug's history:** it was in the agent's connection since phase 1d and moved into the shared `lines.ts` in step 3. CI caught it on the agent's "stops while requests wait" test.
+     - **The fix:** a stdin error is now handled like an exit, once. Waiting requests fail with "stopped", and the next request starts the process again.
+     - **Proof:** `lines.test.ts` reproduces it with a pipe that fails every write: it fails without the fix and passes with it. The host suite then passed three times in a row.
+  2. **The palette's catalogue baselines** changed with the marked top row (a deliberate change). They were regenerated, and the 6 images reviewed.
 
 **Tests:**
 - **Fast suites on the laptop:**
   - format, lint and typecheck: all pass
-  - unit: 903 tests, including UI 120 with 2 new, for symbols after 700 ms and the top-result mark
+  - unit: 904 tests, including UI 120 with 2 new (symbols after 700 ms, the top-result mark) and host 100 with 1 new (the broken pipe)
   - performance: the search check passes at p95 13.6 ms
 - **Heavy suites:** CI on PR #18 for the closing commit (recorded in the report).
 - **Investigations run on the laptop:**

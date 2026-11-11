@@ -53,7 +53,11 @@ export class LineConnection<Request, Response> {
     lines.on('line', (line) => {
       this.#receive(line);
     });
-    process.onExit(() => {
+    // The process has gone: by its exit, or by a write to its stdin failing first (EPIPE when it has just exited).
+    // Without an error listener, that failed write was an uncaught exception, which would end the host (found by
+    // CI, phase 4). Either way, once: every waiting request fails with "stopped", and the connection is closed.
+    const stopped = () => {
+      if (this.#closed) return;
       this.#closed = true;
       for (const pending of this.#pending.values()) {
         clearTimeout(pending.timer);
@@ -61,7 +65,9 @@ export class LineConnection<Request, Response> {
       }
       this.#pending.clear();
       onClose();
-    });
+    };
+    process.stdin.on('error', stopped);
+    process.onExit(stopped);
   }
 
   get closed() {

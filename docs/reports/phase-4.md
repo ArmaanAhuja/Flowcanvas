@@ -75,7 +75,7 @@ Like phases 1d and 3, **workspaces run only on the owner's computer** until a cl
 
 | Suite | Count | Command |
 | --- | --- | --- |
-| Unit and component | 903 | `pnpm test` |
+| Unit and component | 904 | `pnpm test` |
 | Walkthroughs (recorded, production CSP) | 19 (1 new) | `pnpm test:e2e` |
 | Visual and accessibility (both themes) | 130: 54 catalogue stories and 11 screens, each in both themes | `pnpm test:visual` |
 | Docker (real containers) | 53 (7 new: 6 corpus forks, 1 indexing) | `pnpm test:docker` |
@@ -126,6 +126,7 @@ Like phases 1d and 3, **workspaces run only on the owner's computer** until a cl
   - **What I found:** a real gap, since the watcher started at the same time as the first pass. It's fixed (watcher first) and pinned by a unit test.
   - **Not proven:** the failure didn't happen again in eight runs before the fix, so this gap isn't proven to be its cause.
   - **Watched:** the corpus and Docker tests run in CI on every push.
+- **Phase 1d bug found and fixed this phase:** a request written to a workspace process that had just exited could raise an uncaught `EPIPE`. In the real host, that would end the host process. It's now handled like an exit (found by CI; `lines.test.ts`).
 - **Phase 3 bugs found and fixed this phase:**
   - quick-open lost "v", "h" and "f" when opened from the Graph view
   - quick-open's rows were read out without pauses
