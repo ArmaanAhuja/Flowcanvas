@@ -7,19 +7,41 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "default": "./dist/protocol.js"
+    },
+    "./bundle": {
+      "types": "./dist/bundle-files.d.ts",
+      "default": "./dist/bundle-files.js"
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "grammars"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && tsx scripts/bundle.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "lint": "eslint ."
+    "test": "vitest run --exclude '**/*.perf.test.ts'",
+    "lint": "eslint .",
+    "test:perf": "vitest run perf.test"
+  },
+  "dependencies": {
+    "@flowcanvas/workspace-agent": "workspace:*",
+    "tree-sitter-css": "catalog:",
+    "tree-sitter-html": "catalog:",
+    "tree-sitter-javascript": "catalog:",
+    "tree-sitter-json": "catalog:",
+    "tree-sitter-typescript": "catalog:",
+    "web-tree-sitter": "catalog:"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
+    "esbuild": "catalog:",
     "eslint": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

@@ -11772,3 +11772,612 @@ pnpm build && pnpm size
 - **Laptop:** all five checks ok.
 
 **Commit:** `chore(release): phase 3 report, 0.7.0, in review`
+
+## Phase 4 — Indexer
+
+**From the build plan:**
+- **Build:** engine inside the workspace; tree-sitter parse of every file; symbols into SQLite; symbol search; re-index changed files on save.
+- **Done when:** both forks index in under 30 s; symbol search under 100 ms.
+- **Try it:** press ⌘K and jump to any function in Rallly.
+
+**Decisions (decisions log, 9 Nov 2026):**
+- **Every file of a language we ship a grammar for:** TS, TSX, JS, JSX, CSS, JSON, HTML and Markdown. Others are listed and counted.
+- **Both forks:** Rallly and Documenso.
+- **⌘K** is the command palette (Symbols and Files); Ctrl/⌘+P stays files.
+- **A symbol opens in the Code view at its line.**
+- **100 ms** in the engine and in the browser.
+
+**Expected outcome:**
+- When a workspace opens, the engine indexes the project in the background, and the page says so ("Indexing 1,240 of 2,031 files…").
+- **⌘K**, or the top bar's **Search ⌘K**, opens the command palette. Type part of a name to find functions, components, classes, types and constants, with their kind and file. Enter opens the Code view at that line.
+- Saving a file, or changing it in the terminal, updates its symbols within a moment.
+
+**Concepts this phase introduces** (each with a primer in its step):
+- tree-sitter, incremental parsing into a syntax tree: https://tree-sitter.github.io/tree-sitter/
+- WebAssembly, the parser and its grammars as portable binaries: https://developer.mozilla.org/en-US/docs/WebAssembly
+- SQLite and full-text search (FTS5) in Node 26's built-in `node:sqlite`: https://nodejs.org/api/sqlite.html and https://www.sqlite.org/fts5.html
+- Content hashes for incremental work: only changed files are parsed again
+
+**Scope:**
+- **In:** the engine process in the workspace; parsing; symbol extraction; the SQLite index; search; re-indexing on change; indexing status; the command palette with Symbols and Files; the top-bar search field.
+- **Out:**
+  - name resolution and call graphs (phase 5)
+  - the graph model (phase 6)
+  - global text search across code (a later phase)
+  - commands, nodes and screens in the palette (their phases)
+  - other languages' grammars (later waves)
+
+### Steps (planned)
+
+| # | Step | Milestone | Status |
+| --- | --- | --- | --- |
+| 0 | The plan and decisions; branch | A | done (Claude, 9 Nov) |
+| 1 | Spike: tree-sitter as WebAssembly and its grammars in the workspace image; `node:sqlite` with FTS5; Rallly's parse time; CPU and memory. ADR 0023 | A | done (Claude, 9 Nov) |
+| 2 | The engine: parse every file, extract symbols, store them in SQLite; incremental by content hash | A | done (Claude, 11 Nov) |
+| 3 | The engine's API (status, search) through the host and control plane; re-indexing on watcher events | B | done (Claude, 11 Nov) |
+| 4 | UI: the command palette in the design system (Symbols and Files); the top-bar search field | B | done (Claude, 11 Nov) |
+| 5 | The page: ⌘K, jumping to a symbol, indexing status | C | done (Claude, 11 Nov) |
+| 6 | Corpus tests (Rallly and Documenso under 30 s, all six reported), performance tests, the walkthrough, baselines, the Figma differences | C | done (Claude, 11 Nov) |
+| 7 | Close: report, 0.8.0, PR | C | done (Claude, 11 Nov); in review |
+
+### How each Done-when item is proven
+
+| Item | Test |
+| --- | --- |
+| Both forks index in under 30 s | Docker corpus test: Rallly and Documenso at their pins, a cold index timed in a real workspace (2 CPUs, 4 GiB) |
+| Symbol search under 100 ms | The engine's query p95 over hundreds of queries on Rallly; the browser's keypress to results |
+| Try it | Walkthrough: ⌘K, a function's name, Enter, the Code view at that line |
+| Symbols are right | Unit tests on fixtures for each kind; corpus spot checks against hand-picked Rallly functions |
+| Re-index on save | Docker test: `sed` adds a function, and search finds it within a second |
+
+### Risks (checked at every milestone)
+
+| # | Risk | How we keep it in check | Status |
+| --- | --- | --- | --- |
+| R1 | tree-sitter in WebAssembly is too slow for 30 s on Documenso | Measured in the spike on both forks before building on it | **closed:** 3.1 s on Documenso, 1.6 s on Rallly (ADR 0023) |
+| R2 | **Laptop:** indexing uses the workspace's CPU and memory | Measured in the spike; within the container's limits; the resource guard still applies | **measured:** one thread, under 150 MB; re-checked in step 6 |
+| R3 | The workspace image grows by the grammars | Measured; only the eight grammars | **measured:** about 4.2 MB of `.wasm`; confirmed when step 3 adds them to the image |
+| R4 | `node:sqlite` lacks something we need | The spike tests FTS5, transactions and speed | **closed:** FTS5 trigram p95 18 ms at 100,000 symbols |
+
+### Step 4.1 — Spike: tree-sitter as WebAssembly, the eight grammars, `node:sqlite` with FTS5 (done by Claude; ADR 0023)
+
+**Goal:** prove, before building on it, that tree-sitter can parse every file of both forks well inside 30 s in a workspace's limits, that `node:sqlite` can answer symbol searches well inside 100 ms, and that every grammar we ship loads. Settle where each grammar comes from.
+
+**What a person can do now:**
+- **Load all eight grammars and parse any file** with `@flowcanvas/engine`'s `loadGrammars()` and `languageOf(path)`. Nothing is visible in the app yet; the engine arrives in step 2 and the page in step 5.
+- **Rebuild the Markdown grammar** and check it matches what's committed: `tools/grammars/build-markdown.sh --check`.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `tools/grammars/build-markdown.sh` | Builds the Markdown grammar (block and inline) as WebAssembly from its C source. Pinned, checksummed inputs; a container with no network; `--check` compares a fresh build |
+| `packages/engine/grammars/` | The built `tree-sitter-markdown.wasm` and `tree-sitter-markdown-inline.wasm`, their `markdown.sha256`, and the grammar's licence |
+| `packages/engine/src/grammars.ts` | `GRAMMAR_FILES` (where each grammar's `.wasm` is), `languageOf(path)`, `limitationOf(path)` (`mdx-components`), `loadGrammars()` (once per process) |
+| `packages/engine/src/grammars.test.ts` | Extensions, limitations, each grammar parsing a sample, the committed checksums |
+| `packages/engine/package.json`, `tsconfig.json` | `web-tree-sitter` and the five grammar packages; Node's types; `grammars/` is published with `dist/` |
+| `pnpm-workspace.yaml` | The six packages in the catalog; the grammars' install scripts denied (`allowBuilds: false`) |
+| `docs/adr/0023-tree-sitter-webassembly-and-sqlite.md` | The decisions and the measurements |
+
+**Concepts:**
+- **tree-sitter:** a parser generator. A grammar becomes a C parser that builds a concrete syntax tree quickly, recovers from syntax errors (a half-typed file still gives a tree), and can re-parse incrementally after an edit. https://tree-sitter.github.io/tree-sitter/
+- **WebAssembly (`.wasm`):** a portable binary format any JavaScript runtime runs at near-native speed. Here the parser's runtime is one `.wasm` file and each grammar is another, so nothing is compiled when packages install. https://developer.mozilla.org/en-US/docs/WebAssembly
+- **wasi-sdk:** clang set up to compile C to WebAssembly. tree-sitter 0.27's CLI uses it (and binaryen's `wasm-opt` to shrink the result) to turn a grammar's `parser.c` and `scanner.c` into a `.wasm`. https://github.com/WebAssembly/wasi-sdk
+- **Queries:** tree-sitter's pattern language, which picks nodes out of a tree, for example `(function_declaration name: (identifier) @name)`. Step 2 uses them to extract symbols. https://tree-sitter.github.io/tree-sitter/using-parsers/queries/
+- **`node:sqlite` and FTS5:** SQLite built into Node 26, so there's no native addon. FTS5 is SQLite's full-text index; its `trigram` tokenizer matches any three or more letters inside a name. https://nodejs.org/api/sqlite.html and https://www.sqlite.org/fts5.html
+- **Reproducible builds:** the same pinned inputs always give byte-identical outputs, so anyone can check that a committed binary is what the script makes. https://reproducible-builds.org/
+
+**Found and fixed on the way:**
+1. **No package ships Markdown as WebAssembly** (not the grammar's package, not `tree-sitter-wasms`). The owner chose to build it ourselves; the script does it reproducibly. Two builds are byte-identical.
+2. **tree-sitter 0.27 no longer uses Emscripten:** it downloads wasi-sdk and binaryen at build time. The script downloads the exact versions the CLI names, checks their SHA-256, and points the CLI at them, so the container needs no network. This avoids an 825 MB Emscripten image.
+3. **188 `.mdx` files in the forks,** which the agreed list didn't cover. Asked; the owner chose parsing them as Markdown, marked as partly read (decisions log, 9 Nov 2026).
+4. **The grammar packages have native-build install scripts** (node-gyp). Denied, since we load their `.wasm`.
+5. **Docker on this laptop can't mount anything under `/home`** (it can under `/tmp`). The spike ran from copies in the scratchpad. Step 3 copies the engine into the workspace, as the agent already is (ADR 0016), so nothing depends on a mount.
+
+**Tests:**
+- **Unit:** 25 in `@flowcanvas/engine`, 24 new:
+  - **`languageOf`:** 10 paths, including `.mts`, `.mjs`, `.jsx`, `README.MD` and `.mdx`
+  - **no grammar:** 6 paths (Prisma, SQL, PNG, `Dockerfile`, `.gitignore`, a dot in a folder name)
+  - **`limitationOf`:** 5 paths (MDX, and four with nothing to say)
+  - **loading:** every grammar loads, and a sample of each parses to the right root with no errors
+  - **loaded once per process**
+  - **our Markdown build** matches its recorded checksums
+- **Mutation-checked:** dropping the case-insensitive match fails `README.MD`; changing one character of a recorded checksum fails the checksum test.
+- **Spike measurements** (in the workspace image: 2 CPUs, 4 GiB, read-only root, no network; ADR 0023):
+
+  | | Rallly | Documenso |
+  | --- | --- | --- |
+  | Files parsed | 1,472 of 1,959 | 2,510 of 2,986 |
+  | Parse and query time | 1.6 s | 3.1 s |
+  | Memory | 130 MB | 147 MB |
+
+  `node:sqlite` with 100,000 symbols: insert 0.4 s; trigram search p95 18 ms.
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/engine test     # 25 tests: grammars load and parse; checksums match
+tools/grammars/build-markdown.sh --check  # optional: rebuilds Markdown (about 300 MB of downloads, 1.5 min)
+```
+
+**Risks:**
+- R1 (speed): closed.
+- R4 (`node:sqlite`): closed.
+- R2 (laptop): measured; re-checked in step 6.
+- R3 (image size): about 4.2 MB; confirmed in step 3.
+- **Laptop:** load stayed under 3 during the spike (8 cores). Every container was labelled and removed with `--rm`. 577 GB free disk.
+
+**Commit:** `0a16797` `feat(engine): tree-sitter grammars as WebAssembly, with a reproducible Markdown build` (with this step's docs).
+
+### Step 4.2 — The engine: symbols, the SQLite index, incremental indexing (done by Claude; ADR 0024)
+
+**Goal:** the engine itself. Parse every file of a shipped grammar, extract its symbols, store everything in SQLite, and on later runs parse only what changed.
+
+**What a person can do now:**
+- **Index a project folder from code:** `new Indexer({ root, store: new IndexStore(file) }).sync(files)` parses it and stores every file's status and symbols. A second `sync` re-parses only changed files; `refresh(changes)` re-checks just the paths the watcher reports.
+- **Nothing in the app yet:** step 3 runs the engine in the workspace and adds search; step 5 adds ⌘K.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `packages/engine/src/symbols.ts` | `extractSymbols(language, tree)`: TS/JS declarations, methods, components; Markdown headings with their parent |
+| `packages/engine/src/store.ts` | `IndexStore`: the `files` and `symbols` tables, the FTS5 name index and its triggers, transactions, counts; rebuilt when `INDEX_FORMAT` changes |
+| `packages/engine/src/indexer.ts` | `Indexer` (`sync`, `refresh`, queued runs, batches that yield); `indexable(path)` (never secret files, ignored folders or escaping paths) |
+| `packages/engine/src/index.ts` | The package's exports |
+| `packages/engine/src/*.test.ts` | 44 new tests (below) |
+| `packages/engine/package.json` | Depends on `@flowcanvas/workspace-agent` for the shared protocol (secret-file rule, ignored folders, limits) |
+| `docs/adr/0024-symbol-index.md` | What a symbol is, the store, incremental indexing, what's never indexed, measurements |
+
+**Concepts:**
+- **Walking a syntax tree:** each node has a type (`function_declaration`) and named fields (`name`, `body`). The extractor visits the module's top-level statements, unwraps `export`, and reads names from fields. https://tree-sitter.github.io/tree-sitter/using-parsers/
+- **External-content FTS5 tables:** the full-text index stores only its own search structure and points at rows of `symbols`. Triggers keep the two in step. https://www.sqlite.org/fts5.html#external_content_tables
+- **Content addressing:** a file's identity for indexing is the hash of its bytes, not its time stamp, so a checkout that rewrites identical files costs nothing.
+- **Cooperative yielding:** a long job split into batches with `await setImmediate()` between them lets other requests on the same thread run. https://nodejs.org/api/timers.html#timerspromisessetimmediatevalue-options
+- **`user_version`:** a number SQLite keeps in the database header, used here as the index's format. https://www.sqlite.org/pragma.html#pragma_user_version
+
+**Found and fixed on the way:**
+1. **An ATX heading's closing hashes** (`## Title ##`) were part of its name. They're dropped now (CommonMark).
+2. **The test that two runs never overlap could not fail:** removing the queue left it passing. A new test records the order of writes during a long sync, and fails without the queue.
+3. **Two of Claude's test expectations were wrong:**
+   - a column count (it is 20)
+   - a namespace member's export flag (`export function` inside a namespace *is* exported)
+
+   The code was right in both.
+4. **`docs/.env.md` is treated as a secret** by the agent's shared rule. The engine follows it rather than having its own rule. The test was corrected.
+5. **The laptop restarted between sessions,** which cleared the scratchpad and its fork clones. They were cloned again at their pins.
+6. **One visual test failed once** (the flow-node combinations story, dark theme) with no UI change on this branch. It passed alone, and then in a second full run (114 of 114). The diff image was lost when the rerun cleared the results, so the cause is unknown. Watched in CI; if it happens again, the diff is kept and investigated.
+
+**Tests:**
+- **Unit:** 69 in `@flowcanvas/engine`, 44 new:
+  - **symbols (13):**
+    - each declaration kind
+    - locals, destructuring and anonymous defaults left out
+    - export lists, not re-exports
+    - UTF-16 columns after an emoji
+    - symbols around a syntax error
+    - components in TSX and JSX, never in `.ts`
+    - Markdown headings with parents, closing hashes, setext, a code block that isn't a heading
+    - MDX
+    - CSS, JSON and HTML with no symbols
+  - **store (6):**
+    - put replaces symbols
+    - remove keeps FTS in step
+    - all-or-nothing transactions
+    - counts
+    - reopening
+    - an old format rebuilt
+  - **indexer (25):**
+    - every status: parsed, no grammar, binary, too large, syntax errors, a link not followed
+    - progress
+    - a second run parses only changes and drops removed files
+    - same-bytes rewrites unchanged
+    - secret files, ignored folders and escaping paths never stored
+    - refresh
+    - runs queued (write order)
+    - newest content wins
+    - recovery after a failed run
+    - 17 `indexable` cases
+- **Mutation-checked:** following links, dropping the secret rule, dropping the unchanged check, removing the queue, and removing binary detection each fail at least one test.
+- **Both forks** (the real engine in the workspace image, 2 CPUs, 4 GiB, no network):
+
+  | | Rallly | Documenso |
+  | --- | --- | --- |
+  | Cold index | 1.8 s | 3.4 s |
+  | Unchanged | 52 ms | 85 ms |
+  | Symbols | 5,633 | 9,886 |
+  | Peak memory | 155 MB | 166 MB |
+
+  Step 6 makes this a corpus test.
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/engine test   # 69 tests
+```
+
+**Risks:**
+- R1 (speed): closed; 3.4 s with the database included.
+- R2 (laptop): one thread, at most 166 MB.
+- **Laptop:** load under 2 throughout. Containers were labelled and removed. Two empty root-owned folders were left in the scratchpad by Docker mounts; they're harmless and cleared at the next restart.
+
+**Commit:** `5e54382` `feat(engine): symbols, the SQLite index and incremental indexing` (with this step's docs).
+
+### Step 4.3 — The engine in each workspace: status and search through the host and API; re-indexing as files change (done by Claude; ADR 0025)
+
+**Goal:** run the engine where the build plan puts it, inside the workspace. It indexes the project when first asked, follows every change, and answers status and search through the same path as files: browser, control plane, host, workspace.
+
+**What a person can do now** (`pnpm dev`, a running workspace):
+- **See the index's status:** `GET /api/projects/<id>/workspace/index/status` gives the state (starting, indexing, ready, failed), progress, counts by file status, and the last full pass's time.
+- **Search symbols:** `GET /api/projects/<id>/workspace/index/search?q=create%20poll`. On Rallly, `createPoll` is the top result, at `apps/web/src/features/poll/mutations.ts:98`.
+- **Edit a file in the terminal,** and its new symbols are searchable in about 300 ms, whether or not a page is open.
+- **Nothing in the page yet:** step 5 adds ⌘K.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `packages/engine/src/protocol.ts` | The engine's protocol: requests, results, `parseEngineRequest`, `isEngineResponse` (no imports: bundled into the Worker) |
+| `packages/engine/src/service.ts` | `startEngineService`: the watcher first, then the full pass; changes gathered for 200 ms into one refresh; overflow runs a full pass; status and search |
+| `packages/engine/src/serve.ts` | `serveEngine`: one JSON envelope per line, answers by id, refusals in safe words |
+| `packages/engine/src/main.ts` | The workspace entry: the agent's file list and watcher, the index in `/workspace/.flowcanvas/index.db` |
+| `packages/engine/src/store.ts` | `search` and `rankHits` (ADR 0025 §5) |
+| `packages/engine/src/grammars.ts` | Grammar files resolved when asked; `useGrammarDirectory` for the bundle |
+| `packages/engine/src/bundle-files.ts`, `scripts/bundle.ts` | The bundle: `main.js`, the runtime and grammar `.wasm`, and `version.txt` in `dist/workspace/` (esbuild) |
+| `workspace/host/src/lines.ts` | The JSON-lines connection, now shared by the agent and the engine |
+| `workspace/host/src/indexers.ts` | Copies the bundle in when its version differs; one engine per workspace; checks answers |
+| `workspace/host/src/{workspaces,server,protocol}.ts` | `index(ref, request)`; `POST /v1/workspaces/:ref/index`; the engine closed when the workspace stops |
+| `services/control-plane/src/workspaces/index-routes.ts` | `/workspace/index/status` (not activity) and `/workspace/index/search` (activity) |
+| `services/control-plane/src/workspaces/{provider,local-host}.ts` | `index()` in the provider interface and the local host, with the answer checked again |
+| `workspace/agent/package.json` | Exports `./agent` and `./watch` for the bundle |
+| `docs/adr/0025-engine-in-the-workspace.md` | The decisions and measurements |
+
+**Concepts:**
+- **Bundling for a bare runtime:** esbuild follows every import from one entry file and writes a single file that needs only Node's built-ins. That's how the engine runs in a workspace with no `node_modules`. https://esbuild.github.io/api/#bundle
+- **Content versions for copies:** a hash over every bundled file says whether the workspace already has this engine, so most starts copy nothing.
+- **Ordering a watcher and a scan:** start watching before scanning, or a change in between is missed by both.
+- **Checking at every hop:** the workspace is untrusted, so the host and the control plane each check an answer's exact shape before passing it on. Paths must be project-relative, kinds known, and results no more than asked for.
+- **Activity versus polling:** a status request the page makes by itself isn't the person working, so it must never keep a workspace awake.
+
+**Found and fixed on the way:**
+1. **A gap between the first pass and the watcher:** they started together, so an edit made just as the pass finished could be missed for good. One Docker run in about ten failed that way. The watcher now starts first, and a unit test pins the order (mutation-checked). The failure didn't happen again in eight later runs, so the gap isn't *proven* to be the cause; it's in the phase report's known issues.
+2. **Grammar paths were resolved when the module loaded,** which fails in the bundle (no `node_modules`). They're now resolved only when asked, and the bundle loads every `.wasm` from its own folder.
+3. **The agent's connection code would have been copied** for the engine. It's now one shared module (`lines.ts`); the agent's tests pass unchanged.
+4. **`docker exec` input was text only.** It now takes bytes, for the `.wasm` files.
+5. **The 100,000-symbol search test timed out once in the full unit run.** Its setup (writing the symbols) passed Vitest's 5 s default while every package tested at once; the timed searches weren't the problem. It now has 30 s for setup, and the 100 ms assertion is unchanged. The whole unit suite then passed (886).
+6. **Status has a `symbols` count and search has a `symbols` list,** so a check on `'symbols' in result` couldn't tell them apart. The Docker test checks `'ms' in result`.
+7. **Three of Claude's test expectations were wrong:**
+   - the host's status for a refusal (409, not 503)
+   - a ranking tie (shorter name first, as the rule says)
+   - a match count (`createpoll` matches both `createPoll` and `CreatePoll`)
+
+**Tests:**
+- **Unit:**
+  - **engine:** 109 tests, 40 new:
+    - **protocol (23):** what each request accepts and refuses; answers refused for an unknown state, a negative count, a missing or extra status, a long message, more results than asked, an absolute path, an unknown kind, line 0, an empty or huge name, a non-boolean, an unknown error code
+    - **search (7):** the ranking tiers; exported, kind and length; case and every word; LIKE and FTS syntax taken literally; the limit; the best matches past the candidate limit; p95 under 100 ms on 100,000 symbols (moved to its own performance test in step 6: see there)
+    - **service and serve (10):**
+      - ready after the first pass
+      - changes gathered into one refresh
+      - deletes and overflow
+      - failures in safe words
+      - not following changes, and still searchable
+      - the watcher before the pass
+      - closing
+      - answers by id
+      - unexpected failures described without details
+  - **host:** 99 tests, 8 new: the index route (passes on, refuses malformed requests itself, passes the host's refusal, needs the token); `Indexers` (a real engine started once, another protocol refused, an absolute path refused, a stopped engine started again).
+  - **control plane:** 256 tests, 11 new:
+    - **routes:**
+      - status doesn't count as activity, and search does
+      - four refusals before the workspace is asked
+      - the engine's refusal, logged without the query
+      - the provider's failure
+      - not running
+      - the owner only
+    - **local host:** the answer checked again
+- **Mutation-checked:** starting the pass before the watcher fails the order test.
+- **Docker** (`host.docker.test.ts`, 22 tests, 1 new) on Rallly at its pin in a real workspace:
+  - indexed in under 30 s (2.4–2.8 s), over 1,900 files and 5,000 symbols
+  - `createPoll` found in under 100 ms
+  - an edit in the terminal searchable within 5 s (about 300 ms)
+  - a canary in `.env` appears nowhere in `/workspace/.flowcanvas`
+  - the index is owned by the workspace user
+  - 5 runs with the fix, all passing
+- **The Worker:** `wrangler deploy --dry-run` bundles it with none of the parser or SQLite code.
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/engine test           # 109
+pnpm --filter @flowcanvas/workspace-host test   # 99
+pnpm --filter @flowcanvas/workspace-host exec vitest run src/host.docker.test.ts   # real Docker, about 25 s
+```
+
+**Risks:**
+- R1 (speed): closed (2.8 s in a real workspace).
+- R2 (laptop): the engine is one idle process per running workspace after its pass, under 170 MB at its peak.
+- R3 (image size): the image doesn't grow; the bundle (4.5 MB) goes into the container's tmpfs.
+- **Laptop:** load stayed under 3.3 during the Docker runs. No containers were left behind (checked after each run).
+
+**Commit:** `11a42cb` `feat(engine): run the index in each workspace, with status and search through the host and API`.
+
+### Step 4.4 — The command palette and the top bar's search, in the design system (done by Claude)
+
+**Goal:** the components ⌘K needs, built and tested in the catalogue before the page uses them (CLAUDE.md §10: components first).
+
+**What a person can do now:**
+- In the catalogue (`pnpm --filter @flowcanvas/ui storybook`): **Shell/CommandPalette** (Results, Indexing, FilesOnly, Empty) and **Shell/SearchTrigger** (Mac, Others).
+- **Shell/TopBar** now shows the search between the view switch and the workspace status.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `packages/ui/src/components/command-palette/` | `CommandPalette` (Figma 16, brief §22): Symbols first, then Files; `#` for files only; the index's note; kind icons and labels; tests and stories |
+| `packages/ui/src/components/search-trigger/` | `SearchTrigger` (Figma 06): a field-styled native button with the shortcut; tests and stories |
+| `packages/ui/src/components/quick-open/QuickOpen.tsx` | Rows named "file, folder" for screen readers |
+| `packages/ui/src/index.ts` | Exports |
+| `e2e/visual/__screenshots__/shell-{commandpalette,searchtrigger,topbar}-*` | 14 new or changed baselines, both themes |
+
+**Concepts:**
+- **Sections in a listbox:** React Aria's `ListBoxSection` with a `Header` makes a named group, and arrow keys move across groups as one list. https://react-spectrum.adobe.com/react-aria/ListBox.html#sections
+- **Auto-focusing the first result:** Autocomplete highlights the first item after each change (virtual focus), so Enter opens the top match. It holds when results arrive after the typing.
+- **What a listbox may contain:** only options and groups. A status line belongs outside it, or axe reports `aria-required-children`.
+- **Accessible names versus text:** a row's text read out runs together ("createPollFunctionapps/…"). An explicit `aria-label` ("createPoll, function, apps/…:98") gives pauses. `textValue` is for typeahead, not the name.
+- **`aria-keyshortcuts`:** tells assistive technology which keys open something. It's set on a native button, because React Aria's Button drops it.
+
+**Found and fixed on the way:**
+1. **axe: `aria-required-children`.** The index's note was a `status` inside the listbox. It now sits between the search row and the results. Found by the catalogue's accessibility check.
+2. **Rows' accessible names ran together** in the palette and in phase 3's quick-open. Both now have explicit names; quick-open gets a regression test.
+3. **React Aria's Button dropped `aria-keyshortcuts`.** The trigger is a native button, with the global focus ring.
+
+**Settled by the documents** (applied; owner decisions not needed):
+- **Symbols first, then Files:** the approved plan's try-it is "⌘K, a function's name, Enter, the Code view at that line", so the top result must be a symbol.
+- **The first result is highlighted:** the same try-it needs Enter to open it. Quick-open (phase 3) still needs an arrow key first; it's unchanged.
+- **`#` for files only:** design brief §22. `>` commands, `@` nodes and `/` routes arrive with those groups.
+- **The search field opens the palette** rather than searching in place: Figma 06 shows it with ⌘K, and brief §22 makes the palette the place to search.
+
+**Differences from Figma** (Graphite and accessibility win; listed for the owner's review in the phase report):
+- **The kind is shown in words** beside its icon (Graphite: state never carried by an icon or colour alone).
+- **The trigger:** 28 px tall, not 26 (4 px grid); its label is `text/muted`, not `text/tertiary` (tertiary is for non-text).
+- **The first row is highlighted only after typing,** not before (there's nothing to open before).
+
+**Tests:**
+- **Unit:** UI 118 tests, 12 new:
+  - **palette (9):**
+    - the dialog and focus
+    - groups in order, with kinds and places as names
+    - Enter on the top symbol when symbols arrive after the typing
+    - a file by arrows
+    - `#`
+    - the note with results
+    - the note with nothing
+    - nothing matches
+    - Escape
+  - **trigger (2):** name and shortcut; click, Enter and Space
+  - **quick-open (1):** row names
+- **Visual and accessibility:** 126 catalogue checks pass, with 14 baselines new or changed and reviewed by eye.
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/ui test
+pnpm --filter @flowcanvas/ui storybook    # Shell/CommandPalette, Shell/SearchTrigger
+pnpm test:visual
+```
+
+**Risks:**
+- **Laptop:** two catalogue runs (2.4 min each), one at a time; load under 3.1.
+
+**Commit:** `dcdea61` `feat(ui): the command palette (Symbols and Files) and the top bar's search`.
+
+### Step 4.5 — ⌘K in the page: a symbol opens in the Code view at its line; the index's progress (done by Claude)
+
+**Goal:** the phase's Try it in the app. Press ⌘K, type part of a function's name, press Enter, and the Code view opens at that line. While the project indexes, the page says how far it has got.
+
+**What a person can do now** (`pnpm dev`, a running workspace):
+- **⌘K (Ctrl+K) or Search in the top bar** opens the palette. Typing lists symbols from the index, then files; `#` lists files only.
+- **Enter (or a click) on a symbol** switches to the Code view and opens the file with the cursor on the name, scrolled to the middle, with the editor focused.
+- **While the first index runs,** a chip says "Indexing 61%" under Entry points and on the canvas, with "Indexing 1,240 of 2,031 files…" as its tooltip. The Code view's status bar says the same, and the palette notes it above the results. The chip goes once the index is ready.
+- **If the index stopped,** the chip says so ("Index stopped"), with the engine's own sentence. If symbols can't be searched, the palette says why. If the workspace isn't running, it says to open it.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `apps/web/src/symbols/api.ts` | `fetchIndexStatus`, `searchSymbols` (cancellable) |
+| `apps/web/src/symbols/useProjectIndex.ts` | `useProjectIndex`: asks for the status once a second while indexing, every 5 s after a problem, then stops; `useSymbolSearch`: a search per change, the one typed past cancelled, late answers dropped |
+| `apps/web/src/symbols/texts.ts` | `indexChip` (label and detail), `paletteNote` |
+| `apps/web/src/symbols/IndexChip.tsx` | The chip, from the design system's Tag |
+| `apps/web/src/symbols/SearchDialogs.ts` | Quick-open and the palette in one lazy chunk |
+| `apps/web/src/project/ProjectPage.tsx` | ⌘K, the top bar's search, the palette, the chip in three places, opening a symbol at its line |
+| `apps/web/src/code/{useCodeFiles,CodeEditor,CodeView}.tsx` | `open(path, at)`, `reveal`, `positionOf` (kept inside the document), the status bar's index note |
+| `apps/web/src/canvas/FlowCanvas.tsx` | A `status` slot, top left |
+| `packages/ui/src/components/command-palette/prefixes.ts` | `FILES_PREFIX` in a module of its own |
+| `apps/web/scripts/bundle-size.ts` | `SearchDialogs` budget 15 kB (13.7 kB) |
+| `apps/web/src/symbols/{palette,texts}.test.ts(x)`, `apps/web/src/test/setup.ts` | 13 tests; jsdom's missing `document.execCommand` |
+
+**Concepts:**
+- **Cancelling stale requests:** each search passes an `AbortSignal`. When the query changes, the old request is aborted, and an answer that still arrives for an older query is dropped by a sequence number, so the results always match the field. https://developer.mozilla.org/en-US/docs/Web/API/AbortController
+- **Polling politely:** one status request at a time (the next only after the answer), and none once the index is ready. Status never counts as activity, so polling can't keep a workspace awake.
+- **Moving the cursor in CodeMirror:** a transaction with a `selection` and `EditorView.scrollIntoView(pos, { y: 'center' })`. Lines and columns become an offset with `doc.line(n).from + column - 1`, clamped in case the file changed since it was indexed. https://codemirror.net/docs/ref/#view.EditorView%5EscrollIntoView
+- **Keeping shared code out of the page's chunk:** two lazy chunks that share modules make the bundler put the shared part where both are loaded. One chunk for both dialogs, and a constant in its own module, keep React Aria's search parts out of every project page.
+
+**Found and fixed on the way:**
+1. **The page's chunk grew 94.6 → 108.7 kB** (budget 110). The page imported `FILES_PREFIX` from the palette's module, which pulled in the palette and React Aria's search parts. The constant is now in its own module, and both dialogs share one lazy chunk: the page is at 96.3 kB, and the dialogs at 13.7 kB. Found by the bundle budget.
+2. **CI failed on step 5's push:** every screen baseline changes because of the top bar's new Search button. The baselines were regenerated and reviewed in step 6.
+
+**Tests:**
+- **Unit:** web 168 tests, 14 new.
+  - **Palette on the page (7):**
+    - the chip while indexing, gone when ready, polling stopping
+    - the stopped state in the engine's words
+    - no requests while asleep
+    - ⌘K and the top bar's search
+    - Enter on `createPoll` opening the file with the cursor on the name and "Ln 3, Col 17"
+    - a failed search explained
+    - not running explained
+  - **Texts (3):** the chip's label and detail; the palette's note in order
+  - **Search hook (1):** a late answer for an older query dropped; `#` and blank queries not sent
+  - **`positionOf` (2):** UTF-16 columns; kept inside the document
+  - **Canvas shortcuts (1):** the step 6 fix, below
+- **Mutation-checked:** removing the late-answer check fails the search hook test.
+- **Bundle budget:** every part within budget.
+
+**Run and check it:**
+```fish
+pnpm dev     # open a project with its workspace running; ⌘K (Ctrl+K), type part of a function's name, Enter
+pnpm --filter @flowcanvas/web test
+pnpm size
+```
+
+**Risks:**
+- **Laptop:** unit runs only; load under 2.
+
+**Commit:** `19f16f4` `feat(web): ⌘K opens symbols in the Code view at their line; the index's progress`.
+
+### Step 4.6 — Proof: the corpus in real workspaces, the walkthrough, screens and the Figma differences (done by Claude)
+
+**Goal:** prove the Done-when items with named automated tests:
+- both forks index in under 30 s
+- symbol search answers in under 100 ms, in the engine and in the browser
+- the Try it works in a real browser
+
+Report all six corpus forks, and check the symbols against hand-picked ones.
+
+**What a person can do now:**
+- `pnpm corpus:fetch` keeps the six corpus forks at their pins in `~/.cache/flowcanvas/corpus`, outside `/tmp`, so a restart doesn't lose them (owner, 11 Nov 2026).
+- `pnpm test:docker` (and CI) opens each fork in a real workspace and prints the corpus report.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `workspace/host/src/corpus.docker.test.ts` | The six forks at their pins in real workspaces: readiness, labels, search speed, a report; each workspace removed after |
+| `corpus/labels/symbols.json` | 21 hand-picked symbols (11 Rallly, 10 Documenso): name, kind, container, path, line, and the column computed from the source line's text |
+| `corpus/src/cache.ts`, `corpus/scripts/fetch-corpus.ts` | The cache's place, and shallow fetches of exactly each pin, checked |
+| `e2e/try-it/phase-4.spec.ts` | The walkthrough, with keypress-to-results measured in the page |
+| `e2e/visual/screens.spec.ts` | Index routes in the fake API; screens `project-indexing` and `code-palette` |
+| `e2e/visual/__screenshots__/screens-*` | 4 new baselines, 18 changed (the top bar's search) |
+| `apps/web/src/canvas/FlowCanvas.tsx` | Canvas shortcuts skip keys inside a dialog, list or menu |
+| `packages/ui/src/components/{quick-open,command-palette}/*.module.css` | Readable text on a highlighted row |
+| `docs/reports/phase-4-figma-differences.md`, `docs/reports/phase-4/*.png` | Figma 16 and 06 against what's built |
+
+**Concepts:**
+- **Hand-labelled ground truth:** the expected symbols come from reading the source, not from the engine. The column is computed from the line's own text, so a mistake in the engine can't be copied into the test.
+- **Measuring inside the page:** a `keydown` listener and a `MutationObserver` time the keypress to the row appearing in the browser itself. Playwright's own round trips aren't counted. The fake API answers only whole names, so the row can appear only because of that key.
+- **The cost of a real workspace:** the corpus test times from the first request: copying the engine in, starting it, listing, parsing and storing. That's what a person waits for.
+
+**Found and fixed on the way:**
+1. **The letter "v" was lost in the palette** (and in quick-open) in the Graph view. React Aria's Autocomplete passes each typed key to its list as a copy of the event. The canvas listener saw the copy's target (the list, not the field), took it as V (select), and cancelled it, which cancelled the letter. Canvas shortcuts now skip keys inside a dialog, list or menu (a regression test, plus the walkthrough's "calendarservice" query). Found by the walkthrough.
+2. **axe: `color-contrast` on the highlighted row.** Muted text on `surface/selected` fails AA. Quick-open had the same flaw, never captured because its screen had no highlighted row. The folder and kind step up to `text/secondary` there. Found by the new `code-palette` screen.
+3. **The first timing method was wrong:** two of five came out negative, because the row was already on screen before the last key. The fake API now answers whole names only, and timing starts at the keydown.
+4. **One of Claude's labels was wrong:** the heading "🐳 Self-hosting" sits under Rallly's "# Rallly", so its container is "Rallly". The engine was right.
+5. **Two walkthrough expectations were wrong:**
+   - the first Escape clears the field and the second closes, as in quick-open
+   - the timing loop reopened the palette before checking focus
+
+   Both are fixed in the test.
+6. **`pnpm … fetch` ran pnpm's own `fetch`** (it fills the store) instead of the script, which is now `fetch-forks`. Also, `execFileSync`'s 1 MB default buffer was too small for Medusa's file list.
+7. **CI: Enter could open a file instead of the top symbol** (the `code-palette` screen showed the file row highlighted).
+   - **Reproduced:** 1 in 20 in Playwright's pinned image.
+   - **The cause:** React Aria's Autocomplete highlights the row that's first when a letter is typed, up to half a second later, and keeps it. Files are ranked at once, so when the symbols' answer comes later, that row is a file.
+   - **Rejected fix:** remounting the list once the answer arrives broke Enter altogether.
+   - **The fix:** the automatic highlight is off (`disableAutoFocusFirst`, public). Until the person moves with the arrow keys, the palette marks the top result itself and opens it on Enter. After an arrow key, React Aria's highlight is what Enter opens. The field's description says "Enter opens the top result".
+   - **Also found by the new test:** rows kept their old mark until `dependencies` re-rendered them.
+   - **Proof:** 40 of 40 repeats pass in the pinned image (before: 1 in 20 failed); unit tests for symbols after 700 ms, the mark, and arrow keys then Enter; two mutants caught.
+8. **CI: the 100,000-symbol search timing failed once (122 ms against 100).**
+   - **The cause:** the same queries take 14 ms on the laptop. On CI a 2-CPU machine was running every package's tests at once, so the test measured the load.
+   - **The fix:** it's now its own performance test (`search.perf.test.ts`): realistic seeded names, 38 queries, a warm-up and three passes, run alone by `pnpm test:perf` in CI's performance job (ADR 0025 addendum). It runs at p95 13.6 ms.
+
+**Tests:**
+- **The corpus** (`corpus.docker.test.ts`, local run 11 Nov 2026, the workspace's limits of 2 CPUs and 4 GiB):
+
+  | Fork | Files | Parsed | Symbols | Ready after the first request | Engine pass | Search p95, engine / round trip | Labels |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | **Rallly** | 1,958 | 1,472 | 5,633 | **2.8 s** | 1.1 s | **4 ms** / 40 ms | 11 of 11 |
+  | **Documenso** | 2,986 | 2,508 | 9,886 | **4.1 s** | 2.2 s | **8 ms** / 43 ms | 10 of 10 |
+  | LibreChat | 6,675 | 6,406 | 40,702 | 12.0 s | 9.6 s | 34 ms / 69 ms | — |
+  | Twenty | 37,879 | 36,054 | 112,855 | 26.3 s | 19.8 s | 36 ms / 65 ms | — |
+  | Excalidraw | 1,312 | 861 | 5,053 | 3.3 s | 1.4 s | 14 ms / 46 ms | — |
+  | Medusa | 24,260 | 21,611 | 49,819 | 20.8 s | 15.5 s | 25 ms / 58 ms | — |
+
+  Rallly and Documenso: 312 and 318 searches each (every prefix of every label, twice, plus common words). The other four: 20 each.
+- **The browser** (walkthrough): 20–31 ms from keypress to results.
+- **Walkthrough** `try-it/phase-4.spec.ts`:
+  - the chip, then gone
+  - the top bar's search and `#`
+  - five timed queries
+  - Enter to the Code view at "Ln 98, Col 14", with the line on screen and typing going in at the name
+  - no CSP problems
+- **Screens:** 130 checks pass (both themes, with axe), and the new baselines were reviewed by eye.
+- **Unit:** corpus 12 (2 new: the cache's place); web 168, including the shortcut regression test.
+
+**Run and check it:**
+```fish
+pnpm corpus:fetch                                    # the six forks into ~/.cache/flowcanvas/corpus
+pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts   # real Docker, about 3 min
+pnpm test:e2e -- try-it/phase-4.spec.ts
+pnpm test:visual
+```
+
+**Risks:**
+- R2 (laptop): Twenty, the largest fork, indexes in 26 s within the workspace's limits on the laptop, and 40.6 s on CI's slower runner (Medusa: 20.8 and 33.6 s). Only the plan's two forks are held to 30 s, and both meet it on both machines (the report has both columns).
+- **Laptop:**
+  - the corpus run took about 3 minutes, with load under 2.5
+  - every test workspace was removed after its fork
+  - the cache is 1.4 GB (576 GB free)
+  - heavy suites ran one at a time
+
+**Commit:** `2c5ae21` `test: phase 4 corpus, walkthrough and screens; the "v" lost in the palette; contrast on highlighted rows`.
+
+### Step 4.7 — Close the phase: report, 0.8.0, ready for review (done by Claude)
+
+**Goal:** the phase report, the Figma differences, version 0.8.0 with its CHANGELOG entry (which feeds What's new), every document brought up to date, and PR #18 marked ready for the owner's review.
+
+**What a person can do now:**
+- Read `docs/reports/phase-4.md` (the result, how to try it, the evidence, the corpus table) and `docs/reports/phase-4-figma-differences.md`.
+- After the merge, What's new shows 0.8.0.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `docs/reports/phase-4.md` | The report (CLAUDE.md §13.2) |
+| `docs/reports/phase-4-figma-differences.md`, `docs/reports/phase-4/*.png` | Figma 16 and 06 against the built palette and the progress chip |
+| `CHANGELOG.md`, `package.json` | 0.8.0 |
+| `docs/STATUS.md`, `docs/RUN-AND-FEATURES.md`, `ARCHITECTURE.md`, `docs/adr/0025-*.md` (addendum) | Brought up to date |
+| `packages/engine/src/search.perf.test.ts`, `packages/engine/package.json`, `package.json` | Search speed timed on its own, in `pnpm test:perf` |
+| `packages/ui/src/components/command-palette/` | The top result marked and opened by the palette itself |
+
+**Concepts:**
+- **What a red CI is for:** the two failures at the close (a highlight race and a timing measured under load) were both real. One was a bug a person would hit on a slow day. The other was a test measuring the wrong thing. Neither was rerun until green: both were reproduced, explained, fixed and proven (step 6, items 7 and 8).
+- **Owning a behaviour instead of relying on a library's timing:** "Enter opens the top result" is now decided by our code, from the data, rather than by when React Aria's highlight lands.
+
+**Found and fixed on the way:**
+- **Step 6, items 7 and 8**, both found by CI on the draft pull request.
+- **CI on the closing commit:**
+  1. **A broken pipe could crash the workspace host.**
+     - **The cause:** when a process in the workspace (the agent or the engine) exits, a request written to its stdin can fail with `EPIPE` before the exit event arrives. Nothing listened for errors on that stream, so it was an uncaught exception: a failed unit run on CI, and in the real host, the host process ending.
+     - **The bug's history:** it was in the agent's connection since phase 1d and moved into the shared `lines.ts` in step 3. CI caught it on the agent's "stops while requests wait" test.
+     - **The fix:** a stdin error is now handled like an exit, once. Waiting requests fail with "stopped", and the next request starts the process again.
+     - **Proof:** `lines.test.ts` reproduces it with a pipe that fails every write: it fails without the fix and passes with it. The host suite then passed three times in a row.
+  2. **The palette's catalogue baselines** changed with the marked top row (a deliberate change). They were regenerated, and the 6 images reviewed.
+
+**Tests:**
+- **Fast suites on the laptop:**
+  - format, lint and typecheck: all pass
+  - unit: 904 tests, including UI 120 with 2 new (symbols after 700 ms, the top-result mark) and host 100 with 1 new (the broken pipe)
+  - performance: the search check passes at p95 13.6 ms
+- **Heavy suites:** CI on PR #18 for the closing commit (recorded in the report).
+- **Investigations run on the laptop:**
+  - the `code-palette` screen: 40 of 40 repeats in the pinned image
+  - the phase 3 and 4 walkthroughs: 4 passed
+
+**Run and check it:**
+```fish
+pnpm test && pnpm test:perf
+pnpm test:e2e -- try-it/phase-4.spec.ts
+```
+
+**Risks:**
+- **Laptop:** heavy runs were for investigation only, one at a time; load under 3.
+
+**Commit:** `chore(release): phase 4 report, 0.8.0, in review` (with the fixes from CI).

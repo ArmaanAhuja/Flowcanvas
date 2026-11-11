@@ -31,7 +31,7 @@ const FILES: Record<string, string> = {
     "// Greets a person by name.\nexport function greet(name: string): string {\n  const hour = new Date().getHours();\n  return hour < 12 ? `Good morning, ${name}` : `Hello, ${name}`;\n}\n\nexport const DEFAULT_NAME = 'there';\n",
   'apps/web/src/pages/index.tsx': 'export default function Home() {\n  return null;\n}\n',
   'package.json': '{\n  "name": "rallly",\n  "private": true\n}\n',
-  'README.md': '# Rallly\n',
+  'README.md': '# Rallly\n\n## Greeting people\n',
 };
 const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 
@@ -39,7 +39,44 @@ interface ApiOptions {
   readonly running?: boolean;
   /** A journal entry for this file, whose base is older than the file: the restore shows a conflict. */
   readonly staleDraft?: string;
+  /** The project index part way through its first pass (phase 4); otherwise it's ready. */
+  readonly indexing?: boolean;
 }
+
+/** What the project index finds (phase 4), as the engine would: a function, a constant and a heading. */
+const SYMBOLS = [
+  ['greet', 'function', 'apps/web/src/utils/greeting.ts', 2, 17],
+  ['DEFAULT_NAME', 'constant', 'apps/web/src/utils/greeting.ts', 7, 14],
+  ['Home', 'component', 'apps/web/src/pages/index.tsx', 1, 25],
+  ['Greeting people', 'heading', 'README.md', 3, 4],
+].map(([name, kind, path, line, column]) => ({
+  name,
+  kind,
+  path,
+  line,
+  column,
+  container: null,
+  exported: true,
+}));
+
+const indexStatus = (indexing: boolean) => ({
+  state: indexing ? 'indexing' : 'ready',
+  done: indexing ? 1240 : 2031,
+  total: 2031,
+  files: indexing ? 1240 : 2031,
+  byStatus: {
+    parsed: indexing ? 1100 : 1800,
+    'no-grammar': indexing ? 140 : 231,
+    'too-large': 0,
+    binary: 0,
+    unreadable: 0,
+  },
+  symbols: indexing ? 3100 : 5600,
+  withSyntaxErrors: 0,
+  partlyRead: 0,
+  lastFullMs: indexing ? null : 1800,
+  message: null,
+});
 
 async function fakeApi(page: Page, options: ApiOptions = {}): Promise<void> {
   const project =
@@ -70,6 +107,18 @@ async function fakeApi(page: Page, options: ApiOptions = {}): Promise<void> {
     }
     if (path.endsWith('/workspace/journal')) {
       return reply(route, { entries: [] });
+    }
+    if (path.endsWith('/workspace/index/status')) {
+      return reply(route, indexStatus(options.indexing === true));
+    }
+    if (path.endsWith('/workspace/index/search')) {
+      const words = (url.searchParams.get('q') ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+      return reply(route, {
+        symbols: SYMBOLS.filter((symbol) =>
+          words.every((word) => String(symbol.name).toLowerCase().includes(word)),
+        ),
+        ms: 1,
+      });
     }
     if (path.endsWith('/workspace/journal/entry')) {
       return options.staleDraft === file
@@ -157,6 +206,25 @@ const SCREENS: readonly Screen[] = [
       await expect(page.getByRole('searchbox', { name: 'File name' })).toBeFocused();
       await page.keyboard.type('page');
       await expect(page.getByRole('option')).toHaveCount(2);
+    },
+  },
+  // Phase 4: the index's progress chip (design brief, "Still indexing"), and ⌘K (Figma 16).
+  {
+    name: 'project-indexing',
+    api: { running: true, indexing: true },
+    arrange: async (page) => {
+      await expect(page.getByTestId('index-chip')).toHaveCount(2);
+    },
+  },
+  {
+    name: 'code-palette',
+    code: ['apps/web/src/utils/greeting.ts'],
+    arrange: async (page) => {
+      await page.keyboard.press('Control+k');
+      await expect(page.getByRole('searchbox', { name: 'Search symbols and files' })).toBeFocused();
+      await page.keyboard.type('gree');
+      await expect(page.getByRole('option', { name: /^greet, function/ })).toBeVisible();
+      await expect(page.getByRole('option', { name: /^greeting\.ts/ })).toBeVisible();
     },
   },
 ];

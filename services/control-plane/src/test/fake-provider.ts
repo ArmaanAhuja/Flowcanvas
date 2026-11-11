@@ -1,5 +1,6 @@
 // An in-memory WorkspaceProvider for lifecycle and route tests: no Docker, no network.
 import type { AgentRequest, AgentResponse } from '@flowcanvas/workspace-agent/protocol';
+import type { EngineRequest, EngineResponse } from '@flowcanvas/engine/protocol';
 import {
   ProviderError,
   type PressureKind,
@@ -7,7 +8,8 @@ import {
   type WorkspaceProvider,
 } from '../workspaces/provider.js';
 
-type Method = 'create' | 'start' | 'pause' | 'resume' | 'stop' | 'agent' | 'terminal' | 'events';
+type Method =
+  'create' | 'start' | 'pause' | 'resume' | 'stop' | 'agent' | 'index' | 'terminal' | 'events';
 type FakeState = 'running' | 'paused' | 'stopped';
 
 export class FakeProvider implements WorkspaceProvider {
@@ -19,6 +21,9 @@ export class FakeProvider implements WorkspaceProvider {
   /** Requests the agent received, and what it answers next (a hello by default). */
   readonly agentRequests: { ref: string; request: AgentRequest }[] = [];
   agentAnswer: AgentResponse = { ok: true, result: { protocol: 1, node: 'v26' } };
+  /** Requests the engine received (phase 4), and what it answers next (an empty search by default). */
+  readonly indexRequests: { ref: string; request: EngineRequest }[] = [];
+  indexAnswer: EngineResponse = { ok: true, result: { symbols: [], ms: 1 } };
   /** The workspace's side of each terminal opened, newest last. */
   readonly terminals: { ref: string; size: { cols: number; rows: number }; socket: FakeSocket }[] =
     [];
@@ -113,6 +118,13 @@ export class FakeProvider implements WorkspaceProvider {
     if (this.known(ref) !== 'running') throw new ProviderError('refused', 'Resume it first.');
     this.agentRequests.push({ ref, request });
     return this.agentAnswer;
+  }
+
+  async index(ref: string, request: EngineRequest): Promise<EngineResponse> {
+    await this.enter('index', ref);
+    if (this.known(ref) !== 'running') throw new ProviderError('refused', 'Resume it first.');
+    this.indexRequests.push({ ref, request });
+    return this.indexAnswer;
   }
 
   async terminal(ref: string, size: { cols: number; rows: number }): Promise<TerminalSocket> {

@@ -15,6 +15,7 @@
     "db:allow": "tsx --env-file-if-exists=../../.dev.vars scripts/db.ts allow"
   },
   "dependencies": {
+    "@flowcanvas/engine": "workspace:*",
     "@flowcanvas/workspace-agent": "workspace:*",
     "@flowcanvas/workspace-host": "workspace:*",
     "@neondatabase/serverless": "catalog:",

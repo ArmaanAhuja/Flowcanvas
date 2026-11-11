@@ -45,14 +45,15 @@ If the host can't start, its log line says why: the token, Docker, or another `p
 
 | Command | What it checks | Time |
 | --- | --- | --- |
-| `pnpm test` | 747 unit and component tests, with no Docker or network | about 20 s |
+| `pnpm test` | 903 unit and component tests, with no Docker or network | about 25 s |
 | `pnpm lint`, `pnpm typecheck`, `pnpm format:check` | Lint (with the design-token rules), strict TypeScript, formatting | — |
-| `pnpm test:docker` | 46 tests against real containers: isolation, the network allowlist, clone time, sleep and resume, the guard, no secret kept anywhere, and (phase 3) the file list, a save refused after a terminal edit, the journal surviving a restart, and a terminal edit reaching the page's events socket in about 160 ms. Needs Docker 28+ and the internet | about 1 min |
-| `pnpm test:e2e` | 18 recorded walkthroughs of each phase's *Try it*, under the production security policy (1 needs a real API: CI, or a running `pnpm dev`) | about 40 s |
-| `pnpm test:perf` | The canvas with 500 nodes, panned and zoomed: frame times, long tasks, input to paint. Headless (as on CI) only catches large regressions; `PERF_REAL=1 pnpm test:perf` opens a real window on your GPU for about 30 s, which is what decides | about 30 s |
-| `pnpm test:visual` | 114 screenshots in both themes against approved baselines, plus accessibility checks (axe): every catalogue story, and the project page's screens (empty, 1280 × 800, 500 nodes, review open, full screen, workspace popover; the Code view, a conflict, quick-open) | about 2 min |
+| `pnpm test:docker` | 53 tests against real containers: isolation, the network allowlist, clone time, sleep and resume, the guard, no secret kept anywhere; (phase 3) the file list, a save refused after a terminal edit, the journal surviving a restart, a terminal edit reaching the page's events socket in about 160 ms; (phase 4) Rallly indexed in a real workspace with an edit searchable in about 300 ms, and the corpus: all six forks at their pins indexed in real workspaces, Rallly and Documenso held to under 30 s and 100 ms, 21 hand-labelled symbols checked. Needs Docker 28+ and the internet | about 5 min |
+| `pnpm test:e2e` | 19 recorded walkthroughs of each phase's *Try it*, under the production security policy (1 needs a real API: CI, or a running `pnpm dev`) | about 40 s |
+| `pnpm test:perf` | The canvas with 500 nodes, panned and zoomed: frame times, long tasks, input to paint. Headless (as on CI) only catches large regressions; `PERF_REAL=1 pnpm test:perf` opens a real window on your GPU for about 30 s, which is what decides. Then (phase 4) symbol search on 100,000 names, run alone: p95 under 100 ms (13.6 ms) | about 45 s |
+| `pnpm test:visual` | 130 screenshots in both themes against approved baselines, plus accessibility checks (axe): every catalogue story, and the project page's screens (empty, 1280 × 800, 500 nodes, review open, full screen, workspace popover; the Code view, a conflict, quick-open; the index's progress, the command palette) | about 2 min |
 | `pnpm --filter @flowcanvas/control-plane test:idle-real` | The 10-minute idle sleep in real time, nothing faked | about 12 min |
-| `pnpm size` | After `pnpm build`: the web bundle against its budgets (first load, the project page, the terminal) | instant |
+| `pnpm size` | After `pnpm build`: the web bundle against its budgets (first load, the project page, the terminal, the editor, the dialogs) | instant |
+| `pnpm corpus:fetch` | The six corpus forks at their pins into `~/.cache/flowcanvas/corpus` (outside `/tmp`, kept across restarts), for working on the engine against real projects | about 1 min the first time |
 | `pnpm workspace:resources` | Your laptop against Flowcanvas's budget | instant |
 | `pnpm workspace:clean` | Removes test leftovers and old workspace images; `--all --yes` removes everything of Flowcanvas's | — |
 
@@ -115,6 +116,11 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 - 🟡 **Autosave** for when you forget: after 5 s without typing, and on switching file, view or window (a switch in the status bar). Unsaved changes are also kept in the workspace and the browser, so closing the tab loses nothing: reopening restores them, with a note.
 - 🟡 **Changes from the terminal** appear in the editor at once; with unsaved changes, a banner offers **Keep mine** or **Load the workspace's version**, and nothing is overwritten silently. A file deleted in the workspace says so (Close, or Save it again). New and deleted files show in the tree.
 
+### Search and the project index (phase 4)
+- 🟡 **The project index:** every TypeScript, JavaScript, CSS, JSON, HTML, Markdown and MDX file is parsed in the workspace, and every other file is counted. Only changed files are parsed again, and edits are searchable within about a third of a second. Rallly is ready about 3 s after the project opens, and Documenso about 4 s.
+- 🟡 **⌘K (Ctrl+K), or Search in the top bar:** symbols (functions, components, classes, methods, interfaces, types, enums, constants, Markdown headings) with their kind and place, then files; `#` for files only. Enter opens the top result, and a symbol opens in the Code view with the cursor on its name.
+- 🟡 **Progress:** a chip ("Indexing 61%") with the entry points and on the canvas, and a line in the Code view's status bar, while the first index runs.
+
 ### Design system and quality (phases 1a, 1b)
 - ✅ **Graphite tokens:**
   - generated from `packages/tokens/source` into CSS, plus TypeScript values for code that needs numbers
@@ -129,6 +135,6 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 - ✅ **A strict security policy:** no inline scripts or styles, previews per pull request, and telemetry off.
 
 ### Coming next
-- **Phase 4:** the indexer: every file parsed, symbols searchable in under 100 ms.
+- **Phase 4 is in review** (0.8.0, PR #18): see "Search and the project index" above.
 - **Phase 5:** TypeScript call graphs: callers and callees.
 - **After that:** stage 1 draws real flows from code, and stage 2 adds live frames of the running app.

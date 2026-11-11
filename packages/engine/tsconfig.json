@@ -1,8 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist"
+    "types": ["node"],
+    "noEmit": true
   },
-  "include": ["src"]
+  // Type-check the sources and the bundle script; tsconfig.build.json emits only src.
+  "include": ["src", "scripts"]
 }

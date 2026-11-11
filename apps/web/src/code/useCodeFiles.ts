@@ -96,10 +96,25 @@ function rememberedAutosave(): boolean {
   }
 }
 
+/** A place to show in a file once it's open (a symbol from ⌘K, phase 4): 1-based, columns in UTF-16 units. */
+export interface Position {
+  readonly line: number;
+  readonly column: number;
+}
+
+/** The latest request to show a place; `id` tells a repeated jump to the same place from the last one. */
+export interface Reveal extends Position {
+  readonly path: string;
+  readonly id: number;
+}
+
 export interface CodeFiles {
   readonly files: readonly OpenFile[];
   readonly active: OpenFile | undefined;
-  readonly open: (path: string) => void;
+  /** Opens a file (or shows it if open); with `at`, the editor moves there once the file is shown. */
+  readonly open: (path: string, at?: Position) => void;
+  /** The latest place asked for, for the editor of that file. */
+  readonly reveal: Reveal | undefined;
   readonly show: (path: string) => void;
   readonly close: (path: string) => void;
   readonly save: (path: string) => Promise<void>;
@@ -258,8 +273,15 @@ export function useCodeFiles(
 
   // Paths open or being opened, so two quick opens of one file make one tab (updaters must stay pure).
   const openPaths = useRef(new Set<string>());
+  const [reveal, setReveal] = useState<Reveal | undefined>(undefined);
+  const revealCount = useRef(0);
+
   const open = useCallback(
-    (path: string) => {
+    (path: string, at?: Position) => {
+      if (at !== undefined) {
+        revealCount.current += 1;
+        setReveal({ path, line: at.line, column: at.column, id: revealCount.current });
+      }
       setActivePath(path);
       if (openPaths.current.has(path)) return;
       openPaths.current.add(path);
@@ -643,6 +665,7 @@ export function useCodeFiles(
     files,
     active,
     open,
+    reveal,
     show,
     close,
     save,

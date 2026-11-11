@@ -11,6 +11,14 @@
     "./files": {
       "types": "./dist/files.d.ts",
       "default": "./dist/files.js"
+    },
+    "./agent": {
+      "types": "./dist/agent.d.ts",
+      "default": "./dist/agent.js"
+    },
+    "./watch": {
+      "types": "./dist/watch.d.ts",
+      "default": "./dist/watch.js"
     }
   },
   "files": [

@@ -52,4 +52,16 @@ describe('canvas shortcuts (F, V, H)', () => {
     host.remove();
     expect(taken).toBe(false);
   });
+
+  it('never take a key inside a dialog, list or menu above the canvas (the palette passes keys to its list)', () => {
+    for (const role of ['dialog', 'listbox', 'menu']) {
+      const overlay = document.createElement('div');
+      overlay.setAttribute('role', role);
+      const inner = document.createElement('div');
+      overlay.append(inner);
+      document.body.append(overlay);
+      expect(isCanvasShortcut(key({ key: 'v' }, inner)), role).toBe(false);
+      overlay.remove();
+    }
+  });
 });

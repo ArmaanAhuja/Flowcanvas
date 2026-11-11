@@ -3,6 +3,7 @@
 // it can't set the Host header to something else or leave out Origin, and it doesn't know the token.
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { AgentProblem, LIMITS, parseAgentRequest } from '@flowcanvas/workspace-agent/protocol';
+import { EngineProblem, parseEngineRequest } from '@flowcanvas/engine/protocol';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer } from 'ws';
@@ -23,7 +24,16 @@ import type { WorkspaceHost } from './workspaces.js';
 /** The part of WorkspaceHost the server calls, so tests can pass a fake. */
 export type HostOperations = Pick<
   WorkspaceHost,
-  'create' | 'start' | 'pause' | 'resume' | 'stop' | 'agent' | 'terminal' | 'watch' | 'pressure'
+  | 'create'
+  | 'start'
+  | 'pause'
+  | 'resume'
+  | 'stop'
+  | 'agent'
+  | 'index'
+  | 'terminal'
+  | 'watch'
+  | 'pressure'
 >;
 
 export interface ServerOptions {
@@ -38,6 +48,7 @@ export const BODY_MAX_BYTES = 4 * 1024;
 export const AGENT_BODY_MAX_BYTES = LIMITS.lineBytes;
 const ACTION_PATH = new RegExp(`^/${PROTOCOL_VERSION}/workspaces/([^/]+)/(${ACTIONS.join('|')})$`);
 const AGENT_PATH = new RegExp(`^/${PROTOCOL_VERSION}/workspaces/([^/]+)/agent$`);
+const INDEX_PATH = new RegExp(`^/${PROTOCOL_VERSION}/workspaces/([^/]+)/index$`);
 const TERMINAL_PATH = new RegExp(`^/${PROTOCOL_VERSION}/workspaces/([^/]+)/terminal$`);
 const EVENTS_PATH = new RegExp(`^/${PROTOCOL_VERSION}/workspaces/([^/]+)/events$`);
 
@@ -145,6 +156,21 @@ export function createHostServer(options: ServerOptions): Server {
         return;
       }
       send(response, 200, await options.host.agent(ref, parsed));
+      return;
+    }
+    const indexMatch = request.method === 'POST' ? INDEX_PATH.exec(path) : null;
+    if (indexMatch !== null) {
+      const ref = decodeURIComponent(indexMatch[1] ?? '');
+      const body = await readJson(request, BODY_MAX_BYTES);
+      let parsed;
+      try {
+        parsed = parseEngineRequest(body);
+      } catch (error) {
+        if (!(error instanceof EngineProblem)) throw error;
+        send(response, 200, { ok: false, error: { code: error.code, message: error.message } });
+        return;
+      }
+      send(response, 200, await options.host.index(ref, parsed));
       return;
     }
     const match = request.method === 'POST' ? ACTION_PATH.exec(path) : null;

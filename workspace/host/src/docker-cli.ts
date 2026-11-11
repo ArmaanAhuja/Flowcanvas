@@ -10,7 +10,7 @@ export interface DockerResult {
 /** Runs `docker <args>`. Rejects with DockerFailure when the command fails, HostError when Docker isn't there. */
 export type Docker = (
   args: readonly string[],
-  options?: { timeoutMs?: number; input?: string },
+  options?: { timeoutMs?: number; input?: string | Buffer },
 ) => Promise<DockerResult>;
 
 /** A failed docker command, for the host's own decisions and logs; never shown to the person as is. */

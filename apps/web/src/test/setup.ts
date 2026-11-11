@@ -28,3 +28,9 @@ if (typeof Range !== 'undefined' && typeof Range.prototype.getClientRects !== 'f
   Range.prototype.getClientRects = emptyRects;
   Range.prototype.getBoundingClientRect = () => new DOMRect(0, 0, 0, 0);
 }
+
+// jsdom has no document.execCommand, which CodeMirror calls when it takes focus (phase 4: a symbol from ⌘K
+// focuses the editor). It does nothing in a page that isn't laid out; the walkthroughs focus for real.
+if (typeof document !== 'undefined' && !('execCommand' in document)) {
+  Object.defineProperty(document, 'execCommand', { value: () => false, configurable: true });
+}

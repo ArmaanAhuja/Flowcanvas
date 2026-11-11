@@ -14,6 +14,11 @@ import {
   type AgentRequest,
   type AgentResponse,
 } from '@flowcanvas/workspace-agent/protocol';
+import {
+  isEngineResponse,
+  type EngineRequest,
+  type EngineResponse,
+} from '@flowcanvas/engine/protocol';
 import { ProviderError, type TerminalSocket, type WorkspaceProvider } from './provider.js';
 
 export interface LocalHostBindings {
@@ -60,6 +65,7 @@ function misconfigured(message: string): WorkspaceProvider {
     resume: refuse,
     stop: refuse,
     agent: refuse,
+    index: refuse,
     terminal: refuse,
     events: refuse,
   };
@@ -134,6 +140,13 @@ export function localHostProvider(options: {
       const body: unknown = await response.json().catch(() => undefined);
       // From inside the workspace: checked before anything is passed on.
       if (!isAgentResponse(body)) throw new ProviderError('failed', MESSAGES.unexpected);
+      return body;
+    },
+    async index(ref: string, request: EngineRequest): Promise<EngineResponse> {
+      const response = await call(PATHS.index(ref), request, ACTION_TIMEOUT_MS);
+      const body: unknown = await response.json().catch(() => undefined);
+      // From inside the workspace: checked again here, whatever the host checked.
+      if (!isEngineResponse(request, body)) throw new ProviderError('failed', MESSAGES.unexpected);
       return body;
     },
     async pressure() {

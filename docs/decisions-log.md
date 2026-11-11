@@ -457,3 +457,45 @@ The build plan's technology table and phase 3, and CLAUDE.md's stack line, now s
 **Cloudflare's builds failed at first** (`ERR_PNPM_UNSUPPORTED_ENGINE`): Cloudflare installs Node from its own build variable `NODE_VERSION`, still `24`, not from `.nvmrc`. The owner sets it to `26.13.0` in both Cloudflare projects (ADR 0004 addendum), which are account settings.
 
 **Also found on the way:** a timing-dependent unit test, where the first test of a file waited at most 1 s for CodeMirror's first load. It now allows 10 s, and jsdom gets empty Range geometry so CodeMirror's measuring stops logging errors. Three full parallel runs are clean.
+
+## 9 Nov 2026: phase 4 plan (owner decisions); Node 26 merged
+
+**Node 26** is merged (PR #17, `4829ac5`), with both Cloudflare projects' `NODE_VERSION` set to 26.13.0 by the owner. All checks passed, both Cloudflare builds included.
+
+**Phase 4, the indexer:**
+1. **"A tree-sitter parse of every file"** means every file of a language we ship a grammar for: TypeScript, TSX, JavaScript, JSX, CSS, JSON, HTML and Markdown (owner, Claude's recommendation). Other files are still listed and counted, and the page says honestly how many weren't parsed and why.
+2. **Go** for milestone A.
+
+**Settled by the documents** (applied, CLAUDE.md working-pace rule 4):
+- "Both forks" means **Rallly and Documenso**, stage 0's test repos (build plan, stage 0). All six are measured and reported.
+- **⌘K (Ctrl+K) is the command palette** (design brief §22, Figma 16). In this phase it has Symbols and Files groups. Ctrl/⌘+P stays files only (phase 3).
+- **A symbol opens in the Code view at its line;** the canvas shows code once flows exist (phase 7).
+- **Indexing is not activity:** it never keeps a workspace awake.
+- **"Under 100 ms" is measured both ways,** the engine's query (p95) and the browser's keypress to results; both must pass.
+
+**Phase 4, milestone A** (asked during step 1):
+3. **Markdown: we build the grammar ourselves** (owner). No published package ships it as WebAssembly. `tools/grammars/build-markdown.sh` builds it reproducibly from the grammar's own C source, with every input pinned and checked by SHA-256. It compiles in a container with no network, and the outputs' checksums are committed (ADR 0023).
+4. **MDX is parsed as Markdown** (owner, Claude's recommendation). There are 188 `.mdx` files in the two forks (45 in Rallly, 143 in Documenso), and no maintained MDX grammar. Headings and text are read; embedded JSX components aren't. The engine marks each one as partly read (`mdx-components`), and the page says so.
+5. **Symbols in languages other than TS and JS: Markdown headings only** (owner). CSS, HTML and JSON are parsed and counted, but list no symbols in ⌘K (Claude had also recommended CSS names; the owner chose headings only). TS and JS symbols follow the plan: functions, components, classes, methods, interfaces, types, enums and module-level constants (ADR 0024).
+
+**Settled by the documents** (applied):
+- **Secret files are never indexed** by the agent's rule (CLAUDE.md rule 5). Rallly's `apps/web/.env.test` is one of them.
+- `.mts`/`.cts` are TypeScript and `.mjs`/`.cjs` JavaScript (the same languages), `.htm` is HTML, and extensions match without regard to case (`README.MD`).
+
+## 11 Nov 2026: phase 4, milestone B (settled by the documents, applied)
+
+- **The engine runs inside the workspace** (CLAUDE.md §7), as its own process copied in by the host, and follows changes with its own watcher, so re-indexing works whether or not a page is open (ADR 0025).
+- **Index status never counts as activity; a search does,** like opening a file (decisions log, 9 Nov 2026: indexing is not activity).
+- **The palette lists Symbols first, then Files, and highlights the first result,** because the approved try-it is "⌘K, a function's name, Enter, the Code view at that line".
+- **`#` searches files only** (design brief §22). The other prefixes (`>` commands, `@` nodes, `/` routes) arrive with their groups.
+- **The top bar's search opens the palette** (Figma 06 shows it with ⌘K; brief §22).
+
+## 11 Nov 2026: a faster pace, with nothing dropped (owner)
+
+Claude proposed six ways to go faster after milestone B; the owner decided (CLAUDE.md §4a "Working pace"):
+1. **Accepted: heavy suites on CI.** The laptop runs the fast suites before a push (format, lint, typecheck, all unit tests). Walkthroughs, visual and Docker run on CI, on a draft pull request opened at the phase's first push. A milestone is reported only when CI is green on its last commit; `main` still needs every required check.
+2. **Not accepted:** Turborepo's `--affected` filter while working.
+3. **Not accepted:** shorter docs. They stay as complete as before.
+4. **Accepted:** the test projects (corpus forks) cached outside `/tmp`, so a restart doesn't lose them.
+5. **Not accepted:** a fixed rerun limit for flaky tests. Every flaky test is investigated until it's explained, or recorded with what was checked.
+6. **Accepted:** milestones of 3–4 steps instead of 2–3.

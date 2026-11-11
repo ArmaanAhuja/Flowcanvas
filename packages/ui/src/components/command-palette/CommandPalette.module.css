@@ -1,0 +1,71 @@
+/*
+ * The command palette's own parts (Figma 16); the frame, search row, rows and footer are quick-open's
+ * (QuickOpen.module.css), so the two look the same. Group headers in Caption, a little space between groups.
+ */
+.section + .section {
+  margin-block-start: var(--space-8);
+}
+
+.header {
+  padding: var(--space-4) var(--space-8);
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  font-weight: var(--text-caption-font-weight);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+}
+
+/* "Indexing 400 of 1,958 files…", between the search row and the results: a quiet caption. */
+.note {
+  margin: 0;
+  padding: var(--space-8) var(--space-16) 0;
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+}
+
+/* The kind in words beside its icon, so it isn't carried by the icon alone. */
+.kind {
+  flex: none;
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+}
+
+/* As the folder (QuickOpen.module.css): muted is too faint on the highlight, so the kind steps up too. */
+[data-focused] > .kind,
+[data-hovered] > .kind {
+  color: var(--color-text-secondary);
+}
+
+/* The top result, which Enter opens until the person moves with the arrow keys: shown as highlighted, the same
+   as React Aria's own highlight (QuickOpen.module.css's .row[data-focused]). */
+.top {
+  background: var(--color-surface-selected);
+}
+
+.top svg {
+  color: var(--color-text-primary);
+}
+
+.top > .kind,
+.top > .place {
+  color: var(--color-text-secondary);
+}
+
+/* For screen readers only: the search field's description. */
+.hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The search row's key handler (CommandPalette.tsx): in the DOM, with no box of its own. */
+.keys {
+  display: contents;
+}

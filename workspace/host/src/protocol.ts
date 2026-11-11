@@ -75,6 +75,8 @@ export const PATHS = {
    * (@flowcanvas/workspace-agent/protocol), from the host; the page sends nothing.
    */
   events: (ref: string) => `/${PROTOCOL_VERSION}/workspaces/${encodeURIComponent(ref)}/events`,
+  /** Body: one EngineRequest (@flowcanvas/engine/protocol); answer: its EngineResponse, always 200 (ADR 0025). */
+  index: (ref: string) => `/${PROTOCOL_VERSION}/workspaces/${encodeURIComponent(ref)}/index`,
 } as const;
 
 export function isHostErrorKind(value: unknown): value is HostErrorKind {

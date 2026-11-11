@@ -181,6 +181,44 @@ describe('localHostProvider', () => {
     }
   });
 
+  it('asks the project index, and checks its answer again (phase 4)', async () => {
+    const answer = {
+      ok: true,
+      result: {
+        symbols: [
+          {
+            path: 'src/poll.ts',
+            name: 'createPoll',
+            kind: 'function',
+            container: null,
+            line: 1,
+            column: 17,
+            exported: true,
+          },
+        ],
+        ms: 2,
+      },
+    };
+    const request = { op: 'search', query: 'poll', limit: 5 } as const;
+    const { fetcher, provider } = host(() => json(200, answer));
+    expect(await provider.index(REF, request)).toEqual(answer);
+    const [url, init] = fetcher.mock.calls[0] ?? [];
+    expect(url).toBe(`${URL_}/v1/workspaces/${REF}/index`);
+    expect(init?.body).toBe('{"op":"search","query":"poll","limit":5}');
+
+    for (const nonsense of [
+      {
+        ok: true,
+        result: { symbols: [{ ...answer.result.symbols[0], path: '/etc/passwd' }], ms: 1 },
+      },
+      { ok: true, result: { protocol: 1 } },
+      { ok: false, error: { code: 'pwned', message: 'x' } },
+    ]) {
+      const { provider: other } = host(() => json(200, nonsense));
+      expect(await rejection(other.index(REF, request))).toMatchObject({ kind: 'failed' });
+    }
+  });
+
   it('opens the terminal as a WebSocket upgrade, with the token, at its size', async () => {
     const socket = { binaryType: 'blob' };
     const { fetcher, provider } = host(
