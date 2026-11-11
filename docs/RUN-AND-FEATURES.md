@@ -135,6 +135,5 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 - ✅ **A strict security policy:** no inline scripts or styles, previews per pull request, and telemetry off.
 
 ### Coming next
-- **Phase 4 is in review** (0.8.0, PR #18): see "Search and the project index" above.
-- **Phase 5:** TypeScript call graphs: callers and callees.
+- **Phase 5 (in progress):** TypeScript semantics: go to definition, find references, and a function's callers and callees in the right panel's Calls tab.
 - **After that:** stage 1 draws real flows from code, and stage 2 adds live frames of the running app.

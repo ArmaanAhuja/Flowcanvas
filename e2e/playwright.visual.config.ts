@@ -18,11 +18,15 @@ export default defineConfig({
     ['json', { outputFile: 'reports-data/visual.json' }],
   ],
   // threshold 0: any colour change counts. Playwright's default (0.2) let a whole palette change pass unnoticed.
+  // maxDiffPixels 4 (owner, 12 Nov 2026): under CPU load, Chromium draws 1-2 pixels of an icon's anti-aliased edge
+  // 1-3 colour levels differently (2.5% of runs at heavy load, none at normal load; investigated in phase 4). Any
+  // real change, such as a moved row, a colour or a missing icon, is hundreds of pixels.
   expect: {
     toHaveScreenshot: {
       animations: 'disabled',
       caret: 'hide',
       threshold: 0,
+      maxDiffPixels: 4,
       stylePath: './visual/screenshot.css',
     },
   },

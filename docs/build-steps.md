@@ -12381,3 +12381,111 @@ pnpm test:e2e -- try-it/phase-4.spec.ts
 - **Laptop:** heavy runs were for investigation only, one at a time; load under 3.
 
 **Commit:** `chore(release): phase 4 report, 0.8.0, in review` (with the fixes from CI).
+
+## Phase 5 — TypeScript semantics
+
+**From the build plan:**
+- **Build:** TypeScript compiler API service: definitions, references, type-resolved call edges; callers and callees panel.
+- **Done when:** callers and callees for 20 hand-picked functions match a manual check.
+- **Try it:** right-click a function → Callers; compare with your own reading of the code.
+
+**Decisions** (decisions log, 12 Nov 2026):
+- **The right panel's Calls tab** (Figma's inspector) shows the callers and callees of the function at the cursor.
+- **Project code only, honestly:** calls into packages that aren't installed show as unresolved, never guessed, and nothing installs by itself.
+- **Rendering counts as a call,** marked "renders".
+- **Claude picks and labels the 20 functions** (10 in Rallly, 10 in Documenso).
+- **TypeScript 6's compiler API:** upgrade-later 3 checked; TS 7's API isn't stable.
+- **Every row carries how it's known:** resolved or unresolved.
+
+**Expected outcome:**
+- In the Code view, right-click a function's name. **Callers** opens the right panel's Calls tab: who calls it, and who renders it if it's a component, each with its place and how it's known. **Callees** lists what it calls.
+- Clicking a row opens that place.
+- **Go to definition** (F12) and **Find references** (Shift+F12) work across the project, through path aliases and re-exports.
+- After an edit, the answers follow it, as search does.
+
+**Concepts this phase introduces** (each with a primer in its step):
+- **The TypeScript compiler API and language service:** programs, type checkers, symbols, declarations. https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API
+- **tsconfig projects:** one program per `tsconfig.json`, so `paths` aliases and `jsx` settings apply. https://www.typescriptlang.org/tsconfig/
+- **Call hierarchies:** incoming and outgoing calls, as language servers define them. https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_prepareCallHierarchy
+- **Precision and recall** against hand labels.
+
+**Scope:**
+- **In:**
+  - the compiler service in the engine (per-tsconfig programs, kept current on changes)
+  - definition, references, callers (calls and renders) and callees, with provenance
+  - the API through the host and control plane
+  - the Code view's context menu and keys, the Calls tab
+  - the corpus check, the walkthrough
+- **Out:**
+  - the graph model and canvas edges (phase 6)
+  - framework connectors (routes, tRPC, ORM; stage 1)
+  - runtime evidence
+  - automatic dependency installs
+  - TypeScript 7
+
+### Steps (planned)
+
+| # | Step | Milestone | Status |
+| --- | --- | --- | --- |
+| 0 | The plan and decisions; branch; the visual-test pixel tolerance (owner) | A | done (Claude, 12 Nov) |
+| 1 | Spike: the TypeScript language service in the workspace on both forks: per-tsconfig programs, memory, time to first answer, the bundle's size. ADR 0026 | A | *next* |
+| 2 | The engine: definition, references, callers and callees (calls and renders) with provenance; kept current on changes | A | *planned* |
+| 3 | The API through the host and control plane | A | *planned* |
+| 4 | UI: the editor's context menu, and the Calls tab in the design system | B | *planned* |
+| 5 | The page: right-click → Callers or Callees; F12; Shift+F12; rows open their place | B | *planned* |
+| 6 | Corpus: 20 hand-labelled functions in real workspaces; the walkthrough, screens, Figma differences | B | *planned* |
+| 7 | Close: report, 0.9.0 | B | *planned* |
+
+### How each Done-when item is proven
+
+| Item | Test |
+| --- | --- |
+| Callers and callees for 20 hand-picked functions match a manual check | Docker corpus test against `corpus/labels/calls.json`: every labelled caller and callee found, and nothing found that the labels don't have, per function |
+| Right-click → Callers | Walkthrough `try-it/phase-5.spec.ts` |
+| Definitions and references | Engine unit tests on fixtures: path aliases, re-exports, methods, overloads, JSX, a dynamic call left unresolved |
+
+### Risks (checked at every milestone)
+
+| # | Risk | How we keep it in check | Status |
+| --- | --- | --- | --- |
+| R1 | The compiler needs too much memory or time on large projects | Measured in the spike on both forks within the workspace's 4 GiB; programs built on first use, one per tsconfig | open |
+| R2 | Without installed dependencies, calls into packages can't be resolved | Shown honestly as unresolved (owner); measured how many of the labelled calls it affects | open |
+| R3 | The engine's bundle grows by the TypeScript library | Measured in the spike; copied only when the engine changes | open |
+| R4 | **Laptop:** a language service per running workspace | Built on first use, freed with the workspace; the resource guard still applies | open |
+
+### Step 5.0 — The plan, the owner's decisions, and a pixel tolerance for anti-aliasing (done by Claude)
+
+**Goal:** start phase 5 with its plan and the owner's answers recorded. Also land the owner's fix for the one-off visual failures, which turned `main`'s CI red after phase 4's merge.
+
+**What a person can do now:** nothing new in the app. The visual suite no longer fails on 1–2 anti-aliased pixels.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `e2e/playwright.visual.config.ts` | `maxDiffPixels: 4` (owner, 12 Nov 2026), with the reason |
+| `docs/decisions-log.md`, `docs/upgrade-later.md` (3), `docs/STATUS.md`, `docs/RUN-AND-FEATURES.md`, `docs/reports/phase-4.md` | Phase 4 accepted; the tolerance; phase 5's decisions; TS 7 checked |
+| `docs/build-steps.md` | This plan |
+
+**Concepts:**
+- **Anti-aliasing:** shapes' edges are drawn with in-between colours. Chromium's software rasteriser can draw the same edge 1–3 colour levels differently when it's busy, so a screenshot can differ by a pixel or two with nothing changed.
+- **Telling noise from a change:** a real change (a row moved, a colour, a missing icon) touches hundreds of pixels. Four pixels is room for edge noise and nothing else.
+
+**Found and fixed on the way:**
+1. **`main`'s CI failed after phase 4's merge:** the file tree's "large" story, by 1 pixel. Investigated:
+   - The pixels are the first row's icon edge, 1–3 colour levels apart.
+   - Under normal load: 0 failures in 120 runs of the two affected stories. Under 8 parallel browsers (load 17): 6 in 240, each 1–2 pixels.
+   - Chromium's `--disable-low-res-tiling` and `--disable-partial-raster` didn't fix it. The second changes rendering outright.
+   - The owner chose a 4-pixel tolerance.
+
+**Tests:** the visual suite runs on CI on this branch's draft pull request.
+
+**Run and check it:**
+```fish
+pnpm test:visual
+```
+
+**Risks:**
+- **Laptop:** the investigation pushed the load to 17 for about two minutes, then the runs stopped.
+
+**Commit:** `chore: phase 5 plan and owner decisions; visual tests allow 4 anti-aliased pixels`.

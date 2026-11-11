@@ -3,7 +3,7 @@
 - Version: `0.8.0`
 - Branch: `phase/4-indexer`; PR #18
 - Dates: 9–11 Nov 2026
-- Status: **in review**, waiting for the owner's acceptance.
+- Status: **accepted** by the owner on 11 Nov 2026. Merged in PR #18 (`88a3a78`).
 
 ## From the build plan
 
