@@ -1,4 +1,15 @@
-import { Button, Rail, RailButton, ReviewBar, SearchTrigger, Tabs, TopBar } from '@flowcanvas/ui';
+import {
+  Button,
+  ContextMenu,
+  MenuItem,
+  Rail,
+  RailButton,
+  ReviewBar,
+  SearchTrigger,
+  Tabs,
+  TopBar,
+  type CallPlace,
+} from '@flowcanvas/ui';
 import { FileText, Maximize2, Minimize2, PanelRight, SquareTerminal, Target } from 'lucide-react';
 import {
   Suspense,
@@ -23,7 +34,10 @@ import { WorkspacePopover } from './WorkspacePopover';
 import { Shell, useShell } from '../shell/Shell';
 import { IndexChip } from '../symbols/IndexChip';
 import { indexChip, paletteNote } from '../symbols/texts';
+import { askSemantic } from '../symbols/api';
+import { useCalls } from '../symbols/useCalls';
 import { useProjectIndex, useSymbolSearch } from '../symbols/useProjectIndex';
+import { Inspector } from './Inspector';
 import styles from './ProjectPage.module.css';
 
 // The file tree (React Aria's Tree) only when Files is shown, and CodeMirror only when the Code view opens:
@@ -247,6 +261,34 @@ function ReadyProject({
     };
   }, [running, project.id, fetcher]);
 
+  // TypeScript's answers (phase 5): the right-click menu, F12 and Shift+F12 in the Code view, and the Calls tab.
+  const calls = useCalls(project.id, fetcher);
+  const [menu, setMenu] = useState<{
+    readonly at: CallPlace;
+    readonly pointer: { readonly x: number; readonly y: number };
+  } | null>(null);
+  const openPlace = (place: CallPlace) => {
+    if (view !== 'code') setView('code');
+    code.open(place.path, { line: place.line, column: place.column });
+  };
+  const goToDefinition = (at: CallPlace) => {
+    void askSemantic(project.id, 'definition', at, fetcher).then((answer) => {
+      // The first definition in the project; a built-in one (TypeScript's library) has no place to open.
+      const place =
+        'definitions' in answer
+          ? answer.definitions.find((d) => d.place !== null)?.place
+          : undefined;
+      if (place !== undefined && place !== null) openPlace(place);
+      else if ('definitions' in answer && answer.definitions.length > 0)
+        calls.notice('It’s defined in TypeScript’s standard library, not in the project.');
+      else calls.notice(answer.message ?? 'TypeScript found no definition for this.');
+    });
+  };
+  const semantic = (op: 'definition' | 'references' | 'callers' | 'callees', at: CallPlace) => {
+    if (op === 'definition') goToDefinition(at);
+    else void calls.ask(op, at);
+  };
+
   const setView = (next: ProjectView) => {
     // Leaving the Code view settles its files: autosaved, or journalled with autosave off. Only leaving it:
     // arriving must not save anything (restored changes would be written the moment they appear).
@@ -345,20 +387,55 @@ function ReadyProject({
                 files={code}
                 running={running}
                 indexNote={indexChip(index.status)?.detail}
+                onSemanticKey={(op, path, at) => {
+                  semantic(op, { path, ...at });
+                }}
+                onContextMenu={(path, at, pointer) => {
+                  setMenu({ at: { path, ...at }, pointer });
+                }}
               />
             </Suspense>
           ) : (
             <ProjectCanvas status={<IndexChip status={index.status} />} />
           )}
+          {menu !== null && (
+            <ContextMenu
+              isOpen
+              onOpenChange={(open) => {
+                if (!open) setMenu(null);
+              }}
+              at={menu.pointer}
+              aria-label="Code"
+              onAction={(key) => {
+                if (
+                  key === 'definition' ||
+                  key === 'references' ||
+                  key === 'callers' ||
+                  key === 'callees'
+                ) {
+                  semantic(key, menu.at);
+                }
+              }}
+            >
+              <MenuItem id="definition" shortcut="F12">
+                Go to definition
+              </MenuItem>
+              <MenuItem id="references" shortcut="Shift+F12">
+                Find references
+              </MenuItem>
+              <MenuItem id="callers">Callers</MenuItem>
+              <MenuItem id="callees">Callees</MenuItem>
+            </ContextMenu>
+          )}
         </>
       }
       right={
-        <section className={styles.panel} aria-labelledby="inspector">
-          <h2 id="inspector" className={styles.panelTitle}>
-            Inspector
-          </h2>
-          <p className={styles.empty}>{EMPTY.right}</p>
-        </section>
+        <Inspector
+          calls={calls.state}
+          emptyDetails={EMPTY.right}
+          onViewChange={calls.setView}
+          onOpen={openPlace}
+        />
       }
       dock={
         <Dock
