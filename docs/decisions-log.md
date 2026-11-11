@@ -476,6 +476,8 @@ The build plan's technology table and phase 3, and CLAUDE.md's stack line, now s
 **Phase 4, milestone A** (asked during step 1):
 3. **Markdown: we build the grammar ourselves** (owner). No published package ships it as WebAssembly. `tools/grammars/build-markdown.sh` builds it reproducibly from the grammar's own C source, with every input pinned and checked by SHA-256. It compiles in a container with no network, and the outputs' checksums are committed (ADR 0023).
 4. **MDX is parsed as Markdown** (owner, Claude's recommendation). There are 188 `.mdx` files in the two forks (45 in Rallly, 143 in Documenso), and no maintained MDX grammar. Headings and text are read; embedded JSX components aren't. The engine marks each one as partly read (`mdx-components`), and the page says so.
+5. **Symbols in languages other than TS and JS: Markdown headings only** (owner). CSS, HTML and JSON are parsed and counted, but list no symbols in ⌘K (Claude had also recommended CSS names; the owner chose headings only). TS and JS symbols follow the plan: functions, components, classes, methods, interfaces, types, enums and module-level constants (ADR 0024).
 
 **Settled by the documents** (applied):
+- **Secret files are never indexed** by the agent's rule (CLAUDE.md rule 5). Rallly's `apps/web/.env.test` is one of them.
 - `.mts`/`.cts` are TypeScript and `.mjs`/`.cjs` JavaScript (the same languages), `.htm` is HTML, and extensions match without regard to case (`README.MD`).

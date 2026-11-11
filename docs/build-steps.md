@@ -11813,8 +11813,8 @@ pnpm build && pnpm size
 | --- | --- | --- | --- |
 | 0 | The plan and decisions; branch | A | done (Claude, 9 Nov) |
 | 1 | Spike: tree-sitter as WebAssembly and its grammars in the workspace image; `node:sqlite` with FTS5; Rallly's parse time; CPU and memory. ADR 0023 | A | done (Claude, 9 Nov) |
-| 2 | The engine: parse every file, extract symbols, store them in SQLite; incremental by content hash | A | *next* |
-| 3 | The engine's API (status, search) through the host and control plane; re-indexing on watcher events | B | *planned* |
+| 2 | The engine: parse every file, extract symbols, store them in SQLite; incremental by content hash | A | done (Claude, 11 Nov) |
+| 3 | The engine's API (status, search) through the host and control plane; re-indexing on watcher events | B | *next* |
 | 4 | UI: the command palette in the design system (Symbols and Files); the top-bar search field | B | *planned* |
 | 5 | The page: ⌘K, jumping to a symbol, indexing status | C | *planned* |
 | 6 | Corpus tests (Rallly and Documenso under 30 s, all six reported), performance tests, the walkthrough, baselines, the Figma differences | C | *planned* |
@@ -11906,4 +11906,96 @@ tools/grammars/build-markdown.sh --check  # optional: rebuilds Markdown (about 3
 - R3 (image size): about 4.2 MB; confirmed in step 3.
 - **Laptop:** load stayed under 3 during the spike (8 cores). Every container was labelled and removed with `--rm`. 577 GB free disk.
 
-**Commit:** `feat(engine): tree-sitter grammars as WebAssembly, with a reproducible Markdown build` (with this step's docs).
+**Commit:** `0a16797` `feat(engine): tree-sitter grammars as WebAssembly, with a reproducible Markdown build` (with this step's docs).
+
+### Step 4.2 — The engine: symbols, the SQLite index, incremental indexing (done by Claude; ADR 0024)
+
+**Goal:** the engine itself. Parse every file of a shipped grammar, extract its symbols, store everything in SQLite, and on later runs parse only what changed.
+
+**What a person can do now:**
+- **Index a project folder from code:** `new Indexer({ root, store: new IndexStore(file) }).sync(files)` parses it and stores every file's status and symbols. A second `sync` re-parses only changed files; `refresh(changes)` re-checks just the paths the watcher reports.
+- **Nothing in the app yet:** step 3 runs the engine in the workspace and adds search; step 5 adds ⌘K.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `packages/engine/src/symbols.ts` | `extractSymbols(language, tree)`: TS/JS declarations, methods, components; Markdown headings with their parent |
+| `packages/engine/src/store.ts` | `IndexStore`: the `files` and `symbols` tables, the FTS5 name index and its triggers, transactions, counts; rebuilt when `INDEX_FORMAT` changes |
+| `packages/engine/src/indexer.ts` | `Indexer` (`sync`, `refresh`, queued runs, batches that yield); `indexable(path)` (never secret files, ignored folders or escaping paths) |
+| `packages/engine/src/index.ts` | The package's exports |
+| `packages/engine/src/*.test.ts` | 44 new tests (below) |
+| `packages/engine/package.json` | Depends on `@flowcanvas/workspace-agent` for the shared protocol (secret-file rule, ignored folders, limits) |
+| `docs/adr/0024-symbol-index.md` | What a symbol is, the store, incremental indexing, what's never indexed, measurements |
+
+**Concepts:**
+- **Walking a syntax tree:** each node has a type (`function_declaration`) and named fields (`name`, `body`). The extractor visits the module's top-level statements, unwraps `export`, and reads names from fields. https://tree-sitter.github.io/tree-sitter/using-parsers/
+- **External-content FTS5 tables:** the full-text index stores only its own search structure and points at rows of `symbols`. Triggers keep the two in step. https://www.sqlite.org/fts5.html#external_content_tables
+- **Content addressing:** a file's identity for indexing is the hash of its bytes, not its time stamp, so a checkout that rewrites identical files costs nothing.
+- **Cooperative yielding:** a long job split into batches with `await setImmediate()` between them lets other requests on the same thread run. https://nodejs.org/api/timers.html#timerspromisessetimmediatevalue-options
+- **`user_version`:** a number SQLite keeps in the database header, used here as the index's format. https://www.sqlite.org/pragma.html#pragma_user_version
+
+**Found and fixed on the way:**
+1. **An ATX heading's closing hashes** (`## Title ##`) were part of its name. They're dropped now (CommonMark).
+2. **The test that two runs never overlap could not fail:** removing the queue left it passing. A new test records the order of writes during a long sync, and fails without the queue.
+3. **Two of Claude's test expectations were wrong:**
+   - a column count (it is 20)
+   - a namespace member's export flag (`export function` inside a namespace *is* exported)
+
+   The code was right in both.
+4. **`docs/.env.md` is treated as a secret** by the agent's shared rule. The engine follows it rather than having its own rule. The test was corrected.
+5. **The laptop restarted between sessions,** which cleared the scratchpad and its fork clones. They were cloned again at their pins.
+
+**Tests:**
+- **Unit:** 69 in `@flowcanvas/engine`, 44 new:
+  - **symbols (13):**
+    - each declaration kind
+    - locals, destructuring and anonymous defaults left out
+    - export lists, not re-exports
+    - UTF-16 columns after an emoji
+    - symbols around a syntax error
+    - components in TSX and JSX, never in `.ts`
+    - Markdown headings with parents, closing hashes, setext, a code block that isn't a heading
+    - MDX
+    - CSS, JSON and HTML with no symbols
+  - **store (6):**
+    - put replaces symbols
+    - remove keeps FTS in step
+    - all-or-nothing transactions
+    - counts
+    - reopening
+    - an old format rebuilt
+  - **indexer (25):**
+    - every status: parsed, no grammar, binary, too large, syntax errors, a link not followed
+    - progress
+    - a second run parses only changes and drops removed files
+    - same-bytes rewrites unchanged
+    - secret files, ignored folders and escaping paths never stored
+    - refresh
+    - runs queued (write order)
+    - newest content wins
+    - recovery after a failed run
+    - 17 `indexable` cases
+- **Mutation-checked:** following links, dropping the secret rule, dropping the unchanged check, removing the queue, and removing binary detection each fail at least one test.
+- **Both forks** (the real engine in the workspace image, 2 CPUs, 4 GiB, no network):
+
+  | | Rallly | Documenso |
+  | --- | --- | --- |
+  | Cold index | 1.8 s | 3.4 s |
+  | Unchanged | 52 ms | 85 ms |
+  | Symbols | 5,633 | 9,886 |
+  | Peak memory | 155 MB | 166 MB |
+
+  Step 6 makes this a corpus test.
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/engine test   # 69 tests
+```
+
+**Risks:**
+- R1 (speed): closed; 3.4 s with the database included.
+- R2 (laptop): one thread, at most 166 MB.
+- **Laptop:** load under 2 throughout. Containers were labelled and removed. Two empty root-owned folders were left in the scratchpad by Docker mounts; they're harmless and cleared at the next restart.
+
+**Commit:** `feat(engine): symbols, the SQLite index and incremental indexing` (with this step's docs).

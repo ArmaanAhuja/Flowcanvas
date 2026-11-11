@@ -130,6 +130,6 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 
 ### Coming next
 - **Phase 4 (in progress):** the indexer: every file parsed, symbols searchable in under 100 ms.
-  - 🟡 Step 1 done: the engine loads all eight grammars (TS, TSX, JS and JSX, CSS, JSON, HTML, Markdown and MDX) and parses any file; `pnpm --filter @flowcanvas/engine test`. Nothing in the app yet.
+  - 🟡 Milestone A done (the engine, not yet in the app): all eight grammars (TS, TSX, JS and JSX, CSS, JSON, HTML, Markdown and MDX); symbols (functions, components, classes, methods, interfaces, types, enums, constants, Markdown headings) in SQLite; only changed files re-parsed. Documenso indexes in 3.4 s. `pnpm --filter @flowcanvas/engine test`.
 - **Phase 5:** TypeScript call graphs: callers and callees.
 - **After that:** stage 1 draws real flows from code, and stage 2 adds live frames of the running app.

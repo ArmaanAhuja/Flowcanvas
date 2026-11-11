@@ -518,6 +518,9 @@ importers:
 
   packages/engine:
     dependencies:
+      '@flowcanvas/workspace-agent':
+        specifier: workspace:*
+        version: link:../../workspace/agent
       tree-sitter-css:
         specifier: 'catalog:'
         version: 0.25.0
