@@ -145,17 +145,18 @@ afterEach(() => {
 /** The page with src/poll.ts open in the Code view, the cursor on `createPoll` (through ⌘K, as a person would). */
 async function openCreatePoll() {
   const user = userEvent.setup();
+  // The Code view with src/poll.ts open, as the page remembers it. (Through ⌘K, typing key by key, this setup
+  // outlasted the 5 s test limit on CI's busy runner; ⌘K has its own tests, palette.test.tsx.)
+  localStorage.setItem('flowcanvas-view-p-1', 'code');
+  localStorage.setItem(
+    'flowcanvas-code-p-1',
+    JSON.stringify({ open: ['src/poll.ts'], active: 'src/poll.ts' }),
+  );
   render(
     <LabsProvider>
       <ProjectPage projectId="p-1" fetcher={fakeApi()} />
     </LabsProvider>,
   );
-  await screen.findByText('Rallly');
-  await user.keyboard('{Control>}k{/Control}');
-  await screen.findByRole('dialog', { name: 'Command palette' });
-  await user.keyboard('createpoll');
-  await screen.findByRole('option', { name: 'createPoll, function, src/poll.ts:3' });
-  await user.keyboard('{Enter}');
   const host = await waitFor(
     () => {
       const element = document.querySelector<HTMLElement>('[data-region="editor"]');
@@ -166,7 +167,11 @@ async function openCreatePoll() {
     { timeout: 10_000 },
   );
   await waitFor(() => {
-    expect(host.view?.state.selection.main.head).toBe(POLL_TS.indexOf('createPoll'));
+    expect(host.view?.state.doc.toString()).toBe(POLL_TS);
+  });
+  // The cursor on createPoll, as a click there would leave it.
+  act(() => {
+    host.view?.dispatch({ selection: { anchor: POLL_TS.indexOf('createPoll') } });
   });
   return { user, ...host };
 }
