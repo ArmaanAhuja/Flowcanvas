@@ -402,6 +402,55 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
     );
   });
 
+  it('answers callers, callees and definitions from TypeScript in the workspace (phase 5)', async () => {
+    const ask = async (
+      op: 'callers' | 'callees' | 'definition',
+      path: string,
+      line: number,
+      column: number,
+    ) => {
+      const started = Date.now();
+      const response = await host.index(ref, { op, path, line, column });
+      if (!response.ok) throw new Error(response.error.message);
+      return { result: response.result, ms: Date.now() - started };
+    };
+    // createPoll in Rallly at its pin (corpus/labels/symbols.json): the first question builds the web app's program.
+    const first = await ask('callers', 'apps/web/src/features/poll/mutations.ts', 98, 14);
+    if (!('entries' in first.result)) throw new Error('not a calls answer');
+    console.log(
+      `Rallly: createPoll's callers in ${String(first.ms)} ms (the first TypeScript question)`,
+    );
+    expect(first.result.target).toMatchObject({ name: 'createPoll', kind: 'function' });
+    expect(first.result.complete).toBe(true);
+    expect(first.result.entries.map((e) => e.place?.path).sort()).toEqual([
+      'apps/web/src/app/api/private/[...route]/route.ts',
+      'apps/web/src/app/api/v1/[...route]/route.ts',
+    ]);
+    for (const entry of first.result.entries) expect(entry.provenance).toBe('resolved');
+
+    const callees = await ask('callees', 'apps/web/src/features/poll/mutations.ts', 98, 14);
+    if (!('entries' in callees.result)) throw new Error('not a calls answer');
+    console.log(`Rallly: createPoll's callees in ${String(callees.ms)} ms`);
+    const names = callees.result.entries.map((e) => `${e.provenance} ${e.name}`);
+    expect(names).toContain('resolved toPollResponse');
+    // No node_modules, so Prisma's client isn't there: its calls are unresolved, never guessed (owner).
+    expect(names).toContain('unresolved prisma.$transaction');
+
+    // Button in the ui package, rendered across the three packages.
+    const button = await ask('callers', 'packages/ui/src/button.tsx', 18, 7);
+    if (!('entries' in button.result)) throw new Error('not a calls answer');
+    console.log(
+      `Rallly: Button's callers in ${String(button.ms)} ms: ${String(button.result.entries.length)}`,
+    );
+    expect(button.result.entries.length).toBeGreaterThan(100);
+    expect(new Set(button.result.entries.map((e) => e.place?.path.split('/')[0]))).toEqual(
+      new Set(['apps', 'packages']),
+    );
+
+    const definition = await ask('definition', 'apps/web/src/app/api/v1/[...route]/route.ts', 1, 1);
+    expect(definition.ms).toBeLessThan(60_000);
+  });
+
   it('reaches the allowlisted hosts only through the proxy, and nothing else at all', async () => {
     const through = await sh(ref, 'curl -sS -o /dev/null -w "%{http_code}" https://github.com');
     expect(through.out).toBe('200');

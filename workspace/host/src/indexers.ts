@@ -14,6 +14,7 @@ import {
   ENGINE_LIMITS,
   ENGINE_PROTOCOL,
   isEngineResponse,
+  SEMANTIC_OPS,
   type EngineRequest,
   type EngineResponse,
 } from '@flowcanvas/engine/protocol';
@@ -30,6 +31,9 @@ export const ENGINE_MESSAGES = {
 
 /** Status and search answer from memory and the index; anything slower than this is stuck. */
 const TIMEOUT_MS = 15_000;
+/** TypeScript's answers (phase 5): the first about a package builds its programs, which can take seconds; the worker
+ * gives up at 60 s itself, so this is only a backstop. */
+export const SEMANTIC_TIMEOUT_MS = 90_000;
 
 export type StartEngine = (ref: string) => Promise<WorkspaceProcess>;
 
@@ -88,7 +92,8 @@ export function dockerEngine(docker: Docker): StartEngine {
 const engineProtocol: LineProtocol<EngineRequest, EngineResponse> = {
   version: ENGINE_PROTOCOL,
   maxLineBytes: ENGINE_LIMITS.lineBytes,
-  timeoutMs: () => TIMEOUT_MS,
+  timeoutMs: (request) =>
+    (SEMANTIC_OPS as readonly string[]).includes(request.op) ? SEMANTIC_TIMEOUT_MS : TIMEOUT_MS,
   check: (request, body): body is EngineResponse => isEngineResponse(request, body),
   messages: ENGINE_MESSAGES,
 };
