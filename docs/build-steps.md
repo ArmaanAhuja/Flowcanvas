@@ -12319,7 +12319,7 @@ pnpm test:visual
 ```
 
 **Risks:**
-- R2 (laptop): Twenty, the largest fork, indexes in 26 s within the workspace's limits.
+- R2 (laptop): Twenty, the largest fork, indexes in 26 s within the workspace's limits on the laptop, and 40.6 s on CI's slower runner (Medusa: 20.8 and 33.6 s). Only the plan's two forks are held to 30 s, and both meet it on both machines (the report has both columns).
 - **Laptop:**
   - the corpus run took about 3 minutes, with load under 2.5
   - every test workspace was removed after its fork

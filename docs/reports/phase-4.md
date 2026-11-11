@@ -44,18 +44,20 @@
 | **Done when:** symbol search under 100 ms | ✅ **engine p95 4 ms (Rallly), 8 ms (Documenso); browser 20–31 ms** | Corpus test: over 300 searches per fork. Walkthrough: keypress to results, measured in the page |
 | **Try it** | ✅ recorded | `e2e/try-it/phase-4.spec.ts`: ⌘K, "createPoll", Enter, the Code view at Ln 98, Col 14 |
 
-**All six corpus forks** (the same run):
+**All six corpus forks:** the laptop (11 Nov) and CI's runner (run 43062779282, `b18aa54`), each in a real workspace limited to 2 CPUs and 4 GiB:
 
-| Fork | Files | Parsed | Symbols | Ready | Search p95 (engine) |
+| Fork | Files | Parsed | Symbols | Ready: laptop / CI | Search p95 (engine): laptop / CI |
 | --- | --- | --- | --- | --- | --- |
-| Rallly | 1,958 | 1,472 | 5,633 | 2.8 s | 4 ms |
-| Documenso | 2,986 | 2,508 | 9,886 | 4.1 s | 8 ms |
-| LibreChat | 6,675 | 6,406 | 40,702 | 12.0 s | 34 ms |
-| Twenty | 37,879 | 36,054 | 112,855 | 26.3 s | 36 ms |
-| Excalidraw | 1,312 | 861 | 5,053 | 3.3 s | 14 ms |
-| Medusa | 24,260 | 21,611 | 49,819 | 20.8 s | 25 ms |
+| **Rallly** | 1,958 | 1,472 | 5,633 | **2.8 s / 5.1 s** | **4 / 3 ms** |
+| **Documenso** | 2,986 | 2,508 | 9,886 | **4.1 s / 4.8 s** | **8 / 4 ms** |
+| LibreChat | 6,675 | 6,406 | 40,702 | 12.0 s / 17.9 s | 34 / 19 ms |
+| Twenty | 37,879 | 36,054 | 112,855 | 26.3 s / **40.6 s** | 36 / 24 ms |
+| Excalidraw | 1,312 | 861 | 5,053 | 3.3 s / 3.5 s | 14 / 9 ms |
+| Medusa | 24,260 | 21,611 | 49,819 | 20.8 s / **33.6 s** | 25 / 20 ms |
 
-Even the largest fork, Twenty, is ready within 30 s.
+- **The two forks the plan names** meet both targets on both machines.
+- **The largest projects don't fit 30 s on CI's slower runner:** Twenty (38,000 files) and Medusa (24,000) are reported, not held to the target. Making them comfortable is the plan's performance phase (42), with parallel parsing.
+- **Every search on every fork** answers in under 40 ms in the engine.
 
 Like phases 1d and 3, **workspaces run only on the owner's computer** until a cloud provider is connected (upgrade-later 33). CI's walkthroughs use a fake workspace that answers like the engine. The real engine is proven by the Docker tests, which run in CI too.
 
@@ -131,7 +133,7 @@ Like phases 1d and 3, **workspaces run only on the owner's computer** until a cl
   - quick-open lost "v", "h" and "f" when opened from the Graph view
   - quick-open's rows were read out without pauses
   - a highlighted row's folder text was below AA contrast
-- **The first full pass on Twenty takes 26 s:** within 30 s, but the largest projects will need the parallel parsing in the plan's performance phase (42) to stay comfortable.
+- **The largest forks take longer than 30 s on CI's runner** (Twenty 40.6 s, Medusa 33.6 s; 26.3 and 20.8 s on the laptop). The target applies to the plan's two forks, which meet it. The parallel parsing in the plan's performance phase (42) is what brings the largest ones down.
 - **Escape in the palette first clears the text, then closes** (React Aria's search field, as in quick-open).
 
 **Upgrade-later review at phase end:**
@@ -145,11 +147,21 @@ Like phases 1d and 3, **workspaces run only on the owner's computer** until a cl
 
 ## CI
 
-The draft PR (#18) ran CI on every push:
-- milestones A and B were green on their last commits
-- step 5's push failed only the screen baselines (the top bar's new Search button), which step 6 regenerated
+The draft PR (#18) ran CI on every push.
+- **Milestones A and B** were green on their last commits.
+- **Step 5's push** failed only the screen baselines (the top bar's new Search button), which step 6 regenerated.
+- **CI found four real problems,** each fixed and proven (build-steps 4.6 and 4.7):
+  - Enter could open a file instead of the top symbol (reproduced 1 in 20 in the pinned image; 40 of 40 after the fix)
+  - search speed measured under load (now its own performance test)
+  - a broken pipe that could crash the workspace host
+  - the palette's baselines
 
-The result for this closing commit is recorded below when it finishes.
+**Closing commit `b18aa54`: every job green** (run 43062779282):
+- lint, typecheck, unit tests and build
+- visual and accessibility
+- walkthroughs on the deployed preview
+- canvas and search performance (search p95 15.7 ms on 100,000 names)
+- real Docker, with the six-fork corpus
 
 ## Next phase preview
 
