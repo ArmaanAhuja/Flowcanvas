@@ -77,6 +77,8 @@ export function QuickOpen({ isOpen, onOpenChange, files, onOpen }: QuickOpenProp
                   <ListBoxItem
                     id={match.path}
                     textValue={match.path}
+                    // Name, then folder, with a pause: not the row's text run together (phase 4).
+                    aria-label={folder === '' ? name : `${name}, ${folder}`}
                     className={classNames(styles.row)}
                   >
                     <FileText size={14} className={classNames(styles.icon)} aria-hidden="true" />

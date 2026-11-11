@@ -55,3 +55,13 @@ describe('QuickOpen', () => {
     expect(screen.getByText('No files yet.')).toBeTruthy();
   });
 });
+
+describe('QuickOpen rows', () => {
+  it('are named by file and folder, with a pause between them', () => {
+    renderOpen();
+    expect(
+      screen.getByRole('option', { name: 'poll-form.tsx, apps/web/src/components' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'README.md' })).toBeTruthy();
+  });
+});

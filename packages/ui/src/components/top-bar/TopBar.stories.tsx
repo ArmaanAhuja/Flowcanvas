@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { GitBranch } from 'lucide-react';
+import { SearchTrigger } from '../search-trigger/SearchTrigger';
 import { Tabs } from '../tabs/Tabs';
 import { WorkspaceStatus } from '../workspace-status/WorkspaceStatus';
 import { TopBar } from './TopBar';
@@ -13,7 +14,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** As on Figma 06: project and branch, the view switch (Sequence and Code arrive in later phases), status. */
+/** As on Figma 06: project and branch, the view switch (Sequence and Code arrive in later phases), search (phase 4), status. */
 export const Default: Story = {
   args: {
     start: (
@@ -34,6 +35,11 @@ export const Default: Story = {
         ]}
       />
     ),
-    end: <WorkspaceStatus state="running" detail="2 cores" />,
+    end: (
+      <>
+        <SearchTrigger onPress={() => undefined} shortcutLabel="⌘K" keyShortcuts="Meta+K" />
+        <WorkspaceStatus state="running" detail="2 cores" />
+      </>
+    ),
   },
 };

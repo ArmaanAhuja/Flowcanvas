@@ -1,0 +1,35 @@
+/*
+ * The command palette's own parts (Figma 16); the frame, search row, rows and footer are quick-open's
+ * (QuickOpen.module.css), so the two look the same. Group headers in Caption, a little space between groups.
+ */
+.section + .section {
+  margin-block-start: var(--space-8);
+}
+
+.header {
+  padding: var(--space-4) var(--space-8);
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  font-weight: var(--text-caption-font-weight);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+}
+
+/* "Indexing 400 of 1,958 files…", between the search row and the results: a quiet caption. */
+.note {
+  margin: 0;
+  padding: var(--space-8) var(--space-16) 0;
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+}
+
+/* The kind in words beside its icon, so it isn't carried by the icon alone. */
+.kind {
+  flex: none;
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+}
