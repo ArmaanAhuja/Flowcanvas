@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { Parser } from 'web-tree-sitter';
 import { describe, expect, it } from 'vitest';
 import {
-  GRAMMAR_FILES,
+  GRAMMAR_FILE_NAMES,
   languageOf,
   limitationOf,
   loadGrammars,
@@ -68,7 +68,7 @@ describe('limitationOf', () => {
 describe('loadGrammars', () => {
   it('loads every grammar and parses a sample of each without errors', async () => {
     const grammars = await loadGrammars();
-    expect([...grammars.keys()].sort()).toEqual(Object.keys(GRAMMAR_FILES).sort());
+    expect([...grammars.keys()].sort()).toEqual(Object.keys(GRAMMAR_FILE_NAMES).sort());
     const parser = new Parser();
     try {
       for (const [id, sample] of Object.entries(samples) as [

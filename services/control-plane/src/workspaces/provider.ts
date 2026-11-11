@@ -1,4 +1,5 @@
 import type { AgentRequest, AgentResponse } from '@flowcanvas/workspace-agent/protocol';
+import type { EngineRequest, EngineResponse } from '@flowcanvas/engine/protocol';
 
 /**
  * What the control plane needs from whatever runs workspaces (ADR 0016). For now that's the local workspace host
@@ -29,6 +30,11 @@ export interface WorkspaceProvider {
    * missing file, a .env file) come back as `{ ok: false }`; a ProviderError means it couldn't be asked.
    */
   agent(ref: string, request: AgentRequest): Promise<AgentResponse>;
+  /**
+   * Status or search for the project index in a running workspace (phase 4, ADR 0025). The engine's own
+   * refusals come back as `{ ok: false }`; a ProviderError means it couldn't be asked.
+   */
+  index(ref: string, request: EngineRequest): Promise<EngineResponse>;
   /** A shell on a pty in a running workspace, as a WebSocket not yet accepted (ADR 0017). */
   terminal(ref: string, size: { cols: number; rows: number }): Promise<TerminalSocket>;
   /**

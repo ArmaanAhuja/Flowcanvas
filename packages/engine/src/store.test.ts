@@ -130,3 +130,117 @@ describe('IndexStore', () => {
     store.close();
   });
 });
+
+describe('IndexStore.search', () => {
+  const hit = (name: string, extra: Partial<FileSymbol> = {}): FileSymbol => ({
+    ...symbol(name),
+    exported: false,
+    ...extra,
+  });
+
+  function storeWith(entries: Record<string, FileSymbol[]>): IndexStore {
+    const store = new IndexStore(':memory:');
+    store.transaction(() => {
+      for (const [path, symbols] of Object.entries(entries)) store.put(record(path), symbols);
+    });
+    return store;
+  }
+
+  it('ranks an exact name, then a prefix, then a word start, then anywhere', () => {
+    const store = storeWith({
+      'a.ts': [hit('createPollOption'), hit('pollster'), hit('createPoll')],
+      'b.ts': [hit('Poll'), hit('apollo'), hit('poll_id')],
+    });
+    expect(store.search('poll').map((s) => s.name)).toEqual([
+      'Poll',
+      'poll_id', // both prefixes: the shorter name first
+      'pollster',
+      'createPoll',
+      'createPollOption',
+      'apollo',
+    ]);
+    store.close();
+  });
+
+  it('puts exported symbols first, then by kind, then shorter names', () => {
+    const store = storeWith({
+      'a.ts': [
+        hit('usePollList', { kind: 'function' }),
+        hit('usePolls', { kind: 'function', exported: true }),
+        hit('usePollCard', { kind: 'component' }),
+      ],
+    });
+    expect(store.search('usepoll').map((s) => s.name)).toEqual([
+      'usePolls',
+      'usePollList',
+      'usePollCard',
+    ]);
+    store.close();
+  });
+
+  it('ignores case, needs every word, and matches short words too', () => {
+    const store = storeWith({
+      'a.ts': [hit('createPoll'), hit('deletePoll'), hit('createUser'), hit('id'), hit('uuid')],
+    });
+    expect(store.search('CREATE poll').map((s) => s.name)).toEqual(['createPoll']);
+    expect(store.search('id').map((s) => s.name)).toEqual(['id', 'uuid']);
+    expect(store.search('   ')).toEqual([]);
+    store.close();
+  });
+
+  it('takes the query literally: no LIKE wildcards, no full-text syntax', () => {
+    const store = storeWith({
+      'a.ts': [hit('a_b'), hit('axb'), hit('x%y'), hit('quote"d')],
+    });
+    expect(store.search('a_b').map((s) => s.name)).toEqual(['a_b']);
+    expect(store.search('x%').map((s) => s.name)).toEqual(['x%y']);
+    expect(store.search('te"d').map((s) => s.name)).toEqual(['quote"d']);
+    expect(() => store.search('AND OR NOT ( * "')).not.toThrow();
+    store.close();
+  });
+
+  it('returns at most the limit, with path and position', () => {
+    const store = storeWith({
+      'src/poll.ts': Array.from({ length: 80 }, (_, i) => hit(`poll${String(i)}`, { line: i + 1 })),
+    });
+    const found = store.search('poll', 5);
+    expect(found).toHaveLength(5);
+    expect(found[0]).toEqual({
+      path: 'src/poll.ts',
+      name: 'poll0',
+      kind: 'function',
+      container: null,
+      line: 1,
+      column: 1,
+      exported: false,
+    });
+    expect(store.search('poll')).toHaveLength(50);
+    store.close();
+  });
+
+  it('finds the best matches even past the candidate limit', () => {
+    const many = Array.from({ length: 3000 }, (_, i) => hit(`zzpollzz${String(i)}`));
+    const store = storeWith({ 'a.ts': [...many, hit('pollExact'), hit('poll')] });
+    expect(store.search('poll', 2).map((s) => s.name)).toEqual(['poll', 'pollExact']);
+    store.close();
+  });
+
+  it('answers within the 100 ms target on 100,000 symbols', () => {
+    const words = ['create', 'poll', 'user', 'sign', 'field', 'team', 'use', 'render', 'dialog'];
+    const symbols = Array.from({ length: 100_000 }, (_, i) =>
+      hit(`${words[i % 9] ?? ''}${(words[(i * 7) % 9] ?? '').toUpperCase()}${String(i)}`),
+    );
+    const store = storeWith({ 'a.ts': symbols });
+    const times = ['po', 'poll', 'create poll', 'usePoll', 'dialog', 'x'].flatMap((q) =>
+      Array.from({ length: 10 }, () => {
+        const started = performance.now();
+        store.search(q);
+        return performance.now() - started;
+      }),
+    );
+    times.sort((a, b) => a - b);
+    // p95; generous against slow CI machines, still well under 100 ms.
+    expect(times[Math.floor(times.length * 0.95)]).toBeLessThan(100);
+    store.close();
+  });
+});

@@ -2,20 +2,11 @@
 // tree says a name is declared here, and nothing more. Which `save()` a call reaches is phase 5.
 import type { Node, Tree } from 'web-tree-sitter';
 import type { LanguageId } from './grammars.js';
+import { SYMBOL_KIND_NAMES, type SymbolKindName } from './protocol.js';
 
-export const SYMBOL_KINDS = [
-  'function',
-  'component',
-  'class',
-  'method',
-  'interface',
-  'type',
-  'enum',
-  'constant',
-  'namespace',
-  'heading',
-] as const;
-export type SymbolKind = (typeof SYMBOL_KINDS)[number];
+// One list, shared with the protocol that checks the engine's answers.
+export const SYMBOL_KINDS = SYMBOL_KIND_NAMES;
+export type SymbolKind = SymbolKindName;
 
 export interface FileSymbol {
   readonly name: string;

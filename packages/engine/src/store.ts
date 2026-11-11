@@ -2,7 +2,8 @@
 // It's a cache of what the files say, so when its format changes it's simply rebuilt.
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import type { Limitation, LanguageId } from './grammars.js';
-import type { FileSymbol, SymbolKind } from './symbols.js';
+import { ENGINE_LIMITS, type FileStatusName, type SymbolHit } from './protocol.js';
+import { SYMBOL_KINDS, type FileSymbol, type SymbolKind } from './symbols.js';
 
 /**
  * Raise this whenever the schema or the extraction rules change: an index written under another
@@ -10,17 +11,14 @@ import type { FileSymbol, SymbolKind } from './symbols.js';
  */
 export const INDEX_FORMAT = 1;
 
-/** What happened to a file. Only `parsed` files have symbols. */
-export type FileStatus =
-  | 'parsed'
-  /** No grammar for it (SQL, images, Prisma…): listed and counted. */
-  | 'no-grammar'
-  /** Over the size limit, like minified bundles and big lockfiles. */
-  | 'too-large'
-  /** NUL bytes in its first 8 KB: not text, whatever its extension says. */
-  | 'binary'
-  /** Couldn't be read (gone, a link, permissions). */
-  | 'unreadable';
+/**
+ * What happened to a file. Only `parsed` files have symbols.
+ * - `no-grammar`: no grammar for it (SQL, images, Prisma…): listed and counted.
+ * - `too-large`: over the size limit, like minified bundles and big lockfiles.
+ * - `binary`: NUL bytes in its first 8 KB: not text, whatever its extension says.
+ * - `unreadable`: couldn't be read (gone, a link, permissions).
+ */
+export type FileStatus = FileStatusName;
 
 export interface FileRecord {
   readonly path: string;
@@ -163,15 +161,7 @@ export class IndexStore {
   }
 
   symbolsIn(path: string): StoredSymbol[] {
-    return this.#statements.symbolsIn.all(path).map((row) => ({
-      path: String(row.path),
-      name: String(row.name),
-      kind: row.kind as SymbolKind,
-      container: row.container as string | null,
-      line: Number(row.line),
-      column: Number(row.column),
-      exported: row.exported === 1,
-    }));
+    return this.#statements.symbolsIn.all(path).map(toHit);
   }
 
   /** Records a file and replaces its symbols. Call inside `transaction`. */
@@ -243,7 +233,121 @@ export class IndexStore {
     };
   }
 
+  /**
+   * Symbols whose names contain every word of `query`, best first (ADR 0025): an exact name, then a
+   * prefix, then a match at a word start (`poll` in `createPoll`), then anywhere; within each, exported
+   * first, then by kind, then shorter names. Case is ignored.
+   */
+  search(query: string, limit: number = ENGINE_LIMITS.defaultResults): SymbolHit[] {
+    const words = query
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((word) => word !== '');
+    if (words.length === 0) return [];
+    const rows = new Map<number, Record<string, unknown>>();
+    const take = (found: Record<string, unknown>[]) => {
+      for (const row of found) rows.set(Number(row.id), row);
+    };
+    // Names that start with the whole query first, so a short query's best matches are never cut off
+    // by the candidate limit below.
+    const whole = words.join(' ');
+    take(this.#prefix.all(`${escapeLike(whole)}%`, CANDIDATES));
+    if (words.every((word) => word.length >= 3)) {
+      // Trigram full text: any three or more letters, quoted so nothing in them is FTS syntax.
+      const match = words.map((word) => `"${word.replaceAll('"', '""')}"`).join(' AND ');
+      take(this.#trigram.all(match, CANDIDATES));
+    } else {
+      // A word under three letters is below the trigram index: scan the names (fast at this size).
+      const where = words.map(() => "name LIKE ? ESCAPE '\\'").join(' AND ');
+      take(
+        this.#db
+          .prepare(`SELECT * FROM symbols WHERE ${where} LIMIT ?`)
+          .all(...words.map((word) => `%${escapeLike(word)}%`), CANDIDATES),
+      );
+    }
+    return rankHits(
+      [...rows.values()].map(toHit).filter((hit) => {
+        const name = hit.name.toLowerCase();
+        return words.every((word) => name.includes(word));
+      }),
+      words,
+    ).slice(0, limit);
+  }
+
+  get #prefix(): StatementSync {
+    return (this.#cachedPrefix ??= this.#db.prepare(
+      "SELECT * FROM symbols WHERE name LIKE ? ESCAPE '\\' ORDER BY length(name) LIMIT ?",
+    ));
+  }
+
+  get #trigram(): StatementSync {
+    return (this.#cachedTrigram ??= this.#db.prepare(
+      `SELECT s.* FROM symbol_names JOIN symbols s ON s.id = symbol_names.rowid
+       WHERE symbol_names MATCH ? LIMIT ?`,
+    ));
+  }
+
+  #cachedPrefix: StatementSync | undefined;
+  #cachedTrigram: StatementSync | undefined;
+
   close(): void {
     this.#db.close();
   }
+}
+
+/** Candidates fetched per query before ranking: far more than a page of results, small enough to rank at once. */
+const CANDIDATES = 2000;
+
+function toHit(row: Record<string, unknown>): StoredSymbol {
+  return {
+    path: String(row.path),
+    name: String(row.name),
+    kind: row.kind as SymbolKind,
+    container: row.container as string | null,
+    line: Number(row.line),
+    column: Number(row.column),
+    exported: row.exported === 1,
+  };
+}
+
+/** `%`, `_` and the escape itself, taken literally in a LIKE pattern. */
+function escapeLike(text: string): string {
+  return text.replace(/[\\%_]/g, (character) => `\\${character}`);
+}
+
+/** Where `word` starts a word of `name`: after `_`, `-`, `.`, a space, or at a lower-to-upper case step. */
+function atWordStart(name: string, word: string): boolean {
+  const lower = name.toLowerCase();
+  for (let at = lower.indexOf(word); at !== -1; at = lower.indexOf(word, at + 1)) {
+    if (at === 0) return true;
+    const before = name.charAt(at - 1);
+    const here = name.charAt(at);
+    if (/[\s_\-.]/.test(before) || (/[a-z0-9]/.test(before) && /[A-Z]/.test(here))) return true;
+  }
+  return false;
+}
+
+const KIND_ORDER = new Map<string, number>(SYMBOL_KINDS.map((kind, i) => [kind, i]));
+
+/** Best first; ties broken by kind, name length, path and line so the order never wobbles. */
+export function rankHits<T extends SymbolHit>(hits: readonly T[], words: readonly string[]): T[] {
+  const whole = words.join(' ');
+  const tier = (hit: T): number => {
+    const name = hit.name.toLowerCase();
+    if (name === whole) return 0;
+    if (name.startsWith(whole)) return 1;
+    return words.every((word) => atWordStart(hit.name, word)) ? 2 : 3;
+  };
+  return hits
+    .map((hit) => ({ hit, tier: tier(hit) }))
+    .sort(
+      (a, b) =>
+        a.tier - b.tier ||
+        Number(b.hit.exported) - Number(a.hit.exported) ||
+        (KIND_ORDER.get(a.hit.kind) ?? 99) - (KIND_ORDER.get(b.hit.kind) ?? 99) ||
+        a.hit.name.length - b.hit.name.length ||
+        a.hit.path.localeCompare(b.hit.path) ||
+        a.hit.line - b.hit.line,
+    )
+    .map(({ hit }) => hit);
 }

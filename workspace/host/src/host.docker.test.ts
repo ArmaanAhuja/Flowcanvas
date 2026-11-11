@@ -339,6 +339,69 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
     }
   });
 
+  it('indexes Rallly in under 30 seconds, finds a function, and follows an edit (phase 4)', async () => {
+    // A canary secret: it must never reach the index (CLAUDE.md rule 5).
+    await sh(ref, 'printf "FLOWCANVAS_CANARY=phase4-canary-7f3a\\n" > /workspace/project/.env');
+    const status = async () => {
+      const response = await host.index(ref, { op: 'status' });
+      if (!response.ok || !('state' in response.result)) throw new Error('no status');
+      return response.result;
+    };
+    const search = async (query: string) => {
+      const response = await host.index(ref, { op: 'search', query, limit: 10 });
+      if (!response.ok || !('ms' in response.result)) throw new Error('no search');
+      return response.result;
+    };
+    const started = Date.now();
+    let current = await status();
+    while (current.state !== 'ready') {
+      expect(current.state).not.toBe('failed');
+      expect(Date.now() - started).toBeLessThan(30_000);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      current = await status();
+    }
+    const total = Date.now() - started;
+    console.log(
+      `Rallly: indexed in ${String(total)} ms (engine pass ${String(current.lastFullMs)} ms, ${String(current.files)} files, ${String(current.symbols)} symbols)`,
+    );
+    expect(total).toBeLessThan(30_000);
+    expect(current.files).toBeGreaterThan(1900);
+    expect(current.symbols).toBeGreaterThan(5000);
+
+    const found = await search('createPoll');
+    expect(found.ms).toBeLessThan(100);
+    expect(found.symbols[0]).toMatchObject({
+      name: 'createPoll',
+      path: 'apps/web/src/features/poll/mutations.ts',
+      kind: 'function',
+    });
+
+    // An edit in the terminal is searchable within a second or two (the build plan: re-index on save).
+    await sh(
+      ref,
+      'printf "\\nexport function phaseFourCanaryFunction() {}\\n" >> /workspace/project/apps/web/src/features/poll/mutations.ts',
+    );
+    const edited = Date.now();
+    while ((await search('phaseFourCanaryFunction')).symbols.length === 0) {
+      if (Date.now() - edited > 5000) {
+        const processes = (await sh(ref, 'ps -eo pid,etimes,args')).out;
+        throw new Error(`the edit wasn't indexed: ${JSON.stringify(await status())}\n${processes}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    console.log(`Rallly: an edit was searchable after ${String(Date.now() - edited)} ms`);
+
+    // Nothing from the .env file anywhere in the index's files, and the index is the workspace user's own.
+    expect((await sh(ref, 'grep -rl phase4-canary /workspace/.flowcanvas || true')).out).toBe('');
+    expect((await sh(ref, 'stat -c "%U %a" /workspace/.flowcanvas/index.db')).out).toMatch(
+      /^node 6\d\d$/,
+    );
+    await sh(
+      ref,
+      'cd /workspace/project && git checkout -- apps/web/src/features/poll/mutations.ts && rm -f .env',
+    );
+  });
+
   it('reaches the allowlisted hosts only through the proxy, and nothing else at all', async () => {
     const through = await sh(ref, 'curl -sS -o /dev/null -w "%{http_code}" https://github.com');
     expect(through.out).toBe('200');

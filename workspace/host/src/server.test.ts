@@ -78,6 +78,11 @@ const fake: HostOperations = {
     if (failWith !== undefined) throw failWith;
     return Promise.resolve({ ok: true, result: { protocol: 1, node: 'v26' } });
   },
+  index: async (ref, request) => {
+    calls.push(`index ${ref} ${JSON.stringify(request)}`);
+    if (failWith !== undefined) throw failWith;
+    return Promise.resolve({ ok: true, result: { symbols: [], ms: 1 } });
+  },
   watch: async (ref) => {
     calls.push(`watch ${ref}`);
     if (failWith !== undefined) throw failWith;
@@ -266,6 +271,44 @@ describe('agent requests', () => {
     expect((await call('POST', PATHS.agent(REF), { body: ok })).status).toBe(200);
     const huge = JSON.stringify({ op: 'write', path: 'a', content: 'x'.repeat(3 * 1024 * 1024) });
     expect((await call('POST', PATHS.agent(REF), { body: huge })).status).toBe(422);
+  });
+});
+
+describe('index requests', () => {
+  it('passes a checked request to the engine and returns its answer', async () => {
+    const body = JSON.stringify({ op: 'search', query: 'poll' });
+    expect(await call('POST', PATHS.index(REF), { body })).toEqual({
+      status: 200,
+      body: JSON.stringify({ ok: true, result: { symbols: [], ms: 1 } }),
+    });
+    expect(calls).toEqual([`index ${REF} {"op":"search","query":"poll","limit":50}`]);
+  });
+
+  it('answers a malformed request itself, without reaching the engine', async () => {
+    const response = await call('POST', PATHS.index(REF), { body: '{"op":"search","limit":5}' });
+    expect(JSON.parse(response.body)).toEqual({
+      ok: false,
+      error: { code: 'invalid_request', message: 'Give something to search for.' },
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it('passes on the host’s own refusal (a sleeping workspace)', async () => {
+    failWith = new HostError('refused', 'This workspace is asleep. Resume it first.');
+    const response = await call('POST', PATHS.index(REF), { body: '{"op":"status"}' });
+    expect(response.status).toBe(409);
+    expect(JSON.parse(response.body)).toEqual({
+      error: { kind: 'refused', message: 'This workspace is asleep. Resume it first.' },
+    });
+  });
+
+  it('needs the token, like every route', async () => {
+    const response = await call('POST', PATHS.index(REF), {
+      body: '{"op":"status"}',
+      headers: { authorization: 'Bearer wrong' },
+    });
+    expect(response.status).toBe(401);
+    expect(calls).toEqual([]);
   });
 });
 

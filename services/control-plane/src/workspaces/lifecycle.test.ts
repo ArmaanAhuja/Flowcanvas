@@ -484,6 +484,7 @@ describe('the resource guard (relievePressure)', () => {
       resume: (ref) => provider.resume(ref),
       stop: (ref) => provider.stop(ref),
       agent: (ref, request) => provider.agent(ref, request),
+      index: (ref, request) => provider.index(ref, request),
       terminal: (ref, size) => provider.terminal(ref, size),
       events: (ref) => provider.events(ref),
     };

@@ -11,6 +11,7 @@ import {
   runArgs,
 } from '@flowcanvas/workspace-image';
 import type { AgentRequest, AgentResponse } from '@flowcanvas/workspace-agent/protocol';
+import type { EngineRequest, EngineResponse } from '@flowcanvas/engine/protocol';
 import {
   Agents,
   dockerAgent,
@@ -20,6 +21,7 @@ import {
 } from './agents.js';
 import { DockerFailure, type Docker } from './docker-cli.js';
 import { socketEngine, type Engine } from './engine.js';
+import { dockerEngine, Indexers } from './indexers.js';
 import { openTerminal, type TerminalSession } from './terminal.js';
 import { HostError } from './errors.js';
 import { COMMIT, type CreateRequest, type CreateResponse, type Pressure } from './protocol.js';
@@ -67,6 +69,8 @@ export interface WorkspaceHostOptions {
   readonly limits?: Parameters<typeof runArgs>[0]['limits'];
   /** The agent connections; by default, the agent copied in and started with docker exec. */
   readonly agents?: Agents;
+  /** The project index in each workspace (phase 4, ADR 0025); by default, the engine bundle through docker exec. */
+  readonly indexers?: Indexers;
   /** The file watchers (phase 3); by default, the agent with --watch through docker exec. */
   readonly watchers?: StartAgent;
   /** The Docker Engine API, for terminals (ADR 0017); by default, Docker's own socket. */
@@ -79,6 +83,7 @@ export class WorkspaceHost {
   readonly #options: WorkspaceHostOptions;
   readonly #locks = new Map<string, Promise<unknown>>();
   readonly #agents: Agents;
+  readonly #indexers: Indexers;
   readonly #engine: Engine;
   readonly #terminals = new Map<string, number>();
   readonly #watchers = new Map<string, Set<AgentProcess>>();
@@ -87,6 +92,7 @@ export class WorkspaceHost {
   constructor(options: WorkspaceHostOptions) {
     this.#options = options;
     this.#agents = options.agents ?? new Agents(dockerAgent(options.docker));
+    this.#indexers = options.indexers ?? new Indexers(dockerEngine(options.docker));
     this.#startWatcher = options.watchers ?? dockerWatcher(options.docker);
     this.#engine = options.engine ?? socketEngine();
   }
@@ -185,6 +191,17 @@ export class WorkspaceHost {
     return this.#agents.call(ref, request);
   }
 
+  /**
+   * Status or search for the project index in a running workspace (ADR 0025). The first call starts the
+   * engine, which indexes the project and then follows its changes until the workspace stops.
+   */
+  async index(ref: string, request: EngineRequest): Promise<EngineResponse> {
+    const state = await this.#known(ref);
+    if (state === 'paused') throw new HostError('refused', MESSAGES.asleep);
+    if (state !== 'running') throw new HostError('refused', MESSAGES.notRunning);
+    return this.#indexers.call(ref, request);
+  }
+
   /** A shell on a pty in a running workspace, in the project folder when there is one (ADR 0017). */
   async terminal(ref: string, size: { cols: number; rows: number }): Promise<TerminalSession> {
     const state = await this.#known(ref);
@@ -244,6 +261,7 @@ export class WorkspaceHost {
   async stop(ref: string): Promise<void> {
     await this.#locked(ref, async () => {
       this.#agents.close(ref);
+      this.#indexers.close(ref);
       this.#endWatchers(ref);
       const state = await this.#known(ref);
       if (state === 'paused') await this.#docker(['unpause', ref]);

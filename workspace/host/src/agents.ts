@@ -3,19 +3,17 @@
 // so its answers are checked like any other untrusted input.
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
-import { createInterface } from 'node:readline';
-import type { Readable, Writable } from 'node:stream';
 import {
   AGENT_PROTOCOL,
   LIMITS,
   isAgentResponse,
   type AgentRequest,
   type AgentResponse,
-  type Envelope,
 } from '@flowcanvas/workspace-agent/protocol';
 import { AGENT_DIR, AGENT_FILES } from '@flowcanvas/workspace-agent/files';
 import type { Docker } from './docker-cli.js';
 import { HostError } from './errors.js';
+import { LineConnections, type LineProtocol, type WorkspaceProcess } from './lines.js';
 
 /** Inside the container. /tmp is a tmpfs, so a restarted container gets a fresh copy. */
 export const AGENT_HOME = '/tmp/flowcanvas-agent';
@@ -32,12 +30,7 @@ export const MESSAGES = {
 } as const;
 
 /** What the host needs from a running agent process; a test passes a local process instead of docker exec. */
-export interface AgentProcess {
-  readonly stdin: Writable;
-  readonly stdout: Readable;
-  kill(): void;
-  onExit(listener: () => void): void;
-}
+export type AgentProcess = WorkspaceProcess;
 
 export type StartAgent = (ref: string) => Promise<AgentProcess>;
 
@@ -91,126 +84,34 @@ export function dockerWatcher(docker: Docker): StartAgent {
   };
 }
 
-interface Pending {
-  readonly resolve: (response: AgentResponse) => void;
-  readonly reject: (error: HostError) => void;
-  readonly timer: NodeJS.Timeout;
-}
-
-class Connection {
-  readonly #process: AgentProcess;
-  readonly #pending = new Map<number, Pending>();
-  #nextId = 1;
-  #closed = false;
-
-  constructor(process: AgentProcess, onClose: () => void) {
-    this.#process = process;
-    const lines = createInterface({ input: process.stdout, crlfDelay: Infinity });
-    lines.on('line', (line) => {
-      this.#receive(line);
-    });
-    process.onExit(() => {
-      this.#closed = true;
-      for (const pending of this.#pending.values()) {
-        clearTimeout(pending.timer);
-        pending.reject(new HostError('failed', MESSAGES.stopped));
-      }
-      this.#pending.clear();
-      onClose();
-    });
-  }
-
-  get closed() {
-    return this.#closed;
-  }
-
-  #receive(line: string): void {
-    let envelope: Partial<Envelope<unknown>>;
-    try {
-      envelope =
-        line.length > LIMITS.lineBytes ? {} : (JSON.parse(line) as Partial<Envelope<unknown>>);
-    } catch {
-      return;
-    }
-    const id = envelope.id;
-    const pending = typeof id === 'number' ? this.#pending.get(id) : undefined;
-    if (pending === undefined || typeof id !== 'number') return;
-    this.#pending.delete(id);
-    clearTimeout(pending.timer);
-    if (envelope.v === AGENT_PROTOCOL && isAgentResponse(envelope.body))
-      pending.resolve(envelope.body);
-    else pending.reject(new HostError('failed', MESSAGES.badAnswer));
-  }
-
-  call(request: AgentRequest): Promise<AgentResponse> {
-    if (this.#closed) return Promise.reject(new HostError('failed', MESSAGES.stopped));
-    const id = this.#nextId++;
-    const timeoutMs = (request.op === 'exec' ? request.timeoutMs : DEFAULT_TIMEOUT_MS) + GRACE_MS;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.#pending.delete(id);
-        reject(new HostError('failed', MESSAGES.noAnswer));
-      }, timeoutMs);
-      this.#pending.set(id, { resolve, reject, timer });
-      const envelope: Envelope<AgentRequest> = { v: AGENT_PROTOCOL, id, body: request };
-      this.#process.stdin.write(`${JSON.stringify(envelope)}\n`);
-    });
-  }
-
-  close(): void {
-    this.#process.kill();
-  }
-}
+const agentProtocol: LineProtocol<AgentRequest, AgentResponse> = {
+  version: AGENT_PROTOCOL,
+  maxLineBytes: LIMITS.lineBytes,
+  timeoutMs: (request) =>
+    (request.op === 'exec' ? request.timeoutMs : DEFAULT_TIMEOUT_MS) + GRACE_MS,
+  check: (_request, body): body is AgentResponse => isAgentResponse(body),
+  messages: MESSAGES,
+};
 
 /** One agent connection per workspace, started on first use and again after the agent stops. */
 export class Agents {
-  readonly #start: StartAgent;
-  readonly #connections = new Map<string, Promise<Connection>>();
+  readonly #connections: LineConnections<AgentRequest, AgentResponse>;
 
   constructor(start: StartAgent) {
-    this.#start = start;
+    this.#connections = new LineConnections(start, agentProtocol, async (connection) => {
+      const hello = await connection.call({ op: 'hello' });
+      if (!hello.ok || !('protocol' in hello.result) || hello.result.protocol !== AGENT_PROTOCOL) {
+        throw new HostError('failed', MESSAGES.wrongVersion);
+      }
+    });
   }
 
-  async call(ref: string, request: AgentRequest): Promise<AgentResponse> {
-    return (await this.#connect(ref)).call(request);
+  call(ref: string, request: AgentRequest): Promise<AgentResponse> {
+    return this.#connections.call(ref, request);
   }
 
   /** Ends the connection, e.g. when the workspace stops. */
   close(ref: string): void {
-    const connection = this.#connections.get(ref);
-    this.#connections.delete(ref);
-    void connection?.then(
-      (c) => {
-        c.close();
-      },
-      () => undefined,
-    );
-  }
-
-  async #connect(ref: string): Promise<Connection> {
-    const existing = this.#connections.get(ref);
-    if (existing !== undefined) {
-      const connection = await existing.catch(() => undefined);
-      if (connection !== undefined && !connection.closed) return connection;
-      this.#connections.delete(ref);
-    }
-    const connecting = (async () => {
-      const connection = new Connection(await this.#start(ref), () => {
-        if (this.#connections.get(ref) === connecting) this.#connections.delete(ref);
-      });
-      const hello = await connection.call({ op: 'hello' });
-      if (!hello.ok || !('protocol' in hello.result) || hello.result.protocol !== AGENT_PROTOCOL) {
-        connection.close();
-        throw new HostError('failed', MESSAGES.wrongVersion);
-      }
-      return connection;
-    })();
-    this.#connections.set(ref, connecting);
-    try {
-      return await connecting;
-    } catch (error) {
-      if (this.#connections.get(ref) === connecting) this.#connections.delete(ref);
-      throw error;
-    }
+    this.#connections.close(ref);
   }
 }

@@ -3,7 +3,10 @@
 export const PACKAGE_NAME = '@flowcanvas/engine';
 
 export {
-  GRAMMAR_FILES,
+  GRAMMAR_FILE_NAMES,
+  packagedGrammarFiles,
+  RUNTIME_FILE_NAME,
+  useGrammarDirectory,
   languageOf,
   limitationOf,
   loadGrammars,
