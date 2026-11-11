@@ -1,0 +1,181 @@
+// The phase 4 corpus test (build plan: "both forks index in under 30 s; symbol search under 100 ms"): each of
+// the six corpus forks (corpus/manifest.json) opened at its pin in a real workspace, through the egress proxy,
+// and indexed by the engine there. Rallly and Documenso must be ready within 30 s of the first request and
+// search within 100 ms (the engine's p95); all six are reported. The hand-labelled symbols
+// (corpus/labels/symbols.json, each read from the source) must be found at their exact place and kind.
+// Needs Docker 28+ and the internet. Run with `pnpm test:docker`. Everything it creates is removed.
+import { randomBytes, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { buildImage } from '@flowcanvas/workspace-image';
+import type { EngineStatus, SearchResult } from '@flowcanvas/engine/protocol';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { findObjects, remove } from './clean.js';
+import { dockerCli } from './docker-cli.js';
+import { WorkspaceHost } from './workspaces.js';
+
+interface Repo {
+  readonly id: string;
+  readonly name: string;
+  readonly fork: string;
+  readonly commit: string;
+}
+interface Label {
+  readonly name: string;
+  readonly kind: string;
+  readonly container: string | null;
+  readonly path: string;
+  readonly line: number;
+  readonly column: number;
+}
+
+const corpus = (file: string): unknown =>
+  JSON.parse(readFileSync(new URL(`../../../corpus/${file}`, import.meta.url), 'utf8'));
+const repos = (corpus('manifest.json') as { repos: Repo[] }).repos;
+const labels = corpus('labels/symbols.json') as Record<string, Label[] | undefined>;
+
+/** The build plan's two forks: held to the targets. The other four are measured and reported. */
+const HELD = new Set(['rallly', 'documenso']);
+const READY_MS = 30_000;
+const SEARCH_P95_MS = 100;
+/** Larger forks may take longer; they're reported, not held, but a pass that never ends is still a failure. */
+const GIVE_UP_MS = 180_000;
+
+const prefix = `fc-test-${randomBytes(4).toString('hex')}`;
+const host = new WorkspaceHost({
+  docker: dockerCli,
+  prefix,
+  image: () => buildImage(),
+  log: () => undefined,
+});
+const report: Record<string, unknown>[] = [];
+
+async function removeWorkspace(ref: string): Promise<void> {
+  await host.stop(ref).catch(() => undefined);
+  for (const object of (await findObjects(dockerCli)).filter(
+    (o) => o.prefix === prefix && o.name.startsWith(ref) && o.kind !== 'image',
+  )) {
+    await remove(dockerCli, object).catch(() => undefined);
+  }
+}
+
+const p95 = (values: number[]) =>
+  [...values].sort((a, b) => a - b)[
+    Math.min(values.length - 1, Math.floor(values.length * 0.95))
+  ] ?? 0;
+
+beforeAll(async () => {
+  await buildImage();
+}, 300_000);
+
+afterAll(async () => {
+  console.log(`\nPhase 4 corpus report\n${JSON.stringify(report, null, 2)}`);
+  for (const object of (await findObjects(dockerCli)).filter((o) => o.prefix === prefix)) {
+    await remove(dockerCli, object).catch(() => undefined);
+  }
+}, 120_000);
+
+describe('the corpus, indexed in real workspaces (phase 4)', { timeout: 420_000 }, () => {
+  for (const repo of repos) {
+    const held = HELD.has(repo.id);
+    it(`${repo.name}: ${held ? 'ready in under 30 s, searched in under 100 ms' : 'indexed and reported'}`, async () => {
+      const workspaceId = randomUUID();
+      const ref = host.refFor(workspaceId);
+      try {
+        const created = await host.create({
+          workspaceId,
+          repoUrl: `https://github.com/${repo.fork}`,
+          commit: repo.commit,
+        });
+        expect(created.cloned).toBe(true);
+
+        const status = async (): Promise<EngineStatus> => {
+          const answer = await host.index(ref, { op: 'status' });
+          if (!answer.ok || !('state' in answer.result)) throw new Error('no status');
+          return answer.result;
+        };
+        const search = async (query: string, limit = 50): Promise<SearchResult> => {
+          const answer = await host.index(ref, { op: 'search', query, limit });
+          if (!answer.ok || !('ms' in answer.result)) throw new Error('no search');
+          return answer.result;
+        };
+
+        // From the first request: copying the engine in, starting it, listing, parsing and storing.
+        const started = Date.now();
+        let current = await status();
+        while (current.state !== 'ready') {
+          expect(current.state, current.message ?? '').not.toBe('failed');
+          expect(Date.now() - started).toBeLessThan(GIVE_UP_MS);
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          current = await status();
+        }
+        const readyMs = Date.now() - started;
+
+        // The hand-labelled symbols: each found by its name at its exact place, with its kind.
+        const expected = labels[repo.id] ?? [];
+        const missing: string[] = [];
+        for (const label of expected) {
+          const { symbols } = await search(label.name, 100);
+          const found = symbols.find(
+            (s) =>
+              s.path === label.path &&
+              s.line === label.line &&
+              s.name === label.name &&
+              s.kind === label.kind &&
+              s.column === label.column &&
+              s.container === label.container,
+          );
+          if (found === undefined) {
+            missing.push(`${label.kind} ${label.name} at ${label.path}:${String(label.line)}`);
+          }
+        }
+
+        // Search speed: every prefix of every labelled name (2 letters up), plus a few common words.
+        const queries = [
+          ...expected.flatMap((label) =>
+            Array.from({ length: Math.max(0, label.name.length - 1) }, (_, i) =>
+              label.name.slice(0, i + 2),
+            ),
+          ),
+          ...['use', 'get', 'create', 'props', 'handler', 'button', 'schema', 'id', 'e', 'type'],
+        ];
+        const engineMs: number[] = [];
+        const roundTripMs: number[] = [];
+        for (let round = 0; round < 2; round += 1) {
+          for (const query of queries) {
+            const asked = performance.now();
+            const result = await search(query);
+            roundTripMs.push(performance.now() - asked);
+            engineMs.push(result.ms);
+          }
+        }
+
+        const row = {
+          repo: repo.id,
+          files: current.files,
+          parsed: current.byStatus.parsed,
+          notParsed: current.files - current.byStatus.parsed,
+          symbols: current.symbols,
+          withSyntaxErrors: current.withSyntaxErrors,
+          partlyRead: current.partlyRead,
+          readyMs,
+          enginePassMs: current.lastFullMs,
+          searches: engineMs.length,
+          searchEngineP95Ms: p95(engineMs),
+          searchRoundTripP95Ms: Math.round(p95(roundTripMs)),
+          labels: `${String(expected.length - missing.length)} of ${String(expected.length)}`,
+        };
+        report.push(row);
+        console.log(JSON.stringify(row));
+
+        expect(missing).toEqual([]);
+        expect(current.byStatus.parsed).toBeGreaterThan(0);
+        if (held) {
+          expect(readyMs).toBeLessThan(READY_MS);
+          expect(p95(engineMs)).toBeLessThan(SEARCH_P95_MS);
+        }
+      } finally {
+        await removeWorkspace(ref);
+      }
+    });
+  }
+});

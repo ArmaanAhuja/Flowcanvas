@@ -1,0 +1,174 @@
+{
+  "rallly": [
+    {
+      "name": "createPoll",
+      "kind": "function",
+      "container": null,
+      "path": "apps/web/src/features/poll/mutations.ts",
+      "line": 98,
+      "column": 14
+    },
+    {
+      "name": "createMemoryStore",
+      "kind": "function",
+      "container": null,
+      "path": "apps/web/src/app/api/middleware/rate-limit.ts",
+      "line": 119,
+      "column": 17
+    },
+    {
+      "name": "AuthPageContainer",
+      "kind": "component",
+      "container": null,
+      "path": "apps/web/src/app/[locale]/(auth)/components/auth-page.tsx",
+      "line": 1,
+      "column": 17
+    },
+    {
+      "name": "RateLimitStoreError",
+      "kind": "class",
+      "container": null,
+      "path": "apps/web/src/app/api/middleware/rate-limit.ts",
+      "line": 45,
+      "column": 14
+    },
+    {
+      "name": "GoogleCalendarService",
+      "kind": "class",
+      "container": null,
+      "path": "apps/web/src/features/calendars/google/service.ts",
+      "line": 9,
+      "column": 14
+    },
+    {
+      "name": "listCalendars",
+      "kind": "method",
+      "container": "GoogleCalendarService",
+      "path": "apps/web/src/features/calendars/google/service.ts",
+      "line": 34,
+      "column": 9
+    },
+    {
+      "name": "CalendarService",
+      "kind": "interface",
+      "container": null,
+      "path": "apps/web/src/features/calendars/types.ts",
+      "line": 1,
+      "column": 18
+    },
+    {
+      "name": "RateLimitWindow",
+      "kind": "type",
+      "container": null,
+      "path": "apps/web/src/app/api/middleware/rate-limit.ts",
+      "line": 23,
+      "column": 13
+    },
+    {
+      "name": "FakeRedis",
+      "kind": "type",
+      "container": null,
+      "path": "apps/web/src/app/api/middleware/fake-redis.ts",
+      "line": 7,
+      "column": 13
+    },
+    {
+      "name": "ACCENT",
+      "kind": "constant",
+      "container": null,
+      "path": "apps/landing/src/components/home/how-it-works/accent.ts",
+      "line": 4,
+      "column": 14
+    },
+    {
+      "name": "🐳 Self-hosting",
+      "kind": "heading",
+      "container": "Rallly",
+      "path": "README.md",
+      "line": 40,
+      "column": 4
+    }
+  ],
+  "documenso": [
+    {
+      "name": "getSigningVolume",
+      "kind": "function",
+      "container": null,
+      "path": "packages/lib/server-only/admin/get-signing-volume.ts",
+      "line": 24,
+      "column": 23
+    },
+    {
+      "name": "TemplateUseDialog",
+      "kind": "component",
+      "container": null,
+      "path": "apps/remix/app/components/dialogs/template-use-dialog.tsx",
+      "line": 114,
+      "column": 17
+    },
+    {
+      "name": "AiApiError",
+      "kind": "class",
+      "container": null,
+      "path": "apps/remix/server/api/ai/detect-fields.client.ts",
+      "line": 45,
+      "column": 14
+    },
+    {
+      "name": "triggerJob",
+      "kind": "method",
+      "container": "BaseJobProvider",
+      "path": "packages/lib/jobs/client/base.ts",
+      "line": 7,
+      "column": 16
+    },
+    {
+      "name": "JobRunIO",
+      "kind": "interface",
+      "container": null,
+      "path": "packages/lib/jobs/client/_internal/job.ts",
+      "line": 48,
+      "column": 18
+    },
+    {
+      "name": "ZipFileEntry",
+      "kind": "type",
+      "container": null,
+      "path": "packages/lib/client-only/create-zip-writer.ts",
+      "line": 3,
+      "column": 13
+    },
+    {
+      "name": "RecipientStatusType",
+      "kind": "enum",
+      "container": null,
+      "path": "packages/lib/client-only/recipient-type.ts",
+      "line": 6,
+      "column": 13
+    },
+    {
+      "name": "APP_DOCUMENT_UPLOAD_SIZE_LIMIT",
+      "kind": "constant",
+      "container": null,
+      "path": "packages/lib/constants/app.ts",
+      "line": 5,
+      "column": 14
+    },
+    {
+      "name": "NEXT_PUBLIC_WEBAPP_URL",
+      "kind": "function",
+      "container": null,
+      "path": "packages/lib/constants/app.ts",
+      "line": 7,
+      "column": 14
+    },
+    {
+      "name": "About Documenso",
+      "kind": "heading",
+      "container": null,
+      "path": "README.md",
+      "line": 39,
+      "column": 4
+    }
+  ]
+}

@@ -22,6 +22,7 @@
     "test:visual": "turbo run build-storybook --filter=@flowcanvas/ui && turbo run build --filter=@flowcanvas/web && pnpm --filter @flowcanvas/e2e --fail-if-no-match test:visual",
     "test:visual:update": "turbo run build-storybook --filter=@flowcanvas/ui && turbo run build --filter=@flowcanvas/web && pnpm --filter @flowcanvas/e2e --fail-if-no-match test:visual --update-snapshots",
     "corpus:check": "pnpm --filter @flowcanvas/corpus --fail-if-no-match check",
+    "corpus:fetch": "pnpm --filter @flowcanvas/corpus --fail-if-no-match run fetch-forks",
     "db:migrate": "pnpm --filter @flowcanvas/control-plane --fail-if-no-match db:migrate",
     "db:status": "pnpm --filter @flowcanvas/control-plane --fail-if-no-match db:status",
     "db:allow": "pnpm --filter @flowcanvas/control-plane --fail-if-no-match db:allow",

@@ -33,3 +33,9 @@
   line-height: var(--text-caption-line-height);
   color: var(--color-text-muted);
 }
+
+/* As the folder (QuickOpen.module.css): muted is too faint on the highlight, so the kind steps up too. */
+[data-focused] > .kind,
+[data-hovered] > .kind {
+  color: var(--color-text-secondary);
+}

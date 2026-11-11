@@ -106,6 +106,13 @@
   color: var(--color-text-primary);
 }
 
+/* On the highlight, muted text is too faint for WCAG AA (axe, phase 4: the palette highlights its first row):
+   the folder steps up to secondary. */
+.row[data-focused] .folder,
+.row[data-hovered] .folder {
+  color: var(--color-text-secondary);
+}
+
 .name {
   flex: none;
   font-family: var(--text-small-font-family);
