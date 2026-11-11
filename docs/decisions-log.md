@@ -489,3 +489,13 @@ The build plan's technology table and phase 3, and CLAUDE.md's stack line, now s
 - **The palette lists Symbols first, then Files, and highlights the first result,** because the approved try-it is "⌘K, a function's name, Enter, the Code view at that line".
 - **`#` searches files only** (design brief §22). The other prefixes (`>` commands, `@` nodes, `/` routes) arrive with their groups.
 - **The top bar's search opens the palette** (Figma 06 shows it with ⌘K; brief §22).
+
+## 11 Nov 2026: a faster pace, with nothing dropped (owner)
+
+Claude proposed six ways to go faster after milestone B; the owner decided (CLAUDE.md §4a "Working pace"):
+1. **Accepted: heavy suites on CI.** The laptop runs the fast suites before a push (format, lint, typecheck, all unit tests). Walkthroughs, visual and Docker run on CI, on a draft pull request opened at the phase's first push. A milestone is reported only when CI is green on its last commit; `main` still needs every required check.
+2. **Not accepted:** Turborepo's `--affected` filter while working.
+3. **Not accepted:** shorter docs. They stay as complete as before.
+4. **Accepted:** the test projects (corpus forks) cached outside `/tmp`, so a restart doesn't lose them.
+5. **Not accepted:** a fixed rerun limit for flaky tests. Every flaky test is investigated until it's explained, or recorded with what was checked.
+6. **Accepted:** milestones of 3–4 steps instead of 2–3.
