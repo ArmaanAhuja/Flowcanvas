@@ -481,3 +481,11 @@ The build plan's technology table and phase 3, and CLAUDE.md's stack line, now s
 **Settled by the documents** (applied):
 - **Secret files are never indexed** by the agent's rule (CLAUDE.md rule 5). Rallly's `apps/web/.env.test` is one of them.
 - `.mts`/`.cts` are TypeScript and `.mjs`/`.cjs` JavaScript (the same languages), `.htm` is HTML, and extensions match without regard to case (`README.MD`).
+
+## 11 Nov 2026: phase 4, milestone B (settled by the documents, applied)
+
+- **The engine runs inside the workspace** (CLAUDE.md §7), as its own process copied in by the host, and follows changes with its own watcher, so re-indexing works whether or not a page is open (ADR 0025).
+- **Index status never counts as activity; a search does,** like opening a file (decisions log, 9 Nov 2026: indexing is not activity).
+- **The palette lists Symbols first, then Files, and highlights the first result,** because the approved try-it is "⌘K, a function's name, Enter, the Code view at that line".
+- **`#` searches files only** (design brief §22). The other prefixes (`>` commands, `@` nodes, `/` routes) arrive with their groups.
+- **The top bar's search opens the palette** (Figma 06 shows it with ⌘K; brief §22).

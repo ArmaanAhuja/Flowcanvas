@@ -131,5 +131,6 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 ### Coming next
 - **Phase 4 (in progress):** the indexer: every file parsed, symbols searchable in under 100 ms.
   - 🟡 Milestone A done (the engine, not yet in the app): all eight grammars (TS, TSX, JS and JSX, CSS, JSON, HTML, Markdown and MDX); symbols (functions, components, classes, methods, interfaces, types, enums, constants, Markdown headings) in SQLite; only changed files re-parsed. Documenso indexes in 3.4 s. `pnpm --filter @flowcanvas/engine test`.
+  - 🟡 Milestone B done (the API and the components, not yet in the page): with `pnpm dev` and a running workspace, `GET /api/projects/<id>/workspace/index/status` and `…/index/search?q=create%20poll` answer from the engine in the workspace, which re-indexes edits in about 300 ms. The catalogue has Shell/CommandPalette and Shell/SearchTrigger. ⌘K in the page arrives in step 5.
 - **Phase 5:** TypeScript call graphs: callers and callees.
 - **After that:** stage 1 draws real flows from code, and stage 2 adds live frames of the running app.
