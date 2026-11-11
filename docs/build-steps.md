@@ -12428,8 +12428,8 @@ pnpm test:e2e -- try-it/phase-4.spec.ts
 | # | Step | Milestone | Status |
 | --- | --- | --- | --- |
 | 0 | The plan and decisions; branch; the visual-test pixel tolerance (owner) | A | done (Claude, 12 Nov) |
-| 1 | Spike: the TypeScript language service in the workspace on both forks: per-tsconfig programs, memory, time to first answer, the bundle's size. ADR 0026 | A | *next* |
-| 2 | The engine: definition, references, callers and callees (calls and renders) with provenance; kept current on changes | A | *planned* |
+| 1 | Spike: the TypeScript language service in the workspace on both forks: per-tsconfig programs, memory, time to first answer, the bundle's size. ADR 0026 | A | done (Claude, 12 Nov) |
+| 2 | The engine: definition, references, callers and callees (calls and renders) with provenance; kept current on changes | A | *next* |
 | 3 | The API through the host and control plane | A | *planned* |
 | 4 | UI: the editor's context menu, and the Calls tab in the design system | B | *planned* |
 | 5 | The page: right-click → Callers or Callees; F12; Shift+F12; rows open their place | B | *planned* |
@@ -12448,9 +12448,9 @@ pnpm test:e2e -- try-it/phase-4.spec.ts
 
 | # | Risk | How we keep it in check | Status |
 | --- | --- | --- | --- |
-| R1 | The compiler needs too much memory or time on large projects | Measured in the spike on both forks within the workspace's 4 GiB; programs built on first use, one per tsconfig | open |
-| R2 | Without installed dependencies, calls into packages can't be resolved | Shown honestly as unresolved (owner); measured how many of the labelled calls it affects | open |
-| R3 | The engine's bundle grows by the TypeScript library | Measured in the spike; copied only when the engine changes | open |
+| R1 | The compiler needs too much memory or time on large projects | Measured in the spike on both forks within the workspace's 4 GiB; programs built on first use, one per tsconfig | **measured:** Rallly 0.65 GB, Documenso 1.07 GB with every program; Twenty runs out of memory with every program, so the service runs in a worker capped at 2.5 GB and builds only the programs a question needs (ADR 0026) |
+| R2 | Without installed dependencies, calls into packages can't be resolved | Shown honestly as unresolved (owner); measured how many of the labelled calls it affects | **in check:** the project's own packages resolve as project code; TypeScript leaves unresolved calls out, so the engine adds them itself (ADR 0026 §5) |
+| R3 | The engine's bundle grows by the TypeScript library | Measured in the spike; copied only when the engine changes | **measured:** +12.9 MB (TypeScript beside the bundle, not in it) |
 | R4 | **Laptop:** a language service per running workspace | Built on first use, freed with the workspace; the resource guard still applies | open |
 
 ### Step 5.0 — The plan, the owner's decisions, and a pixel tolerance for anti-aliasing (done by Claude)
@@ -12489,3 +12489,61 @@ pnpm test:visual
 - **Laptop:** the investigation pushed the load to 17 for about two minutes, then the runs stopped.
 
 **Commit:** `chore: phase 5 plan and owner decisions; visual tests allow 4 anti-aliased pixels`.
+
+### Step 5.1 — Spike: the TypeScript language service in a workspace, on three forks (done by Claude; ADR 0026)
+
+**Goal:** before building on it, find out whether TypeScript's compiler can answer "who calls this, and what does it call" inside a workspace's limits, on monorepos with no `node_modules`, and what that costs.
+
+**What a person can do now:** nothing in the app yet. The design is settled and measured (ADR 0026).
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `docs/adr/0026-typescript-semantics.md` | The measurements and the decisions |
+| (scratchpad) `spike.cjs` | The measuring script; not kept: step 2 builds the engine's service from its findings |
+
+**Concepts:**
+- **A program, a type checker, a language service:**
+  - A *program* is a set of files compiled together under one `tsconfig.json`.
+  - The *type checker* answers what each name refers to.
+  - The *language service* wraps both with the questions an editor asks: definition, references and call hierarchy.
+
+  https://github.com/microsoft/TypeScript/wiki/Using-the-Language-Service-API
+- **Call hierarchy:** incoming calls ("who calls this") and outgoing calls ("what does this call"), with each call site's place. TypeScript counts JSX elements as calls. https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_prepareCallHierarchy
+- **A document registry:** a cache of parsed files shared by several language services, so a file used by five programs is parsed once.
+- **`extends` and `paths`:** how a tsconfig inherits settings and maps import names to files. In a monorepo both usually go through `node_modules`, which a fresh clone doesn't have. https://www.typescriptlang.org/tsconfig/#paths
+- **Worker threads with resource limits:** a JavaScript thread with its own heap, capped (`resourceLimits`), so running out of memory ends only that thread. https://nodejs.org/api/worker_threads.html#new-workerfilename-options
+
+**Found and fixed on the way:**
+1. **The web app's calls to `Button` were missing.** The cause took three steps to find:
+   - The imports resolved to a virtual `node_modules` copy, so the file wasn't the same one as the package's own. Fixed with `paths` to the real files.
+   - The program still had no `.tsx` files from the package, because the web app's config extends `@tsconfig/next`. That's an npm package that isn't installed, so every option was lost, `jsx` included.
+   - Without `jsx`, TypeScript resolves a `.tsx` import but leaves the file out.
+
+   The fix is analysis defaults where an option is unset. After it, `Button` has 573 references in 3 programs.
+2. **Twenty runs out of memory with every program,** at about 3.2 GB. So the service runs in a capped worker and builds only the programs a question needs: the file's own, plus its dependents'.
+3. **TypeScript leaves out calls it can't resolve,** so the engine must find those itself to show them as unresolved (the owner's decision).
+
+**Tests:** a spike: measurements, no committed tests. The measurements are in ADR 0026:
+
+| | Rallly | Documenso | Twenty |
+| --- | --- | --- | --- |
+| Every program built | 4.2 s, 0.65 GB | 7.2 s, 1.07 GB | out of memory at about 3.2 GB |
+| First call hierarchy | 0.15–0.47 s | 0.34–0.46 s | — |
+| After an edit | 45–79 ms | | |
+
+**Checked against the code by hand:**
+- `getSigningVolume` really has no callers.
+- `TemplateUseDialog` is rendered in three places.
+- `createPoll` has two callers.
+
+**Run and check it:** nothing to run in the app.
+
+**Risks:**
+- R1: measured, with the design changed to fit (above).
+- R2: in check.
+- R3: +12.9 MB.
+- **Laptop:** each run was in a workspace-sized container (2 CPUs, 4 GiB, no network); load under 2.5. Twenty's run filled the container's heap, as intended, and didn't touch the laptop's.
+
+**Commit:** `docs: phase 5 spike, the TypeScript language service (ADR 0026)`.
