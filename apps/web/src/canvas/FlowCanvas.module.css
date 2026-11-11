@@ -68,6 +68,14 @@
   pointer-events: none;
 }
 
+/* The index's progress chip (phase 4), top left, clear of the minimap and the toolbar at the bottom. */
+.status {
+  position: absolute;
+  inset-block-start: var(--space-12);
+  inset-inline-start: var(--space-12);
+  z-index: 5;
+}
+
 .banner {
   position: absolute;
   inset-block-start: var(--space-12);

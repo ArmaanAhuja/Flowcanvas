@@ -1,6 +1,15 @@
-import { Button, Rail, RailButton, ReviewBar, Tabs, TopBar } from '@flowcanvas/ui';
+import { Button, Rail, RailButton, ReviewBar, SearchTrigger, Tabs, TopBar } from '@flowcanvas/ui';
 import { FileText, Maximize2, Minimize2, PanelRight, SquareTerminal, Target } from 'lucide-react';
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { fetchTree } from '../code/api';
 import { useWorkspaceEvents } from '../code/events';
 import { useCodeFiles } from '../code/useCodeFiles';
@@ -12,16 +21,24 @@ import { shownState, useWorkspace, type WorkspaceControl } from '../projects/Pro
 import { linkTo } from '../routing/route';
 import { WorkspacePopover } from './WorkspacePopover';
 import { Shell, useShell } from '../shell/Shell';
+import { IndexChip } from '../symbols/IndexChip';
+import { indexChip, paletteNote } from '../symbols/texts';
+import { useProjectIndex, useSymbolSearch } from '../symbols/useProjectIndex';
 import styles from './ProjectPage.module.css';
 
 // The file tree (React Aria's Tree) only when Files is shown, and CodeMirror only when the Code view opens:
 // each in its own chunk, so a project page that never opens them doesn't download them.
 const FilesPanel = lazy(async () => ({ default: (await import('../code/FilesPanel')).FilesPanel }));
 const CodeView = lazy(async () => ({ default: (await import('../code/CodeView')).CodeView }));
-// Quick-open (Ctrl/⌘+P): its own chunk, fetched in the background once the workspace runs, so it's there before the
-// first Ctrl+P. Loading it on that keypress lost the first letters typed (found by the screen test, step 8).
-const loadQuickOpen = () => import('../code/QuickOpenDialog');
-const QuickOpen = lazy(loadQuickOpen);
+// Quick-open (Ctrl/⌘+P) and the command palette (⌘K, phase 4): one chunk of their own (SearchDialogs.ts), fetched in
+// the background once the workspace runs, so it's there before the first keypress. Loading it on the keypress lost
+// the first letters typed (found by the screen test, phase 3 step 8).
+const loadSearchDialogs = () => import('../symbols/SearchDialogs');
+const QuickOpen = lazy(async () => ({ default: (await loadSearchDialogs()).QuickOpen }));
+const CommandPalette = lazy(async () => ({ default: (await loadSearchDialogs()).CommandPalette }));
+
+/** ⌘K on a Mac, Ctrl+K elsewhere; the top bar shows whichever applies. */
+const isMac = () => /Mac|iPhone|iPad/.test(navigator.platform);
 
 // xterm.js only when the dock opens a terminal.
 const WorkspaceTerminal = lazy(async () => ({
@@ -166,8 +183,42 @@ function ReadyProject({
   });
 
   useEffect(() => {
-    if (running) void loadQuickOpen();
+    if (running) void loadSearchDialogs();
   }, [running]);
+
+  // The project index (phase 4): its progress while it indexes, and symbol search for the palette.
+  const index = useProjectIndex(project.id, running, fetcher);
+  const [palette, setPalette] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState('');
+  const [paletteFiles, setPaletteFiles] = useState<readonly string[]>([]);
+  const search = useSymbolSearch(project.id, paletteQuery, palette && running, fetcher);
+  const openPalette = useCallback(() => {
+    setPaletteFiles(running ? [...listed.current] : []);
+    setPalette(true);
+    // The freshest list: the tree may not have been shown yet.
+    if (running) {
+      void fetchTree(project.id, fetcher).then((result) => {
+        if ('files' in result) setPaletteFiles(result.files);
+      });
+    }
+  }, [running, project.id, fetcher]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === 'k'
+      ) {
+        event.preventDefault();
+        openPalette();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, { capture: true });
+    };
+  }, [openPalette]);
 
   // Quick-open, Ctrl/⌘+P: the browser's print is not what anyone wants here.
   const [quickOpen, setQuickOpen] = useState(false);
@@ -216,6 +267,7 @@ function ReadyProject({
           project={project}
           view={view}
           onView={setView}
+          onSearch={openPalette}
           {...(workspacesAvailable ? { workspace: control } : {})}
           fetcher={fetcher}
         />
@@ -246,6 +298,7 @@ function ReadyProject({
             <h2 id="entry-points" className={styles.panelTitle}>
               Entry points
             </h2>
+            <IndexChip status={index.status} className={styles.panelChip} />
             <p className={styles.empty}>{EMPTY.left}</p>
           </section>
         )
@@ -265,12 +318,37 @@ function ReadyProject({
               />
             </Suspense>
           )}
+          {palette && (
+            <Suspense fallback={null}>
+              <CommandPalette
+                isOpen
+                onOpenChange={setPalette}
+                query={paletteQuery}
+                onQueryChange={setPaletteQuery}
+                symbols={search.symbols}
+                symbolsNote={paletteNote(running, index.status, search.problem)}
+                files={paletteFiles}
+                onOpenFile={(path) => {
+                  if (view !== 'code') setView('code');
+                  code.open(path);
+                }}
+                onOpenSymbol={(symbol) => {
+                  if (view !== 'code') setView('code');
+                  code.open(symbol.path, { line: symbol.line, column: symbol.column });
+                }}
+              />
+            </Suspense>
+          )}
           {view === 'code' ? (
             <Suspense fallback={<p className={styles.empty}>Loading the editor…</p>}>
-              <CodeView files={code} running={running} />
+              <CodeView
+                files={code}
+                running={running}
+                indexNote={indexChip(index.status)?.detail}
+              />
             </Suspense>
           ) : (
-            <ProjectCanvas />
+            <ProjectCanvas status={<IndexChip status={index.status} />} />
           )}
         </>
       }
@@ -298,12 +376,15 @@ function ProjectTopBar({
   project,
   view,
   onView,
+  onSearch,
   workspace,
   fetcher,
 }: {
   readonly project: Project;
   readonly view: ProjectView;
   readonly onView: (view: ProjectView) => void;
+  /** Opens the command palette (phase 4). */
+  readonly onSearch: () => void;
   /** Absent where workspaces can't run (staging): no chip at all. */
   readonly workspace?: WorkspaceControl;
   readonly fetcher: typeof fetch;
@@ -332,6 +413,11 @@ function ProjectTopBar({
       }
       end={
         <>
+          <SearchTrigger
+            onPress={onSearch}
+            shortcutLabel={isMac() ? '⌘K' : 'Ctrl K'}
+            keyShortcuts={isMac() ? 'Meta+K' : 'Control+K'}
+          />
           {workspace !== undefined && <WorkspacePopover control={workspace} fetcher={fetcher} />}
           <RailButton
             label="Right panel"
@@ -427,7 +513,7 @@ function Dock({ project, running }: { readonly project: Project; readonly runnin
 }
 
 /** No flows until the project is analysed (phase 4 onwards); the Labs stress test shows labelled examples. */
-function ProjectCanvas() {
+function ProjectCanvas({ status }: { readonly status: ReactNode }) {
   const stressTest = useLabs().isOn('canvas-stress-test');
   const examples = useMemo(() => (stressTest ? exampleGraph() : undefined), [stressTest]);
   return (
@@ -435,6 +521,7 @@ function ProjectCanvas() {
       nodes={examples?.nodes ?? []}
       edges={examples?.edges ?? []}
       empty={<p className={styles.empty}>{EMPTY.canvas}</p>}
+      status={status}
       {...(examples === undefined ? {} : { banner: EXAMPLE_BANNER })}
     />
   );

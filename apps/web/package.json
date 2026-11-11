@@ -36,6 +36,7 @@
     "react-resizable-panels": "catalog:"
   },
   "devDependencies": {
+    "@flowcanvas/engine": "workspace:*",
     "@testing-library/dom": "catalog:",
     "@testing-library/react": "catalog:",
     "@testing-library/user-event": "catalog:",

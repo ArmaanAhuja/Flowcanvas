@@ -30,6 +30,7 @@ import { classNames } from '../../class-names';
 import { rankPaths } from '../quick-open/fuzzy';
 import quickOpen from '../quick-open/QuickOpen.module.css';
 import styles from './CommandPalette.module.css';
+import { FILES_PREFIX } from './prefixes';
 
 /** A symbol found by the project index (the engine's SymbolHit). */
 export interface PaletteSymbol {
@@ -86,8 +87,6 @@ export interface CommandPaletteProps {
   readonly onOpenSymbol: (symbol: PaletteSymbol) => void;
 }
 
-/** `#` at the start limits the palette to files (design brief §22). */
-export const FILES_PREFIX = '#';
 const MOST_FILES = 20;
 
 type Row =

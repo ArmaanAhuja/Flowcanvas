@@ -95,6 +95,8 @@ export interface FlowCanvasProps {
   readonly empty: ReactNode;
   /** Shown above the canvas, e.g. that these are example nodes. */
   readonly banner?: ReactNode;
+  /** Top left over the canvas, e.g. the index's progress chip (phase 4). */
+  readonly status?: ReactNode;
 }
 
 /**
@@ -112,7 +114,7 @@ export function FlowCanvas(props: FlowCanvasProps) {
   );
 }
 
-function Canvas({ nodes: given, edges: givenEdges, empty, banner }: FlowCanvasProps) {
+function Canvas({ nodes: given, edges: givenEdges, empty, banner, status }: FlowCanvasProps) {
   const [tool, setTool] = useState<CanvasTool>('select');
   // React Flow keeps selection in the nodes themselves, so it holds them; a new set replaces them.
   const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>([...given]);
@@ -166,6 +168,7 @@ function Canvas({ nodes: given, edges: givenEdges, empty, banner }: FlowCanvasPr
           {banner}
         </p>
       )}
+      {status !== undefined && <div className={styles.status}>{status}</div>}
       <ReactFlow<CanvasNode, CanvasEdge>
         nodes={nodes}
         edges={edges}

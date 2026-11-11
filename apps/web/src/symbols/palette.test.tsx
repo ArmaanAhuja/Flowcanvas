@@ -1,0 +1,228 @@
+// ⌘K on a project's page (phase 4 step 5), with a fake API: the index's progress, opening the palette by key and
+// from the top bar, a symbol opened in the Code view at its line, and the honest states.
+import { EditorView } from '@codemirror/view';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LabsProvider } from '../labs/LabsProvider';
+import type { Project } from '../projects/api';
+import { ProjectPage } from '../project/ProjectPage';
+import type { IndexStatus, SymbolResult } from './api';
+import { INDEX_TEXT } from './texts';
+
+const V1 = '1'.repeat(64);
+const POLL_TS = '// polls\n\nexport function createPoll() {}\n';
+const CREATE_POLL: SymbolResult = {
+  path: 'src/poll.ts',
+  name: 'createPoll',
+  kind: 'function',
+  container: null,
+  line: 3,
+  column: 17,
+  exported: true,
+};
+
+const project = (state: 'running' | 'sleeping'): Project => ({
+  id: 'p-1',
+  name: 'Rallly',
+  repoUrl: null,
+  repoCommit: null,
+  createdAt: '2026-11-11T09:00:00.000Z',
+  workspace: { id: 'w-1', state, stateChangedAt: '2026-11-11T09:00:00.000Z', failure: null },
+});
+
+const status = (state: IndexStatus['state'], done: number, total: number): IndexStatus => ({
+  state,
+  done,
+  total,
+  files: done,
+  byStatus: { parsed: done, 'no-grammar': 0, 'too-large': 0, binary: 0, unreadable: 0 },
+  symbols: done * 3,
+  withSyntaxErrors: 0,
+  partlyRead: 0,
+  lastFullMs: state === 'ready' ? 1800 : null,
+  message: null,
+});
+
+let statuses: IndexStatus[];
+let statusRequests: number;
+let searches: string[];
+let searchAnswer: { status: number; body: unknown };
+
+function fakeApi(state: 'running' | 'sleeping' = 'running'): typeof fetch {
+  return (input) => {
+    const url = new URL(
+      input instanceof Request ? input.url : input.toString(),
+      'https://flowcanvas.example',
+    );
+    const json = (body: unknown, code = 200) =>
+      Promise.resolve(Response.json(body, { status: code }));
+    if (url.pathname === '/api/projects')
+      return json({ projects: [project(state)], workspacesAvailable: true });
+    if (url.pathname.endsWith('/workspace/index/status')) {
+      statusRequests += 1;
+      // The last one repeats: the index stays where it got to.
+      return json(statuses.length > 1 ? statuses.shift() : statuses[0]);
+    }
+    if (url.pathname.endsWith('/workspace/index/search')) {
+      searches.push(url.searchParams.get('q') ?? '');
+      return json(searchAnswer.body, searchAnswer.status);
+    }
+    if (url.pathname.endsWith('/workspace/tree'))
+      return json({ files: ['src/poll.ts', 'README.md'], truncated: false });
+    if (url.pathname.endsWith('/workspace/file')) {
+      return url.searchParams.get('path') === 'src/poll.ts'
+        ? json({ content: POLL_TS, encoding: 'utf8', version: V1, size: POLL_TS.length })
+        : json({ error: 'There’s nothing at that path.', code: 'not_found' }, 404);
+    }
+    if (url.pathname.endsWith('/workspace/journal/entry'))
+      return json({ error: 'none', code: 'not_found' }, 404);
+    return json({});
+  };
+}
+
+beforeEach(() => {
+  statuses = [status('ready', 2, 2)];
+  statusRequests = 0;
+  searches = [];
+  searchAnswer = { status: 200, body: { symbols: [CREATE_POLL], ms: 2 } };
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(248);
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+  Element.prototype.scrollIntoView = () => undefined;
+});
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  localStorage.clear();
+});
+
+const renderPage = (fetcher: typeof fetch) =>
+  render(
+    <LabsProvider>
+      <ProjectPage projectId="p-1" fetcher={fetcher} />
+    </LabsProvider>,
+  );
+
+const palette = () => screen.findByRole('dialog', { name: 'Command palette' });
+
+describe('the index’s progress', () => {
+  it('shows a chip while indexing, asks again until ready, then says nothing and stops asking', async () => {
+    statuses = [status('indexing', 1240, 2031), status('ready', 2031, 2031)];
+    renderPage(fakeApi());
+    const chips = await screen.findAllByText('Indexing 61%');
+    // Under the Entry points title and over the canvas (design brief, "Still indexing").
+    expect(chips).toHaveLength(2);
+    expect(chips[0]?.getAttribute('title')).toBe('Indexing 1,240 of 2,031 files…');
+    await waitFor(
+      () => {
+        expect(screen.queryByText(/^Indexing/)).toBeNull();
+      },
+      { timeout: 3000 },
+    );
+    const asked = statusRequests;
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    expect(statusRequests).toBe(asked);
+  });
+
+  it('says when indexing stopped, in the engine’s words', async () => {
+    statuses = [
+      {
+        ...status('failed', 10, 20),
+        message: 'Indexing stopped. Reopen the project to try again.',
+      },
+    ];
+    renderPage(fakeApi());
+    const chips = await screen.findAllByText(INDEX_TEXT.stopped);
+    expect(chips[0]?.getAttribute('title')).toBe(
+      'Indexing stopped. Reopen the project to try again.',
+    );
+  });
+
+  it('asks nothing while the workspace isn’t running', async () => {
+    renderPage(fakeApi('sleeping'));
+    await screen.findByText('Rallly');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(statusRequests).toBe(0);
+  });
+});
+
+describe('⌘K', () => {
+  it('opens from the keyboard and from the top bar’s search', async () => {
+    const user = userEvent.setup();
+    renderPage(fakeApi());
+    await screen.findByText('Rallly');
+    await user.keyboard('{Control>}k{/Control}');
+    expect(await palette()).toBeTruthy();
+    await user.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull();
+    });
+    const search = screen.getByRole('button', { name: 'Search' });
+    expect(search.getAttribute('aria-keyshortcuts')).toMatch(/^(Meta|Control)\+K$/);
+    await user.click(search);
+    expect(await palette()).toBeTruthy();
+  });
+
+  it('opens a symbol in the Code view at its line (the Try it)', async () => {
+    const user = userEvent.setup();
+    renderPage(fakeApi());
+    await screen.findByText('Rallly');
+    await user.keyboard('{Control>}k{/Control}');
+    await palette();
+    await user.keyboard('createpoll');
+    await screen.findByRole('option', { name: 'createPoll, function, src/poll.ts:3' });
+    await user.keyboard('{Enter}');
+
+    // The Code view, the file, and the cursor on the name.
+    expect(await screen.findByRole('tab', { name: 'Code', selected: true })).toBeTruthy();
+    const host = await waitFor(
+      () => {
+        const editor = document
+          .querySelector('[data-region="editor"]')
+          ?.shadowRoot?.querySelector('.cm-editor');
+        if (!(editor instanceof HTMLElement)) throw new Error('no editor yet');
+        return editor;
+      },
+      { timeout: 10_000 },
+    );
+    const view = EditorView.findFromDOM(host);
+    await waitFor(() => {
+      expect(view?.state.doc.toString()).toBe(POLL_TS);
+    });
+    await waitFor(() => {
+      const head = view?.state.selection.main.head ?? -1;
+      expect(head).toBe(POLL_TS.indexOf('createPoll'));
+    });
+    expect(
+      within(screen.getByRole('group', { name: 'Editor status' })).getByText('Ln 3, Col 17'),
+    ).toBeTruthy();
+    expect(searches.at(-1)).toBe('createpoll');
+  });
+
+  it('says why symbols aren’t there when the search fails', async () => {
+    searchAnswer = {
+      status: 502,
+      body: { error: 'The project index stopped. Reopen the project to start it again.' },
+    };
+    const user = userEvent.setup();
+    renderPage(fakeApi());
+    await screen.findByText('Rallly');
+    await user.keyboard('{Control>}k{/Control}');
+    await palette();
+    await user.keyboard('poll');
+    expect((await screen.findByRole('status')).textContent).toBe(
+      'Symbols aren’t available: The project index stopped. Reopen the project to start it again.',
+    );
+  });
+
+  it('says to open the workspace when it isn’t running', async () => {
+    const user = userEvent.setup();
+    renderPage(fakeApi('sleeping'));
+    await screen.findByText('Rallly');
+    await user.keyboard('{Control>}k{/Control}');
+    await palette();
+    await user.keyboard('poll');
+    expect((await screen.findByRole('status')).textContent).toBe(INDEX_TEXT.notRunning);
+    expect(searches).toEqual([]);
+  });
+});

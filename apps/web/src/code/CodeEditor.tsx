@@ -8,6 +8,12 @@ export interface CodeEditorProps {
   readonly state: EditorState;
   /** Every change of selection or text, e.g. for the status bar's cursor. */
   readonly onUpdate?: (state: EditorState) => void;
+  /**
+   * A place to move to (a symbol from ⌘K): the cursor goes there, it scrolls to the middle, and the editor takes
+   * focus. Each `id` is applied once, so typing afterwards isn't pulled back.
+   */
+  readonly reveal?:
+    { readonly line: number; readonly column: number; readonly id: number } | undefined;
 }
 
 /**
@@ -15,7 +21,7 @@ export interface CodeEditorProps {
  * stylesheets, which our Content-Security-Policy allows, instead of <style> elements, which it blocks. Token
  * variables and fonts still reach inside. Switching files swaps the state, so each file keeps its own undo.
  */
-export function CodeEditor({ state, onUpdate }: CodeEditorProps) {
+export function CodeEditor({ state, onUpdate, reveal }: CodeEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const update = useRef(onUpdate);
@@ -56,6 +62,20 @@ export function CodeEditor({ state, onUpdate }: CodeEditorProps) {
     }
   }, [state]);
 
+  const revealed = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const current = view.current;
+    if (current === null || reveal === undefined || revealed.current === reveal.id) return;
+    revealed.current = reveal.id;
+    const position = positionOf(current.state, reveal.line, reveal.column);
+    current.dispatch({
+      selection: { anchor: position },
+      effects: EditorView.scrollIntoView(position, { y: 'center' }),
+      userEvent: 'select.reveal',
+    });
+    current.focus();
+  }, [reveal, state]);
+
   return <div ref={host} className={styles.editor} data-region="editor" />;
 }
 
@@ -63,4 +83,14 @@ export function CodeEditor({ state, onUpdate }: CodeEditorProps) {
 export function focusEditor(host: Element | null): void {
   const content = host?.shadowRoot?.querySelector<HTMLElement>('.cm-content');
   content?.focus();
+}
+
+/**
+ * The document offset of a 1-based line and column (UTF-16 units, as the engine and CodeMirror count), kept
+ * inside the document: the file may have changed since it was indexed.
+ */
+export function positionOf(state: EditorState, line: number, column: number): number {
+  const doc = state.doc;
+  const target = doc.line(Math.min(Math.max(1, line), doc.lines));
+  return target.from + Math.min(Math.max(0, column - 1), target.length);
 }

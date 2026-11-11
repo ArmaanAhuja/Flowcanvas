@@ -76,3 +76,9 @@
 .panel .empty {
   padding: 0 var(--space-4);
 }
+
+/* The index's progress chip under the Entry points title (design brief, "Still indexing"). */
+.panelChip {
+  align-self: flex-start;
+  margin-inline: var(--space-4);
+}

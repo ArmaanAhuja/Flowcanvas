@@ -125,9 +125,12 @@ export function restoredText(at: number, now: number = Date.now()): string {
 export function CodeView({
   files,
   running,
+  indexNote,
 }: {
   readonly files: CodeFiles;
   readonly running: boolean;
+  /** The index's progress in words, while it indexes ("Indexing 1,240 of 2,031 files…", phase 4). */
+  readonly indexNote?: string | undefined;
 }) {
   const active = files.active;
   const [cursor, setCursor] = useState('Ln 1, Col 1');
@@ -210,7 +213,14 @@ export function CodeView({
               {active.view.message}
             </p>
           ) : (
-            text !== undefined && <CodeEditor key={active.path} state={text} onUpdate={onUpdate} />
+            text !== undefined && (
+              <CodeEditor
+                key={active.path}
+                state={text}
+                onUpdate={onUpdate}
+                reveal={files.reveal?.path === active.path ? files.reveal : undefined}
+              />
+            )
           )}
           <StatusBar
             aria-label="Editor status"
@@ -227,6 +237,7 @@ export function CodeView({
             }
             end={
               <>
+                {indexNote !== undefined && <span>{indexNote}</span>}
                 {status !== undefined && <span role="status">{status}</span>}
                 <span id="autosave-label">{CODE_TEXT.autosave}</span>
                 <Toggle
