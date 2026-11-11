@@ -12431,10 +12431,10 @@ pnpm test:e2e -- try-it/phase-4.spec.ts
 | 1 | Spike: the TypeScript language service in the workspace on both forks: per-tsconfig programs, memory, time to first answer, the bundle's size. ADR 0026 | A | done (Claude, 12 Nov) |
 | 2 | The engine: definition, references, callers and callees (calls and renders) with provenance; kept current on changes | A | done (Claude, 12 Nov) |
 | 3 | The API through the host and control plane | A | done (Claude, 12 Nov) |
-| 4 | UI: the editor's context menu, and the Calls tab in the design system | B | *next* |
-| 5 | The page: right-click → Callers or Callees; F12; Shift+F12; rows open their place | B | *planned* |
-| 6 | Corpus: 20 hand-labelled functions in real workspaces; the walkthrough, screens, Figma differences | B | *planned* |
-| 7 | Close: report, 0.9.0 | B | *planned* |
+| 4 | UI: the editor's context menu, and the Calls tab in the design system | B | done (Claude, 12 Nov) |
+| 5 | The page: right-click → Callers or Callees; F12; Shift+F12; rows open their place | B | done (Claude, 12 Nov) |
+| 6 | Corpus: 20 hand-labelled functions in real workspaces; the walkthrough, screens, Figma differences | B | done (Claude, 12 Nov) |
+| 7 | Close: report, 0.9.0 | B | *next* |
 
 ### How each Done-when item is proven
 
@@ -12448,7 +12448,7 @@ pnpm test:e2e -- try-it/phase-4.spec.ts
 
 | # | Risk | How we keep it in check | Status |
 | --- | --- | --- | --- |
-| R1 | The compiler needs too much memory or time on large projects | Measured in the spike on both forks within the workspace's 4 GiB; programs built on first use, one per tsconfig | **measured:** Rallly 0.65 GB, Documenso 1.07 GB with every program; Twenty runs out of memory with every program, so the service runs in a worker capped at 2.5 GB and builds only the programs a question needs (ADR 0026) |
+| R1 | The compiler needs too much memory or time on large projects | Measured in the spike on both forks within the workspace's 4 GiB; programs built on first use, one per tsconfig | **measured:** Rallly 0.65 GB, Documenso 1.07 GB with every program; Twenty runs out of memory with every program, so the service runs in a worker capped at 2.5 GB and builds only the programs a question needs (ADR 0026). Step 6: TypeScript's DOM library now loads (it was cut by a file limit): +0.15 GB on Rallly, +0.18 GB on Documenso (laptop, heap after GC) |
 | R2 | Without installed dependencies, calls into packages can't be resolved | Shown honestly as unresolved (owner); measured how many of the labelled calls it affects | **in check:** the project's own packages resolve as project code; TypeScript leaves unresolved calls out, so the engine adds them itself (ADR 0026 §5) |
 | R3 | The engine's bundle grows by the TypeScript library | Measured in the spike; copied only when the engine changes | **measured:** +12.9 MB (TypeScript beside the bundle, not in it) |
 | R4 | **Laptop:** a language service per running workspace | Built on first use, freed with the workspace; the resource guard still applies | **in check:** the worker starts on the first question only, capped at 2.5 GB, and ends with the engine |
@@ -12676,3 +12676,140 @@ pnpm --filter @flowcanvas/workspace-host exec vitest run src/host.docker.test.ts
 - **Laptop:** one Docker run, about 1 minute; load under 2.
 
 **Commit:** `43aa510` `feat(api): TypeScript's answers through the host and control plane`.
+
+### Step 5.4 — The editor's context menu and the Calls panel, in the design system (done by Claude)
+
+**Goal:** the two new components, with every variant in the catalogue, before the page uses them.
+
+**What a person can do now** (`pnpm --filter @flowcanvas/ui storybook`):
+- **Editor / ContextMenu:** a menu at a pointer position, its first item focused, shortcuts on the right.
+- **Shell / CallsPanel:** Callers, Callees, References, Loading and Empty stories.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `packages/ui/src/components/context-menu/ContextMenu.tsx` (+ CSS, stories, tests) | React Aria's Popover against an invisible anchor at the pointer, placed through the CSSOM (our CSP forbids style attributes); the shared Menu's look and keys |
+| `packages/ui/src/components/calls-panel/CallsPanel.tsx` (+ CSS, stories, tests) | The three views as a segmented switch; the function's name, kind and place; rows with a provenance glyph, the name, "calls"/"renders", the kind and the place; callees grouped as the project's, Unresolved (explained) and Built-in (a collapsed Disclosure); a call's other places as links |
+| `packages/engine/src/semantics/semantic-service.ts` | A caller outside any named function is named `<file> (top level)` (owner decision 6) |
+| `docs/decisions-log.md` | The owner's decisions 5–7 and the provenance glyphs |
+
+**Concepts:**
+- **A popover anchored to a point, not an element:** React Aria positions a popover against a trigger element; a zero-size span at the pointer is that element. https://react-spectrum.adobe.com/react-aria/Popover.html
+- **Disclosure:** a section that opens and closes, with `aria-expanded` on its button. https://react-spectrum.adobe.com/react-aria/Disclosure.html
+- **Provenance by form (Graphite):** resolved is a solid line, unresolved an open stub ending in a hollow circle, always with the word beside it.
+
+**Found and fixed on the way:**
+- **Two motion tokens the CSS named didn't exist;** the transition now uses `--duration-hover`.
+
+**Tests:** UI 131 (11 new): the menu opens with its first item focused, runs an item by keyboard, closes on Escape, sits at the pointer; the panel's three views, its groups, opening the right place for each row, the states and the glyphs.
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/ui test
+pnpm --filter @flowcanvas/ui storybook   # Editor/ContextMenu, Shell/CallsPanel
+```
+
+**Risks:** none new. **Laptop:** unit tests only.
+
+**Commits:** `83637c9` `feat(engine): a caller outside any named function is named by its file`; `cc937ae` `feat(ui): ContextMenu at the pointer, and the Calls panel`.
+
+### Step 5.5 — The page: right-click → Callers or Callees, F12, Shift+F12, rows open their place (done by Claude)
+
+**Goal:** the Try it in the app: right-click a function's name in the Code view and see its callers in the right panel.
+
+**What a person can do now** (`pnpm dev`, a running workspace, the Code view):
+- **Right-click a name:** a menu with Go to definition (F12), Find references (Shift+F12), Callers and Callees. The cursor moves to where you clicked.
+- **Callers or Callees** opens the inspector on its Calls tab (opening the right panel if it was closed). The tab's own switch moves between the three views about the same name.
+- **F12** opens the definition; if there isn't one in the project, the Calls tab says so. **Shift+F12** lists the references.
+- **Clicking a row** opens that place in the Code view.
+- The inspector now has Figma's tabs: Details, Runs and Changes (dimmed, "Arrives in a later phase"), Calls.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `apps/web/src/code/CodeEditor.tsx`, `CodeView.tsx` | F12, Shift+F12 and right-clicks, caught on the editor's host (CodeMirror lives in a shadow root); `posAtCoords` finds the place under the pointer |
+| `apps/web/src/symbols/api.ts`, `useCalls.ts` | `askSemantic`; the Calls tab's state, dropping an answer to a question since replaced |
+| `apps/web/src/project/Inspector.tsx` | The inspector's tabs; brings the panel into view on a new question |
+| `apps/web/src/project/ProjectPage.tsx` | The menu, the keys, the definition jump, rows opening places |
+| `apps/web/src/symbols/calls.test.tsx` | 7 page tests |
+
+**Concepts:**
+- **Events from a shadow root:** a key or right-click inside CodeMirror reaches the host element, retargeted; listening there catches them without touching CodeMirror's own keymap. https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_shadow_DOM
+- **Stale answers:** a counter per question; an answer for an older question is dropped.
+
+**Found and fixed on the way:**
+- **F12 opened nothing:** a definition is an item whose place is in `.place`; the page passed the item itself. Caught by the page test before it was committed. Built-in definitions (no place in the project) now say so instead.
+- **jsdom has no layout:** `posAtCoords` returns the end of the document there, so the right-click test stands in for the browser with a stub, which also proves the pointer's place, not the old cursor, is asked about.
+
+**Tests:** web 175 (7 new): right-click → Callers fills the Calls tab and a row opens its place; switching to Callees asks the same place; F12 jumps or says why not; Shift+F12 lists references; F12 with a modifier is left to the browser; a stale answer is dropped (mutation-checked: removing the guard fails it).
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/web test
+pnpm dev   # open a project, Code view, right-click a function → Callers
+```
+**Bundle:** ProjectPage 100.5 kB of 110 kB gzip; the rest unchanged and within budget.
+
+**Risks:** browsers may keep F12 for developer tools; the right-click menu always works. **Laptop:** unit tests only.
+
+**Commit:** `903b564` `feat(web): right-click a function for Callers, Callees, Go to definition and Find references`.
+
+### Step 5.6 — Proof: 20 hand-labelled functions in real workspaces, the walkthrough, screens and the Figma differences (done by Claude; ADR 0026 addendum)
+
+**Goal:** the Done when: callers and callees of 20 hand-picked functions match a manual check.
+
+**What a person can do now:**
+- Read `corpus/labels/calls.json`: 10 functions in Rallly, 10 in Documenso, each with what it exercises (plain functions, methods, components, a barrel re-export, workspace packages, path aliases, callers in callbacks and tests), every caller with the lines it calls from, and every callee with how it's known and where it's declared.
+- See the check run in real workspaces on CI (`Workspaces against real Docker`): `"calls": "10 of 10"` for each fork.
+
+**How the labels were made:** by reading the source at each pin, not from the engine. Callers: every call site from a search of the repo, then the named function around each, read by hand. Callees: the function's own body, read line by line. Then the engine's answers were compared; every difference was investigated before anything changed.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `corpus/labels/calls.json` | The 20 functions, labelled |
+| `corpus/src/calls.ts` (+ tests) | The exact comparison: one line per caller and callee, compared as multisets; a call listed twice is a difference |
+| `workspace/host/src/corpus.docker.test.ts` | Rallly and Documenso: callers and callees of the labelled functions, exactly as labelled |
+| `packages/engine/src/semantics/semantic-service.ts`, `host.ts` (+ tests) | Seven fixes below |
+| `e2e/try-it/phase-5.spec.ts`, `try-it/support.ts` | The walkthrough; clicking a word in the editor with the real mouse |
+| `e2e/visual/screens.spec.ts` (+ baselines) | Screens: the menu, Callers, Callees; every project screen with the inspector's tabs |
+| `docs/reports/phase-5-figma-differences.md` | For the owner's review |
+| `docs/adr/0026-typescript-semantics.md` | Addendum: the fixes and the cost of the DOM library |
+
+**Concepts:**
+- **Labelling against the rule, not the tool:** the labels follow TypeScript's call-hierarchy rules (an anonymous callback belongs to the named function around it, or to its file's top level) so a difference means a fault, not a convention.
+- **Exact comparison as multisets:** two callers may share a name (`route.ts (top level)` in two files) but not a place.
+
+**Found and fixed on the way** (each with a test that fails without the fix):
+1. **TypeScript's library was cut by the host's 1 MB file limit:** `lib.dom.d.ts` is 2.3 MB, so `fetch`, `URL` and `setTimeout` were unresolved in every web project.
+2. **`export const f = async () => …` scanned its whole file** for unresolved calls.
+3. **A named function inside the body** had its unresolved calls credited to the outer one.
+4. **Calls the hierarchy can't model were dropped:** a constant holding a function (`nanoid`), built-ins declared as variables (`Boolean`, `new Error`). Now listed by what the name is: resolved for built-ins, module-level constants and interface or class members; unresolved for parameters and locals (decisions log, step 6).
+5. **Built-in overloads made two rows** (`split`), and a call could be listed twice.
+6. **Unresolved names carried their arguments** (`Buffer.concat([ … ]).toString`); now `Buffer.concat(…).toString`. An IIFE isn't listed as a call.
+7. **The status bar kept the previous file's line after switching files** (phase 3's, found by the walkthrough): each file has its own editor, and a new one never reported its cursor.
+- **Two labels were wrong, not the engine:** `packages/prisma/index.ts` calls its own copy of `remember`, and a caller in `packages/ee` exists (named from its import and declaration lines only).
+- **Accessibility:** axe's target-size check failed the "line 11, line 16" links; each is now at least 24 × 24 px.
+- **CI:** the first Calls page test took 5.3 s against Vitest's 5 s limit on CI's busy runner (1.6 s on the laptop). Its setup typed through ⌘K key by key; it now opens the file as the page remembers it, 3–4 times faster. The walkthrough's first CI run used `tab` for editor tabs, which are buttons.
+
+**Tests:**
+- **Corpus (Docker, CI):** Rallly 10 of 10, Documenso 10 of 10; first TypeScript question 2.4 s (Rallly) and 6.1 s (Documenso), while programs build.
+- **Engine:** 20 semantics tests (1 new, covering fixes 1–6; 10 mutants, each caught).
+- **Corpus unit:** 18 (6 new). **Web:** 176 (1 new, the status bar).
+- **Walkthrough:** `try-it/phase-5.spec.ts`, 6 steps, passed against a local build; on CI against the preview.
+- **Visual:** 148, 18 new (the menu and panel stories, three screens, both themes); 20 project screens re-approved after checking each diff lies only in the inspector's tab strip (x 1089–1431, y 77–124).
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/corpus test
+pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts   # real Docker, about 6 minutes
+pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-5.spec.ts
+pnpm test:visual
+```
+
+**Risks:** R1 updated (the DOM library's cost). **Laptop:** one visual run in Docker at a time, load under 4; the corpus Docker test ran on CI only.
+
+**Commits:** `268cdce` `fix(engine): callees as labelled`; `2d7ab85` `test(corpus): 20 hand-labelled functions' callers and callees`; `3953f66` `test(e2e): phase 5 walkthrough and screens`; `2a426bd` `test(web): the Calls tests open the file as the page remembers it`; `99b5d52` `fix(web): the status bar shows the shown file's cursor after switching files`.

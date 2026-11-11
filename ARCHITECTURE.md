@@ -253,9 +253,11 @@ inside the workspace: the agent's watcher (in process) ──► refresh ──�
   - **How:** one language service per `tsconfig.json`, built when a question needs it (the file's programs, plus its package's dependents' for callers), and released least recently used first.
   - **Without `node_modules`:** the project's own packages resolve as project code (`extends` through a virtual `node_modules`, imports through `paths` from each `package.json`'s `exports`). Packages from npm stay unresolved.
   - **Answers:** each caller or callee is *resolved* or *unresolved* (never guessed), *calls* or *renders*, and built-ins are marked.
-  - **What it reads:** only inside the project (never secret files, never through a link out) and TypeScript's own lib.
+  - **Callees beyond TypeScript's hierarchy:** the engine scans the function's own body (not named functions inside it, as the hierarchy counts them). A call the compiler can't resolve is *unresolved*, with its text (arguments shortened). A call it resolves to something the hierarchy doesn't model is listed by what the name is: built-ins, module-level constants and interface or class members are *resolved*; parameters and locals are *unresolved* (ADR 0026 addendum).
+  - **What it reads:** only inside the project (never secret files, never through a link out, nothing over 1 MB) and TypeScript's own lib (whatever its size: `lib.dom.d.ts` is 2.3 MB).
   - **Shipping:** TypeScript ships beside the engine as one archive the host unpacks.
-- **Proof:** `workspace/host/src/corpus.docker.test.ts` indexes all six corpus forks in real workspaces; `packages/engine/src/search.perf.test.ts` times search on 100,000 names, run alone in CI's performance job.
+  - **The page** (`apps/web/src/symbols/useCalls.ts`, `src/project/Inspector.tsx`): the Code view catches F12, Shift+F12 and right-clicks on the editor's host (CodeMirror is in a shadow root) and finds the place under the pointer. The right-click menu is `ContextMenu` (`packages/ui`). Answers fill the inspector's Calls tab (`CallsPanel`), which a new question brings into view; late answers are dropped. A row opens its place in the Code view.
+- **Proof:** `workspace/host/src/corpus.docker.test.ts` indexes all six corpus forks in real workspaces, and checks the callers and callees of 20 hand-labelled functions in Rallly and Documenso exactly (`corpus/labels/calls.json`, `corpus/src/calls.ts`); `packages/engine/src/search.perf.test.ts` times search on 100,000 names, run alone in CI's performance job.
 
 ## Workspace lifecycle (phase 1d, step 3)
 

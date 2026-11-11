@@ -135,6 +135,10 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 - ✅ **A strict security policy:** no inline scripts or styles, previews per pull request, and telemetry off.
 
 ### Coming next
-- **Phase 5 (in progress):** TypeScript semantics: go to definition, find references, and a function's callers and callees in the right panel's Calls tab.
-  - 🟡 Milestone A done (the engine and the API, not yet in the page): with `pnpm dev` and a running workspace, `GET /api/projects/<id>/workspace/index/callers?path=…&line=…&column=…` (and `callees`, `definition`, `references`) answer from TypeScript in the workspace. Calls into packages that aren't installed are shown as unresolved.
+- **Phase 5 (in review, 0.9.0):** TypeScript semantics.
+  - ✅ **Right-click a function's name** in the Code view: Go to definition (F12), Find references (Shift+F12), Callers, Callees.
+  - ✅ **The inspector's Calls tab:** Callers (calls and renders), Callees (the project's, Unresolved with why, Built-in collapsed), References; each row says how it's known, and opens its place.
+  - ✅ **Through path aliases, workspace packages and re-exports,** without installing anything; packages that aren't installed are shown as unresolved, never guessed.
+  - ✅ **Proof:** `pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts` (20 hand-labelled functions, exact); walkthrough `pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-5.spec.ts`.
+  - **Try it:** `pnpm dev`, open Rallly with its workspace running, Code view, open `apps/web/src/features/poll/mutations.ts`, right-click `createPoll` (line 98) → Callers: the two API route modules, each at its lines.
 - **After that:** stage 1 draws real flows from code, and stage 2 adds live frames of the running app.
