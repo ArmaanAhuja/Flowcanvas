@@ -12042,8 +12042,9 @@ pnpm --filter @flowcanvas/engine test   # 69 tests
 2. **Grammar paths were resolved when the module loaded,** which fails in the bundle (no `node_modules`). They're now resolved only when asked, and the bundle loads every `.wasm` from its own folder.
 3. **The agent's connection code would have been copied** for the engine. It's now one shared module (`lines.ts`); the agent's tests pass unchanged.
 4. **`docker exec` input was text only.** It now takes bytes, for the `.wasm` files.
-5. **Status has a `symbols` count and search has a `symbols` list,** so a check on `'symbols' in result` couldn't tell them apart. The Docker test checks `'ms' in result`.
-6. **Three of Claude's test expectations were wrong:**
+5. **The 100,000-symbol search test timed out once in the full unit run.** Its setup (writing the symbols) passed Vitest's 5 s default while every package tested at once; the timed searches weren't the problem. It now has 30 s for setup, and the 100 ms assertion is unchanged. The whole unit suite then passed (886).
+6. **Status has a `symbols` count and search has a `symbols` list,** so a check on `'symbols' in result` couldn't tell them apart. The Docker test checks `'ms' in result`.
+7. **Three of Claude's test expectations were wrong:**
    - the host's status for a refusal (409, not 503)
    - a ranking tie (shorter name first, as the rule says)
    - a match count (`createpoll` matches both `createPoll` and `CreatePoll`)

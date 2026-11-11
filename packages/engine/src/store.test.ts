@@ -242,5 +242,7 @@ describe('IndexStore.search', () => {
     // p95; generous against slow CI machines, still well under 100 ms.
     expect(times[Math.floor(times.length * 0.95)]).toBeLessThan(100);
     store.close();
-  });
+    // Writing 100,000 symbols takes seconds when every package's tests run at once; only the
+    // searches above are timed, so the setup gets room (it once passed the 5 s default under load).
+  }, 30_000);
 });
