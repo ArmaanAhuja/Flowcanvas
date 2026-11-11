@@ -2,7 +2,7 @@
 // saving with the version it was opened at, a conflict, and the honest states. jsdom can't type into CodeMirror
 // (it listens for real input events), so edits go through CodeMirror's own API; the walkthrough types for real.
 import { EditorView } from '@codemirror/view';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LabsProvider } from '../labs/LabsProvider';
@@ -31,6 +31,7 @@ const FILES: Record<string, unknown> = {
     size: 26,
   },
   'public/logo.png': { content: 'iVBO', encoding: 'base64', version: V1, size: 3 },
+  'src/two.ts': { content: 'one\ntwo\nthree\n', encoding: 'utf8', version: V1, size: 14 },
 };
 
 let saves: { path: string; body: unknown }[];
@@ -49,7 +50,7 @@ function fakeApi(state: 'running' | 'sleeping' = 'running'): typeof fetch {
       return json({ projects: [project(state)], workspacesAvailable: true });
     if (url.pathname.endsWith('/workspace/tree')) {
       return json({
-        files: ['.env.example', 'public/logo.png', 'src/index.ts', 'src/.env'],
+        files: ['.env.example', 'public/logo.png', 'src/index.ts', 'src/two.ts', 'src/.env'],
         truncated: false,
       });
     }
@@ -159,6 +160,35 @@ describe('the Code view', () => {
     expect(screen.getByRole('group', { name: 'Editor status' }).textContent).toContain(
       'TypeScript',
     );
+  });
+
+  it('shows the shown file’s cursor in the status bar after switching files (regression, phase 5)', async () => {
+    renderPage(fakeApi());
+    const user = await openCode();
+    await screen.findByRole('treegrid', { name: 'Files' });
+    await user.click(row('src'));
+    await user.click(row('index.ts'));
+    await editorView();
+    await user.click(row('two.ts'));
+    const status = () => screen.getByRole('group', { name: 'Editor status' }).textContent;
+    await waitFor(async () => {
+      expect((await editorView()).state.doc.toString()).toBe('one\ntwo\nthree\n');
+    });
+    const two = await editorView();
+    act(() => {
+      two.dispatch({ selection: { anchor: 'one\ntwo\nth'.length } });
+    });
+    expect(status()).toContain('Ln 3, Col 3');
+    // Back to index.ts: its own cursor, not two.ts's.
+    await user.click(screen.getByRole('button', { name: 'index.ts' }));
+    await waitFor(() => {
+      expect(status()).toContain('Ln 1, Col 1');
+    });
+    // And two.ts kept its place.
+    await user.click(screen.getByRole('button', { name: 'two.ts' }));
+    await waitFor(() => {
+      expect(status()).toContain('Ln 3, Col 3');
+    });
   });
 
   it('marks unsaved changes, saves with Ctrl+S from the opened version, and clears the mark', async () => {

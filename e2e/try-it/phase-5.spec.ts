@@ -288,7 +288,8 @@ test('phase 5: right-click a function → Callers', async ({ page }) => {
     await page
       .getByRole('button', { name: `route.ts (top level), calls, resolved, ${V1_ROUTE}:612` })
       .click();
-    await expect(page.getByRole('tab', { name: 'route.ts', selected: true })).toBeVisible();
+    // The editor shows v1's route.ts (editor tabs are buttons; the editor is named by its file).
+    await expect(page.getByRole('textbox', { name: `Code: ${V1_ROUTE}` })).toBeVisible();
     await expect(status(page)).toContainText('Ln 612, Col 26');
     // Its other call, from the row's places.
     await page.getByRole('button', { name: 'line 683' }).click();
@@ -321,7 +322,8 @@ test('phase 5: right-click a function → Callers', async ({ page }) => {
   });
 
   await test.step('Shift+F12 on createPoll: its references, the definition marked', async () => {
-    await page.getByRole('tab', { name: 'mutations.ts' }).click();
+    await page.getByRole('button', { name: 'mutations.ts', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: `Code: ${MUTATIONS_PATH}` })).toBeVisible();
     // The file keeps its cursor, on createPoll where the right-click put it.
     await expect(status(page)).toContainText('Ln 98');
     await page.locator('.cm-content').focus();

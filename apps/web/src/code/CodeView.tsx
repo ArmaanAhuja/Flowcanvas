@@ -139,7 +139,12 @@ export function CodeView({
   readonly onContextMenu?: (path: string, at: CodePoint, pointer: { x: number; y: number }) => void;
 }) {
   const active = files.active;
-  const [cursor, setCursor] = useState('Ln 1, Col 1');
+  // The cursor's place, and which file it's in: each file has its own editor, so after switching files the label
+  // is read from the shown file's state until its editor reports (found by phase 5's walkthrough: the status bar
+  // kept the previous file's line).
+  const [cursor, setCursor] = useState<{ readonly path: string; readonly label: string } | null>(
+    null,
+  );
 
   if (!running) {
     return (
@@ -153,7 +158,9 @@ export function CodeView({
     if (active === undefined) return;
     files.updated(active.path, state);
     const label = cursorLabel(state);
-    if (label !== cursor) setCursor(label);
+    if (cursor?.path !== active.path || label !== cursor.label) {
+      setCursor({ path: active.path, label });
+    }
   };
 
   const text =
@@ -237,7 +244,7 @@ export function CodeView({
               text === undefined
                 ? []
                 : [
-                    cursor,
+                    cursor?.path === active.path ? cursor.label : cursorLabel(text),
                     detectIndent(text.doc.sliceString(0, 20_000)).label,
                     'UTF-8',
                     languageFor(active.path).name,
