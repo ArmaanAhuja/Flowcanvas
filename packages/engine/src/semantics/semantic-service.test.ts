@@ -126,6 +126,20 @@ describe('callers', () => {
     expect(result.entries).toHaveLength(2);
   });
 
+  it('names a caller outside any named function by its file, at top level (owner)', () => {
+    write(
+      'apps/web/src/boot.ts',
+      "import { formatTitle } from './lib/format';\nexport const BOOT = formatTitle('go');\n",
+    );
+    service.changed(['apps/web/src/boot.ts'], [...Object.keys(FILES), 'apps/web/src/boot.ts']);
+    const result = service.callers('apps/web/src/lib/format.ts', 1, 17);
+    expect(result.entries.find((e) => e.place?.path === 'apps/web/src/boot.ts')).toMatchObject({
+      name: 'boot.ts (top level)',
+      kind: null,
+      sites: [{ path: 'apps/web/src/boot.ts', line: 2, column: 21 }],
+    });
+  });
+
   it('says so when there is nothing callable at the place', () => {
     const result = service.callers('apps/web/src/page.tsx', 5, 1);
     expect(result).toMatchObject({ target: null, entries: [] });

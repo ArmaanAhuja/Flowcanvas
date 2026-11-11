@@ -2,7 +2,7 @@
 // language service per tsconfig, built when a question needs it and released (least recently used first) when memory
 // runs high. Answers carry how each is known: resolved by the compiler, or unresolved and never guessed.
 import { heap } from './v8.js';
-import { dirname, join, relative, sep } from 'node:path';
+import { basename, dirname, join, relative, sep } from 'node:path';
 import type * as TS from 'typescript';
 import {
   SEMANTIC_LIMITS,
@@ -217,7 +217,9 @@ export class SemanticService {
     const builtIn = this.#builtIn(item.file);
     const isModule = item.kind === this.#ts.ScriptElementKind.moduleElement;
     return {
-      name: isModule ? '(top level)' : cut(item.name),
+      // Calls outside any named function (a module's top level, an anonymous callback there): the file's name,
+      // "(top level)" (owner, 12 Nov 2026).
+      name: isModule ? `${basename(item.file)} (top level)` : cut(item.name),
       kind: kindOf(this.#ts, item.kind, item.name),
       container: containerOf(item.containerName),
       place: builtIn ? null : this.#position(program, item.file, item.selectionSpan.start),

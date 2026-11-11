@@ -523,3 +523,11 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 - **TypeScript 6's compiler API.** Upgrade-later 3 was checked as it asks: TS 7's API is still unstable, and typescript-eslint supports `<6.1`.
 - **Every caller and callee row carries how it's known** (CLAUDE.md rule 4): *resolved* when the compiler proved it, *unresolved* when it couldn't (such as `obj[key]()`, or a package without types).
 - **The Try it says "right-click a function → Callers",** so the Code view gets a context menu: Callers, Callees, Go to definition and Find references. F12 and Shift+F12 are the usual keys for the last two.
+
+**Phase 5, milestone B** (owner, 12 Nov 2026):
+5. **Built-ins** (`Math.max`, `Promise.all`) in a function's callees: listed after the project's calls, in a collapsed "Built-in" group. Unresolved calls get their own group, labelled as unresolved.
+6. **A caller outside any named function** (a module's top level, or an anonymous callback there, such as an API route handler) is named by its file: `route.ts (top level)`, with its line.
+7. **Find references** shows in the same right-panel Calls tab as a third view: Callers, Callees, References.
+
+**Settled by the documents** (applied):
+- **Provenance in the rows** follows Graphite's form channel: *resolved* is a plain solid line with no glyph; *unresolved* (Graphite's "unknown") is a short open stub ending in a hollow circle. Each row also says the word, so meaning is never carried by form alone.
