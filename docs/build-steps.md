@@ -12656,6 +12656,7 @@ pnpm --filter @flowcanvas/engine build    # dist/workspace/: main.js, semantics-
 
 **Found and fixed on the way:**
 - **Rallly's index is now ready about 4.9 s after the first request** (it was about 2.5 s), because the first engine start in a workspace also copies TypeScript's 13 MB. That's well under 30 s, and only when the engine has changed. Step 6's corpus test keeps the 30 s check.
+- **CI: phase 4's progress-chip page test failed once on milestone A's push.** Its fake answered "indexing" once and "ready" from then on, so how long the chip stayed up depended on the machine's speed. On CI's busy runner it was gone before the test looked. The fake now answers "indexing" until the test switches it to "ready", and the test checks it asked again in between. It passed three runs in a row of the whole web suite.
 
 **Tests:**
 - **Unit:** control plane 262 tests, 6 new: the four routes with their places, and activity; five refusals before the workspace is asked.
