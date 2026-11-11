@@ -536,3 +536,5 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 - **A call TypeScript's call hierarchy leaves out, but whose name the compiler finds,** is listed by what that name is. A built-in (`Boolean`, `new Error`, `fetch`), a module-level constant (`export const nanoid = customAlphabet(…)`) or an interface or class member is fixed where it's declared: *resolved*. A parameter, a local, a destructured name or an object literal's property holds whatever it's given at run time: *unresolved*, with the call's text (`getValue`, `resolve`).
 - **An IIFE** (`(() => …)()`) isn't a call of anything unknown: its body is the function's own code, and its calls are listed as the function's.
 - **A caller in `packages/ee`** (Documenso's commercial code) is listed like any other: it is one, and the engine reads the project as it is. The labels name it from its import and declaration lines only; nothing there is run or enabled (CLAUDE.md rule 8).
+
+**Phase 5 accepted** (owner, 12 Nov 2026): "accepted and now let's move ahead". Merged in PR #19 once CI is green on its last commit.

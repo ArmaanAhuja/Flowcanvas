@@ -3,7 +3,7 @@
 - Version: `0.9.0`
 - Branch: `phase/5-typescript-semantics`; PR #19
 - Dates: 12 Nov 2026
-- Status: **in review**, waiting for the owner's acceptance.
+- Status: **accepted** by the owner on 12 Nov 2026. Merged in PR #19.
 
 ## From the build plan
 
