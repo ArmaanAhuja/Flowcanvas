@@ -1,0 +1,1335 @@
+{
+  "about": "Phase 5's Done when: callers and callees of 20 hand-picked functions, labelled by reading each fork's source at its pin (callers from every call site and the named function around it; callees from the function's own body). TypeScript's call-hierarchy rules: an anonymous callback belongs to the named function around it, or to its file's top level (owner, 12 Nov 2026); a function or arrow assigned to a const is named by it; a named function inside the body keeps its own calls. Provenance (CLAUDE.md rule 4): packages aren't installed, so a call into one is unresolved; a call through a parameter or a local is unresolved; TypeScript's library is built-in. Lines are 1-based. Nothing from packages/ee is labelled; one caller there (createEmailDomain) is listed because it is one.",
+  "rallly": [
+    {
+      "name": "flashCookieName",
+      "case": "plain function, callers through the @/ alias, in a const arrow and in tests",
+      "path": "apps/web/src/lib/flash/constants.ts",
+      "line": 7,
+      "column": 17,
+      "callers": [
+        {
+          "name": "GET",
+          "relation": "calls",
+          "path": "apps/web/src/app/api/stripe/return/route.ts",
+          "lines": [22]
+        },
+        {
+          "name": "setFlash",
+          "relation": "calls",
+          "path": "apps/web/src/lib/flash/server.ts",
+          "lines": [10]
+        },
+        {
+          "name": "setFlash",
+          "relation": "calls",
+          "path": "apps/web/src/lib/flash/client.tsx",
+          "lines": [8]
+        },
+        {
+          "name": "useFlash",
+          "relation": "calls",
+          "path": "apps/web/src/lib/flash/client.tsx",
+          "lines": [22]
+        },
+        {
+          "name": "setOutcome",
+          "relation": "calls",
+          "path": "apps/web/src/lib/oauth/server.ts",
+          "lines": [60]
+        },
+        {
+          "name": "client.test.tsx (top level)",
+          "relation": "calls",
+          "path": "apps/web/src/lib/flash/client.test.tsx",
+          "lines": [8, 16]
+        }
+      ],
+      "callees": []
+    },
+    {
+      "name": "hasDuplicateCookie",
+      "case": "plain function, built-in string methods, a caller in a callback inside an object at top level",
+      "path": "apps/web/src/lib/auth-plugins/has-duplicate-cookie.ts",
+      "line": 6,
+      "column": 17,
+      "callers": [
+        {
+          "name": "host-only-cookie-cleanup.ts (top level)",
+          "relation": "calls",
+          "path": "apps/web/src/lib/auth-plugins/host-only-cookie-cleanup.ts",
+          "lines": [40]
+        },
+        {
+          "name": "has-duplicate-cookie.test.ts (top level)",
+          "relation": "calls",
+          "path": "apps/web/src/lib/auth-plugins/has-duplicate-cookie.test.ts",
+          "lines": [8, 12, 17, 23, 31, 35]
+        }
+      ],
+      "callees": [
+        {
+          "name": "split",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [8]
+        },
+        {
+          "name": "indexOf",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [9]
+        },
+        {
+          "name": "slice",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [10]
+        },
+        {
+          "name": "trim",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [10]
+        }
+      ]
+    },
+    {
+      "name": "verifySignature",
+      "case": "plain function; node:crypto and Buffer without @types/node are unresolved; tests/webhooks.spec.ts has its own verifySignature, not a caller",
+      "path": "apps/web/src/lib/signature.ts",
+      "line": 23,
+      "column": 17,
+      "callers": [
+        {
+          "name": "parseUnsubscribeToken",
+          "relation": "calls",
+          "path": "apps/web/src/features/notifications/utils.ts",
+          "lines": [55]
+        },
+        {
+          "name": "verifyUploadToken",
+          "relation": "calls",
+          "path": "apps/web/src/lib/storage/asset-upload.ts",
+          "lines": [35]
+        },
+        {
+          "name": "signature.test.ts (top level)",
+          "relation": "calls",
+          "path": "apps/web/src/lib/signature.test.ts",
+          "lines": [10, 21, 24, 28, 34]
+        }
+      ],
+      "callees": [
+        {
+          "name": "createSignature",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "apps/web/src/lib/signature.ts:8",
+          "lines": [34]
+        },
+        {
+          "name": "Buffer.from",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [34, 35]
+        },
+        {
+          "name": "crypto.timingSafeEqual",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [38]
+        }
+      ]
+    },
+    {
+      "name": "resolveTimeZone",
+      "case": "plain function, callers across the datetime module and tests",
+      "path": "apps/web/src/lib/datetime/time-zone-overrides.ts",
+      "line": 75,
+      "column": 17,
+      "callers": [
+        {
+          "name": "resolveOptionalTimeZone",
+          "relation": "calls",
+          "path": "apps/web/src/lib/datetime/format.ts",
+          "lines": [32]
+        },
+        {
+          "name": "getCalendarDate",
+          "relation": "calls",
+          "path": "apps/web/src/lib/datetime/utils.ts",
+          "lines": [24]
+        },
+        {
+          "name": "instantToWallTime",
+          "relation": "calls",
+          "path": "apps/web/src/lib/datetime/wall-time.ts",
+          "lines": [102]
+        },
+        {
+          "name": "time-zone-overrides.test.ts (top level)",
+          "relation": "calls",
+          "path": "apps/web/src/lib/datetime/time-zone-overrides.test.ts",
+          "lines": [33, 39, 45, 51, 57, 58, 59, 64]
+        }
+      ],
+      "callees": [
+        {
+          "name": "get",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [76]
+        },
+        {
+          "name": "getTime",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [77]
+        }
+      ]
+    },
+    {
+      "name": "isMaintenanceModeEnabled",
+      "case": "plain function; callers in route handlers and cache() callbacks are their files' top level; two files share a name",
+      "path": "apps/web/src/lib/maintenance.ts",
+      "line": 10,
+      "column": 17,
+      "callers": [
+        {
+          "name": "route.ts (top level)",
+          "relation": "calls",
+          "path": "apps/web/src/app/api/private/[...route]/route.ts",
+          "lines": [114]
+        },
+        {
+          "name": "route.ts (top level)",
+          "relation": "calls",
+          "path": "apps/web/src/app/api/v1/[...route]/route.ts",
+          "lines": [176]
+        },
+        {
+          "name": "getCustomBrandingConfig",
+          "relation": "calls",
+          "path": "apps/web/src/features/branding/data.ts",
+          "lines": [31]
+        },
+        {
+          "name": "data.ts (top level)",
+          "relation": "calls",
+          "path": "apps/web/src/features/branding/data.ts",
+          "lines": [47]
+        },
+        {
+          "name": "data.ts (top level)",
+          "relation": "calls",
+          "path": "apps/web/src/features/instance-policy/data.ts",
+          "lines": [18]
+        },
+        {
+          "name": "isMaintenanceActiveForRequest",
+          "relation": "calls",
+          "path": "apps/web/src/lib/maintenance-server.ts",
+          "lines": [16]
+        },
+        { "name": "proxy", "relation": "calls", "path": "apps/web/src/proxy.ts", "lines": [53] },
+        {
+          "name": "maintenance.test.ts (top level)",
+          "relation": "calls",
+          "path": "apps/web/src/lib/maintenance.test.ts",
+          "lines": [18, 23, 28]
+        }
+      ],
+      "callees": []
+    },
+    {
+      "name": "handleOAuthError",
+      "case": "plain function called from methods of four classes (same method names, different files)",
+      "path": "apps/web/src/lib/oauth/providers/base.ts",
+      "line": 23,
+      "column": 17,
+      "callers": [
+        {
+          "name": "exchangeCode",
+          "relation": "calls",
+          "path": "apps/web/src/lib/oauth/providers/google.ts",
+          "lines": [85]
+        },
+        {
+          "name": "getUserInfo",
+          "relation": "calls",
+          "path": "apps/web/src/lib/oauth/providers/google.ts",
+          "lines": [113]
+        },
+        {
+          "name": "refreshAccessToken",
+          "relation": "calls",
+          "path": "apps/web/src/lib/oauth/providers/google.ts",
+          "lines": [127]
+        },
+        {
+          "name": "exchangeCode",
+          "relation": "calls",
+          "path": "apps/web/src/lib/oauth/providers/microsoft.ts",
+          "lines": [95]
+        },
+        {
+          "name": "getUserInfo",
+          "relation": "calls",
+          "path": "apps/web/src/lib/oauth/providers/microsoft.ts",
+          "lines": [123]
+        },
+        {
+          "name": "refreshAccessToken",
+          "relation": "calls",
+          "path": "apps/web/src/lib/oauth/providers/microsoft.ts",
+          "lines": [143]
+        },
+        {
+          "name": "exchangeCode",
+          "relation": "calls",
+          "path": "apps/web/src/lib/oauth/providers/webex.ts",
+          "lines": [74]
+        },
+        {
+          "name": "getUserInfo",
+          "relation": "calls",
+          "path": "apps/web/src/lib/oauth/providers/webex.ts",
+          "lines": [94]
+        },
+        {
+          "name": "refreshAccessToken",
+          "relation": "calls",
+          "path": "apps/web/src/lib/oauth/providers/webex.ts",
+          "lines": [113]
+        },
+        {
+          "name": "exchangeCode",
+          "relation": "calls",
+          "path": "apps/web/src/lib/oauth/providers/zoom.ts",
+          "lines": [72]
+        },
+        {
+          "name": "getUserInfo",
+          "relation": "calls",
+          "path": "apps/web/src/lib/oauth/providers/zoom.ts",
+          "lines": [94]
+        },
+        {
+          "name": "refreshAccessToken",
+          "relation": "calls",
+          "path": "apps/web/src/lib/oauth/providers/zoom.ts",
+          "lines": [111]
+        },
+        {
+          "name": "revokeToken",
+          "relation": "calls",
+          "path": "apps/web/src/lib/oauth/providers/zoom.ts",
+          "lines": [123]
+        }
+      ],
+      "callees": [
+        {
+          "name": "OAuthError",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "apps/web/src/lib/oauth/providers/base.ts:6",
+          "lines": [31, 38]
+        }
+      ]
+    },
+    {
+      "name": "listCalendars",
+      "case": "class method, called through the CalendarService interface it implements; Boolean is a built-in declared as a variable",
+      "path": "apps/web/src/features/calendars/google/service.ts",
+      "line": 34,
+      "column": 9,
+      "callers": [
+        {
+          "name": "syncCalendars",
+          "relation": "calls",
+          "path": "apps/web/src/features/calendars/mutations.ts",
+          "lines": [120]
+        }
+      ],
+      "callees": [
+        {
+          "name": "this.client.calendarList.list",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [35]
+        },
+        {
+          "name": "calendarList.data.items.map",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [41]
+        },
+        {
+          "name": "Boolean",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [45, 46, 47]
+        }
+      ]
+    },
+    {
+      "name": "CalendarDate",
+      "case": "component: rendered (not called), including from an arrow inside a conditional (VoteViewList)",
+      "path": "apps/web/src/lib/datetime/calendar-date.tsx",
+      "line": 17,
+      "column": 17,
+      "callers": [
+        {
+          "name": "EventsInfiniteList",
+          "relation": "renders",
+          "path": "apps/web/src/app/[locale]/(space)/(dashboard)/events/events-infinite-list.tsx",
+          "lines": [315, 320]
+        },
+        {
+          "name": "PollOptionsList",
+          "relation": "renders",
+          "path": "apps/web/src/features/poll/components/poll-options-list.tsx",
+          "lines": [69, 74, 125, 130]
+        },
+        {
+          "name": "VoteViewList",
+          "relation": "renders",
+          "path": "apps/web/src/features/poll/vote/components/vote-view-list.tsx",
+          "lines": [223, 228]
+        },
+        {
+          "name": "EventDate",
+          "relation": "renders",
+          "path": "apps/web/src/features/scheduled-event/components/event-date-time.tsx",
+          "lines": [40]
+        }
+      ],
+      "callees": [
+        {
+          "name": "useHydrated",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "apps/web/src/lib/datetime/use-hydrated.ts:13",
+          "lines": [22]
+        },
+        {
+          "name": "useDateTimeConfig",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "apps/web/src/lib/datetime/client.tsx:67",
+          "lines": [23]
+        },
+        {
+          "name": "toISODate",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "apps/web/src/lib/datetime/utils.ts:12",
+          "lines": [25]
+        },
+        {
+          "name": "formatDate",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "apps/web/src/lib/datetime/format.ts:162",
+          "lines": [26]
+        }
+      ]
+    },
+    {
+      "name": "createPoll",
+      "case": "async const arrow with a nested callback; Prisma isn't generated (unresolved); nanoid is a module-level constant in @rallly/utils",
+      "path": "apps/web/src/features/poll/mutations.ts",
+      "line": 98,
+      "column": 14,
+      "callers": [
+        {
+          "name": "route.ts (top level)",
+          "relation": "calls",
+          "path": "apps/web/src/app/api/private/[...route]/route.ts",
+          "lines": [404, 476]
+        },
+        {
+          "name": "route.ts (top level)",
+          "relation": "calls",
+          "path": "apps/web/src/app/api/v1/[...route]/route.ts",
+          "lines": [612, 683]
+        }
+      ],
+      "callees": [
+        {
+          "name": "some",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [113]
+        },
+        {
+          "name": "prisma.$transaction",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [115]
+        },
+        {
+          "name": "assertOpenPollCapacity",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "apps/web/src/features/poll/limit/mutations.ts:57",
+          "lines": [116]
+        },
+        {
+          "name": "tx.poll.create",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [118]
+        },
+        {
+          "name": "nanoid",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/utils/src/nanoid.ts:3",
+          "lines": [120]
+        },
+        {
+          "name": "recordPollActivities",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "apps/web/src/features/activity/mutations.ts:20",
+          "lines": [139]
+        },
+        {
+          "name": "scheduleWebhookDispatch",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "apps/web/src/features/webhook/mutations.ts:479",
+          "lines": [147]
+        },
+        {
+          "name": "toPollResponse",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "apps/web/src/features/poll/mutations.ts:82",
+          "lines": [152]
+        }
+      ]
+    },
+    {
+      "name": "decrypt",
+      "case": "a workspace package (@rallly/utils/encryption through its exports); a caller inside Effect.fn(function* …) is its file's top level",
+      "path": "packages/utils/src/encryption.ts",
+      "line": 55,
+      "column": 17,
+      "callers": [
+        {
+          "name": "loadCredential",
+          "relation": "calls",
+          "path": "apps/web/src/features/credentials/data.ts",
+          "lines": [43]
+        },
+        {
+          "name": "mutations.ts (top level)",
+          "relation": "calls",
+          "path": "apps/web/src/features/webhook/mutations.ts",
+          "lines": [359]
+        },
+        {
+          "name": "decryptSecret",
+          "relation": "calls",
+          "path": "apps/web/tests/webhooks-settings.spec.ts",
+          "lines": [129]
+        },
+        {
+          "name": "encryption.test.ts (top level)",
+          "relation": "calls",
+          "path": "packages/utils/src/encryption.test.ts",
+          "lines": [
+            49, 56, 64, 72, 93, 105, 116, 117, 120, 121, 126, 135, 144, 150, 161, 172, 217, 225,
+            243, 258, 273, 288
+          ]
+        }
+      ],
+      "callees": [
+        {
+          "name": "Buffer.from",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [56]
+        },
+        {
+          "name": "Error",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [58, 64, 70]
+        },
+        {
+          "name": "combined.readUInt8",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [61]
+        },
+        {
+          "name": "combined.subarray",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [72, 73, 77, 81]
+        },
+        {
+          "name": "crypto.pbkdf2Sync",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [86]
+        },
+        {
+          "name": "crypto.createDecipheriv",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [94]
+        },
+        {
+          "name": "decipher.setAuthTag",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [97]
+        },
+        {
+          "name": "Buffer.concat",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [99]
+        },
+        {
+          "name": "Buffer.concat(…).toString",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [99]
+        },
+        {
+          "name": "decipher.update",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [100]
+        },
+        {
+          "name": "decipher.final",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [101]
+        }
+      ]
+    }
+  ],
+  "documenso": [
+    {
+      "name": "withTimeout",
+      "case": "generic const arrow; DOM globals are built-in; resolve is a parameter (unresolved)",
+      "path": "packages/lib/utils/timeout.ts",
+      "line": 5,
+      "column": 14,
+      "callers": [
+        {
+          "name": "assertNotPrivateUrl",
+          "relation": "calls",
+          "path": "packages/lib/server-only/webhooks/assert-webhook-url.ts",
+          "lines": [111]
+        }
+      ],
+      "callees": [
+        {
+          "name": "race",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [6]
+        },
+        {
+          "name": "Promise",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [8]
+        },
+        {
+          "name": "setTimeout",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [9]
+        },
+        {
+          "name": "resolve",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [9]
+        }
+      ]
+    },
+    {
+      "name": "fetchWithTimeout",
+      "case": "const arrow calling only DOM built-ins",
+      "path": "packages/lib/utils/timeout.ts",
+      "line": 17,
+      "column": 14,
+      "callers": [
+        {
+          "name": "executeWebhookCall",
+          "relation": "calls",
+          "path": "packages/lib/server-only/webhooks/execute-webhook-call.ts",
+          "lines": [33]
+        }
+      ],
+      "callees": [
+        {
+          "name": "AbortController",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [20]
+        },
+        {
+          "name": "setTimeout",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [21]
+        },
+        {
+          "name": "abort",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [21]
+        },
+        {
+          "name": "fetch",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [24]
+        },
+        {
+          "name": "Error",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [27]
+        },
+        {
+          "name": "clearTimeout",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [32]
+        }
+      ]
+    },
+    {
+      "name": "isValidReturnTo",
+      "case": "callers in another package (@documenso/auth) and in the app; a callee through the package's own path",
+      "path": "packages/lib/utils/is-valid-return-to.ts",
+      "line": 14,
+      "column": 14,
+      "callers": [
+        {
+          "name": "loader",
+          "relation": "calls",
+          "path": "apps/remix/app/routes/_unauthenticated+/signin.tsx",
+          "lines": [60]
+        },
+        {
+          "name": "loader",
+          "relation": "calls",
+          "path": "apps/remix/app/routes/_unauthenticated+/signup.tsx",
+          "lines": [35]
+        },
+        {
+          "name": "validateOauth",
+          "relation": "calls",
+          "path": "packages/auth/server/lib/utils/handle-oauth-callback-url.ts",
+          "lines": [257]
+        }
+      ],
+      "callees": [
+        {
+          "name": "decodeURIComponent",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [21]
+        },
+        {
+          "name": "URL",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [22]
+        },
+        {
+          "name": "NEXT_PUBLIC_WEBAPP_URL",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/lib/constants/app.ts:7",
+          "lines": [22]
+        },
+        {
+          "name": "getWebAppOrigin",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/lib/utils/is-valid-return-to.ts:6",
+          "lines": [27]
+        }
+      ]
+    },
+    {
+      "name": "normalizeBrandingColors",
+      "case": "callers in tRPC route callbacks (top level) and a form component",
+      "path": "packages/lib/utils/normalize-branding-colors.ts",
+      "line": 22,
+      "column": 14,
+      "callers": [
+        {
+          "name": "BrandingPreferencesForm",
+          "relation": "calls",
+          "path": "apps/remix/app/components/forms/branding-preferences-form.tsx",
+          "lines": [118]
+        },
+        {
+          "name": "update-organisation-settings.ts (top level)",
+          "relation": "calls",
+          "path": "packages/trpc/server/organisation-router/update-organisation-settings.ts",
+          "lines": [148]
+        },
+        {
+          "name": "update-team-settings.ts (top level)",
+          "relation": "calls",
+          "path": "packages/trpc/server/team-router/update-team-settings.ts",
+          "lines": [151]
+        }
+      ],
+      "callees": [
+        {
+          "name": "entries",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [35]
+        },
+        {
+          "name": "trim",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [36]
+        },
+        {
+          "name": "keys",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [41]
+        }
+      ]
+    },
+    {
+      "name": "recipientAbbreviation",
+      "case": "callers in components and in nested const arrows; @prisma/client isn't generated, so the recipient's fields are unresolved",
+      "path": "packages/lib/utils/recipient-formatter.ts",
+      "line": 10,
+      "column": 14,
+      "callers": [
+        {
+          "name": "EnvelopeRedistributeDialog",
+          "relation": "calls",
+          "path": "apps/remix/app/components/dialogs/envelope-redistribute-dialog.tsx",
+          "lines": [165]
+        },
+        {
+          "name": "DocumentPreferencesForm",
+          "relation": "calls",
+          "path": "apps/remix/app/components/forms/document-preferences-form.tsx",
+          "lines": [408]
+        },
+        {
+          "name": "RecipientRow",
+          "relation": "calls",
+          "path": "apps/remix/app/components/general/stack-avatars-with-tooltip.tsx",
+          "lines": [133]
+        },
+        {
+          "name": "RecipientAvatarStack",
+          "relation": "calls",
+          "path": "apps/remix/app/components/general/stack-avatars-with-tooltip.tsx",
+          "lines": [206]
+        }
+      ],
+      "callees": [
+        {
+          "name": "extractInitials",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/lib/utils/recipient-formatter.ts:3",
+          "lines": [11]
+        },
+        {
+          "name": "recipient.email.slice",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [11]
+        },
+        {
+          "name": "recipient.email.slice(…).toUpperCase",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [11]
+        }
+      ]
+    },
+    {
+      "name": "remember",
+      "case": "function declaration; packages/prisma/index.ts calls its own copy (./utils/remember), not this one; getValue is a parameter",
+      "path": "packages/lib/utils/remember.ts",
+      "line": 6,
+      "column": 17,
+      "callers": [
+        {
+          "name": "i18n-server.tsx (top level)",
+          "relation": "calls",
+          "path": "packages/lib/client-only/providers/i18n-server.tsx",
+          "lines": [39]
+        }
+      ],
+      "callees": [
+        {
+          "name": "Map",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [10]
+        },
+        {
+          "name": "has",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [13]
+        },
+        {
+          "name": "set",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [14]
+        },
+        {
+          "name": "getValue",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [14]
+        },
+        {
+          "name": "get",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [17]
+        }
+      ]
+    },
+    {
+      "name": "generateEmailDomainRecords",
+      "case": "callers in route components and in packages/ee (named only, from its import and declaration lines)",
+      "path": "packages/lib/utils/email-domains.ts",
+      "line": 15,
+      "column": 14,
+      "callers": [
+        {
+          "name": "AdminEmailDomainDetailPage",
+          "relation": "calls",
+          "path": "apps/remix/app/routes/_authenticated+/admin+/email-domains.$id.tsx",
+          "lines": [74]
+        },
+        {
+          "name": "OrganisationEmailDomainSettingsPage",
+          "relation": "calls",
+          "path": "apps/remix/app/routes/_authenticated+/o.$orgUrl.settings.email-domains.$id.tsx",
+          "lines": [145]
+        },
+        {
+          "name": "createEmailDomain",
+          "relation": "calls",
+          "path": "packages/ee/server-only/lib/create-email-domain.ts",
+          "lines": [106]
+        }
+      ],
+      "callees": [
+        {
+          "name": "generateDkimRecord",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/lib/utils/email-domains.ts:1",
+          "lines": [16]
+        }
+      ]
+    },
+    {
+      "name": "distanceTo",
+      "case": "class method: called from another method through this, from a Canvas method and from a const arrow in a component, both named onMouseMove",
+      "path": "packages/ui/primitives/signature-pad/point.ts",
+      "line": 30,
+      "column": 10,
+      "callers": [
+        {
+          "name": "velocityFrom",
+          "relation": "calls",
+          "path": "packages/ui/primitives/signature-pad/point.ts",
+          "lines": [42]
+        },
+        {
+          "name": "onMouseMove",
+          "relation": "calls",
+          "path": "packages/ui/primitives/signature-pad/canvas.ts",
+          "lines": [143]
+        },
+        {
+          "name": "onMouseMove",
+          "relation": "calls",
+          "path": "packages/ui/primitives/signature-pad/signature-pad-draw.tsx",
+          "lines": [75]
+        }
+      ],
+      "callees": [
+        {
+          "name": "sqrt",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [31]
+        }
+      ]
+    },
+    {
+      "name": "SignaturePad",
+      "case": "component re-exported by a barrel (signature-pad/index.ts) and imported by package path; an IIFE; nested named handlers keep their own calls; JSX from uninstalled packages is unresolved",
+      "path": "packages/ui/primitives/signature-pad/signature-pad.tsx",
+      "line": 36,
+      "column": 14,
+      "callers": [
+        {
+          "name": "sign-field-signature-dialog.tsx (top level)",
+          "relation": "renders",
+          "path": "apps/remix/app/components/dialogs/sign-field-signature-dialog.tsx",
+          "lines": [32]
+        },
+        {
+          "name": "DocumentSigningSignatureField",
+          "relation": "renders",
+          "path": "apps/remix/app/components/general/document-signing/document-signing-signature-field.tsx",
+          "lines": [290]
+        },
+        {
+          "name": "SignaturePadDialog",
+          "relation": "renders",
+          "path": "packages/ui/primitives/signature-pad/signature-pad-dialog.tsx",
+          "lines": [123]
+        }
+      ],
+      "callees": [
+        {
+          "name": "isBase64Image",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/lib/constants/signatures.ts:4",
+          "lines": [45, 46, 47]
+        },
+        {
+          "name": "useState",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [45, 46, 47, 55]
+        },
+        {
+          "name": "Error",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [83]
+        },
+        {
+          "name": "Tabs",
+          "relation": "renders",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/ui/primitives/signature-pad/signature-tabs.tsx:28",
+          "lines": [139]
+        },
+        {
+          "name": "cn",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/ui/lib/utils.ts:5",
+          "lines": [141, 186]
+        },
+        {
+          "name": "onTabChange",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/ui/primitives/signature-pad/signature-pad.tsx:114",
+          "lines": [145]
+        },
+        {
+          "name": "TabsList",
+          "relation": "renders",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/ui/primitives/signature-pad/signature-tabs.tsx:60",
+          "lines": [147]
+        },
+        {
+          "name": "TabsTrigger",
+          "relation": "renders",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/ui/primitives/signature-pad/signature-tabs.tsx:74",
+          "lines": [149, 156, 163]
+        },
+        {
+          "name": "SignatureIcon",
+          "relation": "renders",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/ui/icons/signature.tsx:4",
+          "lines": [150]
+        },
+        {
+          "name": "Trans",
+          "relation": "renders",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [151, 158, 165]
+        },
+        {
+          "name": "KeyboardIcon",
+          "relation": "renders",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [157]
+        },
+        {
+          "name": "UploadCloudIcon",
+          "relation": "renders",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [164]
+        },
+        {
+          "name": "TabsContent",
+          "relation": "renders",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/ui/primitives/signature-pad/signature-tabs.tsx:117",
+          "lines": [170, 177, 184]
+        },
+        {
+          "name": "SignaturePadDraw",
+          "relation": "renders",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/ui/primitives/signature-pad/signature-pad-draw.tsx:22",
+          "lines": [174]
+        },
+        {
+          "name": "SignaturePadType",
+          "relation": "renders",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/ui/primitives/signature-pad/signature-pad-type.tsx:13",
+          "lines": [181]
+        },
+        {
+          "name": "SignaturePadUpload",
+          "relation": "renders",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/ui/primitives/signature-pad/signature-pad-upload.tsx:79",
+          "lines": [190]
+        }
+      ]
+    },
+    {
+      "name": "addPoint",
+      "case": "private method: callers and callees are other methods, through this",
+      "path": "packages/ui/primitives/signature-pad/canvas.ts",
+      "line": 189,
+      "column": 11,
+      "callers": [
+        {
+          "name": "onMouseDown",
+          "relation": "calls",
+          "path": "packages/ui/primitives/signature-pad/canvas.ts",
+          "lines": [125]
+        },
+        {
+          "name": "onMouseMove",
+          "relation": "calls",
+          "path": "packages/ui/primitives/signature-pad/canvas.ts",
+          "lines": [144]
+        },
+        {
+          "name": "onMouseUp",
+          "relation": "calls",
+          "path": "packages/ui/primitives/signature-pad/canvas.ts",
+          "lines": [162]
+        }
+      ],
+      "callees": [
+        {
+          "name": "push",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [192]
+        },
+        {
+          "name": "smoothSignature",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/ui/primitives/signature-pad/canvas.ts:209",
+          "lines": [194]
+        },
+        {
+          "name": "velocityFrom",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/ui/primitives/signature-pad/point.ts:38",
+          "lines": [196]
+        },
+        {
+          "name": "strokeWidth",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/ui/primitives/signature-pad/canvas.ts:269",
+          "lines": [199]
+        },
+        {
+          "name": "minStrokeWidth",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/ui/primitives/signature-pad/canvas.ts:54",
+          "lines": [199]
+        },
+        {
+          "name": "drawSmoothSignature",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/ui/primitives/signature-pad/canvas.ts:240",
+          "lines": [201]
+        }
+      ]
+    }
+  ]
+}

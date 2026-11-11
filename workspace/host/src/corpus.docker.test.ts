@@ -3,15 +3,18 @@
 // and indexed by the engine there. Rallly and Documenso must be ready within 30 s of the first request and
 // search within 100 ms (the engine's p95); all six are reported. The hand-labelled symbols
 // (corpus/labels/symbols.json, each read from the source) must be found at their exact place and kind.
+// Phase 5's Done when, in the same workspaces: callers and callees of the 20 hand-labelled functions
+// (corpus/labels/calls.json, 10 in each of the plan's two forks) must match the labels exactly.
 // Needs Docker 28+ and the internet. Run with `pnpm test:docker`. Everything it creates is removed.
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { buildImage } from '@flowcanvas/workspace-image';
-import type { EngineStatus, SearchResult } from '@flowcanvas/engine/protocol';
+import type { CallsResult, EngineStatus, SearchResult } from '@flowcanvas/engine/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { findObjects, remove } from './clean.js';
 import { dockerCli } from './docker-cli.js';
 import { WorkspaceHost } from './workspaces.js';
+import { compareCalls, type CallsLabel } from '../../../corpus/src/calls.js';
 
 interface Repo {
   readonly id: string;
@@ -32,6 +35,7 @@ const corpus = (file: string): unknown =>
   JSON.parse(readFileSync(new URL(`../../../corpus/${file}`, import.meta.url), 'utf8'));
 const repos = (corpus('manifest.json') as { repos: Repo[] }).repos;
 const labels = corpus('labels/symbols.json') as Record<string, Label[] | undefined>;
+const callLabels = corpus('labels/calls.json') as Record<string, CallsLabel[] | undefined>;
 
 /** The build plan's two forks: held to the targets. The other four are measured and reported. */
 const HELD = new Set(['rallly', 'documenso']);
@@ -68,16 +72,16 @@ beforeAll(async () => {
 }, 300_000);
 
 afterAll(async () => {
-  console.log(`\nPhase 4 corpus report\n${JSON.stringify(report, null, 2)}`);
+  console.log(`\nCorpus report (phases 4 and 5)\n${JSON.stringify(report, null, 2)}`);
   for (const object of (await findObjects(dockerCli)).filter((o) => o.prefix === prefix)) {
     await remove(dockerCli, object).catch(() => undefined);
   }
 }, 120_000);
 
-describe('the corpus, indexed in real workspaces (phase 4)', { timeout: 420_000 }, () => {
+describe('the corpus in real workspaces (phases 4 and 5)', { timeout: 600_000 }, () => {
   for (const repo of repos) {
     const held = HELD.has(repo.id);
-    it(`${repo.name}: ${held ? 'ready in under 30 s, searched in under 100 ms' : 'indexed and reported'}`, async () => {
+    it(`${repo.name}: ${held ? 'ready in under 30 s, searched in under 100 ms, callers and callees as labelled' : 'indexed and reported'}`, async () => {
       const workspaceId = randomUUID();
       const ref = host.refFor(workspaceId);
       try {
@@ -149,6 +153,39 @@ describe('the corpus, indexed in real workspaces (phase 4)', { timeout: 420_000 
           }
         }
 
+        // Phase 5: TypeScript's callers and callees of the labelled functions, exactly as labelled.
+        const calls = async (op: 'callers' | 'callees', label: CallsLabel) => {
+          const asked = performance.now();
+          const answer = await host.index(ref, {
+            op,
+            path: label.path,
+            line: label.line,
+            column: label.column,
+          });
+          if (!answer.ok || !('entries' in answer.result)) throw new Error(`no ${op}`);
+          return { result: answer.result, ms: performance.now() - asked };
+        };
+        const callsDiffering: string[] = [];
+        const callsMs: number[] = [];
+        for (const label of callLabels[repo.id] ?? []) {
+          const callers: { result: CallsResult; ms: number } = await calls('callers', label);
+          const callees = await calls('callees', label);
+          callsMs.push(callers.ms, callees.ms);
+          const found = compareCalls(label, callers.result.entries, callees.result.entries);
+          const problems = [
+            callers.result.target?.name === label.name
+              ? []
+              : [`target ${String(callers.result.target?.name)}`],
+            callers.result.complete && callees.result.complete ? [] : ['incomplete answer'],
+            found.callers.missing.map((line) => `missing caller: ${line}`),
+            found.callers.extra.map((line) => `extra caller: ${line}`),
+            found.callees.missing.map((line) => `missing callee: ${line}`),
+            found.callees.extra.map((line) => `extra callee: ${line}`),
+          ].flat();
+          if (problems.length > 0) callsDiffering.push(`${label.name}: ${problems.join('; ')}`);
+        }
+        const labelledCalls = callLabels[repo.id]?.length ?? 0;
+
         const row = {
           repo: repo.id,
           files: current.files,
@@ -163,11 +200,19 @@ describe('the corpus, indexed in real workspaces (phase 4)', { timeout: 420_000 
           searchEngineP95Ms: p95(engineMs),
           searchRoundTripP95Ms: Math.round(p95(roundTripMs)),
           labels: `${String(expected.length - missing.length)} of ${String(expected.length)}`,
+          ...(labelledCalls > 0
+            ? {
+                calls: `${String(labelledCalls - callsDiffering.length)} of ${String(labelledCalls)}`,
+                firstCallsMs: Math.round(callsMs[0] ?? 0),
+                callsMaxMs: Math.round(Math.max(...callsMs)),
+              }
+            : {}),
         };
         report.push(row);
         console.log(JSON.stringify(row));
 
         expect(missing).toEqual([]);
+        expect(callsDiffering).toEqual([]);
         expect(current.byStatus.parsed).toBeGreaterThan(0);
         if (held) {
           expect(readyMs).toBeLessThan(READY_MS);
