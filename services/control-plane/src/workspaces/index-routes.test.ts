@@ -158,6 +158,59 @@ describe('while the workspace runs', () => {
   });
 });
 
+describe('TypeScript’s answers (phase 5)', () => {
+  let opened: number;
+  beforeEach(async () => {
+    await call('POST', '/open');
+    opened = now;
+  });
+
+  it('asks the four questions about a place, and each counts as activity', async () => {
+    const answer = {
+      target: null,
+      entries: [],
+      complete: true,
+      message: 'Put the cursor on a function, method or component to see its calls.',
+    };
+    provider.indexAnswer = { ok: true, result: answer };
+    now += 9 * 60_000;
+    expect(
+      await call('GET', '/index/callers?path=apps%2Fweb%2Fsrc%2Fpage.tsx&line=6&column=17'),
+    ).toEqual({ status: 200, json: answer });
+    await call('GET', '/index/callees?path=a.ts&line=1&column=1');
+    await call('GET', '/index/definition?path=a.ts&line=2&column=3');
+    await call('GET', '/index/references?path=a.ts&line=4&column=5');
+    expect(provider.indexRequests.map(({ request }) => request)).toEqual([
+      { op: 'callers', path: 'apps/web/src/page.tsx', line: 6, column: 17 },
+      { op: 'callees', path: 'a.ts', line: 1, column: 1 },
+      { op: 'definition', path: 'a.ts', line: 2, column: 3 },
+      { op: 'references', path: 'a.ts', line: 4, column: 5 },
+    ]);
+    expect(await lastActive()).toBe(now);
+    expect(opened).toBeLessThan(now);
+  });
+
+  it.each([
+    ['/index/callers?line=1&column=1', 'Give a file in the project, like src/index.ts.'],
+    [
+      '/index/callers?path=%2Fetc%2Fpasswd&line=1&column=1',
+      'Give a file in the project, like src/index.ts.',
+    ],
+    [
+      '/index/callees?path=..%2Fx.ts&line=1&column=1',
+      'Give a file in the project, like src/index.ts.',
+    ],
+    ['/index/definition?path=a.ts&line=0&column=1', 'Give a line and a column, counting from 1.'],
+    ['/index/references?path=a.ts&line=1', 'Give a line and a column, counting from 1.'],
+  ])('refuses %s itself, without asking the workspace', async (path, error) => {
+    expect(await call('GET', path)).toEqual({
+      status: 400,
+      json: { error, code: 'invalid_request' },
+    });
+    expect(provider.indexRequests).toEqual([]);
+  });
+});
+
 it('needs a running workspace', async () => {
   expect(await call('GET', '/index/status')).toEqual({
     status: 409,

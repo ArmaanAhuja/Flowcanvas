@@ -1,6 +1,7 @@
 import {
   EngineProblem,
   parseEngineRequest,
+  SEMANTIC_OPS,
   type EngineRequest,
   type EngineResponse,
 } from '@flowcanvas/engine/protocol';
@@ -20,7 +21,8 @@ const PROVIDER_STATUS: Record<ProviderErrorKind, 409 | 502 | 503> = {
 };
 
 /**
- * The project index (phase 4, ADR 0025): /api/projects/:projectId/workspace/index/{status,search}. Only the
+ * The project index (phase 4, ADR 0025): /api/projects/:projectId/workspace/index/{status,search} and (phase 5)
+ * /index/{definition,references,callers,callees}. Only the
  * project's owner, only while the workspace runs.
  *
  * Indexing is not activity (decisions log, 9 Nov 2026): the page asks for the status while it shows progress,
@@ -92,6 +94,22 @@ export function indexRoutes(deps: WorkspaceDependencies) {
       true,
     );
   });
+
+  // TypeScript's answers about the name at a place (phase 5, ADR 0026): the person asking, so activity.
+  for (const op of SEMANTIC_OPS) {
+    index.get(`/index/${op}`, (c) =>
+      ask(
+        c,
+        {
+          op,
+          path: c.req.query('path'),
+          line: Number(c.req.query('line')),
+          column: Number(c.req.query('column')),
+        },
+        true,
+      ),
+    );
+  }
 
   return index;
 }

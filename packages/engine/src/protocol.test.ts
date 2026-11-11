@@ -101,3 +101,82 @@ describe('isEngineResponse', () => {
     ).toBe(false);
   });
 });
+
+describe('the semantic questions (phase 5)', () => {
+  const at = { path: 'apps/web/src/page.tsx', line: 6, column: 17 };
+  const item = { name: 'Page', kind: 'component', container: null, place: at, builtIn: false };
+
+  it('accepts a place in the project for each of the four', () => {
+    for (const op of ['definition', 'references', 'callers', 'callees'] as const) {
+      expect(parseEngineRequest({ op, ...at })).toEqual({ op, ...at });
+    }
+  });
+
+  it.each([
+    [{ path: '/etc/passwd', line: 1, column: 1 }, 'Give a file in the project, like src/index.ts.'],
+    [
+      { path: '../outside.ts', line: 1, column: 1 },
+      'Give a file in the project, like src/index.ts.',
+    ],
+    [{ path: 'a//b.ts', line: 1, column: 1 }, 'Give a file in the project, like src/index.ts.'],
+    [{ path: 'a.ts', line: 0, column: 1 }, 'Give a line and a column, counting from 1.'],
+    [{ path: 'a.ts', line: 1, column: 1.5 }, 'Give a line and a column, counting from 1.'],
+  ])('refuses %j', (place, message) => {
+    expect(() => parseEngineRequest({ op: 'callers', ...place })).toThrow(
+      new EngineProblem('invalid_request', message),
+    );
+  });
+
+  const callers: EngineRequest = { op: 'callers', ...at };
+  const entry = {
+    ...item,
+    relation: 'renders',
+    provenance: 'resolved',
+    sites: [{ path: 'apps/web/src/app.tsx', line: 3, column: 5 }],
+  };
+
+  it('accepts well-formed answers', () => {
+    expect(
+      isEngineResponse(callers, {
+        ok: true,
+        result: { target: item, entries: [entry], complete: true, message: null },
+      }),
+    ).toBe(true);
+    expect(
+      isEngineResponse(
+        { op: 'definition', ...at },
+        { ok: true, result: { definitions: [item], message: null } },
+      ),
+    ).toBe(true);
+    expect(
+      isEngineResponse(
+        { op: 'references', ...at },
+        {
+          ok: true,
+          result: {
+            target: item,
+            references: [{ ...at, isDefinition: true }],
+            complete: true,
+            message: null,
+          },
+        },
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    ['an unresolved entry with a place to jump to', { ...entry, provenance: 'unresolved' }],
+    ['an unknown relation', { ...entry, relation: 'imports' }],
+    ['a site outside the project', { ...entry, sites: [{ path: '/etc/x', line: 1, column: 1 }] }],
+    ['a place that climbs out', { ...entry, place: { path: 'a/../../x', line: 1, column: 1 } }],
+    ['an unknown kind', { ...entry, kind: 'secret' }],
+    ['a non-boolean built-in', { ...entry, builtIn: 'no' }],
+  ])('refuses callers with %s', (_, bad) => {
+    expect(
+      isEngineResponse(callers, {
+        ok: true,
+        result: { target: item, entries: [bad], complete: true, message: null },
+      }),
+    ).toBe(false);
+  });
+});

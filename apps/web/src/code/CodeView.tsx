@@ -1,7 +1,7 @@
 import { Breadcrumb, Button, EditorTabs, StatusBar, Toggle } from '@flowcanvas/ui';
 import type { EditorState } from '@codemirror/state';
 import { useState } from 'react';
-import { CodeEditor } from './CodeEditor';
+import { CodeEditor, type CodePoint } from './CodeEditor';
 import { cursorLabel } from './editor-setup';
 import { detectIndent, languageFor } from './languages';
 import { FILES_TEXT } from './texts';
@@ -126,14 +126,25 @@ export function CodeView({
   files,
   running,
   indexNote,
+  onSemanticKey,
+  onContextMenu,
 }: {
   readonly files: CodeFiles;
   readonly running: boolean;
   /** The index's progress in words, while it indexes ("Indexing 1,240 of 2,031 files…", phase 4). */
   readonly indexNote?: string | undefined;
+  /** F12 and Shift+F12 in the shown file (phase 5). */
+  readonly onSemanticKey?: (op: 'definition' | 'references', path: string, at: CodePoint) => void;
+  /** A right-click in the shown file (phase 5). */
+  readonly onContextMenu?: (path: string, at: CodePoint, pointer: { x: number; y: number }) => void;
 }) {
   const active = files.active;
-  const [cursor, setCursor] = useState('Ln 1, Col 1');
+  // The cursor's place, and which file it's in: each file has its own editor, so after switching files the label
+  // is read from the shown file's state until its editor reports (found by phase 5's walkthrough: the status bar
+  // kept the previous file's line).
+  const [cursor, setCursor] = useState<{ readonly path: string; readonly label: string } | null>(
+    null,
+  );
 
   if (!running) {
     return (
@@ -147,7 +158,9 @@ export function CodeView({
     if (active === undefined) return;
     files.updated(active.path, state);
     const label = cursorLabel(state);
-    if (label !== cursor) setCursor(label);
+    if (cursor?.path !== active.path || label !== cursor.label) {
+      setCursor({ path: active.path, label });
+    }
   };
 
   const text =
@@ -219,6 +232,8 @@ export function CodeView({
                 state={text}
                 onUpdate={onUpdate}
                 reveal={files.reveal?.path === active.path ? files.reveal : undefined}
+                onSemanticKey={(op, at) => onSemanticKey?.(op, active.path, at)}
+                onContextMenu={(at, pointer) => onContextMenu?.(active.path, at, pointer)}
               />
             )
           )}
@@ -229,7 +244,7 @@ export function CodeView({
               text === undefined
                 ? []
                 : [
-                    cursor,
+                    cursor?.path === active.path ? cursor.label : cursorLabel(text),
                     detectIndent(text.doc.sliceString(0, 20_000)).label,
                     'UTF-8',
                     languageFor(active.path).name,

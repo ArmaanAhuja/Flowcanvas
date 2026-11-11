@@ -16,6 +16,7 @@ import {
 } from '@flowcanvas/workspace-agent/protocol';
 import {
   isEngineResponse,
+  SEMANTIC_OPS,
   type EngineRequest,
   type EngineResponse,
 } from '@flowcanvas/engine/protocol';
@@ -143,7 +144,13 @@ export function localHostProvider(options: {
       return body;
     },
     async index(ref: string, request: EngineRequest): Promise<EngineResponse> {
-      const response = await call(PATHS.index(ref), request, ACTION_TIMEOUT_MS);
+      // TypeScript's answers can take a while the first time (the host allows 90 s); the rest are quick.
+      const semantic = (SEMANTIC_OPS as readonly string[]).includes(request.op);
+      const response = await call(
+        PATHS.index(ref),
+        request,
+        semantic ? 100_000 : ACTION_TIMEOUT_MS,
+      );
       const body: unknown = await response.json().catch(() => undefined);
       // From inside the workspace: checked again here, whatever the host checked.
       if (!isEngineResponse(request, body)) throw new ProviderError('failed', MESSAGES.unexpected);

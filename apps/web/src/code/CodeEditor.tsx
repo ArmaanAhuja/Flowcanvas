@@ -14,6 +14,28 @@ export interface CodeEditorProps {
    */
   readonly reveal?:
     { readonly line: number; readonly column: number; readonly id: number } | undefined;
+  /**
+   * TypeScript's questions about the name at the cursor (phase 5): F12 for its definition, Shift+F12 for its
+   * references. 1-based line and column in UTF-16 units, as the engine counts.
+   */
+  readonly onSemanticKey?: (op: 'definition' | 'references', at: CodePoint) => void;
+  /** A right-click: the place clicked (the cursor moves there) and where the pointer is, for the menu. */
+  readonly onContextMenu?: (
+    at: CodePoint,
+    pointer: { readonly x: number; readonly y: number },
+  ) => void;
+}
+
+/** A place in a file: 1-based line and column, in UTF-16 units. */
+export interface CodePoint {
+  readonly line: number;
+  readonly column: number;
+}
+
+/** The 1-based line and column of an offset in the document. */
+export function pointOf(state: EditorState, offset: number): CodePoint {
+  const line = state.doc.lineAt(offset);
+  return { line: line.number, column: offset - line.from + 1 };
 }
 
 /**
@@ -21,11 +43,61 @@ export interface CodeEditorProps {
  * stylesheets, which our Content-Security-Policy allows, instead of <style> elements, which it blocks. Token
  * variables and fonts still reach inside. Switching files swaps the state, so each file keeps its own undo.
  */
-export function CodeEditor({ state, onUpdate, reveal }: CodeEditorProps) {
+export function CodeEditor({
+  state,
+  onUpdate,
+  reveal,
+  onSemanticKey,
+  onContextMenu,
+}: CodeEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const update = useRef(onUpdate);
   update.current = onUpdate;
+  const semanticKey = useRef(onSemanticKey);
+  semanticKey.current = onSemanticKey;
+  const contextMenu = useRef(onContextMenu);
+  contextMenu.current = onContextMenu;
+
+  // Keys and right-clicks inside the shadow root reach the host element; CodeMirror says where they are.
+  useEffect(() => {
+    const element = host.current;
+    if (element === null) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const current = view.current;
+      if (
+        current === null ||
+        event.key !== 'F12' ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      if (semanticKey.current === undefined) return;
+      event.preventDefault();
+      semanticKey.current(
+        event.shiftKey ? 'references' : 'definition',
+        pointOf(current.state, current.state.selection.main.head),
+      );
+    };
+    const onMenu = (event: MouseEvent) => {
+      const current = view.current;
+      if (current === null || contextMenu.current === undefined) return;
+      event.preventDefault();
+      const offset =
+        current.posAtCoords({ x: event.clientX, y: event.clientY }) ??
+        current.state.selection.main.head;
+      current.dispatch({ selection: { anchor: offset }, userEvent: 'select.pointer' });
+      contextMenu.current(pointOf(current.state, offset), { x: event.clientX, y: event.clientY });
+    };
+    element.addEventListener('keydown', onKeyDown);
+    element.addEventListener('contextmenu', onMenu);
+    return () => {
+      element.removeEventListener('keydown', onKeyDown);
+      element.removeEventListener('contextmenu', onMenu);
+    };
+  }, []);
 
   useEffect(() => {
     const element = host.current;

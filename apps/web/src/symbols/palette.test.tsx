@@ -107,17 +107,27 @@ const palette = () => screen.findByRole('dialog', { name: 'Command palette' });
 
 describe('the index’s progress', () => {
   it('shows a chip while indexing, asks again until ready, then says nothing and stops asking', async () => {
-    statuses = [status('indexing', 1240, 2031), status('ready', 2031, 2031)];
+    // Indexing until the test says it's ready: the steps don't depend on how fast this machine is (CI's busy
+    // runner once took longer than one answer to show the chip, phase 5 milestone A).
+    statuses = [status('indexing', 1240, 2031)];
     renderPage(fakeApi());
-    const chips = await screen.findAllByText('Indexing 61%');
+    const chips = await screen.findAllByText('Indexing 61%', {}, { timeout: 10_000 });
     // Under the Entry points title and over the canvas (design brief, "Still indexing").
     expect(chips).toHaveLength(2);
     expect(chips[0]?.getAttribute('title')).toBe('Indexing 1,240 of 2,031 files…');
+    // It keeps asking while indexing…
+    await waitFor(
+      () => {
+        expect(statusRequests).toBeGreaterThanOrEqual(2);
+      },
+      { timeout: 5000 },
+    );
+    statuses = [status('ready', 2031, 2031)];
     await waitFor(
       () => {
         expect(screen.queryByText(/^Indexing/)).toBeNull();
       },
-      { timeout: 3000 },
+      { timeout: 5000 },
     );
     const asked = statusRequests;
     await new Promise((resolve) => setTimeout(resolve, 1200));

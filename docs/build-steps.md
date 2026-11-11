@@ -12381,3 +12381,468 @@ pnpm test:e2e -- try-it/phase-4.spec.ts
 - **Laptop:** heavy runs were for investigation only, one at a time; load under 3.
 
 **Commit:** `chore(release): phase 4 report, 0.8.0, in review` (with the fixes from CI).
+
+## Phase 5 — TypeScript semantics
+
+**From the build plan:**
+- **Build:** TypeScript compiler API service: definitions, references, type-resolved call edges; callers and callees panel.
+- **Done when:** callers and callees for 20 hand-picked functions match a manual check.
+- **Try it:** right-click a function → Callers; compare with your own reading of the code.
+
+**Decisions** (decisions log, 12 Nov 2026):
+- **The right panel's Calls tab** (Figma's inspector) shows the callers and callees of the function at the cursor.
+- **Project code only, honestly:** calls into packages that aren't installed show as unresolved, never guessed, and nothing installs by itself.
+- **Rendering counts as a call,** marked "renders".
+- **Claude picks and labels the 20 functions** (10 in Rallly, 10 in Documenso).
+- **TypeScript 6's compiler API:** upgrade-later 3 checked; TS 7's API isn't stable.
+- **Every row carries how it's known:** resolved or unresolved.
+
+**Expected outcome:**
+- In the Code view, right-click a function's name. **Callers** opens the right panel's Calls tab: who calls it, and who renders it if it's a component, each with its place and how it's known. **Callees** lists what it calls.
+- Clicking a row opens that place.
+- **Go to definition** (F12) and **Find references** (Shift+F12) work across the project, through path aliases and re-exports.
+- After an edit, the answers follow it, as search does.
+
+**Concepts this phase introduces** (each with a primer in its step):
+- **The TypeScript compiler API and language service:** programs, type checkers, symbols, declarations. https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API
+- **tsconfig projects:** one program per `tsconfig.json`, so `paths` aliases and `jsx` settings apply. https://www.typescriptlang.org/tsconfig/
+- **Call hierarchies:** incoming and outgoing calls, as language servers define them. https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_prepareCallHierarchy
+- **Precision and recall** against hand labels.
+
+**Scope:**
+- **In:**
+  - the compiler service in the engine (per-tsconfig programs, kept current on changes)
+  - definition, references, callers (calls and renders) and callees, with provenance
+  - the API through the host and control plane
+  - the Code view's context menu and keys, the Calls tab
+  - the corpus check, the walkthrough
+- **Out:**
+  - the graph model and canvas edges (phase 6)
+  - framework connectors (routes, tRPC, ORM; stage 1)
+  - runtime evidence
+  - automatic dependency installs
+  - TypeScript 7
+
+### Steps (planned)
+
+| # | Step | Milestone | Status |
+| --- | --- | --- | --- |
+| 0 | The plan and decisions; branch; the visual-test pixel tolerance (owner) | A | done (Claude, 12 Nov) |
+| 1 | Spike: the TypeScript language service in the workspace on both forks: per-tsconfig programs, memory, time to first answer, the bundle's size. ADR 0026 | A | done (Claude, 12 Nov) |
+| 2 | The engine: definition, references, callers and callees (calls and renders) with provenance; kept current on changes | A | done (Claude, 12 Nov) |
+| 3 | The API through the host and control plane | A | done (Claude, 12 Nov) |
+| 4 | UI: the editor's context menu, and the Calls tab in the design system | B | done (Claude, 12 Nov) |
+| 5 | The page: right-click → Callers or Callees; F12; Shift+F12; rows open their place | B | done (Claude, 12 Nov) |
+| 6 | Corpus: 20 hand-labelled functions in real workspaces; the walkthrough, screens, Figma differences | B | done (Claude, 12 Nov) |
+| 7 | Close: report, 0.9.0 | B | done (Claude, 12 Nov) |
+
+### How each Done-when item is proven
+
+| Item | Test |
+| --- | --- |
+| Callers and callees for 20 hand-picked functions match a manual check | Docker corpus test against `corpus/labels/calls.json`: every labelled caller and callee found, and nothing found that the labels don't have, per function |
+| Right-click → Callers | Walkthrough `try-it/phase-5.spec.ts` |
+| Definitions and references | Engine unit tests on fixtures: path aliases, re-exports, methods, overloads, JSX, a dynamic call left unresolved |
+
+### Risks (checked at every milestone)
+
+| # | Risk | How we keep it in check | Status |
+| --- | --- | --- | --- |
+| R1 | The compiler needs too much memory or time on large projects | Measured in the spike on both forks within the workspace's 4 GiB; programs built on first use, one per tsconfig | **measured:** Rallly 0.65 GB, Documenso 1.07 GB with every program; Twenty runs out of memory with every program, so the service runs in a worker capped at 2.5 GB and builds only the programs a question needs (ADR 0026). Step 6: TypeScript's DOM library now loads (it was cut by a file limit): +0.15 GB on Rallly, +0.18 GB on Documenso (laptop, heap after GC) |
+| R2 | Without installed dependencies, calls into packages can't be resolved | Shown honestly as unresolved (owner); measured how many of the labelled calls it affects | **in check:** the project's own packages resolve as project code; TypeScript leaves unresolved calls out, so the engine adds them itself (ADR 0026 §5) |
+| R3 | The engine's bundle grows by the TypeScript library | Measured in the spike; copied only when the engine changes | **measured:** +12.9 MB (TypeScript beside the bundle, not in it) |
+| R4 | **Laptop:** a language service per running workspace | Built on first use, freed with the workspace; the resource guard still applies | **in check:** the worker starts on the first question only, capped at 2.5 GB, and ends with the engine |
+
+### Step 5.0 — The plan, the owner's decisions, and a pixel tolerance for anti-aliasing (done by Claude)
+
+**Goal:** start phase 5 with its plan and the owner's answers recorded. Also land the owner's fix for the one-off visual failures, which turned `main`'s CI red after phase 4's merge.
+
+**What a person can do now:** nothing new in the app. The visual suite no longer fails on 1–2 anti-aliased pixels.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `e2e/playwright.visual.config.ts` | `maxDiffPixels: 4` (owner, 12 Nov 2026), with the reason |
+| `docs/decisions-log.md`, `docs/upgrade-later.md` (3), `docs/STATUS.md`, `docs/RUN-AND-FEATURES.md`, `docs/reports/phase-4.md` | Phase 4 accepted; the tolerance; phase 5's decisions; TS 7 checked |
+| `docs/build-steps.md` | This plan |
+
+**Concepts:**
+- **Anti-aliasing:** shapes' edges are drawn with in-between colours. Chromium's software rasteriser can draw the same edge 1–3 colour levels differently when it's busy, so a screenshot can differ by a pixel or two with nothing changed.
+- **Telling noise from a change:** a real change (a row moved, a colour, a missing icon) touches hundreds of pixels. Four pixels is room for edge noise and nothing else.
+
+**Found and fixed on the way:**
+1. **`main`'s CI failed after phase 4's merge:** the file tree's "large" story, by 1 pixel. Investigated:
+   - The pixels are the first row's icon edge, 1–3 colour levels apart.
+   - Under normal load: 0 failures in 120 runs of the two affected stories. Under 8 parallel browsers (load 17): 6 in 240, each 1–2 pixels.
+   - Chromium's `--disable-low-res-tiling` and `--disable-partial-raster` didn't fix it. The second changes rendering outright.
+   - The owner chose a 4-pixel tolerance.
+
+**Tests:** the visual suite runs on CI on this branch's draft pull request.
+
+**Run and check it:**
+```fish
+pnpm test:visual
+```
+
+**Risks:**
+- **Laptop:** the investigation pushed the load to 17 for about two minutes, then the runs stopped.
+
+**Commit:** `chore: phase 5 plan and owner decisions; visual tests allow 4 anti-aliased pixels`.
+
+### Step 5.1 — Spike: the TypeScript language service in a workspace, on three forks (done by Claude; ADR 0026)
+
+**Goal:** before building on it, find out whether TypeScript's compiler can answer "who calls this, and what does it call" inside a workspace's limits, on monorepos with no `node_modules`, and what that costs.
+
+**What a person can do now:** nothing in the app yet. The design is settled and measured (ADR 0026).
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `docs/adr/0026-typescript-semantics.md` | The measurements and the decisions |
+| (scratchpad) `spike.cjs` | The measuring script; not kept: step 2 builds the engine's service from its findings |
+
+**Concepts:**
+- **A program, a type checker, a language service:**
+  - A *program* is a set of files compiled together under one `tsconfig.json`.
+  - The *type checker* answers what each name refers to.
+  - The *language service* wraps both with the questions an editor asks: definition, references and call hierarchy.
+
+  https://github.com/microsoft/TypeScript/wiki/Using-the-Language-Service-API
+- **Call hierarchy:** incoming calls ("who calls this") and outgoing calls ("what does this call"), with each call site's place. TypeScript counts JSX elements as calls. https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_prepareCallHierarchy
+- **A document registry:** a cache of parsed files shared by several language services, so a file used by five programs is parsed once.
+- **`extends` and `paths`:** how a tsconfig inherits settings and maps import names to files. In a monorepo both usually go through `node_modules`, which a fresh clone doesn't have. https://www.typescriptlang.org/tsconfig/#paths
+- **Worker threads with resource limits:** a JavaScript thread with its own heap, capped (`resourceLimits`), so running out of memory ends only that thread. https://nodejs.org/api/worker_threads.html#new-workerfilename-options
+
+**Found and fixed on the way:**
+1. **The web app's calls to `Button` were missing.** The cause took three steps to find:
+   - The imports resolved to a virtual `node_modules` copy, so the file wasn't the same one as the package's own. Fixed with `paths` to the real files.
+   - The program still had no `.tsx` files from the package, because the web app's config extends `@tsconfig/next`. That's an npm package that isn't installed, so every option was lost, `jsx` included.
+   - Without `jsx`, TypeScript resolves a `.tsx` import but leaves the file out.
+
+   The fix is analysis defaults where an option is unset. After it, `Button` has 573 references in 3 programs.
+2. **Twenty runs out of memory with every program,** at about 3.2 GB. So the service runs in a capped worker and builds only the programs a question needs: the file's own, plus its dependents'.
+3. **TypeScript leaves out calls it can't resolve,** so the engine must find those itself to show them as unresolved (the owner's decision).
+
+**Tests:** a spike: measurements, no committed tests. The measurements are in ADR 0026:
+
+| | Rallly | Documenso | Twenty |
+| --- | --- | --- | --- |
+| Every program built | 4.2 s, 0.65 GB | 7.2 s, 1.07 GB | out of memory at about 3.2 GB |
+| First call hierarchy | 0.15–0.47 s | 0.34–0.46 s | — |
+| After an edit | 45–79 ms | | |
+
+**Checked against the code by hand:**
+- `getSigningVolume` really has no callers.
+- `TemplateUseDialog` is rendered in three places.
+- `createPoll` has two callers.
+
+**Run and check it:** nothing to run in the app.
+
+**Risks:**
+- R1: measured, with the design changed to fit (above).
+- R2: in check.
+- R3: +12.9 MB.
+- **Laptop:** each run was in a workspace-sized container (2 CPUs, 4 GiB, no network); load under 2.5. Twenty's run filled the container's heap, as intended, and didn't touch the laptop's.
+
+**Commit:** `34472fa` `docs: phase 5 spike, the TypeScript language service in a capped worker (ADR 0026)`.
+
+### Step 5.2 — The engine: definitions, references, callers and callees, in a capped worker (done by Claude; ADR 0026)
+
+**Goal:** the engine answers four questions about the name at a place, from TypeScript's compiler, each answer saying how it's known:
+- where it's defined
+- where it's used
+- who calls or renders it
+- what it calls or renders
+
+It has to stay within the workspace's memory, and keep up with edits.
+
+**What a person can do now:** nothing in the app yet (steps 3 and 5). The engine bundled for workspaces answers the four questions. In a real container against Rallly:
+- `createPoll`'s callers are the two API route modules.
+- Its callees are `toPollResponse` and the project's other functions (resolved), and 11 Prisma calls (unresolved, since the generated client isn't in git).
+- `Button` is rendered by 149 components across three packages.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `packages/engine/src/semantics/host.ts` | What the compiler may read: inside the project, never secret files, never through a link out; TypeScript's own lib; the project's own packages for `extends` |
+| `packages/engine/src/semantics/projects.ts` | `findPackages` (names, folders, dependencies, `paths` from `exports`), `ProjectModel` (tsconfigs, which configs hold a file, which could hold its callers), `analysisDefaults` |
+| `packages/engine/src/semantics/semantic-service.ts` | `SemanticService`: language services built per question and released least recently used first; `definition`, `references`, `callers`, `callees`; renders; the unresolved pass; built-ins; `changed` |
+| `packages/engine/src/semantics/worker.ts`, `client.ts` | The worker thread, and its client: started on the first question with a 2,500 MB heap cap; honest answers when it runs out of memory, fails or is too slow |
+| `packages/engine/src/semantics/v8.ts` | The heap reading, replaceable in tests |
+| `packages/engine/src/protocol.ts` | `definition`, `references`, `callers` and `callees`: requests, results, and checks (unresolved entries never carry a place) |
+| `packages/engine/src/service.ts`, `main.ts` | The engine answers through the client; the watcher's changes reach the worker with the fresh file list |
+| `packages/engine/scripts/bundle.ts`, `src/bundle-files.ts` | The worker bundled beside `main.js`; TypeScript as one deterministic archive (`typescript.tar`) |
+| `workspace/host/src/indexers.ts` | Unpacks the archive into `typescript/` |
+| `packages/engine/src/semantics/*.test.ts`, `protocol.test.ts`, `service.test.ts` | 34 new tests |
+
+**Concepts:**
+- **The language service API:** `prepareCallHierarchy`, `provideCallHierarchyIncomingCalls` and `provideCallHierarchyOutgoingCalls`, `getDefinitionAtPosition` and `findReferences`. These are the calls an editor makes. https://github.com/microsoft/TypeScript/wiki/Using-the-Language-Service-API
+- **The type checker:** `getSymbolAtLocation` says what a name refers to, and a symbol with no declarations means the compiler couldn't find it. That's how unresolved calls are found. https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API#using-the-type-checker
+- **Script versions:** the language service re-checks a file only when its version changes, so an edit costs only that file.
+- **Worker threads:** `resourceLimits.maxOldGenerationSizeMb` caps the heap, and `ERR_WORKER_OUT_OF_MEMORY` ends only the worker. https://nodejs.org/api/worker_threads.html#worker-resource-limits
+- **Deterministic archives:** `tar --sort=name --mtime=@0 --owner=0 --group=0` gives the same bytes for the same files, so the engine's version hash is reproducible.
+
+**Found and fixed on the way:**
+1. **For a top-level function, TypeScript gives the module (`"./format"`) as its container.** Containers are classes and namespaces, so quoted module names become null.
+2. **Two safety tests couldn't fail:** removing the link guard or the secret-file rule left them passing, because they asked about things that never touched those files. The new tests call through a link and import a secret-named module (`.env.ts`). Both now fail without the guard.
+3. **For an import it can't resolve, TypeScript's "definition" is the import line itself.** That's in the importing file, so nothing is read through it. Claude's test had expected no definition; it now checks that nothing points past the import.
+4. **Spying on a module's namespace fails under ES modules,** so the heap reading is an object of our own.
+
+**Tests:**
+- **Unit:** engine 142 tests, 34 new.
+  - **The semantic service (12),** on a fixture monorepo shaped like the forks:
+    - callers through an alias and relative imports
+    - renders across packages, through `exports` and a barrel
+    - asking from a use
+    - nothing callable
+    - callees: resolved, built-in, unresolved; `<div>` isn't a call
+    - a method's callees, and a constructor
+    - definition through an alias
+    - references, the definition marked
+    - a caller added by an edit, and one removed
+    - a link out stays unresolved
+    - a secret-named module never read
+    - memory released, with "partial"
+  - **The client (6):**
+    - starts on the first question only
+    - answers matched by id
+    - out of memory: an honest answer, then a fresh worker
+    - a failed answer, without the error
+    - too slow
+    - changes reach a running worker only
+  - **The protocol (13):** the four questions' requests, and their answers refused when malformed (an unresolved entry with a place, an unknown relation, a site outside the project, a path climbing out, an unknown kind)
+  - **The engine service (3):** the questions passed on; no worker; changes and overflow passed on with the fresh list
+- **Mutation-checked:** following a link out, reading a secret file, dropping the unresolved pass, and dropping "renders" each fail their tests.
+- **A real container** (the bundle, 2 CPUs, 4 GiB, Rallly): the answers above, by hand against the code.
+- **Bundle:** 12 files, 17.6 MB. Two builds give the same version hash.
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/engine test
+pnpm --filter @flowcanvas/engine build    # dist/workspace/: main.js, semantics-worker.js, typescript.tar, …
+```
+
+**Risks:**
+- R1 (memory): the cap and per-question programs are in place. The plan's two forks fit with every program.
+- R2: unresolved calls are shown, never guessed.
+- R3: +12.9 MB.
+- **Laptop:** container runs only; load under 2.
+
+**Commit:** `7598905` `feat(engine): TypeScript's definitions, references, callers and callees, in a capped worker`.
+
+### Step 5.3 — TypeScript's answers through the host and control plane (done by Claude)
+
+**Goal:** the four answers reach the page by the same path as search, checked at every hop, with time for TypeScript's first answer about a package.
+
+**What a person can do now** (`pnpm dev`, a running workspace):
+- `GET /api/projects/<id>/workspace/index/callers?path=apps/web/src/features/poll/mutations.ts&line=98&column=14`
+- the same for `callees`, `definition` and `references`
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `services/control-plane/src/workspaces/index-routes.ts` | The four routes: owner only, while running, counting as activity |
+| `services/control-plane/src/workspaces/local-host.ts` | 100 s for TypeScript's questions; the answer checked again |
+| `workspace/host/src/indexers.ts` | 90 s for TypeScript's questions (15 s for the rest) |
+| `workspace/host/src/host.docker.test.ts` | Rallly in a real workspace: the four answers through the host |
+| `services/control-plane/src/workspaces/index-routes.test.ts` | 6 new tests |
+
+**Concepts:**
+- **Timeouts per question:** a backstop longer than the worker's own 60 s limit, so the worker's honest "too slow" answer arrives first rather than a transport error.
+
+**Found and fixed on the way:**
+- **Rallly's index is now ready about 4.9 s after the first request** (it was about 2.5 s), because the first engine start in a workspace also copies TypeScript's 13 MB. That's well under 30 s, and only when the engine has changed. Step 6's corpus test keeps the 30 s check.
+- **CI: phase 4's progress-chip page test failed once on milestone A's push.** Its fake answered "indexing" once and "ready" from then on, so how long the chip stayed up depended on the machine's speed. On CI's busy runner it was gone before the test looked. The fake now answers "indexing" until the test switches it to "ready", and the test checks it asked again in between. It passed three runs in a row of the whole web suite.
+
+**Tests:**
+- **Unit:** control plane 262 tests, 6 new: the four routes with their places, and activity; five refusals before the workspace is asked.
+- **Docker:** `host.docker.test.ts` (23, 1 new) on Rallly at its pin:
+  - `createPoll`'s callers, the two route modules, in 2.9 s (the first question)
+  - its callees in 1.9 s, with `prisma.$transaction` unresolved
+  - `Button`'s 149 callers across apps and packages in 1.2 s
+  - a definition
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/control-plane test
+pnpm --filter @flowcanvas/workspace-host exec vitest run src/host.docker.test.ts   # real Docker
+```
+
+**Risks:**
+- **Laptop:** one Docker run, about 1 minute; load under 2.
+
+**Commit:** `43aa510` `feat(api): TypeScript's answers through the host and control plane`.
+
+### Step 5.4 — The editor's context menu and the Calls panel, in the design system (done by Claude)
+
+**Goal:** the two new components, with every variant in the catalogue, before the page uses them.
+
+**What a person can do now** (`pnpm --filter @flowcanvas/ui storybook`):
+- **Editor / ContextMenu:** a menu at a pointer position, its first item focused, shortcuts on the right.
+- **Shell / CallsPanel:** Callers, Callees, References, Loading and Empty stories.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `packages/ui/src/components/context-menu/ContextMenu.tsx` (+ CSS, stories, tests) | React Aria's Popover against an invisible anchor at the pointer, placed through the CSSOM (our CSP forbids style attributes); the shared Menu's look and keys |
+| `packages/ui/src/components/calls-panel/CallsPanel.tsx` (+ CSS, stories, tests) | The three views as a segmented switch; the function's name, kind and place; rows with a provenance glyph, the name, "calls"/"renders", the kind and the place; callees grouped as the project's, Unresolved (explained) and Built-in (a collapsed Disclosure); a call's other places as links |
+| `packages/engine/src/semantics/semantic-service.ts` | A caller outside any named function is named `<file> (top level)` (owner decision 6) |
+| `docs/decisions-log.md` | The owner's decisions 5–7 and the provenance glyphs |
+
+**Concepts:**
+- **A popover anchored to a point, not an element:** React Aria positions a popover against a trigger element; a zero-size span at the pointer is that element. https://react-spectrum.adobe.com/react-aria/Popover.html
+- **Disclosure:** a section that opens and closes, with `aria-expanded` on its button. https://react-spectrum.adobe.com/react-aria/Disclosure.html
+- **Provenance by form (Graphite):** resolved is a solid line, unresolved an open stub ending in a hollow circle, always with the word beside it.
+
+**Found and fixed on the way:**
+- **Two motion tokens the CSS named didn't exist;** the transition now uses `--duration-hover`.
+
+**Tests:** UI 131 (11 new): the menu opens with its first item focused, runs an item by keyboard, closes on Escape, sits at the pointer; the panel's three views, its groups, opening the right place for each row, the states and the glyphs.
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/ui test
+pnpm --filter @flowcanvas/ui storybook   # Editor/ContextMenu, Shell/CallsPanel
+```
+
+**Risks:** none new. **Laptop:** unit tests only.
+
+**Commits:** `83637c9` `feat(engine): a caller outside any named function is named by its file`; `cc937ae` `feat(ui): ContextMenu at the pointer, and the Calls panel`.
+
+### Step 5.5 — The page: right-click → Callers or Callees, F12, Shift+F12, rows open their place (done by Claude)
+
+**Goal:** the Try it in the app: right-click a function's name in the Code view and see its callers in the right panel.
+
+**What a person can do now** (`pnpm dev`, a running workspace, the Code view):
+- **Right-click a name:** a menu with Go to definition (F12), Find references (Shift+F12), Callers and Callees. The cursor moves to where you clicked.
+- **Callers or Callees** opens the inspector on its Calls tab (opening the right panel if it was closed). The tab's own switch moves between the three views about the same name.
+- **F12** opens the definition; if there isn't one in the project, the Calls tab says so. **Shift+F12** lists the references.
+- **Clicking a row** opens that place in the Code view.
+- The inspector now has Figma's tabs: Details, Runs and Changes (dimmed, "Arrives in a later phase"), Calls.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `apps/web/src/code/CodeEditor.tsx`, `CodeView.tsx` | F12, Shift+F12 and right-clicks, caught on the editor's host (CodeMirror lives in a shadow root); `posAtCoords` finds the place under the pointer |
+| `apps/web/src/symbols/api.ts`, `useCalls.ts` | `askSemantic`; the Calls tab's state, dropping an answer to a question since replaced |
+| `apps/web/src/project/Inspector.tsx` | The inspector's tabs; brings the panel into view on a new question |
+| `apps/web/src/project/ProjectPage.tsx` | The menu, the keys, the definition jump, rows opening places |
+| `apps/web/src/symbols/calls.test.tsx` | 7 page tests |
+
+**Concepts:**
+- **Events from a shadow root:** a key or right-click inside CodeMirror reaches the host element, retargeted; listening there catches them without touching CodeMirror's own keymap. https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_shadow_DOM
+- **Stale answers:** a counter per question; an answer for an older question is dropped.
+
+**Found and fixed on the way:**
+- **F12 opened nothing:** a definition is an item whose place is in `.place`; the page passed the item itself. Caught by the page test before it was committed. Built-in definitions (no place in the project) now say so instead.
+- **jsdom has no layout:** `posAtCoords` returns the end of the document there, so the right-click test stands in for the browser with a stub, which also proves the pointer's place, not the old cursor, is asked about.
+
+**Tests:** web 175 (7 new): right-click → Callers fills the Calls tab and a row opens its place; switching to Callees asks the same place; F12 jumps or says why not; Shift+F12 lists references; F12 with a modifier is left to the browser; a stale answer is dropped (mutation-checked: removing the guard fails it).
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/web test
+pnpm dev   # open a project, Code view, right-click a function → Callers
+```
+**Bundle:** ProjectPage 100.5 kB of 110 kB gzip; the rest unchanged and within budget.
+
+**Risks:** browsers may keep F12 for developer tools; the right-click menu always works. **Laptop:** unit tests only.
+
+**Commit:** `903b564` `feat(web): right-click a function for Callers, Callees, Go to definition and Find references`.
+
+### Step 5.6 — Proof: 20 hand-labelled functions in real workspaces, the walkthrough, screens and the Figma differences (done by Claude; ADR 0026 addendum)
+
+**Goal:** the Done when: callers and callees of 20 hand-picked functions match a manual check.
+
+**What a person can do now:**
+- Read `corpus/labels/calls.json`: 10 functions in Rallly, 10 in Documenso, each with what it exercises (plain functions, methods, components, a barrel re-export, workspace packages, path aliases, callers in callbacks and tests), every caller with the lines it calls from, and every callee with how it's known and where it's declared.
+- See the check run in real workspaces on CI (`Workspaces against real Docker`): `"calls": "10 of 10"` for each fork.
+
+**How the labels were made:** by reading the source at each pin, not from the engine. Callers: every call site from a search of the repo, then the named function around each, read by hand. Callees: the function's own body, read line by line. Then the engine's answers were compared; every difference was investigated before anything changed.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `corpus/labels/calls.json` | The 20 functions, labelled |
+| `corpus/src/calls.ts` (+ tests) | The exact comparison: one line per caller and callee, compared as multisets; a call listed twice is a difference |
+| `workspace/host/src/corpus.docker.test.ts` | Rallly and Documenso: callers and callees of the labelled functions, exactly as labelled |
+| `packages/engine/src/semantics/semantic-service.ts`, `host.ts` (+ tests) | Seven fixes below |
+| `e2e/try-it/phase-5.spec.ts`, `try-it/support.ts` | The walkthrough; clicking a word in the editor with the real mouse |
+| `e2e/visual/screens.spec.ts` (+ baselines) | Screens: the menu, Callers, Callees; every project screen with the inspector's tabs |
+| `docs/reports/phase-5-figma-differences.md` | For the owner's review |
+| `docs/adr/0026-typescript-semantics.md` | Addendum: the fixes and the cost of the DOM library |
+
+**Concepts:**
+- **Labelling against the rule, not the tool:** the labels follow TypeScript's call-hierarchy rules (an anonymous callback belongs to the named function around it, or to its file's top level) so a difference means a fault, not a convention.
+- **Exact comparison as multisets:** two callers may share a name (`route.ts (top level)` in two files) but not a place.
+
+**Found and fixed on the way** (each with a test that fails without the fix):
+1. **TypeScript's library was cut by the host's 1 MB file limit:** `lib.dom.d.ts` is 2.3 MB, so `fetch`, `URL` and `setTimeout` were unresolved in every web project.
+2. **`export const f = async () => …` scanned its whole file** for unresolved calls.
+3. **A named function inside the body** had its unresolved calls credited to the outer one.
+4. **Calls the hierarchy can't model were dropped:** a constant holding a function (`nanoid`), built-ins declared as variables (`Boolean`, `new Error`). Now listed by what the name is: resolved for built-ins, module-level constants and interface or class members; unresolved for parameters and locals (decisions log, step 6).
+5. **Built-in overloads made two rows** (`split`), and a call could be listed twice.
+6. **Unresolved names carried their arguments** (`Buffer.concat([ … ]).toString`); now `Buffer.concat(…).toString`. An IIFE isn't listed as a call.
+7. **The status bar kept the previous file's line after switching files** (phase 3's, found by the walkthrough): each file has its own editor, and a new one never reported its cursor.
+- **Two labels were wrong, not the engine:** `packages/prisma/index.ts` calls its own copy of `remember`, and a caller in `packages/ee` exists (named from its import and declaration lines only).
+- **Accessibility:** axe's target-size check failed the "line 11, line 16" links; each is now at least 24 × 24 px.
+- **CI:** the first Calls page test took 5.3 s against Vitest's 5 s limit on CI's busy runner (1.6 s on the laptop). Its setup typed through ⌘K key by key; it now opens the file as the page remembers it, 3–4 times faster. The walkthrough's first CI run used `tab` for editor tabs, which are buttons.
+
+**Tests:**
+- **Corpus (Docker, CI):** Rallly 10 of 10, Documenso 10 of 10; first TypeScript question 2.4 s (Rallly) and 6.1 s (Documenso), while programs build.
+- **Engine:** 20 semantics tests (1 new, covering fixes 1–6; 10 mutants, each caught).
+- **Corpus unit:** 18 (6 new). **Web:** 176 (1 new, the status bar).
+- **Walkthrough:** `try-it/phase-5.spec.ts`, 6 steps, passed against a local build; on CI against the preview.
+- **Visual:** 148, 18 new (the menu and panel stories, three screens, both themes); 20 project screens re-approved after checking each diff lies only in the inspector's tab strip (x 1089–1431, y 77–124).
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/corpus test
+pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts   # real Docker, about 6 minutes
+pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-5.spec.ts
+pnpm test:visual
+```
+
+**Risks:** R1 updated (the DOM library's cost). **Laptop:** one visual run in Docker at a time, load under 4; the corpus Docker test ran on CI only.
+
+**Commits:** `268cdce` `fix(engine): callees as labelled`; `2d7ab85` `test(corpus): 20 hand-labelled functions' callers and callees`; `3953f66` `test(e2e): phase 5 walkthrough and screens`; `2a426bd` `test(web): the Calls tests open the file as the page remembers it`; `99b5d52` `fix(web): the status bar shows the shown file's cursor after switching files`.
+
+### Step 5.7 — Close the phase: report, 0.9.0, ready for review (done by Claude)
+
+**Goal:** the phase written up for the owner's acceptance, with every check green.
+
+**What a person can do now:** read `docs/reports/phase-5.md` (how to try it, the evidence, deviations, known issues) and `docs/reports/phase-5-figma-differences.md`; What's new shows 0.9.0.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `docs/reports/phase-5.md` | The report |
+| `docs/reports/phase-5-figma-differences.md`, `docs/reports/phase-5/` | For review by eye |
+| `CHANGELOG.md`, `package.json` | 0.9.0 |
+| `docs/STATUS.md`, `docs/RUN-AND-FEATURES.md`, `ARCHITECTURE.md` | Phase 5 in review; how to run and check it; the page side and the callee rules |
+
+**Concepts:** none new.
+
+**Found and fixed on the way:** none at close.
+
+**Tests:** CI on the closing commit `9e53ff3` (run 43113208453), every job green: lint, typecheck, unit tests and build; visual and accessibility; walkthroughs on the deployed preview; canvas performance; real Docker with the corpus (Rallly ready in 3.1 s, calls 10 of 10, first question 1.6 s; Documenso ready in 3.1 s, calls 10 of 10, first question 4.2 s).
+
+**Upgrade-later review:** nothing new deferred; 3 (TypeScript 7) re-checked, not met; 33 unchanged.
+
+**Run and check it:**
+```fish
+pnpm dev   # Rallly, Code view, right-click createPoll (mutations.ts:98) → Callers
+pnpm test && pnpm test:e2e && pnpm test:visual && pnpm test:docker
+```
+
+**Risks:** none new. **Laptop:** nothing heavy at close.
+
+**Commit:** `9e53ff3` `docs: phase 5 milestone B and close (steps 4-7)`; this entry in the next commit.

@@ -499,3 +499,42 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 4. **Accepted:** the test projects (corpus forks) cached outside `/tmp`, so a restart doesn't lose them.
 5. **Not accepted:** a fixed rerun limit for flaky tests. Every flaky test is investigated until it's explained, or recorded with what was checked.
 6. **Accepted:** milestones of 3–4 steps instead of 2–3.
+
+## 11–12 Nov 2026: phase 4 accepted; a pixel tolerance for anti-aliasing; phase 5 plan (owner decisions)
+
+**Phase 4:** accepted by the owner on 11 Nov ("do as you seem okay and continue") and merged (PR #18, `88a3a78`).
+
+**Visual tests allow up to 4 differing pixels** (owner, 12 Nov, Claude's recommendation). This is a small, written deviation from "pixel-exact" (CLAUDE.md §8).
+- **What happened:** `main`'s first CI run after the merge failed the file tree's "large" story by 1 pixel. Milestone A's flow-node failure (9 Nov) was the same thing.
+- **The cause:** under CPU load, Chromium draws 1–2 pixels of an icon's anti-aliased edge 1–3 colour levels differently. It happened in 6 of 240 runs with 8 parallel browsers, and none of 120 at normal load.
+- **What didn't fix it:** Chromium's switches for partial and low-resolution drawing. One changes rendering outright.
+- **The rule now:** `maxDiffPixels: 4` on every screenshot. Any real change is hundreds of pixels; `threshold: 0` still counts every colour change in those pixels.
+
+**Phase 5, TypeScript semantics:**
+1. **Callers and callees appear in the right panel's Calls tab** (Figma's inspector; the brief calls it "Connections"), for the function at the cursor in the Code view. The same panel serves canvas nodes from phase 6.
+2. **Project code only, honestly** (owner). A cloned workspace has no `node_modules` unless the person installs them.
+   - Calls within the project are resolved.
+   - Calls into packages show as unresolved ("install dependencies to resolve"), never guessed.
+   - Nothing installs by itself. An automatic install can come with the dev-server phase.
+3. **Rendering counts as a call, marked "renders"** (owner). A component's callers include the components that render it (`<PollForm />`), and its callees the components it renders.
+4. **Claude picks and labels the 20 functions** for the Done-when check: 10 in Rallly and 10 in Documenso, covering plain functions, methods, components, re-exports and path aliases. Their callers and callees are labelled by reading the code (`corpus/labels/calls.json`), for the owner to spot-check.
+
+**Settled by the documents** (applied):
+- **TypeScript 6's compiler API.** Upgrade-later 3 was checked as it asks: TS 7's API is still unstable, and typescript-eslint supports `<6.1`.
+- **Every caller and callee row carries how it's known** (CLAUDE.md rule 4): *resolved* when the compiler proved it, *unresolved* when it couldn't (such as `obj[key]()`, or a package without types).
+- **The Try it says "right-click a function → Callers",** so the Code view gets a context menu: Callers, Callees, Go to definition and Find references. F12 and Shift+F12 are the usual keys for the last two.
+
+**Phase 5, milestone B** (owner, 12 Nov 2026):
+5. **Built-ins** (`Math.max`, `Promise.all`) in a function's callees: listed after the project's calls, in a collapsed "Built-in" group. Unresolved calls get their own group, labelled as unresolved.
+6. **A caller outside any named function** (a module's top level, or an anonymous callback there, such as an API route handler) is named by its file: `route.ts (top level)`, with its line.
+7. **Find references** shows in the same right-panel Calls tab as a third view: Callers, Callees, References.
+
+**Settled by the documents** (applied):
+- **Provenance in the rows** follows Graphite's form channel: *resolved* is a plain solid line with no glyph; *unresolved* (Graphite's "unknown") is a short open stub ending in a hollow circle. Each row also says the word, so meaning is never carried by form alone.
+
+**Phase 5, step 6: what the corpus check settled** (applied by Claude, 12 Nov 2026, by CLAUDE.md rule 4 and owner decision 2 "never guessed"; ADR 0026, addendum):
+- **A call TypeScript's call hierarchy leaves out, but whose name the compiler finds,** is listed by what that name is. A built-in (`Boolean`, `new Error`, `fetch`), a module-level constant (`export const nanoid = customAlphabet(…)`) or an interface or class member is fixed where it's declared: *resolved*. A parameter, a local, a destructured name or an object literal's property holds whatever it's given at run time: *unresolved*, with the call's text (`getValue`, `resolve`).
+- **An IIFE** (`(() => …)()`) isn't a call of anything unknown: its body is the function's own code, and its calls are listed as the function's.
+- **A caller in `packages/ee`** (Documenso's commercial code) is listed like any other: it is one, and the engine reads the project as it is. The labels name it from its import and declaration lines only; nothing there is run or enabled (CLAUDE.md rule 8).
+
+**Phase 5 accepted** (owner, 12 Nov 2026): "accepted and now let's move ahead". Merged in PR #19 once CI is green on its last commit.

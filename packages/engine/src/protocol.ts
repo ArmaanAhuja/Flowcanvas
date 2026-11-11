@@ -41,7 +41,69 @@ export type FileStatusName = (typeof FILE_STATUSES)[number];
 export type EngineRequest =
   | { readonly op: 'hello' }
   | { readonly op: 'status' }
-  | { readonly op: 'search'; readonly query: string; readonly limit: number };
+  | { readonly op: 'search'; readonly query: string; readonly limit: number }
+  | ({ readonly op: SemanticOp } & CodePosition);
+
+// TypeScript semantics (phase 5, ADR 0026): questions about the name at a place in a file.
+export const SEMANTIC_OPS = ['definition', 'references', 'callers', 'callees'] as const;
+export type SemanticOp = (typeof SEMANTIC_OPS)[number];
+
+/** A place in the project: a project-relative path, a 1-based line and a 1-based column in UTF-16 units. */
+export interface CodePosition {
+  readonly path: string;
+  readonly line: number;
+  readonly column: number;
+}
+
+/**
+ * How a caller or callee is known (CLAUDE.md rule 4): `resolved` when the compiler proved it; `unresolved` when it
+ * couldn't (a package without types, `obj[key]()`), shown with the call's text and never guessed.
+ */
+export const PROVENANCES = ['resolved', 'unresolved'] as const;
+export type Provenance = (typeof PROVENANCES)[number];
+/** A plain call, or a component rendered (`<PollForm />`, owner, 12 Nov 2026). */
+export const RELATIONS = ['calls', 'renders'] as const;
+export type Relation = (typeof RELATIONS)[number];
+
+/** Something a question is about or found: a function, method, component, class… */
+export interface CodeItem {
+  /** Its name; for an unresolved callee, the call's text (cut to 120 characters). */
+  readonly name: string;
+  readonly kind: SymbolKindName | null;
+  readonly container: string | null;
+  /** Where it's declared; null when it's unresolved, or built in (TypeScript's standard library). */
+  readonly place: CodePosition | null;
+  /** From TypeScript's standard library (`Math.max`, `Promise.all`): resolved, but not the project's code. */
+  readonly builtIn: boolean;
+}
+
+export interface CallEntry extends CodeItem {
+  readonly relation: Relation;
+  readonly provenance: Provenance;
+  /** Where the calls happen: in the caller (for callers), or in the function asked about (for callees). */
+  readonly sites: readonly CodePosition[];
+}
+
+export interface CallsResult {
+  /** What was asked about, or null when there's nothing callable there. */
+  readonly target: CodeItem | null;
+  readonly entries: readonly CallEntry[];
+  /** False when some of the project couldn't be looked at (too large, or a limit was reached): said in `message`. */
+  readonly complete: boolean;
+  readonly message: string | null;
+}
+
+export interface DefinitionResult {
+  readonly definitions: readonly CodeItem[];
+  readonly message: string | null;
+}
+
+export interface ReferencesResult {
+  readonly target: CodeItem | null;
+  readonly references: readonly (CodePosition & { readonly isDefinition: boolean })[];
+  readonly complete: boolean;
+  readonly message: string | null;
+}
 
 /**
  * - `starting`: the engine is opening its index and listing files.
@@ -88,6 +150,10 @@ export interface EngineResults {
   readonly hello: { readonly protocol: number };
   readonly status: EngineStatus;
   readonly search: SearchResult;
+  readonly definition: DefinitionResult;
+  readonly references: ReferencesResult;
+  readonly callers: CallsResult;
+  readonly callees: CallsResult;
 }
 
 export const ENGINE_ERROR_CODES = ['invalid_request', 'failed'] as const;
@@ -142,6 +208,28 @@ export function parseEngineRequest(input: unknown): EngineRequest {
         throw new EngineProblem('invalid_request', 'Ask for 1 to 100 results.');
       }
       return { op: 'search', query: fields.query, limit };
+    }
+    case 'definition':
+    case 'references':
+    case 'callers':
+    case 'callees': {
+      const { path, line, column } = fields;
+      if (
+        typeof path !== 'string' ||
+        path === '' ||
+        path.length > ENGINE_LIMITS.text ||
+        path.startsWith('/') ||
+        path.split('/').some((part) => part === '..' || part === '')
+      ) {
+        throw new EngineProblem(
+          'invalid_request',
+          'Give a file in the project, like src/index.ts.',
+        );
+      }
+      if (!isPositive(line) || !isPositive(column)) {
+        throw new EngineProblem('invalid_request', 'Give a line and a column, counting from 1.');
+      }
+      return { op: fields.op, path, line, column };
     }
     default:
       throw new EngineProblem('invalid_request', 'Unknown operation.');
@@ -219,5 +307,84 @@ export function isEngineResponse(request: EngineRequest, value: unknown): value 
         result.symbols.length <= request.limit &&
         result.symbols.every(isHit)
       );
+    case 'definition':
+      return (
+        result !== undefined &&
+        isList(result.definitions, SEMANTIC_LIMITS.definitions, isItem) &&
+        isMessage(result.message)
+      );
+    case 'references':
+      return (
+        result !== undefined &&
+        (result.target === null || isItem(result.target)) &&
+        isList(
+          result.references,
+          SEMANTIC_LIMITS.references,
+          (r) => isPosition(r) && typeof record(r)?.isDefinition === 'boolean',
+        ) &&
+        typeof result.complete === 'boolean' &&
+        isMessage(result.message)
+      );
+    case 'callers':
+    case 'callees':
+      return (
+        result !== undefined &&
+        (result.target === null || isItem(result.target)) &&
+        isList(result.entries, SEMANTIC_LIMITS.entries, isEntry) &&
+        typeof result.complete === 'boolean' &&
+        isMessage(result.message)
+      );
   }
+}
+
+/** The most a semantic answer holds; the engine says when it stopped short (`complete: false`). */
+export const SEMANTIC_LIMITS = {
+  definitions: 20,
+  references: 500,
+  entries: 200,
+  sites: 50,
+} as const;
+
+const isPositive = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 1;
+const isMessage = (value: unknown) =>
+  value === null || (typeof value === 'string' && value.length <= 300);
+const isList = (value: unknown, most: number, each: (item: unknown) => boolean) =>
+  Array.isArray(value) && value.length <= most && value.every(each);
+
+function isPosition(value: unknown): value is CodePosition {
+  const p = record(value);
+  return (
+    p !== undefined &&
+    isText(p.path) &&
+    !p.path.startsWith('/') &&
+    !p.path.split('/').includes('..') &&
+    isPositive(p.line) &&
+    isPositive(p.column)
+  );
+}
+
+function isItem(value: unknown): value is CodeItem {
+  const i = record(value);
+  return (
+    i !== undefined &&
+    isText(i.name) &&
+    (i.kind === null || (SYMBOL_KIND_NAMES as readonly unknown[]).includes(i.kind)) &&
+    (i.container === null || isText(i.container)) &&
+    (i.place === null || isPosition(i.place)) &&
+    typeof i.builtIn === 'boolean'
+  );
+}
+
+function isEntry(value: unknown): value is CallEntry {
+  const e = record(value);
+  return (
+    e !== undefined &&
+    isItem(e) &&
+    (RELATIONS as readonly unknown[]).includes(e.relation) &&
+    (PROVENANCES as readonly unknown[]).includes(e.provenance) &&
+    isList(e.sites, SEMANTIC_LIMITS.sites, isPosition) &&
+    // Unresolved means not proven: never a place to jump to as if it were.
+    (e.provenance === 'resolved' || e.place === null)
+  );
 }

@@ -9,9 +9,11 @@ import type { EngineStatus, SearchResult } from './protocol.js';
 import { serveEngine } from './serve.js';
 import {
   INDEXING_FAILED,
+  NO_SEMANTICS,
   NOT_FOLLOWING,
   startEngineService,
   type EngineService,
+  type Semantics,
 } from './service.js';
 import { IndexStore } from './store.js';
 
@@ -171,6 +173,57 @@ describe('the engine service', () => {
     await service.settled();
     service.close();
     expect(watcherClosed).toBe(true);
+  });
+});
+
+describe('TypeScript’s answers (phase 5)', () => {
+  const at = { path: 'a.ts', line: 1, column: 17 };
+
+  it('passes the four questions to the semantic worker', async () => {
+    const ask = vi.fn<(op: string, position: unknown) => Promise<unknown>>((op) =>
+      Promise.resolve({ asked: op }),
+    );
+    start({
+      semantics: { ask, changed: vi.fn(), close: () => Promise.resolve() } as unknown as Semantics,
+    });
+    for (const op of ['definition', 'references', 'callers', 'callees'] as const) {
+      expect(await service.handle({ op, ...at })).toEqual({ asked: op });
+    }
+    expect(ask.mock.calls.map(([op, position]) => [op, position])).toEqual([
+      ['definition', at],
+      ['references', at],
+      ['callers', at],
+      ['callees', at],
+    ]);
+  });
+
+  it('says so when there is no semantic worker', async () => {
+    start();
+    expect(await service.handle({ op: 'callers', ...at })).toEqual({
+      target: null,
+      entries: [],
+      complete: false,
+      message: NO_SEMANTICS,
+    });
+  });
+
+  it('tells the semantic worker about changes, with the fresh file list', async () => {
+    write('a.ts', 'export function one() {}');
+    files = ['a.ts'];
+    const changed = vi.fn();
+    start({
+      semantics: { ask: vi.fn(), changed, close: () => Promise.resolve() } as unknown as Semantics,
+    });
+    await service.settled();
+    write('b.ts', 'export function two() {}');
+    files = ['a.ts', 'b.ts'];
+    emit({ type: 'changed', path: 'b.ts', deleted: false, version: null });
+    await service.settled();
+    expect(changed).toHaveBeenCalledWith(['b.ts'], ['a.ts', 'b.ts']);
+    emit({ type: 'overflow' });
+    await service.settled();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(changed).toHaveBeenLastCalledWith([], ['a.ts', 'b.ts']);
   });
 });
 

@@ -4,6 +4,37 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-11-12 — Phase 5: TypeScript semantics
+
+Right-click a function in the Code view to see who calls it and what it calls, as TypeScript itself resolves them. Every row says how it's known, and calls TypeScript can't resolve (a package that isn't installed, a function passed in at run time) are shown as unresolved, never guessed. Workspaces still run on your own computer (`pnpm dev`).
+
+### Try it
+
+1. Open a project with its workspace running, and open a file in the Code view.
+2. Right-click a function's name and choose **Callers**. The right panel's **Calls** tab lists every function that calls it, or renders it if it's a component, with where.
+3. Click a row to open that place. Switch to **Callees** to see what it calls: the project's own, then unresolved calls, then built-ins.
+
+### Added
+
+- **The Code view's right-click menu:** Go to definition (F12), Find references (Shift+F12), Callers and Callees, about the name under the pointer.
+- **The inspector's tabs** (Details, Runs, Changes, Calls), with **Calls** working now:
+  - **Callers:** who calls or renders it, each with its kind and place; a caller outside any named function is named by its file ("route.ts (top level)")
+  - **Callees:** the project's, then **Unresolved** (with why), then **Built-in** (collapsed)
+  - **References:** every place it's used, the definition marked
+  - a call made from several places lists each one
+- **TypeScript in the workspace:** one program per `tsconfig.json`, through path aliases, workspace packages and re-exports, without installing anything; it follows your edits.
+- **Design system:** Context menu and Calls panel, in the catalogue.
+
+### Fixed
+
+- **The status bar showed the previous file's line** after switching files in the Code view.
+
+### Security
+
+- **TypeScript never reads `.env` files,** files outside the project, or links that lead out of it.
+- **TypeScript runs in its own worker with a memory cap,** so a very large project gets an honest "too large" instead of stopping the workspace's index.
+
+
 ## [0.8.0] — 2026-11-11 — Phase 4: the indexer
 
 Every project is indexed inside its workspace, so you can jump to any function, component or heading by typing part of its name. The index follows your edits as you make them. Workspaces still run on your own computer (`pnpm dev`).

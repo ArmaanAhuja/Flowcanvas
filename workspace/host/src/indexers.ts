@@ -7,12 +7,14 @@ import {
   ENGINE_BUNDLE_DIR,
   ENGINE_BUNDLE_FILES,
   ENGINE_BUNDLE_VERSION_FILE,
+  ENGINE_TYPESCRIPT_ARCHIVE,
 } from '@flowcanvas/engine/bundle';
 import {
   ENGINE_HOME,
   ENGINE_LIMITS,
   ENGINE_PROTOCOL,
   isEngineResponse,
+  SEMANTIC_OPS,
   type EngineRequest,
   type EngineResponse,
 } from '@flowcanvas/engine/protocol';
@@ -29,12 +31,19 @@ export const ENGINE_MESSAGES = {
 
 /** Status and search answer from memory and the index; anything slower than this is stuck. */
 const TIMEOUT_MS = 15_000;
+/** TypeScript's answers (phase 5): the first about a package builds its programs, which can take seconds; the worker
+ * gives up at 60 s itself, so this is only a backstop. */
+export const SEMANTIC_TIMEOUT_MS = 90_000;
 
 export type StartEngine = (ref: string) => Promise<WorkspaceProcess>;
 
 /** File names are our own constants; content goes in on stdin, never on a command line. */
 const copyCommand = (name: string) =>
   `mkdir -p ${ENGINE_HOME} && cat > ${ENGINE_HOME}/${name}.$$ && mv ${ENGINE_HOME}/${name}.$$ ${ENGINE_HOME}/${name}`;
+
+/** TypeScript's archive (phase 5): unpacked into `typescript/`, replacing an older copy, then removed. */
+const unpackCommand = (name: string) =>
+  `mkdir -p ${ENGINE_HOME} && cat > ${ENGINE_HOME}/${name}.$$ && rm -rf ${ENGINE_HOME}/typescript && mkdir ${ENGINE_HOME}/typescript && tar -xf ${ENGINE_HOME}/${name}.$$ -C ${ENGINE_HOME}/typescript && rm ${ENGINE_HOME}/${name}.$$`;
 
 /**
  * Copies the bundle into the workspace unless the same version is already there. The version file goes in
@@ -56,7 +65,8 @@ async function copyEngine(docker: Docker, ref: string): Promise<void> {
   if (there === version) return;
   for (const name of ENGINE_BUNDLE_FILES) {
     const content = await readFile(new URL(name, ENGINE_BUNDLE_DIR));
-    await docker(['exec', '-i', ref, 'sh', '-c', copyCommand(name)], { input: content });
+    const command = name === ENGINE_TYPESCRIPT_ARCHIVE ? unpackCommand(name) : copyCommand(name);
+    await docker(['exec', '-i', ref, 'sh', '-c', command], { input: content, timeoutMs: 120_000 });
   }
   await docker(['exec', '-i', ref, 'sh', '-c', copyCommand(ENGINE_BUNDLE_VERSION_FILE)], {
     input: `${version}\n`,
@@ -82,7 +92,8 @@ export function dockerEngine(docker: Docker): StartEngine {
 const engineProtocol: LineProtocol<EngineRequest, EngineResponse> = {
   version: ENGINE_PROTOCOL,
   maxLineBytes: ENGINE_LIMITS.lineBytes,
-  timeoutMs: () => TIMEOUT_MS,
+  timeoutMs: (request) =>
+    (SEMANTIC_OPS as readonly string[]).includes(request.op) ? SEMANTIC_TIMEOUT_MS : TIMEOUT_MS,
   check: (request, body): body is EngineResponse => isEngineResponse(request, body),
   messages: ENGINE_MESSAGES,
 };
