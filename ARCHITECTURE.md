@@ -248,6 +248,13 @@ inside the workspace: the agent's watcher (in process) ──► refresh ──�
 - **Every file is counted** by what happened to it (parsed, no grammar, too large, binary, unreadable). Symbols come from syntax alone: TS/JS declarations and Markdown headings.
 - **The workspace is untrusted:** the host and the control plane both check each answer's exact shape. Logs never contain the query.
 - **The page** (`apps/web/src/symbols/`): ⌘K and the top bar's search open the command palette (`packages/ui`). Symbols come from the engine, a search per keystroke, with the one typed past cancelled and late answers dropped; files are ranked in the browser. Enter opens the top result, which the palette marks itself until the arrow keys are used. A symbol opens in the Code view at its line (`useCodeFiles.open(path, at)`). The status is polled only while indexing, and shows as a chip with the entry points and on the canvas, and in the Code view's status bar. Quick-open and the palette share one lazy chunk (`SearchDialogs`).
+- **TypeScript's answers** (phase 5, ADR 0026): `GET …/index/{definition,references,callers,callees}?path=&line=&column=`.
+  - **Where:** a worker thread in the engine (`packages/engine/src/semantics/`), started on the first question and capped at 2,500 MB, so running out of memory ends only it.
+  - **How:** one language service per `tsconfig.json`, built when a question needs it (the file's programs, plus its package's dependents' for callers), and released least recently used first.
+  - **Without `node_modules`:** the project's own packages resolve as project code (`extends` through a virtual `node_modules`, imports through `paths` from each `package.json`'s `exports`). Packages from npm stay unresolved.
+  - **Answers:** each caller or callee is *resolved* or *unresolved* (never guessed), *calls* or *renders*, and built-ins are marked.
+  - **What it reads:** only inside the project (never secret files, never through a link out) and TypeScript's own lib.
+  - **Shipping:** TypeScript ships beside the engine as one archive the host unpacks.
 - **Proof:** `workspace/host/src/corpus.docker.test.ts` indexes all six corpus forks in real workspaces; `packages/engine/src/search.perf.test.ts` times search on 100,000 names, run alone in CI's performance job.
 
 ## Workspace lifecycle (phase 1d, step 3)

@@ -136,4 +136,5 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 
 ### Coming next
 - **Phase 5 (in progress):** TypeScript semantics: go to definition, find references, and a function's callers and callees in the right panel's Calls tab.
+  - 🟡 Milestone A done (the engine and the API, not yet in the page): with `pnpm dev` and a running workspace, `GET /api/projects/<id>/workspace/index/callers?path=…&line=…&column=…` (and `callees`, `definition`, `references`) answer from TypeScript in the workspace. Calls into packages that aren't installed are shown as unresolved.
 - **After that:** stage 1 draws real flows from code, and stage 2 adds live frames of the running app.

@@ -12429,9 +12429,9 @@ pnpm test:e2e -- try-it/phase-4.spec.ts
 | --- | --- | --- | --- |
 | 0 | The plan and decisions; branch; the visual-test pixel tolerance (owner) | A | done (Claude, 12 Nov) |
 | 1 | Spike: the TypeScript language service in the workspace on both forks: per-tsconfig programs, memory, time to first answer, the bundle's size. ADR 0026 | A | done (Claude, 12 Nov) |
-| 2 | The engine: definition, references, callers and callees (calls and renders) with provenance; kept current on changes | A | *next* |
-| 3 | The API through the host and control plane | A | *planned* |
-| 4 | UI: the editor's context menu, and the Calls tab in the design system | B | *planned* |
+| 2 | The engine: definition, references, callers and callees (calls and renders) with provenance; kept current on changes | A | done (Claude, 12 Nov) |
+| 3 | The API through the host and control plane | A | done (Claude, 12 Nov) |
+| 4 | UI: the editor's context menu, and the Calls tab in the design system | B | *next* |
 | 5 | The page: right-click → Callers or Callees; F12; Shift+F12; rows open their place | B | *planned* |
 | 6 | Corpus: 20 hand-labelled functions in real workspaces; the walkthrough, screens, Figma differences | B | *planned* |
 | 7 | Close: report, 0.9.0 | B | *planned* |
@@ -12451,7 +12451,7 @@ pnpm test:e2e -- try-it/phase-4.spec.ts
 | R1 | The compiler needs too much memory or time on large projects | Measured in the spike on both forks within the workspace's 4 GiB; programs built on first use, one per tsconfig | **measured:** Rallly 0.65 GB, Documenso 1.07 GB with every program; Twenty runs out of memory with every program, so the service runs in a worker capped at 2.5 GB and builds only the programs a question needs (ADR 0026) |
 | R2 | Without installed dependencies, calls into packages can't be resolved | Shown honestly as unresolved (owner); measured how many of the labelled calls it affects | **in check:** the project's own packages resolve as project code; TypeScript leaves unresolved calls out, so the engine adds them itself (ADR 0026 §5) |
 | R3 | The engine's bundle grows by the TypeScript library | Measured in the spike; copied only when the engine changes | **measured:** +12.9 MB (TypeScript beside the bundle, not in it) |
-| R4 | **Laptop:** a language service per running workspace | Built on first use, freed with the workspace; the resource guard still applies | open |
+| R4 | **Laptop:** a language service per running workspace | Built on first use, freed with the workspace; the resource guard still applies | **in check:** the worker starts on the first question only, capped at 2.5 GB, and ends with the engine |
 
 ### Step 5.0 — The plan, the owner's decisions, and a pixel tolerance for anti-aliasing (done by Claude)
 
@@ -12546,4 +12546,132 @@ pnpm test:visual
 - R3: +12.9 MB.
 - **Laptop:** each run was in a workspace-sized container (2 CPUs, 4 GiB, no network); load under 2.5. Twenty's run filled the container's heap, as intended, and didn't touch the laptop's.
 
-**Commit:** `docs: phase 5 spike, the TypeScript language service (ADR 0026)`.
+**Commit:** `34472fa` `docs: phase 5 spike, the TypeScript language service in a capped worker (ADR 0026)`.
+
+### Step 5.2 — The engine: definitions, references, callers and callees, in a capped worker (done by Claude; ADR 0026)
+
+**Goal:** the engine answers four questions about the name at a place, from TypeScript's compiler, each answer saying how it's known:
+- where it's defined
+- where it's used
+- who calls or renders it
+- what it calls or renders
+
+It has to stay within the workspace's memory, and keep up with edits.
+
+**What a person can do now:** nothing in the app yet (steps 3 and 5). The engine bundled for workspaces answers the four questions. In a real container against Rallly:
+- `createPoll`'s callers are the two API route modules.
+- Its callees are `toPollResponse` and the project's other functions (resolved), and 11 Prisma calls (unresolved, since the generated client isn't in git).
+- `Button` is rendered by 149 components across three packages.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `packages/engine/src/semantics/host.ts` | What the compiler may read: inside the project, never secret files, never through a link out; TypeScript's own lib; the project's own packages for `extends` |
+| `packages/engine/src/semantics/projects.ts` | `findPackages` (names, folders, dependencies, `paths` from `exports`), `ProjectModel` (tsconfigs, which configs hold a file, which could hold its callers), `analysisDefaults` |
+| `packages/engine/src/semantics/semantic-service.ts` | `SemanticService`: language services built per question and released least recently used first; `definition`, `references`, `callers`, `callees`; renders; the unresolved pass; built-ins; `changed` |
+| `packages/engine/src/semantics/worker.ts`, `client.ts` | The worker thread, and its client: started on the first question with a 2,500 MB heap cap; honest answers when it runs out of memory, fails or is too slow |
+| `packages/engine/src/semantics/v8.ts` | The heap reading, replaceable in tests |
+| `packages/engine/src/protocol.ts` | `definition`, `references`, `callers` and `callees`: requests, results, and checks (unresolved entries never carry a place) |
+| `packages/engine/src/service.ts`, `main.ts` | The engine answers through the client; the watcher's changes reach the worker with the fresh file list |
+| `packages/engine/scripts/bundle.ts`, `src/bundle-files.ts` | The worker bundled beside `main.js`; TypeScript as one deterministic archive (`typescript.tar`) |
+| `workspace/host/src/indexers.ts` | Unpacks the archive into `typescript/` |
+| `packages/engine/src/semantics/*.test.ts`, `protocol.test.ts`, `service.test.ts` | 34 new tests |
+
+**Concepts:**
+- **The language service API:** `prepareCallHierarchy`, `provideCallHierarchyIncomingCalls` and `provideCallHierarchyOutgoingCalls`, `getDefinitionAtPosition` and `findReferences`. These are the calls an editor makes. https://github.com/microsoft/TypeScript/wiki/Using-the-Language-Service-API
+- **The type checker:** `getSymbolAtLocation` says what a name refers to, and a symbol with no declarations means the compiler couldn't find it. That's how unresolved calls are found. https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API#using-the-type-checker
+- **Script versions:** the language service re-checks a file only when its version changes, so an edit costs only that file.
+- **Worker threads:** `resourceLimits.maxOldGenerationSizeMb` caps the heap, and `ERR_WORKER_OUT_OF_MEMORY` ends only the worker. https://nodejs.org/api/worker_threads.html#worker-resource-limits
+- **Deterministic archives:** `tar --sort=name --mtime=@0 --owner=0 --group=0` gives the same bytes for the same files, so the engine's version hash is reproducible.
+
+**Found and fixed on the way:**
+1. **For a top-level function, TypeScript gives the module (`"./format"`) as its container.** Containers are classes and namespaces, so quoted module names become null.
+2. **Two safety tests couldn't fail:** removing the link guard or the secret-file rule left them passing, because they asked about things that never touched those files. The new tests call through a link and import a secret-named module (`.env.ts`). Both now fail without the guard.
+3. **For an import it can't resolve, TypeScript's "definition" is the import line itself.** That's in the importing file, so nothing is read through it. Claude's test had expected no definition; it now checks that nothing points past the import.
+4. **Spying on a module's namespace fails under ES modules,** so the heap reading is an object of our own.
+
+**Tests:**
+- **Unit:** engine 142 tests, 34 new.
+  - **The semantic service (12),** on a fixture monorepo shaped like the forks:
+    - callers through an alias and relative imports
+    - renders across packages, through `exports` and a barrel
+    - asking from a use
+    - nothing callable
+    - callees: resolved, built-in, unresolved; `<div>` isn't a call
+    - a method's callees, and a constructor
+    - definition through an alias
+    - references, the definition marked
+    - a caller added by an edit, and one removed
+    - a link out stays unresolved
+    - a secret-named module never read
+    - memory released, with "partial"
+  - **The client (6):**
+    - starts on the first question only
+    - answers matched by id
+    - out of memory: an honest answer, then a fresh worker
+    - a failed answer, without the error
+    - too slow
+    - changes reach a running worker only
+  - **The protocol (13):** the four questions' requests, and their answers refused when malformed (an unresolved entry with a place, an unknown relation, a site outside the project, a path climbing out, an unknown kind)
+  - **The engine service (3):** the questions passed on; no worker; changes and overflow passed on with the fresh list
+- **Mutation-checked:** following a link out, reading a secret file, dropping the unresolved pass, and dropping "renders" each fail their tests.
+- **A real container** (the bundle, 2 CPUs, 4 GiB, Rallly): the answers above, by hand against the code.
+- **Bundle:** 12 files, 17.6 MB. Two builds give the same version hash.
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/engine test
+pnpm --filter @flowcanvas/engine build    # dist/workspace/: main.js, semantics-worker.js, typescript.tar, …
+```
+
+**Risks:**
+- R1 (memory): the cap and per-question programs are in place. The plan's two forks fit with every program.
+- R2: unresolved calls are shown, never guessed.
+- R3: +12.9 MB.
+- **Laptop:** container runs only; load under 2.
+
+**Commit:** `7598905` `feat(engine): TypeScript's definitions, references, callers and callees, in a capped worker`.
+
+### Step 5.3 — TypeScript's answers through the host and control plane (done by Claude)
+
+**Goal:** the four answers reach the page by the same path as search, checked at every hop, with time for TypeScript's first answer about a package.
+
+**What a person can do now** (`pnpm dev`, a running workspace):
+- `GET /api/projects/<id>/workspace/index/callers?path=apps/web/src/features/poll/mutations.ts&line=98&column=14`
+- the same for `callees`, `definition` and `references`
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `services/control-plane/src/workspaces/index-routes.ts` | The four routes: owner only, while running, counting as activity |
+| `services/control-plane/src/workspaces/local-host.ts` | 100 s for TypeScript's questions; the answer checked again |
+| `workspace/host/src/indexers.ts` | 90 s for TypeScript's questions (15 s for the rest) |
+| `workspace/host/src/host.docker.test.ts` | Rallly in a real workspace: the four answers through the host |
+| `services/control-plane/src/workspaces/index-routes.test.ts` | 6 new tests |
+
+**Concepts:**
+- **Timeouts per question:** a backstop longer than the worker's own 60 s limit, so the worker's honest "too slow" answer arrives first rather than a transport error.
+
+**Found and fixed on the way:**
+- **Rallly's index is now ready about 4.9 s after the first request** (it was about 2.5 s), because the first engine start in a workspace also copies TypeScript's 13 MB. That's well under 30 s, and only when the engine has changed. Step 6's corpus test keeps the 30 s check.
+
+**Tests:**
+- **Unit:** control plane 262 tests, 6 new: the four routes with their places, and activity; five refusals before the workspace is asked.
+- **Docker:** `host.docker.test.ts` (23, 1 new) on Rallly at its pin:
+  - `createPoll`'s callers, the two route modules, in 2.9 s (the first question)
+  - its callees in 1.9 s, with `prisma.$transaction` unresolved
+  - `Button`'s 149 callers across apps and packages in 1.2 s
+  - a definition
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/control-plane test
+pnpm --filter @flowcanvas/workspace-host exec vitest run src/host.docker.test.ts   # real Docker
+```
+
+**Risks:**
+- **Laptop:** one Docker run, about 1 minute; load under 2.
+
+**Commit:** `43aa510` `feat(api): TypeScript's answers through the host and control plane`.
