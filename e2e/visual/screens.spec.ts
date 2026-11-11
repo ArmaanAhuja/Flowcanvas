@@ -3,6 +3,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { createHash } from 'node:crypto';
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { THEMES, type Theme } from './storybook.js';
+import { clickWord } from '../try-it/support.js';
 
 // The app's implemented screens (phase 2 onwards), from the production build with a fake API, in both themes:
 // pixel-compared with their approved baselines and checked with axe. Figma 06 is the owner's reference by eye;
@@ -78,6 +79,85 @@ const indexStatus = (indexing: boolean) => ({
   message: null,
 });
 
+/** TypeScript's answers about `greet` (phase 5), as the engine gives them. */
+const GREET = {
+  name: 'greet',
+  kind: 'function',
+  container: null,
+  place: { path: 'apps/web/src/utils/greeting.ts', line: 2, column: 17 },
+  builtIn: false,
+};
+const CALLS: Record<string, unknown> = {
+  callers: {
+    target: GREET,
+    entries: [
+      {
+        name: 'WelcomeBanner',
+        kind: 'component',
+        container: null,
+        place: { path: 'apps/web/src/components/welcome-banner.tsx', line: 6, column: 17 },
+        builtIn: false,
+        relation: 'calls',
+        provenance: 'resolved',
+        sites: [{ path: 'apps/web/src/components/welcome-banner.tsx', line: 8, column: 22 }],
+      },
+      {
+        name: 'sendDigest',
+        kind: 'function',
+        container: null,
+        place: { path: 'apps/web/src/jobs/digest.ts', line: 14, column: 23 },
+        builtIn: false,
+        relation: 'calls',
+        provenance: 'resolved',
+        sites: [{ path: 'apps/web/src/jobs/digest.ts', line: 21, column: 19 }],
+      },
+      {
+        name: 'greeting.test.ts (top level)',
+        kind: null,
+        container: null,
+        place: { path: 'apps/web/src/utils/greeting.test.ts', line: 1, column: 1 },
+        builtIn: false,
+        relation: 'calls',
+        provenance: 'resolved',
+        sites: [
+          { path: 'apps/web/src/utils/greeting.test.ts', line: 6, column: 12 },
+          { path: 'apps/web/src/utils/greeting.test.ts', line: 11, column: 12 },
+          { path: 'apps/web/src/utils/greeting.test.ts', line: 16, column: 12 },
+        ],
+      },
+    ],
+    complete: true,
+    message: null,
+  },
+  callees: {
+    target: GREET,
+    entries: [
+      {
+        name: 'Date',
+        kind: null,
+        container: null,
+        place: null,
+        builtIn: true,
+        relation: 'calls',
+        provenance: 'resolved',
+        sites: [{ path: 'apps/web/src/utils/greeting.ts', line: 3, column: 20 }],
+      },
+      {
+        name: 'getHours',
+        kind: 'method',
+        container: 'Date',
+        place: null,
+        builtIn: true,
+        relation: 'calls',
+        provenance: 'resolved',
+        sites: [{ path: 'apps/web/src/utils/greeting.ts', line: 3, column: 16 }],
+      },
+    ],
+    complete: true,
+    message: null,
+  },
+};
+
 async function fakeApi(page: Page, options: ApiOptions = {}): Promise<void> {
   const project =
     options.running === true
@@ -120,6 +200,8 @@ async function fakeApi(page: Page, options: ApiOptions = {}): Promise<void> {
         ms: 1,
       });
     }
+    const semantic = /\/workspace\/index\/(callers|callees)$/.exec(path)?.[1];
+    if (semantic !== undefined) return reply(route, CALLS[semantic]);
     if (path.endsWith('/workspace/journal/entry')) {
       return options.staleDraft === file
         ? reply(route, {
@@ -227,7 +309,42 @@ const SCREENS: readonly Screen[] = [
       await expect(page.getByRole('option', { name: /^greeting\.ts/ })).toBeVisible();
     },
   },
+  // Phase 5: right-click a function (the Try it), and the inspector's Calls tab (Figma's inspector tabs).
+  {
+    name: 'code-context-menu',
+    code: ['apps/web/src/utils/greeting.ts'],
+    arrange: async (page) => {
+      await rightClickGreet(page);
+    },
+  },
+  {
+    name: 'code-callers',
+    code: ['apps/web/src/utils/greeting.ts'],
+    arrange: async (page) => {
+      await rightClickGreet(page);
+      await page.getByRole('menuitem', { name: 'Callers' }).click();
+      await expect(
+        page.getByRole('button', { name: /^sendDigest, calls, resolved/ }),
+      ).toBeVisible();
+    },
+  },
+  {
+    name: 'code-callees',
+    code: ['apps/web/src/utils/greeting.ts'],
+    arrange: async (page) => {
+      await rightClickGreet(page);
+      await page.getByRole('menuitem', { name: 'Callees' }).click();
+      await expect(page.getByRole('button', { name: 'Built-in (2)' })).toBeVisible();
+    },
+  },
 ];
+
+/** A right-click on `greet` in the editor (CodeMirror is in an open shadow root, which locators pierce). */
+async function rightClickGreet(page: Page): Promise<void> {
+  await clickWord(page, 'export function greet', 'greet');
+  await expect(page.getByRole('menu', { name: 'Code' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Go to definition' })).toBeFocused();
+}
 
 async function open(page: Page, screen: Screen, theme: Theme): Promise<void> {
   await page.clock.setFixedTime(new Date('2026-11-07T10:00:00.000Z'));

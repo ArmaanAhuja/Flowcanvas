@@ -45,6 +45,16 @@
   color: var(--color-text-primary);
 }
 
+/* A call's other places sit side by side: each is a 24 px target at least (WCAG 2.2, target size; found by axe). */
+.siteLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--space-24);
+  min-inline-size: var(--space-24);
+  padding-inline: var(--space-4);
+}
+
 .note,
 .empty,
 .groupNote {
