@@ -531,3 +531,8 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 
 **Settled by the documents** (applied):
 - **Provenance in the rows** follows Graphite's form channel: *resolved* is a plain solid line with no glyph; *unresolved* (Graphite's "unknown") is a short open stub ending in a hollow circle. Each row also says the word, so meaning is never carried by form alone.
+
+**Phase 5, step 6: what the corpus check settled** (applied by Claude, 12 Nov 2026, by CLAUDE.md rule 4 and owner decision 2 "never guessed"; ADR 0026, addendum):
+- **A call TypeScript's call hierarchy leaves out, but whose name the compiler finds,** is listed by what that name is. A built-in (`Boolean`, `new Error`, `fetch`), a module-level constant (`export const nanoid = customAlphabet(…)`) or an interface or class member is fixed where it's declared: *resolved*. A parameter, a local, a destructured name or an object literal's property holds whatever it's given at run time: *unresolved*, with the call's text (`getValue`, `resolve`).
+- **An IIFE** (`(() => …)()`) isn't a call of anything unknown: its body is the function's own code, and its calls are listed as the function's.
+- **A caller in `packages/ee`** (Documenso's commercial code) is listed like any other: it is one, and the engine reads the project as it is. The labels name it from its import and declaration lines only; nothing there is run or enabled (CLAUDE.md rule 8).

@@ -177,6 +177,81 @@ describe('callees', () => {
     expect(result.entries.find((e) => e.name === 'Button')?.sites).toHaveLength(2);
   });
 
+  // Found by the corpus check (phase 5 step 6): a constant arrow scanned its whole file, built-in overloads listed
+  // twice, calls to a constant or a built-in variable left out, and an unresolved name the size of its arguments.
+  it('lists a constant arrow’s own calls once each, constants and built-in variables included', () => {
+    const jobs = 'apps/web/src/jobs.ts';
+    write(
+      jobs,
+      [
+        "import { customAlphabet } from 'nanoid';",
+        "import { z } from 'zod';",
+        "export const makeId = customAlphabet('ab', 4);",
+        'export interface Runner { start: () => void }',
+        'export const runJob = async (input: string, done: () => void, runner: Runner) => {',
+        '  const id = makeId();',
+        '  done();',
+        '  runner.start();',
+        "  const parts = input.split(',').concat(input.split(';'));",
+        '  const size = (() => parts.length)();',
+        '  if (!Boolean(size)) throw new Error(id);',
+        '  z.object({ a: z.string() }).parse(input);',
+        '  const later = () => z.number();',
+        '  setTimeout(() => huge(), 1);',
+        '  return later;',
+        '};',
+        'export function after() {',
+        '  return z.boolean();',
+        '}',
+        "import { huge } from './huge';",
+        '',
+      ].join('\n'),
+    );
+    // A project file over 1 MB isn't read (a generated bundle): a call into it stays unresolved. TypeScript's own
+    // lib.dom.d.ts is larger still, and is read: setTimeout is a built-in (found by the corpus check).
+    const huge = 'apps/web/src/huge.ts';
+    write(huge, `export function huge() {}\n/*${' '.repeat(1024 * 1024)}*/\n`);
+    service.changed([jobs, huge], [...Object.keys(FILES), jobs, huge]);
+    const result = service.callees(jobs, 5, 14);
+    expect(result.target?.name).toBe('runJob');
+    expect(brief(result.entries)).toEqual([
+      'resolved calls Boolean',
+      'resolved calls Error',
+      'resolved calls concat',
+      'resolved calls makeId',
+      'resolved calls setTimeout',
+      'resolved calls split',
+      'resolved calls start',
+      // A parameter holds whatever it's given: the compiler can't say which function runs.
+      'unresolved calls done',
+      'unresolved calls huge',
+      'unresolved calls z.object',
+      'unresolved calls z.object(…).parse',
+      'unresolved calls z.string',
+    ]);
+    // A constant holding a function: the project's, at its declaration.
+    expect(result.entries.find((e) => e.name === 'makeId')).toMatchObject({
+      builtIn: false,
+      place: { path: jobs, line: 3, column: 14 },
+    });
+    // A member of an interface: fixed by the type, at its declaration.
+    expect(result.entries.find((e) => e.name === 'start')).toMatchObject({
+      kind: 'method',
+      container: 'Runner',
+      place: { path: jobs, line: 4, column: 27 },
+    });
+    expect(result.entries.find((e) => e.name === 'Error')).toMatchObject({
+      builtIn: true,
+      place: null,
+    });
+    // Both splits, one row; and no call counted twice.
+    expect(result.entries.find((e) => e.name === 'split')?.sites).toHaveLength(2);
+    for (const entry of result.entries) {
+      const sites = entry.sites.map((s) => `${String(s.line)}:${String(s.column)}`);
+      expect(new Set(sites).size).toBe(sites.length);
+    }
+  });
+
   it('lists a method’s calls, and a constructor call', () => {
     const result = service.callees('apps/web/src/store.ts', 7, 17);
     expect(brief(result.entries)).toEqual(['resolved calls Store', 'resolved calls save']);

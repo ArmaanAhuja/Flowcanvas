@@ -365,7 +365,9 @@ export class SemanticService {
     const service = [...this.#holding(this.#model.configsFor(item.file), item.file)][0]?.service;
     if (source === undefined || service === undefined) return nothingCallable();
     const entries = new Map<string, CallEntry & { sites: CodePosition[] }>();
-    const resolvedSites = new Set<number>();
+    const starts = new Map<string, Set<number>>();
+    // Where TypeScript's hierarchy already put a call (its spans start where the callee expression starts).
+    const covered = new Set<number>();
     let complete = true;
     const add = (
       key: string,
@@ -383,19 +385,28 @@ export class SemanticService {
         entry = { ...base, relation, provenance: resolved ? 'resolved' : 'unresolved', sites: [] };
         entries.set(key, entry);
       }
+      // Each call once, however many declarations TypeScript matched it to.
+      const seen = starts.get(key) ?? new Set<number>();
+      starts.set(key, seen);
+      if (seen.has(start)) return;
+      seen.add(start);
       const site = this.#position(program, item.file, start);
       if (site !== null && entry.sites.length < SEMANTIC_LIMITS.sites) entry.sites.push(site);
     };
+    // A built-in has no place; its overloads sit in several lib files: one row per name (found by the corpus
+    // check, `split` listed twice).
+    const keyOf = (base: CodeItem, file: string, start: number, relation: Relation) =>
+      base.builtIn ? `builtin:${base.name}:${relation}` : `${file}:${String(start)}:${relation}`;
     for (const call of service.provideCallHierarchyOutgoingCalls(
       item.file,
       item.selectionSpan.start,
     )) {
       const to = this.#item(program, call.to);
       for (const span of call.fromSpans) {
-        resolvedSites.add(span.start);
+        covered.add(span.start);
         const relation = this.#relation(source, span.start);
         add(
-          `${call.to.file}:${String(call.to.selectionSpan.start)}:${relation}`,
+          keyOf(to, call.to.file, call.to.selectionSpan.start, relation),
           to,
           relation,
           true,
@@ -403,14 +414,35 @@ export class SemanticService {
         );
       }
     }
-    // What TypeScript couldn't resolve is left out of its hierarchy: found here, and shown as unresolved.
-    for (const site of this.#unresolvedSites(program, source, item)) {
-      if (resolvedSites.has(site.start)) continue;
+    // The calls TypeScript's hierarchy leaves out: those it can't resolve (shown as unresolved, never guessed), and
+    // those it resolves to something its hierarchy doesn't model, such as a constant holding a function (`nanoid`)
+    // or a built-in declared as a variable (`Boolean`, `new Error`).
+    for (const site of this.#callSites(program, source, item)) {
+      if (covered.has(site.start)) continue;
+      const declared = site.declaration;
+      if (declared === null) {
+        add(
+          `unresolved:${site.text}:${site.relation}`,
+          { name: cut(site.text), kind: null, container: null, place: null, builtIn: false },
+          site.relation,
+          false,
+          site.start,
+        );
+        continue;
+      }
+      const builtIn = this.#builtIn(declared.file);
+      const base: CodeItem = {
+        name: cut(declared.name),
+        kind: kindOf(this.#ts, declared.kind, declared.name),
+        container: declared.container === null ? null : cut(declared.container),
+        place: builtIn ? null : this.#position(program, declared.file, declared.start),
+        builtIn,
+      };
       add(
-        `unresolved:${site.text}:${site.relation}`,
-        { name: cut(site.text), kind: null, container: null, place: null, builtIn: false },
+        keyOf(base, declared.file, declared.start, site.relation),
+        base,
         site.relation,
-        false,
+        true,
         site.start,
       );
     }
@@ -432,67 +464,215 @@ export class SemanticService {
   }
 
   /**
-   * Call and JSX sites in the function's body whose callee the compiler can't find a declaration for: a package
-   * without types, `obj[key]()`. HTML elements (`<div>`) aren't calls; `super()` and `import()` aren't either.
+   * Call, `new` and JSX sites in the function's own body (not in a named function inside it, as TypeScript's hierarchy
+   * counts them), each with what the compiler resolves its callee to, or null when it can't: a package without
+   * types, `obj[key]()`. HTML elements (`<div>`) aren't calls; `super()` and `import()` aren't either.
    */
-  #unresolvedSites(
-    program: TS.Program,
-    source: TS.SourceFile,
-    item: TS.CallHierarchyItem,
-  ): { start: number; text: string; relation: Relation }[] {
+  #callSites(program: TS.Program, source: TS.SourceFile, item: TS.CallHierarchyItem): CallSite[] {
     const ts = this.#ts;
     const checker = program.getTypeChecker();
-    let declaration = findNode(ts, source, item.selectionSpan.start);
-    while (
-      declaration !== undefined &&
-      !ts.isFunctionLike(declaration) &&
-      !ts.isSourceFile(declaration)
-    ) {
-      if (ts.isClassLike(declaration)) break;
-      declaration = declaration.parent;
-    }
-    if (declaration === undefined) return [];
-    const found: { start: number; text: string; relation: Relation }[] = [];
-    const resolves = (expression: TS.Node) => {
+    const root = callableAt(ts, source, item.selectionSpan.start);
+    if (root === undefined) return [];
+    const found: CallSite[] = [];
+    const declarationOf = (expression: TS.Node) => {
       const symbol = checker.getSymbolAtLocation(expression);
       const target =
         symbol !== undefined && symbol.flags & ts.SymbolFlags.Alias
           ? checker.getAliasedSymbol(symbol)
           : symbol;
-      return (target?.declarations?.length ?? 0) > 0;
+      const declaration = target?.valueDeclaration ?? target?.declarations?.[0];
+      if (target === undefined || declaration === undefined) return null;
+      const file = declaration.getSourceFile();
+      // A parameter, a local or a destructured name holds whatever it's given at run time: the compiler finds the
+      // name, not the function, so the call stays unresolved (CLAUDE.md rule 4). Built-ins, module-level constants
+      // and interface or class members are fixed: resolved.
+      if (!this.#builtIn(file.fileName) && !isFixedCallee(ts, declaration)) return null;
+      const name = ts.getNameOfDeclaration(declaration) ?? declaration;
+      const owner = declaration.parent;
+      return {
+        file: file.fileName,
+        start: name.getStart(file),
+        name: target.getName(),
+        kind: kindOfDeclaration(ts, declaration),
+        container:
+          (ts.isInterfaceDeclaration(owner) || ts.isClassLike(owner)) && owner.name !== undefined
+            ? owner.name.text
+            : null,
+      };
     };
     const visit = (node: TS.Node): void => {
+      if (node !== root && isNamedCallable(ts, node)) return;
       if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
         const callee = node.expression;
+        // An IIFE, `(() => …)()`: its body is this function's own code, scanned below; the call itself isn't
+        // unknown (found by the corpus check, Documenso's SignaturePad).
+        let inline: TS.Expression = callee;
+        while (ts.isParenthesizedExpression(inline)) inline = inline.expression;
         const skip =
-          callee.kind === ts.SyntaxKind.SuperKeyword || callee.kind === ts.SyntaxKind.ImportKeyword;
+          callee.kind === ts.SyntaxKind.SuperKeyword ||
+          callee.kind === ts.SyntaxKind.ImportKeyword ||
+          ts.isArrowFunction(inline) ||
+          ts.isFunctionExpression(inline);
         const name = ts.isPropertyAccessExpression(callee) ? callee.name : callee;
-        if (!skip && !resolves(name)) {
+        if (!skip) {
           found.push({
-            start: name.getStart(source),
-            text: callee.getText(source),
+            start: callee.getStart(source),
+            text: calleeText(ts, callee, source),
             relation: 'calls',
+            declaration: declarationOf(name),
           });
         }
       } else if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
         const tag = node.tagName;
         const intrinsic = ts.isIdentifier(tag) && /^[a-z]/.test(tag.text);
         const name = ts.isPropertyAccessExpression(tag) ? tag.name : tag;
-        if (!intrinsic && !resolves(name)) {
+        if (!intrinsic) {
           found.push({
-            start: name.getStart(source),
-            text: tag.getText(source),
+            start: tag.getStart(source),
+            text: calleeText(ts, tag, source),
             relation: 'renders',
+            declaration: declarationOf(name),
           });
         }
       }
       ts.forEachChild(node, visit);
     };
-    if (ts.isSourceFile(declaration)) ts.forEachChild(declaration, visit);
-    else if (ts.isClassLike(declaration)) ts.forEachChild(declaration, visit);
-    else if ('body' in declaration && declaration.body !== undefined) visit(declaration.body);
+    if (ts.isSourceFile(root) || ts.isClassLike(root)) ts.forEachChild(root, visit);
+    else if (ts.isFunctionLike(root)) {
+      // A signature (in an interface or an overload list) has no body.
+      const body = (root as TS.SignatureDeclaration & { readonly body?: TS.Node }).body;
+      if (body !== undefined) visit(body);
+    }
     return found;
   }
+}
+
+/** A call in a function's body, and the declaration the compiler resolves its callee to (null: it can't). */
+interface CallSite {
+  readonly start: number;
+  readonly text: string;
+  readonly relation: Relation;
+  readonly declaration: {
+    readonly file: string;
+    readonly start: number;
+    readonly name: string;
+    readonly kind: TS.ScriptElementKind;
+    readonly container: string | null;
+  } | null;
+}
+
+/**
+ * A callee whose function is fixed where it's declared: a module-level constant or variable (`export const nanoid =
+ * customAlphabet(…)`), or a member of an interface, type or class. Not a parameter, a local, a destructured name or
+ * an object literal's property: those hold whatever they're given at run time.
+ */
+function isFixedCallee(ts: TypeScript, declaration: TS.Declaration): boolean {
+  if (ts.isVariableDeclaration(declaration)) {
+    const statement = declaration.parent.parent;
+    return (
+      ts.isIdentifier(declaration.name) &&
+      ts.isVariableStatement(statement) &&
+      (ts.isSourceFile(statement.parent) || ts.isModuleBlock(statement.parent))
+    );
+  }
+  return (
+    ts.isPropertySignature(declaration) ||
+    ts.isPropertyDeclaration(declaration) ||
+    ts.isMethodSignature(declaration) ||
+    ts.isMethodDeclaration(declaration) ||
+    ts.isFunctionDeclaration(declaration) ||
+    ts.isClassLike(declaration)
+  );
+}
+
+/**
+ * A declaration TypeScript's call hierarchy treats as its own callable (its `isValidCallHierarchyDeclaration`): a
+ * function, method, accessor or class, a named function expression, or a function or class assigned to a constant
+ * or a class property. Its calls are its own, not the enclosing function's.
+ */
+function isNamedCallable(ts: TypeScript, node: TS.Node): boolean {
+  if (
+    ts.isFunctionDeclaration(node) ||
+    ts.isClassDeclaration(node) ||
+    ts.isClassStaticBlockDeclaration(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isMethodSignature(node) ||
+    ts.isGetAccessorDeclaration(node) ||
+    ts.isSetAccessorDeclaration(node) ||
+    (ts.isModuleDeclaration(node) && ts.isIdentifier(node.name))
+  ) {
+    return true;
+  }
+  if ((ts.isFunctionExpression(node) || ts.isClassExpression(node)) && node.name !== undefined)
+    return true;
+  if (!(ts.isFunctionExpression(node) || ts.isArrowFunction(node) || ts.isClassExpression(node)))
+    return false;
+  const parent = node.parent;
+  return (
+    (ts.isVariableDeclaration(parent) || ts.isPropertyDeclaration(parent)) &&
+    parent.initializer === node &&
+    ts.isIdentifier(parent.name) &&
+    (ts.isPropertyDeclaration(parent) ||
+      (ts.getCombinedNodeFlags(parent) & ts.NodeFlags.Const) !== 0)
+  );
+}
+
+/**
+ * The callable whose name is at `position`: the function, method or class itself, or, for `const f = () => …`, the
+ * function assigned (climbing from the name reaches the file, and the whole file was scanned: found by the corpus
+ * check, `createPoll` listed calls from the functions after it).
+ */
+function callableAt(ts: TypeScript, source: TS.SourceFile, position: number): TS.Node | undefined {
+  let node = findNode(ts, source, position);
+  while (node !== undefined && !ts.isSourceFile(node)) {
+    if (ts.isFunctionLike(node) || ts.isClassLike(node)) return node;
+    if (
+      (ts.isVariableDeclaration(node) || ts.isPropertyDeclaration(node)) &&
+      node.initializer !== undefined &&
+      isNamedCallable(ts, node.initializer)
+    ) {
+      return node.initializer;
+    }
+    node = node.parent;
+  }
+  return node;
+}
+
+/**
+ * A callee as written, a call's arguments shortened: `Buffer.concat(…).toString`, not the whole array passed to
+ * `concat` (found by the corpus check). Anything else (`(save as () => void)`) as written; `cut` caps it.
+ */
+function calleeText(ts: TypeScript, node: TS.Node, source: TS.SourceFile): string {
+  if (ts.isPropertyAccessExpression(node)) {
+    return `${calleeText(ts, node.expression, source)}.${node.name.getText(source)}`;
+  }
+  if (ts.isCallExpression(node)) return `${calleeText(ts, node.expression, source)}(…)`;
+  if (ts.isElementAccessExpression(node)) return `${calleeText(ts, node.expression, source)}[…]`;
+  if (ts.isNonNullExpression(node)) return `${calleeText(ts, node.expression, source)}!`;
+  return node.getText(source);
+}
+
+/** A declaration's kind in TypeScript's words, for `kindOf`. */
+function kindOfDeclaration(ts: TypeScript, node: TS.Declaration): TS.ScriptElementKind {
+  const K = ts.ScriptElementKind;
+  if (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node))
+    return K.functionElement;
+  // A property holding a function is called like a method, and listed as one.
+  if (
+    ts.isMethodDeclaration(node) ||
+    ts.isMethodSignature(node) ||
+    ts.isPropertySignature(node) ||
+    ts.isPropertyDeclaration(node)
+  ) {
+    return K.memberFunctionElement;
+  }
+  if (ts.isClassLike(node)) return K.classElement;
+  if (ts.isVariableDeclaration(node))
+    return (ts.getCombinedNodeFlags(node) & ts.NodeFlags.Const) !== 0
+      ? K.constElement
+      : K.variableElement;
+  if (ts.isInterfaceDeclaration(node)) return K.interfaceElement;
+  return K.unknown;
 }
 
 function nothingCallable(): CallsResult {

@@ -98,3 +98,25 @@ The engine already hears every change (ADR 0025). A changed file's version goes 
 - **Very large projects get calls resolved for the parts that fit,** and an honest message where they don't, rather than an engine that dies. Making them comfortable belongs to the performance phase (42).
 - **The first question about a package can take a few seconds** (building its program and its dependents'). Later ones are fast. The Calls tab shows it's working while it waits.
 - **Generated code that isn't in git** (Prisma's client) stays unresolved until it's generated, and the page says so.
+
+## Addendum: the corpus check (phase 5 step 6, 12 Nov 2026)
+
+The Done when's 20 functions (`corpus/labels/calls.json`) were labelled by reading the source, then compared with the engine. The callers matched from the start. The callees found six faults, each fixed with a fixture test that fails without the fix:
+
+1. **TypeScript's library was cut by the host's 1 MB file limit.** `lib.dom.d.ts` is 2.3 MB, so every DOM global (`fetch`, `URL`, `setTimeout`) was unresolved. The limit is for project files; the library ships with the engine and is now read whatever its size.
+2. **`export const f = async () => …` scanned its whole file** for unresolved calls (climbing from the name never meets a function). The scan now starts at the function assigned.
+3. **A named function inside the body** (`const later = () => …`) had its unresolved calls credited to the outer one. The scan now stops at the same declarations TypeScript's hierarchy treats as their own callables.
+4. **Calls the hierarchy can't model were dropped:** a constant holding a function (`nanoid`), and built-ins declared as variables (`Boolean`, `new Error`). They're now listed by what the name is (the decisions log, phase 5 step 6): resolved for built-ins, module-level constants and interface or class members; unresolved for parameters and locals.
+5. **Built-in overloads in several lib files made two rows** (`split`), and a site could repeat. Built-ins are one row per name, and each call is listed once.
+6. **An unresolved name could be the size of its arguments** (`Buffer.concat([ … ]).toString`). Call arguments now show as `(…)`; an IIFE isn't listed as a call at all.
+
+After the fixes, all 20 match the labels exactly (in-process on the laptop; in real workspaces on CI, `corpus.docker.test.ts`).
+
+**What reading the DOM library costs** (laptop, every program built, heap after GC; same method as the spike):
+
+| | Before (no DOM) | After |
+| --- | --- | --- |
+| Rallly (9 of 12 programs use DOM) | 2.8 s, 0.23 GB | 3.8 s, 0.38 GB |
+| Documenso (all 16) | 7.5 s, 0.57 GB | 8.9 s, 0.75 GB |
+
+Both stay far inside the worker's 2.5 GB cap. Twenty, which never fit whole, relies on the LRU (section 1) as before; its Docker test on CI is the check.

@@ -89,7 +89,9 @@ export function createProjectHost(options: HostOptions): ProjectHost {
       const p = resolve(path);
       if (!allowed(p)) return undefined;
       try {
-        if (lstatSync(p).size > MAX_FILE_BYTES) return undefined;
+        // TypeScript's own library ships with the engine and is read whatever its size: lib.dom.d.ts is 2.3 MB,
+        // and without it every DOM global (fetch, URL, setTimeout) was unresolved (found by the corpus check).
+        if (!inside(p, options.libDir) && lstatSync(p).size > MAX_FILE_BYTES) return undefined;
         return readFileSync(p, 'utf8');
       } catch {
         return undefined;
