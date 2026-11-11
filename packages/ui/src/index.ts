@@ -90,3 +90,12 @@ export {
   type PaletteSymbolKind,
 } from './components/command-palette/CommandPalette';
 export { SearchTrigger, type SearchTriggerProps } from './components/search-trigger/SearchTrigger';
+export { ContextMenu, type ContextMenuProps } from './components/context-menu/ContextMenu';
+export {
+  CallsPanel,
+  type CallPlace,
+  type CallRow,
+  type CallsPanelProps,
+  type CallsView,
+  type ReferenceRow,
+} from './components/calls-panel/CallsPanel';

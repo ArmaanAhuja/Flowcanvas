@@ -1,0 +1,186 @@
+/*
+ * The right panel's Calls tab (phase 5). Rows on the 4 px grid, names in Small, places in Mono small, kinds and
+ * relations in Caption. Provenance by form only (Graphite): a solid line, or an open stub with a hollow circle, in
+ * the edge colour; never a hue.
+ */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-inline-size: 0;
+}
+
+.target {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-8);
+  align-items: baseline;
+  padding-inline: var(--space-4);
+}
+
+.targetName {
+  font-family: var(--text-small-strong-font-family);
+  font-size: var(--text-small-strong-font-size);
+  font-weight: var(--text-small-strong-font-weight);
+  line-height: var(--text-small-strong-line-height);
+  color: var(--color-text-primary);
+}
+
+.place,
+.siteLink {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  line-height: var(--text-mono-small-line-height);
+  color: var(--color-text-secondary);
+  text-decoration: underline;
+  text-decoration-color: var(--color-border-strong);
+  cursor: pointer;
+}
+
+.place:hover,
+.siteLink:hover {
+  color: var(--color-text-primary);
+}
+
+.note,
+.empty,
+.groupNote {
+  margin: 0;
+  padding-inline: var(--space-4);
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  line-height: var(--text-small-line-height);
+  color: var(--color-text-muted);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.groupTitle {
+  margin: var(--space-8) 0 0;
+  padding-inline: var(--space-4);
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  font-weight: var(--text-caption-font-weight);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+}
+
+.disclosure {
+  display: inline-flex;
+  gap: var(--space-4);
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.chevron {
+  transition: transform var(--duration-hover) ease-out;
+}
+
+[data-expanded] .chevron {
+  transform: rotate(90deg);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+  min-block-size: var(--size-row-compact);
+  padding-inline: var(--space-4);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  text-align: start;
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--color-surface-hover);
+}
+
+.row:disabled {
+  cursor: default;
+}
+
+.provenance {
+  flex: none;
+  inline-size: var(--space-16);
+  block-size: var(--space-8);
+  fill: none;
+  stroke: var(--color-edge-default);
+  stroke-width: var(--border-width-edge);
+}
+
+.name {
+  flex: none;
+  max-inline-size: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  line-height: var(--text-small-line-height);
+  color: var(--color-text-primary);
+}
+
+.relation,
+.kind {
+  flex: none;
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+}
+
+.where {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: start;
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  line-height: var(--text-mono-small-line-height);
+  color: var(--color-text-muted);
+}
+
+.wide {
+  flex: 1;
+}
+
+.more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  padding-inline: calc(var(--space-16) + var(--space-12)) var(--space-4);
+  padding-block-end: var(--space-4);
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+}

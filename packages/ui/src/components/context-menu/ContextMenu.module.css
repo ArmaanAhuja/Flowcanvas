@@ -1,0 +1,7 @@
+/* The point the menu opens against: fixed in the viewport where the person right-clicked, with no size of its own. */
+.anchor {
+  position: fixed;
+  inline-size: 0;
+  block-size: 0;
+  pointer-events: none;
+}
