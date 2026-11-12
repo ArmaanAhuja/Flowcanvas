@@ -538,3 +538,15 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 - **A caller in `packages/ee`** (Documenso's commercial code) is listed like any other: it is one, and the engine reads the project as it is. The labels name it from its import and declaration lines only; nothing there is run or enabled (CLAUDE.md rule 8).
 
 **Phase 5 accepted** (owner, 12 Nov 2026): "accepted and now let's move ahead". Merged in PR #19 once CI is green on its last commit.
+
+## 12 Nov 2026: phase 6, the graph model
+
+**Owner decisions:**
+1. **Forks held to the Done when:** the plan's four, with LibreChat in Inbox Zero's place (29 Oct): Rallly, Documenso, LibreChat and Twenty. Excalidraw and Medusa are measured and reported, as in phase 4.
+2. **Kinds not detected yet** (entry points, data access, external boundaries, async hand-offs, decisions) are listed in Graph stats with 0 and the phase they arrive in.
+3. **Built-ins stay out of the graph** (they stay in the Calls tab); Graph stats counts them separately.
+4. **Graph stats** (behind its Labs switch) shows in the inspector's Details tab when nothing is selected.
+
+**Settled by the documents** (applied):
+- **Edge provenance** uses CLAUDE.md's five: observed, resolved, convention, suggested, unknown. Phase 5's *unresolved* is stored as *unknown*; the Calls tab keeps its wording.
+- **Change state** uses the research report's five: added, removed, modified, possibly affected, unchanged; plus *analysing* for freshness (CLAUDE.md section 11).

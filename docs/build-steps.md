@@ -12846,3 +12846,64 @@ pnpm test && pnpm test:e2e && pnpm test:visual && pnpm test:docker
 **Risks:** none new. **Laptop:** nothing heavy at close.
 
 **Commit:** `9e53ff3` `docs: phase 5 milestone B and close (steps 4-7)`; this entry in the next commit.
+
+## Phase 6 — Graph model
+
+**From the build plan:**
+- **Build:** core vocabulary: entry point, code unit, call, decision, data access, async hand-off, external boundary; provenance on every edge; change state on every node; versioned snapshots in SQLite.
+- **Done when:** schema handles all 4 forks; snapshot save and load under 1 s.
+- **Try it:** Labs → Graph stats shows node and edge counts for each demo fork.
+
+**Decisions** (decisions log, 12 Nov 2026): the four forks held are Rallly, Documenso, LibreChat and Twenty (Excalidraw and Medusa reported); kinds not detected yet show 0 with their phase; built-ins stay out of the graph; Graph stats is in the inspector's Details tab behind its Labs switch.
+
+**Expected outcome:**
+- With a project's workspace running and **Labs → Graph stats** on, the inspector's Details tab shows the project's graph: nodes by kind, edges by provenance, built-in calls counted apart, when the snapshot was taken, and how long it took to save and load.
+- The four forks have real counts, built from their code by the engine in their workspaces.
+
+**Concepts this phase introduces** (each with a primer in its step):
+- **A property graph with a small core vocabulary.** https://en.wikipedia.org/wiki/Property_graph
+- **Content-addressed snapshots:** a version named by the hash of its content. https://git-scm.com/book/en/v2/Git-Internals-Git-Objects
+- **A whole-project call graph in one pass** with TypeScript's type checker. https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API
+- **SQLite bulk writes and blobs.** https://nodejs.org/api/sqlite.html
+
+**Scope:**
+- **In:** the graph types and a snapshot diff (`@flowcanvas/graph-model`); the graph pass in the engine (code units and call edges from TypeScript); the snapshot store in SQLite; the API; the Labs Graph stats panel; the Docker proof on the forks.
+- **Out:** drawing flows (phase 7), entry points (8), UI-to-API links (9), data access and external boundaries (10), async hand-offs (later in stage 1), change-state animation (22). Their kinds exist in the schema and are tested with fixtures.
+
+### Steps (planned)
+
+| # | Step | Milestone | Status |
+| --- | --- | --- | --- |
+| 0 | The plan and decisions; branch | A | done (Claude, 12 Nov) |
+| 1 | Spike: one pass over each program for code units and call edges; snapshot save and load in SQLite; on the four forks. ADR | A | *next* |
+| 2 | The graph types, validation and snapshot diff in `@flowcanvas/graph-model` | A | *planned* |
+| 3 | The engine: the graph pass and the snapshot store, kept current on changes | A | *planned* |
+| 4 | The API through the host and control plane | B | *planned* |
+| 5 | UI: the Graph stats panel behind its Labs switch | B | *planned* |
+| 6 | Proof: the forks in real workspaces (hand-checked samples, save and load times); walkthrough; screens | B | *planned* |
+| 7 | Close: report, 0.10.0 | B | *planned* |
+
+### How each Done-when item is proven
+
+| Item | Test |
+| --- | --- |
+| Schema handles all 4 forks | Docker corpus test: each fork's graph built in a real workspace, valid against the schema, with hand-checked samples (code units in labelled files; phase 5's 20 functions' edges) |
+| Snapshot save and load under 1 s | Timed in the same test, per fork, in a workspace (2 CPUs, 4 GiB) |
+| Labs → Graph stats | Walkthrough `try-it/phase-6.spec.ts` |
+
+### Risks (checked at every milestone)
+
+| # | Risk | How we keep it in check | Status |
+| --- | --- | --- | --- |
+| R1 | Twenty's whole-project pass needs too much memory or time | One program at a time, released after; a partial graph says so | *to measure (step 1)* |
+| R2 | Large snapshots miss 1 s | Measured in the spike; a compact encoding if rows are too slow | *to measure (step 1)* |
+| R3 | Node identity breaks diffs when lines move | Identity from file and qualified name, not position | *design (step 1)* |
+| R4 | **Laptop:** four forks analysed | One at a time; heavy runs on CI | *in check* |
+
+### Step 6.0 — The plan and the owner's decisions (done by Claude)
+
+**Goal:** the phase's plan, the owner's four answers, and a branch from `main` after phase 5's merge (`a4c5a1e`, CI green).
+
+**Files:** `docs/decisions-log.md` (phase 6 decisions), this section.
+
+**Commit:** `docs: phase 6 plan and the owner's decisions`.
