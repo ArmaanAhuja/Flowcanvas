@@ -13164,3 +13164,57 @@ pnpm test:visual
 **Risks:** none. **Laptop:** unit tests only.
 
 **Commit:** `test(web): texts about what arrives later name their phase, and never one already accepted`.
+
+## Phase 7 — Flow builder and inspector
+
+**From the build plan:**
+- **Build:** build a downstream flow from any function; ELK layout; click a node to open its code; conditions on branches; node inspector showing every detail the code reveals (see "What every node shows").
+- **Done when:** flows for 10 functions render correctly and every node opens the right line.
+- **Try it:** pick any function in Documenso, open its flow, click nodes and read the inspector; compare with Figma 06.
+
+**Decisions** (decisions log, 12 Nov 2026): opened from the right-click menu, ⌘K and the Calls tab; up to 60 nodes, then a stub; one grouped stub per node for unknown calls; 10 functions in Documenso, labelled by Claude.
+
+**Expected outcome:**
+- Choose a function (right-click → Show flow, ⌘K, or the Calls tab): its downstream flow appears on the canvas, left to right. Every function it reaches is a node with its file and line; calls made under an `if`, `switch` or `catch` hang off small decision diamonds labelled with their conditions; a node's unknown calls are one open stub ("4 unknown calls").
+- Click a node: the inspector's Details tab shows its signature and typed inputs and outputs, its branches and their conditions, what it throws and awaits, the calls it makes that can't be resolved, and its callers. "Open code" (or a double-click) opens the Code view at its line.
+- A completeness pill at the flow's top left says how many of its edges are proven.
+
+**Concepts this phase introduces** (each with a primer in its step):
+- **Graph layout:** layered (Sugiyama-style) layout with ELK. https://eclipse.dev/elk/reference/algorithms/org-eclipse-elk-layered.html
+- **Web Workers:** heavy work off the page's main thread. https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API
+- **Control flow from syntax:** which conditions a call sits under, from the syntax tree.
+- **Breadth-first search** with a node budget.
+
+**Scope:**
+- **In:** the engine's flow and node details; decision nodes; the API; the flow on the canvas (ELK, the completeness pill, the 60-node stub, grouped unknown stubs); the inspector's Details for code units; opening flows from three places; Open code.
+- **Out:** expand and collapse, groups, filters, per-call unknown stubs (phase 12); entry points (8); UI → API links (9); data access and external boundaries (10); background lanes (11); the Sequence view (13); runtime values (30); editing in place (22a).
+
+### Steps (planned)
+
+| # | Step | Milestone | Status |
+| --- | --- | --- | --- |
+| 0 | The plan and decisions; branch | A | done (Claude, 12 Nov) |
+| 1 | Spike: ELK layout time; conditions per call site. ADR | A | *next* |
+| 2 | The engine: `flow` (downstream from a function, with decisions and stubs) and `details` (what the inspector shows) | A | *planned* |
+| 3 | The API through the host and control plane | A | *planned* |
+| 4 | UI: the decision node, the flow's layout, the pill, the inspector's body, in the design system | B | *planned* |
+| 5 | The page: opening flows from three places; selecting nodes; Open code | B | *planned* |
+| 6 | Proof: 10 hand-labelled Documenso flows in real workspaces, every node at its line; the walkthrough; screens | B | *planned* |
+| 7 | Close: report, 0.11.0 | B | *planned* |
+
+### How each Done-when item is proven
+
+| Item | Test |
+| --- | --- |
+| Flows for 10 functions render correctly | Docker corpus test: 10 Documenso functions' flows, from the engine in a real workspace, compared exactly with hand labels (nodes, edges, conditions, stubs); and the page's rendering of a flow checked in page tests and screenshots |
+| Every node opens the right line | The same labels hold each node's place; the walkthrough opens nodes and checks the Code view's line |
+| The Try it | Walkthrough `try-it/phase-7.spec.ts` |
+
+### Risks (checked at every milestone)
+
+| # | Risk | How we keep it in check | Status |
+| --- | --- | --- | --- |
+| R1 | Layout too slow for the page | ELK in a Web Worker; 60 nodes measured | *to measure (step 1)* |
+| R2 | Conditions unreadable (long expressions) | Cut at 60 characters, the full text in the inspector | *to check (step 1)* |
+| R3 | Flows built from a stale graph after edits | Built from the latest snapshot; the page says when the graph is being brought up to date | *design (step 2)* |
+| R4 | **Laptop:** none new | — | *in check* |

@@ -568,3 +568,19 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 4. **The hand-labelled checks stay as they are:** not reduced in size.
 
 **Phase 6 accepted** (owner, 12 Nov 2026): "okay continue", after the report and a green CI. Merged in PR #20 once CI is green on its last commit.
+
+## 12 Nov 2026: phase 7, the flow builder and inspector
+
+**Owner decisions:**
+1. **Opening a flow:** "Show flow" in the Code view's right-click menu, an action on functions in ⌘K, and a link on the Calls tab's function.
+2. **Flow size:** breadth-first from the function, up to 60 nodes; beyond that, an honest "N more calls not shown" stub where the flow was cut. Expanding and collapsing arrive in phase 12.
+3. **Unknown calls:** one grouped open-stub edge per node ("4 unknown calls"), each listed in the inspector. Per-call stubs and filters arrive in phase 12.
+4. **The 10 flows of the Done when:** Claude picks 10 functions in Documenso and labels each flow by reading the code.
+
+**Defaults stated in the plan, not changed by the owner:** one flow on the canvas at a time (opening another replaces it); a single click selects a node and fills the inspector; "Open code" (the inspector's button, or a double-click) opens the Code view at its line.
+
+**Settled by the documents** (applied):
+- **Layout:** left to right, with Figma 06's node anatomy (about 200 × 56 px: type icon, name, file and line). ELK (`elkjs`) runs in a Web Worker, off the page's main thread (CLAUDE.md section 7).
+- **Decisions:** small diamonds with condition labels on their outgoing edges; failure paths (a `catch`) as thin red edges (design brief, "Flow graph view").
+- **Built-ins** stay out of flows, as out of the graph (owner, 12 Nov 2026).
+- **The completeness pill** at the flow's top left counts its edges by provenance (design brief).
