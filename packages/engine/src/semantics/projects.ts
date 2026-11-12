@@ -18,10 +18,15 @@ export interface WorkspacePackage {
 }
 
 export interface ProjectConfig {
-  /** Project-relative path of the tsconfig.json. */
+  /** Project-relative path of the tsconfig.json; for an inferred program, `<folder>/(inferred)`. */
   readonly path: string;
   /** The package it belongs to (the nearest package.json above it), if any. */
   readonly packageName: string | null;
+  /**
+   * An inferred program (ADR 0027 §2): the package's source files that no tsconfig.json includes, with the analysis
+   * defaults and `allowJs`, as TypeScript's own editors do. LibreChat's whole Express backend is one.
+   */
+  readonly inferred?: true;
 }
 
 export interface ParsedConfig {
@@ -45,6 +50,7 @@ export function analysisDefaults(ts: TypeScript): TS.CompilerOptions {
 }
 
 const SOURCE = /\.(?:ts|tsx|js|jsx|mts|cts|mjs|cjs)$/;
+const DECLARATION = /\.d\.[cm]?ts$/;
 
 /** The `paths` for a package, from its exports (subpaths and `*` patterns), else types/typings/main. */
 export function packagePaths(
@@ -92,6 +98,10 @@ export class ProjectModel {
   readonly #host: ProjectHost;
   readonly #parsed = new Map<string, ParsedConfig | null>();
   readonly #workspacePaths: Record<string, string[]>;
+  readonly #files: readonly string[];
+  readonly #packageDirs: readonly WorkspacePackage[];
+  /** The inferred programs' files, by config path; worked out once every tsconfig is parsed, until `forget`. */
+  #inferred: Map<string, { readonly config: ProjectConfig; readonly files: string[] }> | undefined;
 
   /**
    * @param files the project's files (project-relative, the agent's list: git's, never secret ones)
@@ -108,7 +118,9 @@ export class ProjectModel {
     this.#root = root;
     this.#host = host;
     this.packages = packages;
+    this.#files = files;
     const packageDirs = [...packages.values()].sort((a, b) => b.dir.length - a.dir.length);
+    this.#packageDirs = packageDirs;
     this.configs = files
       .filter(
         (file) =>
@@ -127,11 +139,70 @@ export class ProjectModel {
     }
   }
 
+  /** Every program's config: the tsconfig.json files, then the inferred programs for the source files they leave out. */
+  get allConfigs(): readonly ProjectConfig[] {
+    return [...this.configs, ...[...this.#inferredPrograms().values()].map((p) => p.config)];
+  }
+
+  #inferredPrograms(): Map<string, { readonly config: ProjectConfig; readonly files: string[] }> {
+    if (this.#inferred !== undefined) return this.#inferred;
+    const covered = new Set<string>();
+    for (const config of this.configs) {
+      for (const file of this.parse(config)?.fileNames ?? []) covered.add(file);
+    }
+    const byPackage = new Map<string, { config: ProjectConfig; files: string[] }>();
+    for (const file of this.#files) {
+      if (
+        !SOURCE.test(file) ||
+        DECLARATION.test(file) ||
+        file.split('/').includes('node_modules')
+      ) {
+        continue;
+      }
+      const absolute = join(this.#root, file);
+      if (covered.has(absolute)) continue;
+      const owner = this.#packageDirs.find((p) => p.dir === '' || file.startsWith(`${p.dir}/`));
+      const dir = owner?.dir ?? '';
+      let group = byPackage.get(dir);
+      if (group === undefined) {
+        group = {
+          config: {
+            path: dir === '' ? '(inferred)' : `${dir}/(inferred)`,
+            packageName: owner?.name ?? null,
+            inferred: true,
+          },
+          files: [],
+        };
+        byPackage.set(dir, group);
+      }
+      group.files.push(absolute);
+    }
+    this.#inferred = new Map([...byPackage.values()].map((g) => [g.config.path, g]));
+    return this.#inferred;
+  }
+
   /** A config's options and files; null when it can't be read at all. Parsed once until `forget`. */
   parse(config: ProjectConfig): ParsedConfig | null {
     const cached = this.#parsed.get(config.path);
     if (cached !== undefined) return cached;
     const ts = this.#ts;
+    if (config.inferred === true) {
+      const result: ParsedConfig = {
+        options: {
+          ...analysisDefaults(ts),
+          allowJs: true,
+          checkJs: false,
+          paths: { ...this.#workspacePaths },
+          noEmit: true,
+          skipLibCheck: true,
+          types: [],
+        },
+        // By path: a service may hold the config from before a `forget`.
+        fileNames: this.#inferredPrograms().get(config.path)?.files ?? [],
+      };
+      this.#parsed.set(config.path, result);
+      return result;
+    }
     const configPath = join(this.#root, config.path);
     const host = this.#host;
     const parsed = ts.getParsedCommandLineOfConfigFile(
@@ -171,11 +242,14 @@ export class ProjectModel {
   /** Parse again next time (the config or a package.json changed). */
   forget(): void {
     this.#parsed.clear();
+    this.#inferred = undefined;
   }
 
   /** The configs whose programs include `file` (absolute); else the nearest config above it. */
   configsFor(file: string): ProjectConfig[] {
-    const including = this.configs.filter((config) => this.parse(config)?.fileNames.includes(file));
+    const including = this.allConfigs.filter((config) =>
+      this.parse(config)?.fileNames.includes(file),
+    );
     if (including.length > 0) return including;
     const relativeDir = posix.dirname(file.slice(this.#root.length + 1));
     const nearest = [...this.configs]
@@ -211,7 +285,7 @@ export class ProjectModel {
     );
     const dependents = new Set<string>();
     for (const name of packagesOfOwn) for (const d of this.dependents(name)) dependents.add(d);
-    const extra = this.configs.filter(
+    const extra = this.allConfigs.filter(
       (config) =>
         config.packageName !== null && dependents.has(config.packageName) && !own.includes(config),
     );

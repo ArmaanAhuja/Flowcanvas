@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import * as ts from 'typescript';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { validateGraph } from '@flowcanvas/graph-model';
+import type { GraphPass } from './graph.js';
 import { PARTLY, SemanticService } from './semantic-service.js';
 
 const FILES: Record<string, string> = {
@@ -94,6 +96,39 @@ const brief = (entries: readonly { name: string; relation: string; provenance: s
   entries.map((e) => `${e.provenance} ${e.relation} ${e.name}`).sort();
 
 describe('callers', () => {
+  // Found by phase 6's spike: LibreChat's whole Express backend (CommonJS, plain JavaScript) is in no tsconfig.json.
+  it('sees files no tsconfig includes, through an inferred program (CommonJS JavaScript)', () => {
+    const backend: Record<string, string> = {
+      'apps/api/package.json': JSON.stringify({ name: '@fx/api' }),
+      'apps/api/lib/format.js':
+        'function slug(text) {\n  return text.trim();\n}\nmodule.exports = { slug };\n',
+      'apps/api/server.js': [
+        "const { slug } = require('./lib/format');",
+        'function handle(req) {',
+        '  return slug(req.title);',
+        '}',
+        'module.exports = { handle };',
+        '',
+      ].join('\n'),
+    };
+    for (const [path, content] of Object.entries(backend)) write(path, content);
+    service.changed(Object.keys(backend), [...Object.keys(FILES), ...Object.keys(backend)]);
+    // From handle, the call reaches slug through require and module.exports: resolved, with its place.
+    const callees = service.callees('apps/api/server.js', 2, 10);
+    expect(callees.target).toMatchObject({ name: 'handle', kind: 'function' });
+    expect(callees.entries).toEqual([
+      expect.objectContaining({
+        name: 'slug',
+        provenance: 'resolved',
+        place: { path: 'apps/api/lib/format.js', line: 1, column: 10 },
+        sites: [{ path: 'apps/api/server.js', line: 3, column: 10 }],
+      }),
+    ]);
+    // TypeScript's references stop at `module.exports = { slug }`, so its call hierarchy finds no caller here: a
+    // TypeScript limit for CommonJS shorthand exports (ADR 0027). The graph's edges, built forwards, have it.
+    expect(service.callers('apps/api/lib/format.js', 1, 10).entries).toEqual([]);
+  });
+
   it('finds every caller across the app, through its alias and relative imports', () => {
     const result = service.callers('apps/web/src/lib/format.ts', 1, 17);
     expect(result.target).toMatchObject({
@@ -365,5 +400,88 @@ describe('memory', () => {
     const result = service.callers('packages/ui/src/button.tsx', 1, 17);
     expect(result.complete).toBe(false);
     expect(result.message).toBe(PARTLY.memory);
+  });
+});
+
+describe('graph (phase 6)', () => {
+  const now = () => Promise.resolve();
+  const lines = (pass: GraphPass) =>
+    pass.graph.edges
+      .map(
+        (e) =>
+          `${e.from} -${e.relation ?? e.kind}-> ${e.to ?? `? ${e.target ?? ''}`} [${e.provenance}] @${e.lines.join(',')}`,
+      )
+      .sort();
+
+  it('builds every code unit and call, resolved or unknown, built-ins counted apart', async () => {
+    const pass = await service.graph(now);
+    if (pass === null) throw new Error('no pass');
+    expect(validateGraph(pass.graph)).toEqual([]);
+    expect(pass.graph.nodes.map((n) => `${n.id} (${n.unit ?? ''})`).sort()).toEqual([
+      'apps/web/src/lib/format.ts#formatTitle (function)',
+      'apps/web/src/page.tsx#Page (component)',
+      'apps/web/src/store.ts#Store (class)',
+      'apps/web/src/store.ts#Store.save (method)',
+      'apps/web/src/store.ts#useStore (function)',
+      'packages/ui/src/button.tsx#Button (component)',
+    ]);
+    expect(lines(pass)).toEqual([
+      'apps/web/src/page.tsx#Page -calls-> ? (save as () => void) [unknown] @10',
+      'apps/web/src/page.tsx#Page -calls-> ? z.string [unknown] @8',
+      'apps/web/src/page.tsx#Page -calls-> apps/web/src/lib/format.ts#formatTitle [resolved] @7',
+      // <Button /> and <Again />: the same component under two names, one edge.
+      'apps/web/src/page.tsx#Page -renders-> packages/ui/src/button.tsx#Button [resolved] @12',
+      'apps/web/src/store.ts#Store.save -calls-> apps/web/src/lib/format.ts#formatTitle [resolved] @4',
+      'apps/web/src/store.ts#useStore -calls-> apps/web/src/store.ts#Store [resolved] @8',
+      'apps/web/src/store.ts#useStore -calls-> apps/web/src/store.ts#Store.save [resolved] @8',
+    ]);
+    // title.trim() and Math.max(): built-ins, counted, not edges (owner, 12 Nov 2026).
+    expect(pass).toMatchObject({ builtInCalls: 2, complete: true, note: null });
+    // The .env file is never read, so never walked.
+    expect(pass.files).toBe(5);
+  });
+
+  it('after an edit, walks the changed file and those that call into it', async () => {
+    await service.graph(now);
+    write(
+      'apps/web/src/lib/format.ts',
+      'export function formatHeading(title: string): string {\n  return title.trim();\n}\n',
+    );
+    service.changed(['apps/web/src/lib/format.ts']);
+    const pass = await service.graph(now);
+    if (pass === null) throw new Error('no pass');
+    expect(validateGraph(pass.graph)).toEqual([]);
+    const ids = pass.graph.nodes.map((n) => n.id);
+    expect(ids).toContain('apps/web/src/lib/format.ts#formatHeading');
+    expect(ids).not.toContain('apps/web/src/lib/format.ts#formatTitle');
+    // Its callers were walked again: their calls to the old name no longer reach anything.
+    expect(lines(pass).filter((line) => line.includes('formatTitle'))).toEqual([
+      'apps/web/src/page.tsx#Page -calls-> ? formatTitle [unknown] @7',
+      'apps/web/src/store.ts#Store.save -calls-> ? formatTitle [unknown] @4',
+    ]);
+  });
+
+  // Holding every program until memory ran high took Twenty past the worker's cap (phase 6 step 3).
+  it('releases the programs it built, and keeps the ones questions use', async () => {
+    await service.graph(now);
+    expect(service.liveServices).toBe(0);
+    service.callers('apps/web/src/lib/format.ts', 1, 17);
+    const warm = service.liveServices;
+    expect(warm).toBeGreaterThan(0);
+    service.changed(['apps/web/src/page.tsx']);
+    await service.graph(now);
+    expect(service.liveServices).toBe(warm);
+  });
+
+  it('starts again when the project’s structure changes while it runs', async () => {
+    let paused = 0;
+    const pass = await service.graph(() => {
+      paused += 1;
+      if (paused === 1) service.changed(['apps/web/tsconfig.json']);
+      return Promise.resolve();
+    }, 1);
+    expect(pass).toBeNull();
+    const again = await service.graph(now);
+    expect(again?.files).toBe(5);
   });
 });
