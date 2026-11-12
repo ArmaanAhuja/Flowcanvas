@@ -1,6 +1,7 @@
 import {
   Button,
   ContextMenu,
+  GraphStats,
   MenuItem,
   Rail,
   RailButton,
@@ -28,6 +29,8 @@ import { fetchProjects, isProblem, type Project } from '../projects/api';
 import { FlowCanvas } from '../canvas/FlowCanvas';
 import { EXAMPLE_BANNER, exampleGraph } from '../canvas/examples';
 import { useLabs } from '../labs/LabsProvider';
+import { useGraphStats } from '../graph/useGraphStats';
+import { ARRIVES_IN } from '@flowcanvas/graph-model';
 import { shownState, useWorkspace, type WorkspaceControl } from '../projects/ProjectWorkspace';
 import { linkTo } from '../routing/route';
 import { WorkspacePopover } from './WorkspacePopover';
@@ -262,6 +265,9 @@ function ReadyProject({
   }, [running, project.id, fetcher]);
 
   // TypeScript's answers (phase 5): the right-click menu, F12 and Shift+F12 in the Code view, and the Calls tab.
+  // Labs → Graph stats (phase 6): the flow graph's counts in the Details tab, asked for only while it's on.
+  const graphStatsOn = useLabs().isOn('graph-stats');
+  const graph = useGraphStats(project.id, running, graphStatsOn, fetcher);
   const calls = useCalls(project.id, fetcher);
   const [menu, setMenu] = useState<{
     readonly at: CallPlace;
@@ -432,7 +438,18 @@ function ReadyProject({
       right={
         <Inspector
           calls={calls.state}
-          emptyDetails={EMPTY.right}
+          details={
+            graphStatsOn ? (
+              <GraphStats
+                state={graph.state}
+                message={graph.message}
+                snapshot={graph.snapshot}
+                arrivesIn={ARRIVES_IN}
+              />
+            ) : (
+              <p className={styles.empty}>{EMPTY.right}</p>
+            )
+          }
           onViewChange={calls.setView}
           onOpen={openPlace}
         />

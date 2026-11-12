@@ -1,6 +1,6 @@
 // The right panel (Figma's inspector, phase 5): Details, Runs and Changes as on Figma, with Calls working now.
 import { CallsPanel, Tabs, type CallPlace, type CallsView } from '@flowcanvas/ui';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useShell } from '../shell/Shell';
 import type { CallsState } from '../symbols/useCalls';
 import styles from './ProjectPage.module.css';
@@ -22,12 +22,13 @@ type InspectorTab = 'details' | 'calls';
  */
 export function Inspector({
   calls,
-  emptyDetails,
+  details,
   onViewChange,
   onOpen,
 }: {
   readonly calls: CallsState;
-  readonly emptyDetails: string;
+  /** The Details tab: nothing selectable yet, so its empty state, or Labs → Graph stats (phase 6). */
+  readonly details: ReactNode;
   readonly onViewChange: (view: CallsView) => void;
   readonly onOpen: (place: CallPlace) => void;
 }) {
@@ -66,7 +67,7 @@ export function Inspector({
               onOpen={onOpen}
             />
           ) : (
-            <p className={styles.empty}>{emptyDetails}</p>
+            details
           )
         }
       />
