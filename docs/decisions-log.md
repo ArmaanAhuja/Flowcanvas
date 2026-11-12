@@ -566,3 +566,5 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 2. **One shared fake workspace for walkthroughs and page tests** (12 files each build their own fake API): accepted, as long as it changes nothing the tests prove. Done alongside the next phase's work.
 3. **The docs' overlap** (build-steps, reports, STATUS, RUN-AND-FEATURES) **stays as it is.**
 4. **The hand-labelled checks stay as they are:** not reduced in size.
+
+**Phase 6 accepted** (owner, 12 Nov 2026): "okay continue", after the report and a green CI. Merged in PR #20 once CI is green on its last commit.

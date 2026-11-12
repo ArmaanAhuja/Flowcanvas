@@ -3,7 +3,7 @@
 - Version: `0.10.0`
 - Branch: `phase/6-graph-model`; PR #20
 - Dates: 12 Nov 2026
-- Status: **in review**, waiting for the owner's acceptance.
+- Status: **accepted** by the owner on 12 Nov 2026. Merged in PR #20.
 
 ## From the build plan
 
