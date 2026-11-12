@@ -21,7 +21,9 @@ export type ToWorker =
       readonly paths: readonly string[];
       readonly files?: readonly string[];
     }
-  | { readonly type: 'graph'; readonly id: number };
+  | { readonly type: 'graph'; readonly id: number }
+  /** The graph id of the code unit at a place (phase 7): a string, or null. */
+  | ({ readonly type: 'unit'; readonly id: number } & CodePosition);
 
 /** A graph pass's result across the thread: the graph as its encoding (one string is quick to send). */
 export interface GraphWire {
@@ -85,13 +87,15 @@ if (port !== null) {
     try {
       const { path, line, column } = message;
       const result =
-        message.op === 'definition'
-          ? service.definition(path, line, column)
-          : message.op === 'references'
-            ? service.references(path, line, column)
-            : message.op === 'callers'
-              ? service.callers(path, line, column)
-              : service.callees(path, line, column);
+        message.type === 'unit'
+          ? service.unitAt(path, line, column)
+          : message.op === 'definition'
+            ? service.definition(path, line, column)
+            : message.op === 'references'
+              ? service.references(path, line, column)
+              : message.op === 'callers'
+                ? service.callers(path, line, column)
+                : service.callees(path, line, column);
       reply = { type: 'answer', id: message.id, result };
     } catch {
       // Never the error itself: it could name paths or hold file content.

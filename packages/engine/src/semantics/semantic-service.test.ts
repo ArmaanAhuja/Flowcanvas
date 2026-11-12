@@ -574,3 +574,40 @@ describe('decisions in the graph (phase 7, ADR 0028)', () => {
     expect(calls).toEqual(['format:formatTitle @4,7,9,22', 'later @5,10,11,14,20']);
   });
 });
+
+describe('the code unit at a place (phase 7)', () => {
+  it('names the innermost unit with the graph’s own id, or the file’s top level', async () => {
+    const file = 'apps/web/src/units.ts';
+    write(
+      file,
+      [
+        'export function outer() {', // 1
+        '  const inner = () => {', // 2
+        '    return 1;', // 3
+        '  };', // 4
+        '  return inner();', // 5
+        '}', // 6
+        'export class Store {', // 7
+        '  save() {', // 8
+        '    return outer();', // 9
+        '  }', // 10
+        '}', // 11
+        'outer();', // 12
+        '',
+      ].join('\n'),
+    );
+    write('apps/web/README.md', '# Not code\n');
+    service.changed([file], [...Object.keys(FILES), file, 'apps/web/README.md']);
+    expect(service.unitAt(file, 3, 5)).toBe(`${file}#outer.inner`);
+    expect(service.unitAt(file, 5, 3)).toBe(`${file}#outer`);
+    expect(service.unitAt(file, 9, 5)).toBe(`${file}#Store.save`);
+    expect(service.unitAt(file, 12, 1)).toBe(`${file}#(top level)`);
+    expect(service.unitAt('apps/web/README.md', 1, 1)).toBeNull();
+    // The same ids as the graph's nodes.
+    const pass = await service.graph(() => Promise.resolve());
+    const ids = new Set(pass?.graph.nodes.map((n) => n.id));
+    for (const id of ['outer.inner', 'outer', 'Store.save', '(top level)']) {
+      expect(ids.has(`${file}#${id}`), id).toBe(true);
+    }
+  });
+});

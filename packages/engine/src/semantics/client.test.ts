@@ -167,3 +167,30 @@ describe('SemanticClient.graph (phase 6)', () => {
     });
   });
 });
+
+describe('SemanticClient.unit (phase 7)', () => {
+  it('asks the worker which code unit a place is in, and passes the id or null on', async () => {
+    const { client, workers } = setup();
+    const pending = client.unit(at);
+    await tick();
+    const worker = workers[0];
+    if (worker === undefined) throw new Error('no worker');
+    expect(worker.received[0]).toEqual({ type: 'unit', id: 1, ...at });
+    worker.reply({ type: 'answer', id: 1, result: 'src/a.ts#create' });
+    expect(await pending).toBe('src/a.ts#create');
+    const none = client.unit(at);
+    await tick();
+    worker.reply({ type: 'answer', id: 2, result: null });
+    expect(await none).toBeNull();
+  });
+
+  it('says why when the worker can’t answer', async () => {
+    const failing = setup();
+    const failed = failing.client.unit(at);
+    await tick();
+    failing.workers[0]?.reply({ type: 'failed', id: 1 });
+    expect(await failed).toEqual({ failed: SEMANTIC_MESSAGES.failed });
+    const slow = setup(20);
+    expect(await slow.client.unit(at)).toEqual({ failed: SEMANTIC_MESSAGES.slow });
+  });
+});

@@ -16,7 +16,7 @@ import {
   type SymbolKindName,
 } from '../protocol.js';
 import { assemble, GRAPH_FILES_BETWEEN_PAUSES, GRAPH_HEAP_SHARE, type GraphPass } from './graph.js';
-import { walkFile, type FileGraph, type GraphContext } from './graph-pass.js';
+import { unitAt, walkFile, type FileGraph, type GraphContext } from './graph-pass.js';
 import { createProjectHost, type ProjectHost } from './host.js';
 import {
   callableAt,
@@ -142,12 +142,7 @@ export class SemanticService {
     filesBetweenPauses = GRAPH_FILES_BETWEEN_PAUSES,
   ): Promise<GraphPass | null> {
     const generation = this.#generation;
-    const context: GraphContext = {
-      ts: this.#ts,
-      root: this.#root,
-      inProject: (file) => this.#inProject(file),
-      builtIn: (file) => this.#builtIn(file),
-    };
+    const context = this.#context();
     const full = !this.#graphBuilt;
     const changed = [...this.#graphPending];
     this.#graphPending.clear();
@@ -293,6 +288,27 @@ export class SemanticService {
         yield { service, program, source };
       }
     }
+  }
+
+  #context(): GraphContext {
+    return {
+      ts: this.#ts,
+      root: this.#root,
+      inProject: (file) => this.#inProject(file),
+      builtIn: (file) => this.#builtIn(file),
+    };
+  }
+
+  /**
+   * The code unit a place is in, by the graph's id (phase 7): where a flow starts when it's opened from inside a
+   * function. Null when no program has the file (it isn't TypeScript or JavaScript).
+   */
+  unitAt(path: string, line: number, column: number): string | null {
+    const file = join(this.#root, path);
+    for (const { source } of this.#holding(this.#model.configsFor(file), file)) {
+      return unitAt(this.#context(), source, this.#offset(source, line, column));
+    }
+    return null;
   }
 
   // Places.

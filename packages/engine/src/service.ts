@@ -1,7 +1,16 @@
 // The engine as a service in the workspace (phase 4 step 3, ADR 0025): a full index when it starts, then
 // re-indexing as the watcher reports changes, and answers to status and search. Its files and watcher are
 // passed in, so tests run it without a container.
-import { graphStats } from '@flowcanvas/graph-model';
+import {
+  FLOW_MAX_NODES,
+  buildFlow,
+  graphStats,
+  indexGraph,
+  placeKey,
+  type Flow,
+  type Graph,
+  type GraphIndex,
+} from '@flowcanvas/graph-model';
 import type { WatchEvent } from '@flowcanvas/workspace-agent/protocol';
 import type { Indexer } from './indexer.js';
 import type {
@@ -13,10 +22,11 @@ import type {
   GraphSnapshotInfo,
   GraphState,
   GraphStatus,
+  FlowResult,
   SearchResult,
   SemanticOp,
 } from './protocol.js';
-import { ENGINE_PROTOCOL } from './protocol.js';
+import { ENGINE_LIMITS, ENGINE_PROTOCOL } from './protocol.js';
 import { emptyAnswer, GRAPH_FAILED } from './semantics/client.js';
 import type { GraphWire } from './semantics/worker.js';
 import type { SnapshotStore } from './snapshots.js';
@@ -45,6 +55,8 @@ export interface Semantics {
   changed(paths: readonly string[], files?: readonly string[]): void;
   /** A graph pass (ADR 0027). */
   graph(): Promise<GraphWire | { readonly failed: string }>;
+  /** The graph id of the code unit at a place (phase 7): null when it isn't in a TypeScript or JavaScript file. */
+  unit(position: CodePosition): Promise<string | null | { readonly failed: string }>;
   close(): Promise<void>;
 }
 
@@ -73,6 +85,34 @@ export const NO_GRAPH = 'The graph isn’t available here.';
 
 const GRAPH_DELAY_MS = 2000;
 
+/** Words for flows (phase 7), safe to show. */
+export const FLOW_MESSAGES = {
+  noGraph: 'The graph is still being built. Flows open once it’s ready.',
+  notCode: 'Flows start from functions in TypeScript or JavaScript files.',
+  notYet: 'This isn’t in the graph yet. It will be once the graph has caught up with your changes.',
+  noCalls: 'There’s no function here, and this file’s top level makes no calls.',
+  smaller: (nodes: number) =>
+    `Shown with up to ${String(nodes)} nodes: the whole flow is too large to send at once.`,
+} as const;
+
+/** A flow's answer has to fit in one message line (ENGINE_LIMITS.lineBytes), with room for the rest. */
+const FLOW_BYTES = ENGINE_LIMITS.lineBytes * 0.75;
+
+/** The flow from `root`, made smaller until it fits in a message: halving the node cap, and saying so. */
+export function fittingFlow(
+  index: GraphIndex,
+  root: string,
+): { readonly flow: Flow; readonly message: string | null } | undefined {
+  for (let most = FLOW_MAX_NODES; most >= 1; most = Math.floor(most / 2)) {
+    const flow = buildFlow(index, root, most);
+    if (flow === undefined) return undefined;
+    if (Buffer.byteLength(JSON.stringify(flow)) <= FLOW_BYTES) {
+      return { flow, message: most === FLOW_MAX_NODES ? null : FLOW_MESSAGES.smaller(most) };
+    }
+  }
+  return undefined;
+}
+
 export function startEngineService(options: EngineServiceOptions): EngineService {
   const { store, indexer } = options;
   const refreshDelayMs = options.refreshDelayMs ?? REFRESH_DELAY_MS;
@@ -94,6 +134,11 @@ export function startEngineService(options: EngineServiceOptions): EngineService
     semantics !== undefined && snapshots !== undefined ? 'waiting' : 'failed';
   let graphMessage: string | null = graphState === 'failed' ? NO_GRAPH : null;
   let graphInfo: GraphSnapshotInfo | null = null;
+  // The latest version, decoded and indexed (about 60 MB for Twenty): flows are built from it in milliseconds.
+  let graphIndex: GraphIndex | undefined;
+  const keep = (graph: Graph) => {
+    graphIndex = indexGraph(graph);
+  };
   let graphTimer: NodeJS.Timeout | undefined;
   let graphRunning: Promise<void> | undefined;
   let graphAgain = false;
@@ -104,6 +149,7 @@ export function startEngineService(options: EngineServiceOptions): EngineService
       const latest = snapshots.latest();
       const loaded = latest === undefined ? undefined : snapshots.load(latest.version);
       if (latest !== undefined && loaded !== undefined) {
+        keep(loaded.graph);
         graphInfo = {
           ...latest,
           stats: graphStats(loaded.graph),
@@ -143,6 +189,7 @@ export function startEngineService(options: EngineServiceOptions): EngineService
       // Loaded straight back: every version proves it reads, and how fast (the Done when's "under 1 s").
       const loaded = snapshots.load(saved.meta.version);
       if (loaded === undefined) throw new Error('not stored');
+      keep(loaded.graph);
       graphInfo = {
         ...saved.meta,
         stats: graphStats(loaded.graph),
@@ -272,6 +319,42 @@ export function startEngineService(options: EngineServiceOptions): EngineService
     message,
   });
 
+  const flow = async (position: CodePosition): Promise<FlowResult> => {
+    // Read when answering, not when asked: a new version may arrive while TypeScript works out the function.
+    const none = (message: string): FlowResult => ({ flow: null, message, ...aboutGraph() });
+    if (graphIndex === undefined || semantics === undefined) {
+      return none(
+        graphState === 'failed' ? (graphMessage ?? FLOW_MESSAGES.noGraph) : FLOW_MESSAGES.noGraph,
+      );
+    }
+    // A function's name (from search or the Calls tab) is found in the graph itself; anywhere else, TypeScript
+    // says which function the place is in.
+    let root = graphIndex.byPlace.get(placeKey(position.path, position.line, position.column));
+    if (root === undefined) {
+      const unit = await semantics.unit(position);
+      if (unit === null) return none(FLOW_MESSAGES.notCode);
+      if (typeof unit !== 'string') return none(unit.failed);
+      root = unit;
+    }
+    // The latest index, read after the await (once set, it's only ever replaced).
+    const built = fittingFlow(graphIndex, root);
+    if (built === undefined) {
+      return none(
+        graphState === 'ready' && root.endsWith('#(top level)')
+          ? FLOW_MESSAGES.noCalls
+          : FLOW_MESSAGES.notYet,
+      );
+    }
+    return { ...built, ...aboutGraph() };
+  };
+
+  const aboutGraph = () => ({
+    version: graphInfo?.version ?? null,
+    takenAt: graphInfo?.takenAt ?? null,
+    current: graphState === 'ready',
+    complete: graphInfo?.complete ?? false,
+  });
+
   const search = (query: string, limit: number): SearchResult => {
     const started = performance.now();
     const symbols = store.search(query, limit);
@@ -301,6 +384,10 @@ export function startEngineService(options: EngineServiceOptions): EngineService
           return options.semantics === undefined
             ? Promise.resolve(emptyAnswer(request.op, NO_SEMANTICS) as EngineResults[SemanticOp])
             : options.semantics.ask(request.op, { path, line, column });
+        }
+        case 'flow': {
+          const { path, line, column } = request;
+          return flow({ path, line, column });
         }
       }
     },

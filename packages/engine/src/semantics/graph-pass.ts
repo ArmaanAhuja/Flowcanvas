@@ -3,7 +3,7 @@
 import { basename, relative, sep } from 'node:path';
 import type { GraphEdge, GraphNode, Relation } from '@flowcanvas/graph-model';
 import type * as TS from 'typescript';
-import { calleeText, cut, isFixedCallee, isNamedCallable } from './callables.js';
+import { calleeText, cut, findNode, isFixedCallee, isNamedCallable } from './callables.js';
 import type { TypeScript } from './projects.js';
 
 export interface FileGraph {
@@ -128,6 +128,23 @@ function idsOf(ctx: GraphContext, source: TS.SourceFile): Map<TS.Node, string> {
   return found;
 }
 
+/**
+ * The code unit a place is in, by the graph's id (phase 7, ADR 0028): the innermost one, or the file's top level.
+ * The same ids as the pass, so a flow can start from wherever the person is in the code.
+ */
+export function unitAt(ctx: GraphContext, source: TS.SourceFile, offset: number): string {
+  const own = idsOf(ctx, source);
+  for (
+    let node = findNode(ctx.ts, source, offset);
+    node !== undefined && !ctx.ts.isSourceFile(node);
+    node = node.parent
+  ) {
+    const id = own.get(node);
+    if (id !== undefined) return id;
+  }
+  return `${projectPath(ctx, source.fileName)}#(top level)`;
+}
+
 function placeOf(ctx: GraphContext, node: TS.Node): GraphNode['place'] {
   const source = node.getSourceFile();
   const name = ctx.ts.getNameOfDeclaration(node as TS.Declaration) ?? node;
@@ -217,7 +234,7 @@ function guardsOf(ts: TypeScript, source: TS.SourceFile, call: TS.Node, owner: T
       found.push({
         construct: switched,
         name: text(switched.expression),
-        outcome: ts.isCaseClause(parent) ? `case ${text(parent.expression)}` : 'default',
+        outcome: ts.isCaseClause(parent) ? `case ${cut(text(parent.expression))}` : 'default',
         at: switched.expression,
       });
     } else if (ts.isCatchClause(parent)) {

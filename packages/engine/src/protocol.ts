@@ -3,10 +3,15 @@
 // control plane, so it has no Node APIs: the control plane bundles it into its Worker. Its one import is the graph
 // model's vocabulary (plain data, phase 6), so the graph's kinds are named in one place.
 import {
+  CHANGE_STATES,
   CODE_UNIT_KINDS,
   EDGE_KINDS,
+  FLOW_LIMITS,
+  FLOW_MAX_NODES,
   NODE_KINDS,
   PROVENANCES as GRAPH_PROVENANCES,
+  RELATIONS as GRAPH_RELATIONS,
+  type Flow,
   type GraphStats,
 } from '@flowcanvas/graph-model';
 
@@ -53,7 +58,9 @@ export type EngineRequest =
   | { readonly op: 'status' }
   | { readonly op: 'graph' }
   | { readonly op: 'search'; readonly query: string; readonly limit: number }
-  | ({ readonly op: SemanticOp } & CodePosition);
+  | ({ readonly op: SemanticOp } & CodePosition)
+  /** A flow from the code unit at a place (phase 7, ADR 0028). */
+  | ({ readonly op: 'flow' } & CodePosition);
 
 // TypeScript semantics (phase 5, ADR 0026): questions about the name at a place in a file.
 export const SEMANTIC_OPS = ['definition', 'references', 'callers', 'callees'] as const;
@@ -189,6 +196,22 @@ export interface GraphStatus {
   readonly snapshot: GraphSnapshotInfo | null;
 }
 
+/**
+ * A flow (phase 7, ADR 0028), from the latest version of the graph. `flow` is null when there's none to show, and
+ * `message` says why; with a flow, `message` says what to know about it (shown smaller to fit).
+ */
+export interface FlowResult {
+  readonly flow: Flow | null;
+  readonly message: string | null;
+  /** The version it's from (its SHA-256) and when that was taken; null when there's no version yet. */
+  readonly version: string | null;
+  readonly takenAt: string | null;
+  /** False while the graph is being brought up to date with the files: the flow is from the last version. */
+  readonly current: boolean;
+  /** False when that version covers part of the project only. */
+  readonly complete: boolean;
+}
+
 export interface EngineResults {
   readonly hello: { readonly protocol: number };
   readonly status: EngineStatus;
@@ -198,6 +221,7 @@ export interface EngineResults {
   readonly references: ReferencesResult;
   readonly callers: CallsResult;
   readonly callees: CallsResult;
+  readonly flow: FlowResult;
 }
 
 export const ENGINE_ERROR_CODES = ['invalid_request', 'failed'] as const;
@@ -258,7 +282,8 @@ export function parseEngineRequest(input: unknown): EngineRequest {
     case 'definition':
     case 'references':
     case 'callers':
-    case 'callees': {
+    case 'callees':
+    case 'flow': {
       const { path, line, column } = fields;
       if (
         typeof path !== 'string' ||
@@ -349,6 +374,119 @@ function isGraphStatus(value: unknown): value is GraphStatus {
   );
 }
 
+const isLines = (value: unknown, sites: unknown) =>
+  Array.isArray(value) &&
+  value.length <= FLOW_LIMITS.lines &&
+  value.every((line) => isCount(line) && line >= 1) &&
+  isCount(sites) &&
+  sites >= value.length;
+const isLabel = (value: unknown) => value === null || isText(value);
+const isRelation = (value: unknown) =>
+  value === null || (GRAPH_RELATIONS as readonly unknown[]).includes(value);
+
+function isFlowNode(value: unknown): boolean {
+  const n = record(value);
+  const place = n?.place === null ? null : record(n?.place);
+  return (
+    n !== undefined &&
+    isText(n.id) &&
+    (NODE_KINDS as readonly unknown[]).includes(n.kind) &&
+    typeof n.name === 'string' &&
+    n.name.length <= ENGINE_LIMITS.text &&
+    (place === null ||
+      (place !== undefined &&
+        isText(place.path) &&
+        !place.path.startsWith('/') &&
+        isCount(place.line) &&
+        place.line >= 1 &&
+        isCount(place.column) &&
+        place.column >= 1)) &&
+    (n.unit === null || (CODE_UNIT_KINDS as readonly unknown[]).includes(n.unit)) &&
+    (CHANGE_STATES as readonly unknown[]).includes(n.change)
+  );
+}
+
+/** A flow: bounded, and every edge, group and cut between nodes it has. */
+function isFlow(value: unknown): value is Flow {
+  const f = record(value);
+  if (
+    f === undefined ||
+    !Array.isArray(f.nodes) ||
+    f.nodes.length < 1 ||
+    f.nodes.length > FLOW_MAX_NODES ||
+    !f.nodes.every(isFlowNode) ||
+    !Array.isArray(f.edges) ||
+    !Array.isArray(f.unknown) ||
+    !Array.isArray(f.cut)
+  ) {
+    return false;
+  }
+  const ids = new Set((f.nodes as readonly { readonly id: string }[]).map((n) => n.id));
+  const has = (id: unknown) => typeof id === 'string' && ids.has(id);
+  return (
+    ids.size === f.nodes.length &&
+    has(f.root) &&
+    f.edges.every((value) => {
+      const e = record(value);
+      return (
+        e !== undefined &&
+        has(e.from) &&
+        has(e.to) &&
+        (e.kind === 'call' || e.kind === 'branch') &&
+        isRelation(e.relation) &&
+        isLabel(e.label) &&
+        (GRAPH_PROVENANCES as readonly unknown[]).includes(e.provenance) &&
+        isLines(e.lines, e.sites)
+      );
+    }) &&
+    f.unknown.length <= ids.size &&
+    f.unknown.every((value) => {
+      const g = record(value);
+      return (
+        g !== undefined &&
+        has(g.from) &&
+        Array.isArray(g.calls) &&
+        g.calls.length <= FLOW_LIMITS.unknown &&
+        isCount(g.total) &&
+        g.total >= g.calls.length &&
+        g.calls.every((call) => {
+          const c = record(call);
+          return (
+            c !== undefined &&
+            isText(c.target) &&
+            isRelation(c.relation) &&
+            isLabel(c.label) &&
+            isLines(c.lines, c.sites)
+          );
+        })
+      );
+    }) &&
+    f.cut.length <= ids.size &&
+    f.cut.every((value) => {
+      const c = record(value);
+      return c !== undefined && has(c.from) && isCount(c.nodes) && c.nodes >= 1;
+    }) &&
+    isCount(f.hidden) &&
+    isCounts(f.byProvenance, GRAPH_PROVENANCES)
+  );
+}
+
+function isFlowResult(value: unknown): value is FlowResult {
+  const r = record(value);
+  return (
+    r !== undefined &&
+    (r.flow === null || isFlow(r.flow)) &&
+    isMessage(r.message) &&
+    (r.version === null || (typeof r.version === 'string' && /^[0-9a-f]{64}$/.test(r.version))) &&
+    (r.takenAt === null ||
+      (typeof r.takenAt === 'string' &&
+        r.takenAt.length <= 40 &&
+        !Number.isNaN(Date.parse(r.takenAt)))) &&
+    typeof r.current === 'boolean' &&
+    typeof r.complete === 'boolean'
+  );
+}
+
 function isHit(value: unknown): value is SymbolHit {
   const h = record(value);
   return (
@@ -388,6 +526,8 @@ export function isEngineResponse(request: EngineRequest, value: unknown): value 
       return isStatus(result);
     case 'graph':
       return isGraphStatus(result);
+    case 'flow':
+      return isFlowResult(result);
     case 'search':
       return (
         result !== undefined &&

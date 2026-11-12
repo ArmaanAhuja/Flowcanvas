@@ -5,13 +5,20 @@ import { PassThrough } from 'node:stream';
 import type { WatchEvent } from '@flowcanvas/workspace-agent/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Indexer } from './indexer.js';
-import type { EngineStatus, SearchResult } from './protocol.js';
+import {
+  isEngineResponse,
+  type EngineStatus,
+  type FlowResult,
+  type SearchResult,
+} from './protocol.js';
 import { serveEngine } from './serve.js';
-import { encodeGraph, type Graph } from '@flowcanvas/graph-model';
+import { FLOW_LIMITS, encodeGraph, indexGraph, type Graph } from '@flowcanvas/graph-model';
 import { GRAPH_FAILED } from './semantics/client.js';
 import { SnapshotStore } from './snapshots.js';
 import type { GraphStatus } from './protocol.js';
 import {
+  FLOW_MESSAGES,
+  fittingFlow,
   INDEXING_FAILED,
   NO_GRAPH,
   NO_SEMANTICS,
@@ -397,6 +404,242 @@ describe('the flow graph (phase 6)', () => {
       version: before?.version,
       stats: before?.stats,
     });
+  });
+});
+
+describe('flows (phase 7)', () => {
+  // `show` (line 1) calls `load` (line 5); `if (draft)` guards a call to `save` (line 9).
+  const graph: Graph = {
+    nodes: [
+      {
+        id: 'a.ts#show',
+        kind: 'code-unit',
+        name: 'show',
+        place: { path: 'a.ts', line: 1, column: 17 },
+        unit: 'function',
+        change: 'unchanged',
+      },
+      {
+        id: 'a.ts#show?1',
+        kind: 'decision',
+        name: 'draft',
+        place: { path: 'a.ts', line: 3, column: 7 },
+        unit: null,
+        change: 'unchanged',
+      },
+      {
+        id: 'a.ts#load',
+        kind: 'code-unit',
+        name: 'load',
+        place: { path: 'a.ts', line: 5, column: 17 },
+        unit: 'function',
+        change: 'unchanged',
+      },
+      {
+        id: 'a.ts#save',
+        kind: 'code-unit',
+        name: 'save',
+        place: { path: 'a.ts', line: 9, column: 17 },
+        unit: 'function',
+        change: 'unchanged',
+      },
+    ],
+    edges: [
+      {
+        from: 'a.ts#show',
+        to: 'a.ts#load',
+        target: null,
+        kind: 'call',
+        relation: 'calls',
+        label: null,
+        provenance: 'resolved',
+        lines: [2],
+      },
+      {
+        from: 'a.ts#show',
+        to: 'a.ts#save',
+        target: null,
+        kind: 'call',
+        relation: 'calls',
+        label: null,
+        provenance: 'resolved',
+        lines: [3],
+      },
+      {
+        from: 'a.ts#show',
+        to: 'a.ts#show?1',
+        target: null,
+        kind: 'branch',
+        relation: null,
+        label: null,
+        provenance: 'resolved',
+        lines: [3],
+      },
+      {
+        from: 'a.ts#show?1',
+        to: 'a.ts#save',
+        target: null,
+        kind: 'branch',
+        relation: 'calls',
+        label: 'yes',
+        provenance: 'resolved',
+        lines: [3],
+      },
+    ],
+  };
+  const wire = {
+    encoded: encodeGraph(graph),
+    files: 1,
+    builtInCalls: 0,
+    complete: true,
+    note: null,
+  };
+  const semanticsWith = (
+    pass: () => Promise<unknown>,
+    unit: (position: unknown) => Promise<unknown> = () => Promise.resolve(null),
+  ) => {
+    const fake = {
+      ask: vi.fn(),
+      changed: vi.fn(),
+      graph: pass,
+      unit,
+      close: () => Promise.resolve(),
+    };
+    return fake as unknown as Semantics;
+  };
+  /** Asks for a flow, and checks the answer as the control plane will (the protocol's own check). */
+  const flowAt = async (line: number, column: number): Promise<FlowResult> => {
+    const request = { op: 'flow', path: 'a.ts', line, column } as const;
+    const result = await service.handle(request);
+    expect(isEngineResponse(request, { ok: true, result })).toBe(true);
+    return result as FlowResult;
+  };
+  const ready = async (semantics: Semantics, snapshots = new SnapshotStore(':memory:')) => {
+    write('a.ts', 'export function show() {}');
+    files = ['a.ts'];
+    start({ semantics, snapshots });
+    await service.settled();
+    await service.graphSettled();
+  };
+
+  it('says so where there’s no graph', async () => {
+    start();
+    expect(await flowAt(1, 17)).toEqual({
+      flow: null,
+      message: NO_GRAPH,
+      version: null,
+      takenAt: null,
+      current: false,
+      complete: false,
+    });
+  });
+
+  it('opens from a function’s name straight from the graph, decisions included, without asking TypeScript', async () => {
+    const unit = vi.fn(() => Promise.resolve(null));
+    await ready(semanticsWith(() => Promise.resolve(wire), unit));
+    const result = await flowAt(1, 17);
+    expect(unit).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ message: null, current: true, complete: true });
+    expect(result.version).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.flow?.nodes.map((n) => n.id)).toEqual([
+      'a.ts#show',
+      'a.ts#show?1',
+      'a.ts#load',
+      'a.ts#save',
+    ]);
+    expect(result.flow?.edges.map((e) => [e.from, e.to, e.label])).toEqual([
+      ['a.ts#show', 'a.ts#show?1', null],
+      ['a.ts#show', 'a.ts#load', null],
+      ['a.ts#show?1', 'a.ts#save', 'yes'],
+    ]);
+  });
+
+  it('opens from inside a function: TypeScript says which one', async () => {
+    const unit = vi.fn<(position: unknown) => Promise<unknown>>(() => Promise.resolve('a.ts#load'));
+    await ready(semanticsWith(() => Promise.resolve(wire), unit));
+    const result = await flowAt(6, 3);
+    expect(unit).toHaveBeenCalledWith({ path: 'a.ts', line: 6, column: 3 });
+    expect(result.flow?.root).toBe('a.ts#load');
+  });
+
+  it('says why when there’s no flow to show', async () => {
+    const answers: unknown[] = [
+      null,
+      { failed: 'TypeScript took too long to answer.' },
+      'a.ts#gone',
+      'a.ts#(top level)',
+    ];
+    await ready(
+      semanticsWith(
+        () => Promise.resolve(wire),
+        () => Promise.resolve(answers.shift()),
+      ),
+    );
+    expect((await flowAt(2, 1)).message).toBe(FLOW_MESSAGES.notCode);
+    expect((await flowAt(2, 1)).message).toBe('TypeScript took too long to answer.');
+    expect((await flowAt(2, 1)).message).toBe(FLOW_MESSAGES.notYet);
+    expect((await flowAt(2, 1)).message).toBe(FLOW_MESSAGES.noCalls);
+  });
+
+  it('shows the last version while the graph catches up, and says so', async () => {
+    const snapshots = new SnapshotStore(':memory:');
+    await ready(
+      semanticsWith(() => Promise.resolve(wire)),
+      snapshots,
+    );
+    const before = await flowAt(1, 17);
+    service.close();
+    // After a restart, the stored version is there at once; the new pass never ends here.
+    start({ semantics: semanticsWith(() => new Promise(() => undefined)), snapshots });
+    const during = await flowAt(1, 17);
+    expect(during).toMatchObject({ current: false, version: before.version });
+    expect(during.flow).toEqual(before.flow);
+  });
+
+  it('makes a flow too large to send smaller until it fits, and says so', () => {
+    start(); // Every test has a service for afterEach to close.
+    // 60 functions each with 20 long unknown calls: about 300 KB at full size.
+    const units = Array.from({ length: 61 }, (_, i) => `f${String(i)}`);
+    const big: Graph = {
+      nodes: units.map((name, i) => ({
+        id: `a.ts#${name}`,
+        kind: 'code-unit',
+        name,
+        place: { path: 'a.ts', line: i + 1, column: 1 },
+        unit: 'function',
+        change: 'unchanged',
+      })),
+      edges: units.flatMap((name, i) => [
+        ...(i === 0
+          ? units.slice(1).map((to) => ({
+              from: 'a.ts#f0',
+              to: `a.ts#${to}`,
+              target: null,
+              kind: 'call' as const,
+              relation: 'calls' as const,
+              label: null,
+              provenance: 'resolved' as const,
+              lines: [1],
+            }))
+          : []),
+        ...Array.from({ length: FLOW_LIMITS.unknown }, (_, n) => ({
+          from: `a.ts#${name}`,
+          to: null,
+          target: `service.${'x'.repeat(100)}${String(n)}`,
+          kind: 'call' as const,
+          relation: 'calls' as const,
+          label: null,
+          provenance: 'unknown' as const,
+          lines: [i + 1],
+        })),
+      ]),
+    };
+    const fitted = fittingFlow(indexGraph(big), 'a.ts#f0');
+    expect(fitted?.message).toBe(FLOW_MESSAGES.smaller(30));
+    expect(fitted?.flow.nodes).toHaveLength(30);
+    // f0 calls the 60 others: 29 of them are shown.
+    expect(fitted?.flow.hidden).toBe(31);
+    expect(Buffer.byteLength(JSON.stringify(fitted?.flow))).toBeLessThan(256 * 1024 * 0.75);
   });
 });
 

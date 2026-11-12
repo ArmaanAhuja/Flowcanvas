@@ -103,6 +103,15 @@ export class SemanticClient {
     );
   }
 
+  /** The graph id of the code unit at a place (phase 7): null when it isn't in a TypeScript or JavaScript file. */
+  unit(position: CodePosition): Promise<string | null | { readonly failed: string }> {
+    return this.#send(
+      (id) => ({ type: 'unit', id, ...position }),
+      (reason) => ({ failed: reason }),
+      this.#options.timeoutMs ?? ANSWER_TIMEOUT_MS,
+    ) as Promise<string | null | { readonly failed: string }>;
+  }
+
   /** A graph pass (ADR 0027): the whole project the first time, then what changed since. */
   graph(): Promise<GraphWire | { readonly failed: string }> {
     return this.#send(
