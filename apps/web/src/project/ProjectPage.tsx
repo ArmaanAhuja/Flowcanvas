@@ -1,6 +1,7 @@
 import {
   Button,
   ContextMenu,
+  GraphStats,
   MenuItem,
   Rail,
   RailButton,
@@ -28,6 +29,8 @@ import { fetchProjects, isProblem, type Project } from '../projects/api';
 import { FlowCanvas } from '../canvas/FlowCanvas';
 import { EXAMPLE_BANNER, exampleGraph } from '../canvas/examples';
 import { useLabs } from '../labs/LabsProvider';
+import { useGraphStats } from '../graph/useGraphStats';
+import { ARRIVES_IN } from '@flowcanvas/graph-model';
 import { shownState, useWorkspace, type WorkspaceControl } from '../projects/ProjectWorkspace';
 import { linkTo } from '../routing/route';
 import { WorkspacePopover } from './WorkspacePopover';
@@ -59,16 +62,20 @@ const WorkspaceTerminal = lazy(async () => ({
   default: (await import('../terminal/WorkspaceTerminal')).WorkspaceTerminal,
 }));
 
-/** What each region says until its content exists: honest empty states, never placeholders (owner, 7 Nov). */
+/**
+ * What each region says until its content exists: honest empty states, never placeholders (owner, 7 Nov), and
+ * whatever arrives later says so with its build-plan phase (owner, 12 Nov 2026).
+ */
 export const EMPTY = {
-  left: 'Entry points appear here once the project is analysed.',
-  canvas: 'Flows appear here once the project is analysed.',
-  right: 'Select something on the canvas to see its details here.',
-  review: 'No agent session yet.',
+  left: 'Entry points arrive with entry-point detection (phase 8): pages, routes, event handlers and jobs found in the code.',
+  canvas: 'Flows arrive with the flow builder (phase 7).',
+  right: 'Details of what you select on the canvas arrive with the flow builder (phase 7).',
+  review: 'Agent sessions arrive with the agent panel (phase 19).',
   reviewDetail:
-    'Changes from an agent session are listed here, with their tests and what’s still unverified.',
+    'Reviewing an agent session’s changes, with their tests and what’s still unverified, arrives with the review panel (phase 32).',
   terminalClosed: 'Open the workspace to use a terminal here.',
-  terminalUnavailable: 'Workspaces run locally for now, so there’s no terminal here.',
+  terminalUnavailable:
+    'Workspaces run on your own computer until a cloud provider is connected (phase 1d), so there’s no terminal here.',
 } as const;
 
 /** The view switch: Graph and Code (phase 3); Sequence arrives with its phase (shown, never offered). */
@@ -78,7 +85,7 @@ const VIEWS = [
     id: 'sequence',
     label: 'Sequence',
     disabled: true,
-    hint: 'The sequence view arrives in a later phase',
+    hint: 'The sequence view arrives in phase 13',
   },
   { id: 'code', label: 'Code' },
 ];
@@ -262,6 +269,9 @@ function ReadyProject({
   }, [running, project.id, fetcher]);
 
   // TypeScript's answers (phase 5): the right-click menu, F12 and Shift+F12 in the Code view, and the Calls tab.
+  // Labs → Graph stats (phase 6): the flow graph's counts in the Details tab, asked for only while it's on.
+  const graphStatsOn = useLabs().isOn('graph-stats');
+  const graph = useGraphStats(project.id, running, graphStatsOn, fetcher);
   const calls = useCalls(project.id, fetcher);
   const [menu, setMenu] = useState<{
     readonly at: CallPlace;
@@ -432,7 +442,18 @@ function ReadyProject({
       right={
         <Inspector
           calls={calls.state}
-          emptyDetails={EMPTY.right}
+          details={
+            graphStatsOn ? (
+              <GraphStats
+                state={graph.state}
+                message={graph.message}
+                snapshot={graph.snapshot}
+                arrivesIn={ARRIVES_IN}
+              />
+            ) : (
+              <p className={styles.empty}>{EMPTY.right}</p>
+            )
+          }
           onViewChange={calls.setView}
           onOpen={openPlace}
         />

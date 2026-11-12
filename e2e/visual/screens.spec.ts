@@ -158,6 +158,38 @@ const CALLS: Record<string, unknown> = {
   },
 };
 
+/** Rallly's graph as the engine built it (phase 6, ADR 0027 addendum). */
+const GRAPH = {
+  state: 'ready',
+  message: null,
+  snapshot: {
+    version: 'a'.repeat(64),
+    takenAt: '2026-11-07T09:42:00.000Z',
+    complete: true,
+    note: null,
+    files: 1168,
+    builtInCalls: 3930,
+    stats: {
+      nodes: 3327,
+      edges: 16394,
+      byNodeKind: {
+        'entry-point': 0,
+        'code-unit': 3327,
+        decision: 0,
+        'data-access': 0,
+        'async-handoff': 0,
+        'external-boundary': 0,
+      },
+      byCodeUnit: { function: 1603, method: 189, component: 1081, class: 38, module: 416 },
+      byEdgeKind: { call: 16394, branch: 0, data: 0, handoff: 0, boundary: 0 },
+      byProvenance: { observed: 0, resolved: 7514, convention: 0, suggested: 0, unknown: 8880 },
+    },
+    buildMs: 4100,
+    saveMs: 20,
+    loadMs: 10,
+  },
+};
+
 async function fakeApi(page: Page, options: ApiOptions = {}): Promise<void> {
   const project =
     options.running === true
@@ -200,6 +232,7 @@ async function fakeApi(page: Page, options: ApiOptions = {}): Promise<void> {
         ms: 1,
       });
     }
+    if (path.endsWith('/workspace/index/graph')) return reply(route, GRAPH);
     const semantic = /\/workspace\/index\/(callers|callees)$/.exec(path)?.[1];
     if (semantic !== undefined) return reply(route, CALLS[semantic]);
     if (path.endsWith('/workspace/journal/entry')) {
@@ -241,6 +274,8 @@ interface Screen {
   readonly name: string;
   readonly viewport?: { readonly width: number; readonly height: number };
   readonly stressTest?: boolean;
+  /** Labs → Graph stats on (phase 6). */
+  readonly graphStats?: boolean;
   /** The Code view with these tabs open, the first shown (phase 3); the workspace runs. */
   readonly code?: readonly string[];
   readonly api?: ApiOptions;
@@ -337,6 +372,15 @@ const SCREENS: readonly Screen[] = [
       await expect(page.getByRole('button', { name: 'Built-in (2)' })).toBeVisible();
     },
   },
+  // Phase 6: Labs → Graph stats in the inspector's Details tab.
+  {
+    name: 'project-graph-stats',
+    graphStats: true,
+    api: { running: true },
+    arrange: async (page) => {
+      await expect(page.getByText('3,327 nodes · 16,394 edges')).toBeVisible();
+    },
+  },
 ];
 
 /** A right-click on `greet` in the editor (CodeMirror is in an open shadow root, which locators pierce). */
@@ -352,11 +396,8 @@ async function open(page: Page, screen: Screen, theme: Theme): Promise<void> {
   await page.addInitScript(
     ([chosen, labs, code, projectId]) => {
       window.localStorage.setItem('flowcanvas-theme', chosen);
-      if (labs) {
-        window.localStorage.setItem(
-          'flowcanvas-labs',
-          JSON.stringify({ 'canvas-stress-test': true }),
-        );
+      if (Object.values(labs).some(Boolean)) {
+        window.localStorage.setItem('flowcanvas-labs', JSON.stringify(labs));
       }
       if (code.length > 0) {
         window.localStorage.setItem(`flowcanvas-view-${projectId}`, 'code');
@@ -366,7 +407,15 @@ async function open(page: Page, screen: Screen, theme: Theme): Promise<void> {
         );
       }
     },
-    [theme, screen.stressTest === true, screen.code ?? [], PROJECT.id] as const,
+    [
+      theme,
+      {
+        'canvas-stress-test': screen.stressTest === true,
+        'graph-stats': screen.graphStats === true,
+      },
+      screen.code ?? [],
+      PROJECT.id,
+    ] as const,
   );
   await page.setViewportSize(screen.viewport ?? { width: 1440, height: 900 });
   await page.goto(`/p/${PROJECT.id}`);

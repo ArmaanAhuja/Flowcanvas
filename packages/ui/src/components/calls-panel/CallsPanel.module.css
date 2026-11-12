@@ -136,15 +136,6 @@
   cursor: default;
 }
 
-.provenance {
-  flex: none;
-  inline-size: var(--space-16);
-  block-size: var(--space-8);
-  fill: none;
-  stroke: var(--color-edge-default);
-  stroke-width: var(--border-width-edge);
-}
-
 .name {
   flex: none;
   max-inline-size: 50%;

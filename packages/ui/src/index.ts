@@ -92,6 +92,15 @@ export {
 export { SearchTrigger, type SearchTriggerProps } from './components/search-trigger/SearchTrigger';
 export { ContextMenu, type ContextMenuProps } from './components/context-menu/ContextMenu';
 export {
+  GraphStats,
+  type GraphStatsProps,
+  type GraphStatsSnapshot,
+} from './components/graph-stats/GraphStats';
+export {
+  ProvenanceGlyph,
+  type GlyphProvenance,
+} from './components/provenance-glyph/ProvenanceGlyph';
+export {
   CallsPanel,
   type CallPlace,
   type CallRow,

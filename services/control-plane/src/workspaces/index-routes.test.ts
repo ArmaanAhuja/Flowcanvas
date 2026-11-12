@@ -1,6 +1,6 @@
 // /api/projects/:id/workspace/index/{status,search} through the whole API, with a fake provider (phase 4).
 // @vitest-environment node
-import type { EngineStatus } from '@flowcanvas/engine/protocol';
+import type { EngineStatus, GraphStatus } from '@flowcanvas/engine/protocol';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApi } from '../api/app.js';
 import type { Database } from '../db/database.js';
@@ -79,6 +79,15 @@ describe('while the workspace runs', () => {
     now += 9 * 60_000;
     expect(await call('GET', '/index/status')).toEqual({ status: 200, json: status });
     expect(provider.indexRequests.map(({ request }) => request)).toEqual([{ op: 'status' }]);
+    expect(await lastActive()).toBe(opened);
+  });
+
+  it('gives the graph’s state, without counting as activity (it’s asked for while it builds)', async () => {
+    const graph: GraphStatus = { state: 'building', message: null, snapshot: null };
+    provider.indexAnswer = { ok: true, result: graph };
+    now += 9 * 60_000;
+    expect(await call('GET', '/index/graph')).toEqual({ status: 200, json: graph });
+    expect(provider.indexRequests.map(({ request }) => request)).toEqual([{ op: 'graph' }]);
     expect(await lastActive()).toBe(opened);
   });
 

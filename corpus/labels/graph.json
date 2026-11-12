@@ -1,0 +1,269 @@
+{
+  "about": "Phase 6's hand-checked samples for the two forks phase 5 didn't label: callers and callees of 6 functions, read from each fork's source at its pin, in the same form and by the same rules as calls.json. The graph is held to these and to calls.json's 20. LibreChat's three are in its Express backend, plain CommonJS in no tsconfig.json (an inferred program, ADR 0027 §2).",
+  "librechat": [
+    {
+      "name": "createSpaFallback",
+      "case": "CommonJS: exported as the module (module.exports = createSpaFallback) and called through require from two files; its returned arrow's calls are its own, through parameters (unknown)",
+      "path": "api/server/utils/fallback.js",
+      "line": 11,
+      "column": 10,
+      "callers": [
+        {
+          "name": "startServer",
+          "relation": "calls",
+          "path": "api/server/index.js",
+          "lines": [486]
+        },
+        {
+          "name": "startServer",
+          "relation": "calls",
+          "path": "api/server/experimental.js",
+          "lines": [700]
+        }
+      ],
+      "callees": [
+        {
+          "name": "res.status",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [14]
+        },
+        {
+          "name": "res.status(…).end",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [14]
+        },
+        {
+          "name": "sendIndexHtml",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [16]
+        },
+        {
+          "name": "test",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [13]
+        }
+      ]
+    },
+    {
+      "name": "getAsciiFilenameFallback",
+      "case": "a module-private const arrow in CommonJS; a chain of calls on an untyped parameter (unknown, all starting on one line)",
+      "path": "api/server/utils/files.js",
+      "line": 73,
+      "column": 7,
+      "callers": [
+        {
+          "name": "getContentDisposition",
+          "relation": "calls",
+          "path": "api/server/utils/files.js",
+          "lines": [84]
+        }
+      ],
+      "callees": [
+        {
+          "name": "fileName.normalize",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [74]
+        },
+        {
+          "name": "fileName.normalize(…).replace",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [74]
+        },
+        {
+          "name": "fileName.normalize(…).replace(…).replace",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [74]
+        }
+      ]
+    },
+    {
+      "name": "sendEmailViaSMTP",
+      "case": "an async const arrow calling a package that isn't installed (nodemailer)",
+      "path": "api/server/utils/sendEmail.js",
+      "line": 61,
+      "column": 7,
+      "callers": [
+        {
+          "name": "sendEmail",
+          "relation": "calls",
+          "path": "api/server/utils/sendEmail.js",
+          "lines": [169]
+        }
+      ],
+      "callees": [
+        {
+          "name": "nodemailer.createTransport",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [62]
+        },
+        {
+          "name": "transporter.sendMail",
+          "relation": "calls",
+          "provenance": "unresolved",
+          "builtIn": false,
+          "place": null,
+          "lines": [63]
+        }
+      ]
+    }
+  ],
+  "twenty": [
+    {
+      "name": "arrayToChunks",
+      "case": "a generic const arrow calling only built-ins; a caller in a hook's anonymous effect, and a test",
+      "path": "packages/twenty-front/src/utils/array/arrayToChunks.ts",
+      "line": 1,
+      "column": 14,
+      "callers": [
+        {
+          "name": "useSyncSelectableListItems",
+          "relation": "calls",
+          "path": "packages/twenty-front/src/modules/ui/layout/selectable-list/hooks/internal/useSyncSelectableListItems.ts",
+          "lines": [47]
+        },
+        {
+          "name": "arrayToChunks.test.ts (top level)",
+          "relation": "calls",
+          "path": "packages/twenty-front/src/utils/array/__tests__/arrayToChunks.test.ts",
+          "lines": [5]
+        }
+      ],
+      "callees": [
+        {
+          "name": "splice",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [6]
+        },
+        {
+          "name": "push",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [6]
+        }
+      ]
+    },
+    {
+      "name": "normalizeCronExpression",
+      "case": "called from a plain function and a component in another folder; one project callee, built-ins aside",
+      "path": "packages/twenty-front/src/utils/cron-to-human/utils/normalizeCronExpression.ts",
+      "line": 3,
+      "column": 14,
+      "callers": [
+        {
+          "name": "getNextExecutions",
+          "relation": "calls",
+          "path": "packages/twenty-front/src/modules/workflow/workflow-trigger/components/CronExpressionHelper.tsx",
+          "lines": [21]
+        },
+        {
+          "name": "CronExpressionHelper",
+          "relation": "calls",
+          "path": "packages/twenty-front/src/modules/workflow/workflow-trigger/components/CronExpressionHelper.tsx",
+          "lines": [117]
+        }
+      ],
+      "callees": [
+        {
+          "name": "normalizeWhitespace",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/twenty-front/src/utils/cron-to-human/utils/normalizeWhitespace.ts:1",
+          "lines": [4]
+        },
+        {
+          "name": "replace",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [6]
+        },
+        {
+          "name": "split",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [8]
+        },
+        {
+          "name": "slice",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [15]
+        },
+        {
+          "name": "join",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": true,
+          "place": null,
+          "lines": [15]
+        }
+      ]
+    },
+    {
+      "name": "clearMaintenanceModeBannerDismissals",
+      "case": "a private NestJS service method: called through this, and calling an injected service's method",
+      "path": "packages/twenty-server/src/engine/core-modules/admin-panel/maintenance-mode.service.ts",
+      "line": 38,
+      "column": 17,
+      "callers": [
+        {
+          "name": "setMaintenanceMode",
+          "relation": "calls",
+          "path": "packages/twenty-server/src/engine/core-modules/admin-panel/maintenance-mode.service.ts",
+          "lines": [81]
+        },
+        {
+          "name": "clearMaintenanceMode",
+          "relation": "calls",
+          "path": "packages/twenty-server/src/engine/core-modules/admin-panel/maintenance-mode.service.ts",
+          "lines": [93]
+        }
+      ],
+      "callees": [
+        {
+          "name": "delete",
+          "relation": "calls",
+          "provenance": "resolved",
+          "builtIn": false,
+          "place": "packages/twenty-server/src/engine/core-modules/user/user-vars/services/user-vars.service.ts:183",
+          "lines": [39]
+        }
+      ]
+    }
+  ]
+}

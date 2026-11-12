@@ -15,7 +15,18 @@ import {
   type Relation,
   type SymbolKindName,
 } from '../protocol.js';
+import { assemble, GRAPH_FILES_BETWEEN_PAUSES, GRAPH_HEAP_SHARE, type GraphPass } from './graph.js';
+import { walkFile, type FileGraph, type GraphContext } from './graph-pass.js';
 import { createProjectHost, type ProjectHost } from './host.js';
+import {
+  callableAt,
+  calleeText,
+  cut,
+  findNode,
+  isFixedCallee,
+  isNamedCallable,
+  kindOfDeclaration,
+} from './callables.js';
 import { findPackages, ProjectModel, type ProjectConfig, type TypeScript } from './projects.js';
 
 export interface SemanticOptions {
@@ -35,7 +46,7 @@ export const PARTLY = {
 } as const;
 
 const SOURCE = /\.(?:ts|tsx|js|jsx|mts|cts|mjs|cjs)$/;
-const MAX_NAME = 120;
+const DECLARATION = /\.d\.[cm]?ts$/;
 
 interface Live {
   readonly config: ProjectConfig;
@@ -57,6 +68,13 @@ export class SemanticService {
   #clock = 0;
   /** Set when a service was released, or couldn't be built, for memory: answers say they may be partial. */
   #squeezed = false;
+  /** The flow graph, by walked file (ADR 0027 §1): a file's code units and the calls they make. */
+  #graphFiles = new Map<string, FileGraph>();
+  /** Files changed since the graph was last brought up to date (absolute); everything when it never was. */
+  readonly #graphPending = new Set<string>();
+  #graphBuilt = false;
+  /** Goes up when the project's structure changes: a graph pass running then starts again. */
+  #generation = 0;
 
   constructor(options: SemanticOptions) {
     this.#ts = options.ts;
@@ -96,17 +114,113 @@ export class SemanticService {
     for (const path of paths) {
       const absolute = join(this.#root, path);
       this.#versions.set(absolute, (this.#versions.get(absolute) ?? 0) + 1);
+      this.#graphPending.add(absolute);
       const name = path.split('/').pop() ?? '';
-      if (name === 'tsconfig.json' || name === 'package.json') structural = true;
-      else if (SOURCE.test(path) && !this.#files.includes(path)) structural = true;
+      if (name === 'tsconfig.json' || name === 'package.json') {
+        structural = true;
+        // Programs may now hold other files: the graph is built again from the start.
+        this.#graphBuilt = false;
+      } else if (SOURCE.test(path) && !this.#files.includes(path)) structural = true;
     }
     if (files !== undefined) this.#files = files;
     if (structural) {
+      this.#generation += 1;
       for (const live of this.#live.values()) live.service.dispose();
       this.#live.clear();
       this.#registry = this.#ts.createDocumentRegistry(true, this.#root);
       ({ host: this.#host, model: this.#model } = this.#build(this.#files));
     }
+  }
+
+  /**
+   * Brings the flow graph up to date (ADR 0027 §1): every file the first time, then the changed files and those with
+   * calls into them. Programs one at a time through the same services as the questions, so memory stays capped;
+   * `pause` lets questions in between files. Null when the project's structure changed while it ran: ask again.
+   */
+  async graph(
+    pause: () => Promise<void>,
+    filesBetweenPauses = GRAPH_FILES_BETWEEN_PAUSES,
+  ): Promise<GraphPass | null> {
+    const generation = this.#generation;
+    const context: GraphContext = {
+      ts: this.#ts,
+      root: this.#root,
+      inProject: (file) => this.#inProject(file),
+      builtIn: (file) => this.#builtIn(file),
+    };
+    const full = !this.#graphBuilt;
+    const changed = [...this.#graphPending];
+    this.#graphPending.clear();
+    const files = full ? new Map<string, FileGraph>() : new Map(this.#graphFiles);
+    // What to walk: everything, or the changed files and every file with a call into one of them.
+    let todo: Set<string> | undefined;
+    if (!full) {
+      const paths = new Set(changed.map((file) => relative(this.#root, file).split(sep).join('/')));
+      todo = new Set(changed);
+      for (const [file, part] of this.#graphFiles) {
+        if (part.edges.some((e) => e.to !== null && paths.has(e.to.slice(0, e.to.indexOf('#'))))) {
+          todo.add(file);
+        }
+      }
+      for (const file of changed) files.delete(file);
+    }
+    const walkable = (file: string) =>
+      SOURCE.test(file) && !DECLARATION.test(file) && this.#inProject(file);
+    let complete = true;
+    let walked = 0;
+    const configs = full
+      ? this.#model.allConfigs
+      : [...(todo ?? [])].flatMap((file) => this.#model.configsFor(file).slice(0, 1));
+    const seen = new Set<string>();
+    for (const config of new Set(configs)) {
+      const parsed = this.#model.parse(config);
+      if (parsed === null) continue;
+      const mine = parsed.fileNames.filter(
+        (file) => walkable(file) && !seen.has(file) && (todo === undefined || todo.has(file)),
+      );
+      if (mine.length === 0) continue;
+      // Too little memory left even after releasing services: say the graph is partial rather than run out.
+      const { used, limit } = heap.read();
+      if (used > limit * GRAPH_HEAP_SHARE) {
+        complete = false;
+        break;
+      }
+      // A program the questions already had stays warm; one built for the pass is released once walked: holding
+      // them until memory runs high took Twenty past the worker's cap (found on the fork, phase 6 step 3).
+      const warm = this.#live.has(config.path);
+      const program = this.#service(config)?.getProgram();
+      if (program === undefined) continue;
+      for (const file of mine) {
+        const source = program.getSourceFile(file);
+        seen.add(file);
+        if (source === undefined) continue;
+        files.set(file, walkFile(context, program, source));
+        walked += 1;
+        if (walked % filesBetweenPauses === 0) {
+          await pause();
+          if (this.#generation !== generation) {
+            // The structure changed: start again from everything.
+            for (const file of changed) this.#graphPending.add(file);
+            this.#graphBuilt = false;
+            return null;
+          }
+        }
+      }
+      if (!warm) this.#release(config);
+    }
+    this.#graphFiles = files;
+    this.#graphBuilt = true;
+    return assemble(files, complete);
+  }
+
+  /** How many language services are held (for tests and diagnostics). */
+  get liveServices(): number {
+    return this.#live.size;
+  }
+
+  #release(config: ProjectConfig): void {
+    this.#live.get(config.path)?.service.dispose();
+    this.#live.delete(config.path);
   }
 
   /** Releases every language service. */
@@ -561,120 +675,6 @@ interface CallSite {
   } | null;
 }
 
-/**
- * A callee whose function is fixed where it's declared: a module-level constant or variable (`export const nanoid =
- * customAlphabet(…)`), or a member of an interface, type or class. Not a parameter, a local, a destructured name or
- * an object literal's property: those hold whatever they're given at run time.
- */
-function isFixedCallee(ts: TypeScript, declaration: TS.Declaration): boolean {
-  if (ts.isVariableDeclaration(declaration)) {
-    const statement = declaration.parent.parent;
-    return (
-      ts.isIdentifier(declaration.name) &&
-      ts.isVariableStatement(statement) &&
-      (ts.isSourceFile(statement.parent) || ts.isModuleBlock(statement.parent))
-    );
-  }
-  return (
-    ts.isPropertySignature(declaration) ||
-    ts.isPropertyDeclaration(declaration) ||
-    ts.isMethodSignature(declaration) ||
-    ts.isMethodDeclaration(declaration) ||
-    ts.isFunctionDeclaration(declaration) ||
-    ts.isClassLike(declaration)
-  );
-}
-
-/**
- * A declaration TypeScript's call hierarchy treats as its own callable (its `isValidCallHierarchyDeclaration`): a
- * function, method, accessor or class, a named function expression, or a function or class assigned to a constant
- * or a class property. Its calls are its own, not the enclosing function's.
- */
-function isNamedCallable(ts: TypeScript, node: TS.Node): boolean {
-  if (
-    ts.isFunctionDeclaration(node) ||
-    ts.isClassDeclaration(node) ||
-    ts.isClassStaticBlockDeclaration(node) ||
-    ts.isMethodDeclaration(node) ||
-    ts.isMethodSignature(node) ||
-    ts.isGetAccessorDeclaration(node) ||
-    ts.isSetAccessorDeclaration(node) ||
-    (ts.isModuleDeclaration(node) && ts.isIdentifier(node.name))
-  ) {
-    return true;
-  }
-  if ((ts.isFunctionExpression(node) || ts.isClassExpression(node)) && node.name !== undefined)
-    return true;
-  if (!(ts.isFunctionExpression(node) || ts.isArrowFunction(node) || ts.isClassExpression(node)))
-    return false;
-  const parent = node.parent;
-  return (
-    (ts.isVariableDeclaration(parent) || ts.isPropertyDeclaration(parent)) &&
-    parent.initializer === node &&
-    ts.isIdentifier(parent.name) &&
-    (ts.isPropertyDeclaration(parent) ||
-      (ts.getCombinedNodeFlags(parent) & ts.NodeFlags.Const) !== 0)
-  );
-}
-
-/**
- * The callable whose name is at `position`: the function, method or class itself, or, for `const f = () => …`, the
- * function assigned (climbing from the name reaches the file, and the whole file was scanned: found by the corpus
- * check, `createPoll` listed calls from the functions after it).
- */
-function callableAt(ts: TypeScript, source: TS.SourceFile, position: number): TS.Node | undefined {
-  let node = findNode(ts, source, position);
-  while (node !== undefined && !ts.isSourceFile(node)) {
-    if (ts.isFunctionLike(node) || ts.isClassLike(node)) return node;
-    if (
-      (ts.isVariableDeclaration(node) || ts.isPropertyDeclaration(node)) &&
-      node.initializer !== undefined &&
-      isNamedCallable(ts, node.initializer)
-    ) {
-      return node.initializer;
-    }
-    node = node.parent;
-  }
-  return node;
-}
-
-/**
- * A callee as written, a call's arguments shortened: `Buffer.concat(…).toString`, not the whole array passed to
- * `concat` (found by the corpus check). Anything else (`(save as () => void)`) as written; `cut` caps it.
- */
-function calleeText(ts: TypeScript, node: TS.Node, source: TS.SourceFile): string {
-  if (ts.isPropertyAccessExpression(node)) {
-    return `${calleeText(ts, node.expression, source)}.${node.name.getText(source)}`;
-  }
-  if (ts.isCallExpression(node)) return `${calleeText(ts, node.expression, source)}(…)`;
-  if (ts.isElementAccessExpression(node)) return `${calleeText(ts, node.expression, source)}[…]`;
-  if (ts.isNonNullExpression(node)) return `${calleeText(ts, node.expression, source)}!`;
-  return node.getText(source);
-}
-
-/** A declaration's kind in TypeScript's words, for `kindOf`. */
-function kindOfDeclaration(ts: TypeScript, node: TS.Declaration): TS.ScriptElementKind {
-  const K = ts.ScriptElementKind;
-  if (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node))
-    return K.functionElement;
-  // A property holding a function is called like a method, and listed as one.
-  if (
-    ts.isMethodDeclaration(node) ||
-    ts.isMethodSignature(node) ||
-    ts.isPropertySignature(node) ||
-    ts.isPropertyDeclaration(node)
-  ) {
-    return K.memberFunctionElement;
-  }
-  if (ts.isClassLike(node)) return K.classElement;
-  if (ts.isVariableDeclaration(node))
-    return (ts.getCombinedNodeFlags(node) & ts.NodeFlags.Const) !== 0
-      ? K.constElement
-      : K.variableElement;
-  if (ts.isInterfaceDeclaration(node)) return K.interfaceElement;
-  return K.unknown;
-}
-
 function nothingCallable(): CallsResult {
   return {
     target: null,
@@ -689,24 +689,6 @@ const containerOf = (name: string | undefined): string | null =>
   name === undefined || name === '' || name.startsWith('"') || name.startsWith("'")
     ? null
     : cut(name);
-
-const cut = (text: string) => {
-  const flat = text.replace(/\s+/g, ' ').trim();
-  return flat.length > MAX_NAME ? `${flat.slice(0, MAX_NAME - 1)}…` : flat;
-};
-
-/** The innermost node that contains `position`. */
-function findNode(ts: TypeScript, source: TS.SourceFile, position: number): TS.Node | undefined {
-  let found: TS.Node | undefined;
-  const visit = (node: TS.Node) => {
-    if (position >= node.getStart(source) && position < node.getEnd()) {
-      found = node;
-      ts.forEachChild(node, visit);
-    }
-  };
-  ts.forEachChild(source, visit);
-  return found;
-}
 
 /** TypeScript's element kinds, in the index's words; components are PascalCase functions (as in ADR 0024). */
 function kindOf(ts: TypeScript, kind: TS.ScriptElementKind, name: string): SymbolKindName | null {

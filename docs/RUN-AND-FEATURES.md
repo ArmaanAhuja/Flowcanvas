@@ -141,4 +141,11 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
   - ✅ **Through path aliases, workspace packages and re-exports,** without installing anything; packages that aren't installed are shown as unresolved, never guessed.
   - ✅ **Proof:** `pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts` (20 hand-labelled functions, exact); walkthrough `pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-5.spec.ts`.
   - **Try it:** `pnpm dev`, open Rallly with its workspace running, Code view, open `apps/web/src/features/poll/mutations.ts`, right-click `createPoll` (line 98) → Callers: the two API route modules, each at its lines.
+- **Phase 6 (accepted, 0.10.0):** the graph model.
+  - ✅ **The flow graph** of each project, built in its workspace after indexing and kept up to date: code units and calls, each resolved or unknown, saved as versions in `/workspace/.flowcanvas/graph.db`.
+  - ✅ **Labs → Graph stats** in the inspector's Details tab: nodes and edges by kind, how edges are known, built-ins counted apart, build, save and load times.
+  - ✅ **Files no tsconfig includes** are understood (LibreChat's Express backend), for the Calls tab too.
+  - ✅ **Every later feature names its phase** on the page.
+  - ✅ **Proof:** `pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts` (the four forks' graphs, save and load under 1 s, 26 labelled functions); walkthrough `pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-6.spec.ts`.
+  - **Try it:** `pnpm dev`, Labs → Graph stats on, open Rallly with its workspace running, read the Details tab.
 - **After that:** stage 1 draws real flows from code, and stage 2 adds live frames of the running app.

@@ -21,6 +21,14 @@ export const LABS_FLAGS: readonly LabsFlag[] = [
     label: 'Canvas stress test',
     description:
       'Fills every project’s canvas with 500 example nodes, to try panning and zooming at scale. They are examples, not your project’s flows, and the canvas says so.',
-    phase: '2',
+    // Built in phase 2; large canvases are finished by the performance phase's WebGL renderer (2,000 nodes smooth).
+    phase: '42',
+  },
+  {
+    id: 'graph-stats',
+    label: 'Graph stats',
+    description:
+      'Shows what the project’s flow graph holds in the inspector’s Details tab: nodes and edges by kind, how each edge is known, and how long the graph took to build, save and load. It counts the graph the canvas will draw; the flows themselves arrive with the flow builder (phase 7).',
+    phase: '7',
   },
 ];

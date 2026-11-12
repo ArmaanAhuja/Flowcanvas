@@ -1,16 +1,25 @@
 // The right panel (Figma's inspector, phase 5): Details, Runs and Changes as on Figma, with Calls working now.
 import { CallsPanel, Tabs, type CallPlace, type CallsView } from '@flowcanvas/ui';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useShell } from '../shell/Shell';
 import type { CallsState } from '../symbols/useCalls';
 import styles from './ProjectPage.module.css';
 
-const LATER = 'Arrives in a later phase';
-
+// What arrives later says so, with its phase (owner, 12 Nov 2026).
 const TABS = [
   { id: 'details', label: 'Details' },
-  { id: 'runs', label: 'Runs', disabled: true, hint: LATER },
-  { id: 'changes', label: 'Changes', disabled: true, hint: LATER },
+  {
+    id: 'runs',
+    label: 'Runs',
+    disabled: true,
+    hint: 'Real values from running code arrive with dev-server tracing (phase 30)',
+  },
+  {
+    id: 'changes',
+    label: 'Changes',
+    disabled: true,
+    hint: 'The code diff behind each change arrives with the behavioural diff (phase 23)',
+  },
   { id: 'calls', label: 'Calls' },
 ];
 
@@ -22,12 +31,13 @@ type InspectorTab = 'details' | 'calls';
  */
 export function Inspector({
   calls,
-  emptyDetails,
+  details,
   onViewChange,
   onOpen,
 }: {
   readonly calls: CallsState;
-  readonly emptyDetails: string;
+  /** The Details tab: nothing selectable yet, so its empty state, or Labs → Graph stats (phase 6). */
+  readonly details: ReactNode;
   readonly onViewChange: (view: CallsView) => void;
   readonly onOpen: (place: CallPlace) => void;
 }) {
@@ -66,7 +76,7 @@ export function Inspector({
               onOpen={onOpen}
             />
           ) : (
-            <p className={styles.empty}>{emptyDetails}</p>
+            details
           )
         }
       />

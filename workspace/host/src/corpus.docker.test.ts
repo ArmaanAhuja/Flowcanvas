@@ -5,16 +5,28 @@
 // (corpus/labels/symbols.json, each read from the source) must be found at their exact place and kind.
 // Phase 5's Done when, in the same workspaces: callers and callees of the 20 hand-labelled functions
 // (corpus/labels/calls.json, 10 in each of the plan's two forks) must match the labels exactly.
+// Phase 6's Done when: the flow graph built in each workspace; the plan's four forks (Rallly, Documenso, LibreChat,
+// Twenty) ready and complete, snapshots saved and loaded in under 1 s each, and every labelled function found in the
+// stored graph with exactly its labelled callers and callees (labels/calls.json and labels/graph.json).
 // Needs Docker 28+ and the internet. Run with `pnpm test:docker`. Everything it creates is removed.
 import { randomBytes, randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { SnapshotStore } from '@flowcanvas/engine';
 import { buildImage } from '@flowcanvas/workspace-image';
-import type { CallsResult, EngineStatus, SearchResult } from '@flowcanvas/engine/protocol';
+import {
+  GRAPH_FILE,
+  type CallsResult,
+  type EngineStatus,
+  type GraphStatus,
+  type SearchResult,
+} from '@flowcanvas/engine/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { findObjects, remove } from './clean.js';
 import { dockerCli } from './docker-cli.js';
 import { WorkspaceHost } from './workspaces.js';
-import { compareCalls, type CallsLabel } from '../../../corpus/src/calls.js';
+import { checkGraph, compareCalls, type CallsLabel } from '../../../corpus/src/calls.js';
 
 interface Repo {
   readonly id: string;
@@ -36,6 +48,13 @@ const corpus = (file: string): unknown =>
 const repos = (corpus('manifest.json') as { repos: Repo[] }).repos;
 const labels = corpus('labels/symbols.json') as Record<string, Label[] | undefined>;
 const callLabels = corpus('labels/calls.json') as Record<string, CallsLabel[] | undefined>;
+const graphLabels = corpus('labels/graph.json') as Record<string, CallsLabel[] | undefined>;
+/** Phase 6's four forks (owner, 12 Nov 2026): held to the Done when; Excalidraw and Medusa are reported. */
+const GRAPH_HELD = new Set(['rallly', 'documenso', 'librechat', 'twenty']);
+/** The Done when: a snapshot saved and loaded in under 1 s each. */
+const SNAPSHOT_MS = 1000;
+/** A whole-project graph on CI's two CPUs: minutes for the largest; a pass that never ends is still a failure. */
+const GRAPH_GIVE_UP_MS = 420_000;
 
 /** The build plan's two forks: held to the targets. The other four are measured and reported. */
 const HELD = new Set(['rallly', 'documenso']);
@@ -78,7 +97,7 @@ afterAll(async () => {
   }
 }, 120_000);
 
-describe('the corpus in real workspaces (phases 4 and 5)', { timeout: 600_000 }, () => {
+describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000 }, () => {
   for (const repo of repos) {
     const held = HELD.has(repo.id);
     it(`${repo.name}: ${held ? 'ready in under 30 s, searched in under 100 ms, callers and callees as labelled' : 'indexed and reported'}`, async () => {
@@ -94,7 +113,7 @@ describe('the corpus in real workspaces (phases 4 and 5)', { timeout: 600_000 },
 
         const status = async (): Promise<EngineStatus> => {
           const answer = await host.index(ref, { op: 'status' });
-          if (!answer.ok || !('state' in answer.result)) throw new Error('no status');
+          if (!answer.ok || !('byStatus' in answer.result)) throw new Error('no status');
           return answer.result;
         };
         const search = async (query: string, limit = 50): Promise<SearchResult> => {
@@ -186,6 +205,52 @@ describe('the corpus in real workspaces (phases 4 and 5)', { timeout: 600_000 },
         }
         const labelledCalls = callLabels[repo.id]?.length ?? 0;
 
+        // Phase 6: the flow graph, built in the workspace after the index.
+        const graphStarted = Date.now();
+        let graph: GraphStatus | undefined;
+        for (;;) {
+          const answer = await host.index(ref, { op: 'graph' });
+          if (!answer.ok || !('snapshot' in answer.result)) throw new Error('no graph');
+          graph = answer.result;
+          if (graph.state === 'ready' || graph.state === 'failed') break;
+          expect(Date.now() - graphStarted).toBeLessThan(GRAPH_GIVE_UP_MS);
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+        const graphMs = Date.now() - graphStarted;
+        // The stored version, copied out (with its write-ahead log) and loaded: loading decodes it and checks it
+        // against the schema, then the labelled functions are found in it.
+        const graphDiffering: string[] = [];
+        const sampled = [...(callLabels[repo.id] ?? []), ...(graphLabels[repo.id] ?? [])];
+        if (graph.state === 'ready' && graph.snapshot !== null && sampled.length > 0) {
+          const copy = mkdtempSync(join(tmpdir(), 'fc-graph-'));
+          try {
+            for (const suffix of ['', '-wal', '-shm']) {
+              await dockerCli([
+                'cp',
+                `${ref}:${GRAPH_FILE}${suffix}`,
+                join(copy, `graph.db${suffix}`),
+              ]).catch(() => undefined);
+            }
+            const store = new SnapshotStore(join(copy, 'graph.db'));
+            const loaded = store.load(graph.snapshot.version);
+            store.close();
+            if (loaded === undefined) throw new Error('the reported version isn’t stored');
+            for (const label of sampled) {
+              const found = checkGraph(loaded.graph, label);
+              const problems = [
+                found.node === null ? ['no node at its place'] : [],
+                found.callers.missing.map((line) => `missing caller: ${line}`),
+                found.callers.extra.map((line) => `extra caller: ${line}`),
+                found.callees.missing.map((line) => `missing callee: ${line}`),
+                found.callees.extra.map((line) => `extra callee: ${line}`),
+              ].flat();
+              if (problems.length > 0) graphDiffering.push(`${label.name}: ${problems.join('; ')}`);
+            }
+          } finally {
+            rmSync(copy, { recursive: true, force: true });
+          }
+        }
+
         const row = {
           repo: repo.id,
           files: current.files,
@@ -207,12 +272,32 @@ describe('the corpus in real workspaces (phases 4 and 5)', { timeout: 600_000 },
                 callsMaxMs: Math.round(Math.max(...callsMs)),
               }
             : {}),
+          graph: graph.state,
+          graphMs,
+          graphComplete: graph.snapshot?.complete ?? null,
+          graphNodes: graph.snapshot?.stats.nodes ?? null,
+          graphEdges: graph.snapshot?.stats.edges ?? null,
+          graphBuildMs: graph.snapshot?.buildMs ?? null,
+          snapshotSaveMs: graph.snapshot?.saveMs ?? null,
+          snapshotLoadMs: graph.snapshot?.loadMs ?? null,
+          ...(sampled.length > 0
+            ? {
+                graphLabels: `${String(sampled.length - graphDiffering.length)} of ${String(sampled.length)}`,
+              }
+            : {}),
         };
         report.push(row);
         console.log(JSON.stringify(row));
 
         expect(missing).toEqual([]);
         expect(callsDiffering).toEqual([]);
+        if (GRAPH_HELD.has(repo.id)) {
+          expect(graph.state, graph.message ?? '').toBe('ready');
+          expect(graph.snapshot?.complete).toBe(true);
+          expect(graph.snapshot?.saveMs).toBeLessThan(SNAPSHOT_MS);
+          expect(graph.snapshot?.loadMs).toBeLessThan(SNAPSHOT_MS);
+          expect(graphDiffering).toEqual([]);
+        }
         expect(current.byStatus.parsed).toBeGreaterThan(0);
         if (held) {
           expect(readyMs).toBeLessThan(READY_MS);

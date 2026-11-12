@@ -538,3 +538,33 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 - **A caller in `packages/ee`** (Documenso's commercial code) is listed like any other: it is one, and the engine reads the project as it is. The labels name it from its import and declaration lines only; nothing there is run or enabled (CLAUDE.md rule 8).
 
 **Phase 5 accepted** (owner, 12 Nov 2026): "accepted and now let's move ahead". Merged in PR #19 once CI is green on its last commit.
+
+## 12 Nov 2026: phase 6, the graph model
+
+**Owner decisions:**
+1. **Forks held to the Done when:** the plan's four, with LibreChat in Inbox Zero's place (29 Oct): Rallly, Documenso, LibreChat and Twenty. Excalidraw and Medusa are measured and reported, as in phase 4.
+2. **Kinds not detected yet** (entry points, data access, external boundaries, async hand-offs, decisions) are listed in Graph stats with 0 and the phase they arrive in.
+3. **Built-ins stay out of the graph** (they stay in the Calls tab); Graph stats counts them separately.
+4. **Graph stats** (behind its Labs switch) shows in the inspector's Details tab when nothing is selected.
+
+**Settled by the documents** (applied):
+- **Edge provenance** uses CLAUDE.md's five: observed, resolved, convention, suggested, unknown. Phase 5's *unresolved* is stored as *unknown*; the Calls tab keeps its wording.
+- **Change state** uses the research report's five: added, removed, modified, possibly affected, unchanged; plus *analysing* for freshness (CLAUDE.md section 11).
+
+**Owner decision** (12 Nov 2026, phase 6): **whatever the site shows that arrives in a later phase says so, naming the phase**: an empty panel, a disabled tab or button, a placeholder text, a zero count, a feature stub. Found when the entry points panel said "Entry points appear here once the project is analysed" although the project had been analysed; entry-point detection is phase 8. Applied now:
+- Entry points: entry-point detection (phase 8). Flows on the canvas, and details of what's selected: the flow builder (phase 7).
+- The Sequence view (phase 13). The inspector's Runs tab: dev-server tracing (phase 30); its Changes tab: the behavioural diff (phase 23).
+- Agent sessions in the review bar: the agent panel (phase 19); the review of a session's changes: the review panel (phase 32).
+- Workspaces on the owner's computer until a cloud provider is connected (phase 1d).
+- Already so: Graph stats' zeros ("arrives in phase 8") and Labs ("Finished in phase 7").
+- **Graph stats' Labs switch: "Finished in phase 7"** (Claude's choice, the flow builder draws the graph itself; owner, 12 Nov 2026: "you can have your choice").
+- **The canvas stress test's switch: "Finished in phase 42"** (Claude, under the same delegation): it said phase 2, accepted on 7 Nov, though the switch stays; large canvases are finished by the performance phase's WebGL renderer ("2,000 nodes stay smooth"). Found by the new check below.
+- **A test now holds every visible text to this** (`apps/web/src/later-phases.test.ts`, run with the web unit tests on every commit): no "later" without a phase, no "arrives" without one, and no phase named as still to come once STATUS.md marks it accepted; Labs' and Graph stats' phase numbers included. Asked for by the owner after a catalogue example kept showing the Code view as "arriving in a later phase" two phases after it shipped: the visual tests proved the example hadn't changed, not that it was still true.
+
+**Owner decisions on the repository review** (12 Nov 2026, end of phase 6):
+1. **`e2e/visual-report/`** (the retired Figma comparison's output, committed on 29 Oct) **stays**: it causes no problems.
+2. **One shared fake workspace for walkthroughs and page tests** (12 files each build their own fake API): accepted, as long as it changes nothing the tests prove. Done alongside the next phase's work.
+3. **The docs' overlap** (build-steps, reports, STATUS, RUN-AND-FEATURES) **stays as it is.**
+4. **The hand-labelled checks stay as they are:** not reduced in size.
+
+**Phase 6 accepted** (owner, 12 Nov 2026): "okay continue", after the report and a green CI. Merged in PR #20 once CI is green on its last commit.

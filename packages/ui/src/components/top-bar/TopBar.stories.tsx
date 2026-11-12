@@ -14,7 +14,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** As on Figma 06: project and branch, the view switch (Sequence and Code arrive in later phases), search (phase 4), status. */
+/** As on Figma 06: project and branch, the view switch (Code since phase 3; Sequence arrives in phase 13), search (phase 4), status. */
 export const Default: Story = {
   args: {
     start: (
@@ -30,8 +30,13 @@ export const Default: Story = {
         variant="segmented"
         items={[
           { id: 'graph', label: 'Graph' },
-          { id: 'sequence', label: 'Sequence', disabled: true, hint: 'Arrives in a later phase' },
-          { id: 'code', label: 'Code', disabled: true, hint: 'Arrives in a later phase' },
+          {
+            id: 'sequence',
+            label: 'Sequence',
+            disabled: true,
+            hint: 'The sequence view arrives in phase 13',
+          },
+          { id: 'code', label: 'Code' },
         ]}
       />
     ),

@@ -15,7 +15,7 @@ import styles from './Projects.module.css';
 
 /** Where workspaces can't run (staging, until a cloud provider is connected), said once, plainly. */
 export const WORKSPACES_LOCAL_ONLY =
-  'Workspaces run locally for now. Open your projects on your own computer with pnpm dev.';
+  'Workspaces run on your own computer until a cloud provider is connected (phase 1d). Open your projects there with pnpm dev.';
 
 interface ProjectsProps {
   /** Replaces the browser's fetch in tests. */

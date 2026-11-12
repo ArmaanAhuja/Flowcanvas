@@ -524,6 +524,9 @@ importers:
 
   packages/engine:
     dependencies:
+      '@flowcanvas/graph-model':
+        specifier: workspace:*
+        version: link:../graph-model
       '@flowcanvas/workspace-agent':
         specifier: workspace:*
         version: link:../../workspace/agent

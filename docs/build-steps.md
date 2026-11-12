@@ -12846,3 +12846,321 @@ pnpm test && pnpm test:e2e && pnpm test:visual && pnpm test:docker
 **Risks:** none new. **Laptop:** nothing heavy at close.
 
 **Commit:** `9e53ff3` `docs: phase 5 milestone B and close (steps 4-7)`; this entry in the next commit.
+
+## Phase 6 — Graph model
+
+**From the build plan:**
+- **Build:** core vocabulary: entry point, code unit, call, decision, data access, async hand-off, external boundary; provenance on every edge; change state on every node; versioned snapshots in SQLite.
+- **Done when:** schema handles all 4 forks; snapshot save and load under 1 s.
+- **Try it:** Labs → Graph stats shows node and edge counts for each demo fork.
+
+**Decisions** (decisions log, 12 Nov 2026): the four forks held are Rallly, Documenso, LibreChat and Twenty (Excalidraw and Medusa reported); kinds not detected yet show 0 with their phase; built-ins stay out of the graph; Graph stats is in the inspector's Details tab behind its Labs switch.
+
+**Expected outcome:**
+- With a project's workspace running and **Labs → Graph stats** on, the inspector's Details tab shows the project's graph: nodes by kind, edges by provenance, built-in calls counted apart, when the snapshot was taken, and how long it took to save and load.
+- The four forks have real counts, built from their code by the engine in their workspaces.
+
+**Concepts this phase introduces** (each with a primer in its step):
+- **A property graph with a small core vocabulary.** https://en.wikipedia.org/wiki/Property_graph
+- **Content-addressed snapshots:** a version named by the hash of its content. https://git-scm.com/book/en/v2/Git-Internals-Git-Objects
+- **A whole-project call graph in one pass** with TypeScript's type checker. https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API
+- **SQLite bulk writes and blobs.** https://nodejs.org/api/sqlite.html
+
+**Scope:**
+- **In:** the graph types and a snapshot diff (`@flowcanvas/graph-model`); the graph pass in the engine (code units and call edges from TypeScript); the snapshot store in SQLite; the API; the Labs Graph stats panel; the Docker proof on the forks.
+- **Out:** drawing flows (phase 7), entry points (8), UI-to-API links (9), data access and external boundaries (10), async hand-offs (later in stage 1), change-state animation (22). Their kinds exist in the schema and are tested with fixtures.
+
+### Steps (planned)
+
+| # | Step | Milestone | Status |
+| --- | --- | --- | --- |
+| 0 | The plan and decisions; branch | A | done (Claude, 12 Nov) |
+| 1 | Spike: one pass over each program for code units and call edges; snapshot save and load in SQLite; on the four forks. ADR 0027 | A | done (Claude, 12 Nov) |
+| 2 | The graph types, validation and snapshot diff in `@flowcanvas/graph-model` | A | done (Claude, 12 Nov) |
+| 3 | The engine: the graph pass and the snapshot store, kept current on changes | A | done (Claude, 12 Nov) |
+| 4 | The API through the host and control plane | B | done (Claude, 12 Nov) |
+| 5 | UI: the Graph stats panel behind its Labs switch | B | done (Claude, 12 Nov) |
+| 6 | Proof: the forks in real workspaces (hand-checked samples, save and load times); walkthrough; screens | B | done (Claude, 12 Nov) |
+| 7 | Close: report, 0.10.0 | B | done (Claude, 12 Nov) |
+
+### How each Done-when item is proven
+
+| Item | Test |
+| --- | --- |
+| Schema handles all 4 forks | Docker corpus test: each fork's graph built in a real workspace, valid against the schema, with hand-checked samples (code units in labelled files; phase 5's 20 functions' edges) |
+| Snapshot save and load under 1 s | Timed in the same test, per fork, in a workspace (2 CPUs, 4 GiB) |
+| Labs → Graph stats | Walkthrough `try-it/phase-6.spec.ts` |
+
+### Risks (checked at every milestone)
+
+| # | Risk | How we keep it in check | Status |
+| --- | --- | --- | --- |
+| R1 | Twenty's whole-project pass needs too much memory or time | One program at a time, released after; a partial graph says so | **measured:** Twenty 61 s, 2.06 GB peak against the 2.5 GB cap (laptop) |
+| R2 | Large snapshots miss 1 s | Measured in the spike; a compact encoding if rows are too slow | **measured:** rows load Twenty in 749 ms; a compact gzip blob in 240 ms (laptop), chosen |
+| R3 | Node identity breaks diffs when lines move | Identity from file and qualified name, not position | **decided:** ADR 0027 §4 |
+| R4 | **Laptop:** four forks analysed | One at a time; heavy runs on CI | *in check* |
+
+### Step 6.0 — The plan and the owner's decisions (done by Claude)
+
+**Goal:** the phase's plan, the owner's four answers, and a branch from `main` after phase 5's merge (`a4c5a1e`, CI green).
+
+**Files:** `docs/decisions-log.md` (phase 6 decisions), this section.
+
+**Commit:** `docs: phase 6 plan and the owner's decisions`.
+
+### Step 6.1 — Spike: a whole-project pass with TypeScript, and snapshots in SQLite (done by Claude; ADR 0027)
+
+**Goal:** measure, on every corpus fork, what a one-pass graph of code units and call edges costs, and how a snapshot is best saved and loaded, before building either.
+
+**What a person can do now:** read ADR 0027's numbers. Nothing in the app changes.
+
+**Files:** `docs/adr/0027-graph-model.md`. The spike's scripts stayed outside the repository (they read the corpus forks, whose code never enters it).
+
+**Concepts:**
+- **A whole-project call graph in one pass:** walk every file's syntax tree once and ask the type checker what each call site refers to, instead of asking per function. https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API
+- **Inferred projects:** files no `tsconfig.json` includes still get a program with default options, as in TypeScript's own editors. https://github.com/microsoft/TypeScript/wiki/Standalone-Server-(tsserver)
+- **Content-addressed snapshots:** a version named by the SHA-256 of its encoding. https://git-scm.com/book/en/v2/Git-Internals-Git-Objects
+
+**Found on the way:**
+- **Twenty fits** when programs are walked one at a time (61 s, 2.06 GB peak), where every program at once ran out of memory in phase 5.
+- **1,342 of LibreChat's source files (its whole Express backend) and 983 of Twenty's are in no tsconfig,** so phase 5's Calls tab doesn't see them either. Inferred programs fix both (step 3).
+- **Rows were too slow for Twenty's snapshot** (749 ms to load on the laptop); a compact blob loads in 240 ms.
+
+**Tests:** none (a spike). Measured on all six forks, one at a time.
+
+**Run and check it:** ADR 0027's tables.
+
+**Risks:** R1–R3 updated above. **Laptop:** one fork at a time, about 4 minutes in all; load under 2.
+
+**Commit:** `docs: phase 6 spike, the graph pass and snapshot encoding (ADR 0027)`.
+
+### Step 6.2 — The graph's vocabulary, validation, encoding and diff (done by Claude; ADR 0027)
+
+**Goal:** the graph as shared, plain data: what nodes and edges are, the rules every graph keeps, one canonical compact encoding, and what changed between two versions.
+
+**What a person can do now:** nothing visible; the engine and the page build on it (steps 3 and 5).
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `packages/graph-model/src/model.ts` | Six node kinds, five edge kinds, the five provenances, change states, `Graph` and `Snapshot`; identity by file and qualified name |
+| `packages/graph-model/src/validate.ts` | Every rule, as sentences: ids once, edges between nodes in the graph, an unknown edge never reaching a node and always carrying the call's text, a code unit saying what it is, lines ascending |
+| `packages/graph-model/src/encoding.ts` | Canonical (sorted) and compact (edges refer to nodes and texts by index); decoding checks the result |
+| `packages/graph-model/src/diff.ts` | Nodes added, removed and modified (moved, or its calls changed); edges added and removed; change states with removed nodes kept as ghosts |
+| `packages/graph-model/src/stats.ts` | Counts by kind and provenance, zeros included; the phase each missing kind arrives in |
+
+**Concepts:**
+- **A property graph with a small vocabulary:** typed nodes and edges with attributes; the kinds fixed, the attributes per kind. https://en.wikipedia.org/wiki/Property_graph
+- **Canonical encoding:** the same graph always encodes to the same bytes, so its hash can name it.
+
+**Found and fixed on the way:** none.
+
+**Tests:** 13 (graph-model): the rules (12 ways to break them), round trips and order-independence, the diff (moved code is modified, not removed and added), stats with zeros. Mutation-checked: canonical order, a changed call modifying its caller, unknown edges reaching a node.
+
+**Run and check it:** `pnpm --filter @flowcanvas/graph-model test`
+
+**Risks:** none new. **Laptop:** unit tests only.
+
+**Commit:** `6c87bc0` `feat(graph-model): the flow graph's vocabulary, validation, compact encoding, diff and stats`.
+
+### Step 6.3 — The engine: the graph pass, inferred programs, and snapshots in SQLite (done by Claude; ADR 0027 and its addendum)
+
+**Goal:** every project's graph built in its workspace from its code, kept up to date as files change, and saved as versions.
+
+**What a person can do now** (`pnpm dev`, a running workspace): the engine builds the graph after the index and again once edits settle, and answers the new `graph` request (through the API in step 4).
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `packages/engine/src/semantics/projects.ts` | Inferred programs: the source files no tsconfig includes, per package, with `allowJs` |
+| `packages/engine/src/semantics/callables.ts` | Phase 5's call-site rules, moved here so the Calls tab and the graph share them |
+| `packages/engine/src/semantics/graph-pass.ts`, `graph.ts` | One file's code units and calls; the graph assembled from the files' parts |
+| `packages/engine/src/semantics/semantic-service.ts` | The pass: every file first, then the changed ones and those calling into them; yields to questions; starts again on a structural change; releases the programs it built |
+| `packages/engine/src/semantics/worker.ts`, `client.ts` | The graph request across the thread, with its own failures and a 15-minute limit |
+| `packages/engine/src/snapshots.ts` | Versions in their own SQLite file, by SHA-256, the last 20 kept |
+| `packages/engine/src/service.ts`, `protocol.ts`, `main.ts` | When passes run, the `graph` request, its exact check |
+
+**Concepts:**
+- **Inferred projects:** files outside every tsconfig still get a program, as in TypeScript's own editors. https://github.com/microsoft/TypeScript/wiki/Standalone-Server-(tsserver)
+- **Yielding a long task:** `setImmediate` between files lets the worker answer questions mid-pass. https://nodejs.org/en/learn/asynchronous-work/event-loop-timers-and-nexttick
+- **Incremental by reverse dependency:** a renamed function's callers are walked again, so their calls stop reaching it.
+
+**Found and fixed on the way:**
+- **Twenty ran out of memory in the engine** (not in the spike): programs held in the questions' cache. Programs built for the pass are now released once walked (61 s, 1.93 GB peak).
+- **LibreChat's Express backend was invisible** to the Calls tab and the graph: in no tsconfig. Inferred programs fix both.
+- **TypeScript's references stop at CommonJS shorthand exports,** so Callers misses those callers; the graph has them. Recorded in ADR 0027's addendum as a follow-up.
+- **A test could pass with the "never two passes at once" guard removed:** the first test only proved the timer coalesces changes. A second test makes a change land mid-pass.
+- **Host tests told the index's status apart by `state`,** which the graph's status has too; they use `byStatus` now.
+
+**Tests:**
+- **Engine:** 166 (16 new): the fixture graph exactly (nodes, edges, built-ins counted); an edit re-walking callers; a restart on a structural change; programs released; inferred programs (CommonJS); the snapshot store (save, load, dedupe, the last 20, reopen, a format change, a corrupt version); the client's graph request and its failures; when passes run, one at a time, a mid-pass change, a failure keeping the last good version, a restart showing it; the protocol's check.
+- **Mutation-checked:** dependents re-walked, the restart, built-ins kept out, HTML tags not calls, inferred programs, programs released, one pass at a time, exact keys, a version stored once.
+- **On the forks (laptop, in-process):** Rallly 4.1 s, Documenso 9.8 s, LibreChat 36.7 s, Twenty 60.9 s; every graph valid and complete (ADR 0027 addendum).
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/engine test
+pnpm --filter @flowcanvas/engine build   # the bundle carries the graph model into the workspace
+```
+
+**Risks:** R1 measured in the engine (Twenty 1.93 GB, LibreChat 2.08 GB against 2.5 GB). **Laptop:** the four forks one at a time, about 2 minutes in all; load under 3.
+
+**Commits:** `4dda64e` `feat(engine): the flow graph from one TypeScript pass, and inferred programs`; `aa91029` `feat(engine): graph snapshots in SQLite`.
+
+### Step 6.4 — The graph's state through the host and the API (done by Claude)
+
+**Goal:** the page can ask a running workspace what its graph holds.
+
+**What a person can do now** (`pnpm dev`, a running workspace): `GET /api/projects/<id>/workspace/index/graph` gives the graph's state (waiting, building, ready, failed) and the latest version's counts and timings.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `services/control-plane/src/workspaces/index-routes.ts` | The route: the owner's, while running; not activity |
+| `services/control-plane/src/workspaces/index-routes.test.ts` | 1 new test |
+
+The host passes the request on unchanged: the engine's protocol already accepts it and checks the answer exactly (step 3).
+
+**Concepts:**
+- **Polling isn't activity** (decisions log, 9 Nov 2026): Graph stats asks while the graph builds, and that must never keep a workspace awake.
+
+**Found and fixed on the way:** none.
+
+**Tests:** control plane 263 (1 new): the graph's state passed through, without counting as activity.
+
+**Run and check it:** `pnpm --filter @flowcanvas/control-plane test`
+
+**Risks:** none new. **Laptop:** unit tests only.
+
+**Commit:** `fba074e` `feat(api): the flow graph's state through the host and control plane`.
+
+### Step 6.5 — Labs → Graph stats, in the inspector's Details tab (done by Claude)
+
+**Goal:** the Try it: with its Labs switch on, the project's graph counted in the Details tab.
+
+**What a person can do now** (`pnpm dev`, a running workspace): Labs → **Graph stats** on; open a project; Details shows:
+- nodes by kind (every kind, zeros with the phase they arrive in)
+- code units by type, edges by kind
+- how edges are known, each with its line form and its meaning
+- calls into TypeScript's library, counted apart
+- when the version was taken, from how many files, and how long it took to build, save and load
+- while building, "Building the graph…" over the last version; a failure in the engine's words
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `packages/ui/src/components/graph-stats/` | The panel, its 6 stories and 5 tests |
+| `packages/ui/src/components/provenance-glyph/` | All five provenances' line forms, now shared; the Calls panel draws with it (its baselines unchanged) |
+| `apps/web/src/graph/useGraphStats.ts` | Asked for only while the switch is on and the workspace runs: every 2 s while building, every 15 s once ready |
+| `apps/web/src/labs/flags.ts` | The `graph-stats` switch, off by default, "Finished in phase 7" |
+| `apps/web/src/project/Inspector.tsx`, `ProjectPage.tsx` | The Details tab takes its content from the page |
+| `apps/web/src/graph/graph.test.tsx` | 3 page tests |
+
+**Concepts:**
+- **A Labs switch** keeps an unfinished feature out of the default experience (CLAUDE.md rule 10); its content says "Labs · preview".
+
+**Found and fixed on the way:**
+- **The Labs flag needs "the phase that finishes it".** Nothing in the documents says when Graph stats leaves Labs; phase 7 (the flow builder, which draws the graph itself) is used, and listed in the report for the owner to change.
+
+**Tests:** UI 136 (5 new); web 179 (3 new: not asked for while off; building then counts; not running). Bundle: the project page 102.6 of 110 kB (+2.0 kB).
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/ui test
+pnpm --filter @flowcanvas/web test
+pnpm --filter @flowcanvas/ui storybook   # Shell/GraphStats
+```
+
+**Risks:** none new. **Laptop:** unit tests only.
+
+**Commits:** `625d398` `feat(ui): Graph stats, and every provenance's line form as one glyph`; `b631f0f` `feat(web): Labs → Graph stats in the inspector's Details tab`.
+
+### Step 6.6 — Proof: the four forks' graphs in real workspaces, 26 labelled functions, the walkthrough and screens (done by Claude)
+
+**Goal:** the Done when: the schema handles all 4 forks; snapshot save and load under 1 s.
+
+**What a person can do now:** read the corpus report on CI (`Workspaces against real Docker`): each fork's graph, its timings and its labels.
+
+**How the samples were made:** phase 5's 20 labelled functions (Rallly and Documenso) are reused, and 6 more were labelled by reading the source, 3 in LibreChat (its untyped Express backend, an inferred program) and 3 in Twenty (a front-end utility, a component's callee, a NestJS service method). Each function's node must be in the stored graph at its place, with exactly its labelled callers and callees (built-ins aside: they're counted, not in the graph).
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `corpus/labels/graph.json` | The 6 new labelled functions |
+| `corpus/src/calls.ts` (+ `graph.test.ts`) | `checkGraph`: a labelled function's node and edges as the Calls tab's entries, compared exactly |
+| `workspace/host/src/corpus.docker.test.ts` | Waits for each fork's graph; the four held to a ready, complete snapshot saved and loaded in under 1 s; the stored version copied out (with its write-ahead log), loaded, and the labels found in it |
+| `packages/engine/src/index.ts` | `SnapshotStore` exported, for the test to read a copied store |
+| `e2e/try-it/phase-6.spec.ts` | The walkthrough: Labs → Graph stats on, the project opened, the graph read |
+| `e2e/visual/screens.spec.ts` (+ baselines) | The Graph stats screen; 6 Graph stats stories |
+| `docs/reports/phase-6-figma-differences.md` | For the owner's review |
+
+**Concepts:**
+- **Checking what's stored, not what's reported:** the test reads the version the engine saved, so it proves the encoding, the store and the schema together.
+- **SQLite's write-ahead log:** recent writes live in `graph.db-wal` until a checkpoint, so the copy includes it. https://www.sqlite.org/wal.html
+
+**Found and fixed on the way:**
+- **The host can't import a corpus module that imports another** (`.ts` suffixes under `nodenext`): the graph check lives beside `compareCalls` in `calls.ts`, which imports nothing.
+- **The empty-state texts read as broken** once the project was analysed (the owner's question): every later feature now names its phase (decisions log, 12 Nov 2026; the next commit).
+
+**Tests:**
+- **Corpus (Docker, CI run 43230077468, `2c8a177`):** Rallly, Documenso, LibreChat and Twenty ready and complete; save 14–143 ms, load 37–454 ms; labels 10 of 10, 10 of 10, 3 of 3, 3 of 3. Excalidraw and Medusa reported, complete. Counts identical to the laptop's.
+- **In-process (laptop):** all 26 labelled functions matched before the Docker run.
+- **Corpus unit:** 21 (3 new). **Walkthrough:** `try-it/phase-6.spec.ts`. **Visual:** 162 (14 new), every existing baseline unchanged.
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts   # real Docker, about 10 minutes
+pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-6.spec.ts
+pnpm test:visual
+```
+
+**Risks:** R1 measured in real workspaces (Twenty 68 s). **Laptop:** one visual run in Docker at a time; the corpus Docker test on CI only.
+
+**Commits:** `2c8a177` `test: phase 6's proof`; `ae12d1c` `feat(web): whatever arrives in a later phase says so, with its phase`.
+
+### Step 6.7 — Close the phase: report, 0.10.0, ready for review (done by Claude)
+
+**Goal:** the phase written up for the owner's acceptance, with every check green.
+
+**What a person can do now:** read `docs/reports/phase-6.md` and `docs/reports/phase-6-figma-differences.md`; What's new shows 0.10.0.
+
+**Files:** `docs/reports/phase-6.md`; `CHANGELOG.md`, `package.json` (0.10.0); `docs/STATUS.md`, `docs/RUN-AND-FEATURES.md`, `ARCHITECTURE.md`.
+
+**Concepts:** none new. **Found and fixed on the way:** none at close.
+
+**Upgrade-later review:** nothing new deferred; 3 and 33 unchanged.
+
+**Tests:** CI on the closing commit, every job green (recorded in the report).
+
+**Run and check it:** `pnpm dev`, Labs → Graph stats on, open Rallly with its workspace running.
+
+**Risks:** none new. **Laptop:** nothing heavy at close.
+
+**Commit:** `docs: phase 6 close`.
+
+### Step 6.7a — A check that "arrives later" texts stay true (done by Claude, at the owner's request)
+
+**Goal:** a text about something coming later can't go stale or vague without a test failing.
+
+**Why:** a catalogue example (`Shell/TopBar`) kept showing the Code view as disabled and "arriving in a later phase" from phase 2 until phase 6, though Code shipped in phase 3. The visual tests compare each example with its approved screenshot: they proved it hadn't changed, not that it was still true, and nothing else checked it.
+
+**Files:** `apps/web/src/later-phases.test.ts` (4 tests); `apps/web/src/labs/flags.ts` (two texts it caught).
+
+**Concepts:**
+- **Reading only what's shown:** TypeScript's parser picks out string literals, template text and JSX text, so code comments (which name phases all the time) aren't read. https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API
+- **Truth from one place:** which phases are accepted comes from `docs/STATUS.md`, so accepting a phase makes any text still promising it fail.
+
+**Found and fixed on the way:** the canvas stress test's switch said "Finished in phase 2" (accepted 7 Nov); now phase 42. Graph stats' description said the flows "arrive with the flow builder" without its phase; now "(phase 7)".
+
+**Tests:** web 183 (4 new). Mutation-checked: the original top-bar example put back fails it; a text naming phase 4 (accepted) fails it.
+
+**Run and check it:** `pnpm --filter @flowcanvas/web exec vitest run src/later-phases.test.ts`
+
+**Risks:** none. **Laptop:** unit tests only.
+
+**Commit:** `test(web): texts about what arrives later name their phase, and never one already accepted`.

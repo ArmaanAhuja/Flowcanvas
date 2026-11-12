@@ -2,6 +2,7 @@ import { ChevronRight } from 'lucide-react';
 import { Button, Disclosure, DisclosurePanel, Heading } from 'react-aria-components';
 import { classNames } from '../../class-names';
 import { Tabs } from '../tabs/Tabs';
+import { ProvenanceGlyph } from '../provenance-glyph/ProvenanceGlyph';
 import styles from './CallsPanel.module.css';
 
 /** A place in the project: a project-relative path and a 1-based line and column. */
@@ -218,7 +219,9 @@ function Group({
                 if (destination !== undefined && destination !== null) onOpen(destination);
               }}
             >
-              <Provenance resolved={row.provenance === 'resolved'} />
+              <ProvenanceGlyph
+                provenance={row.provenance === 'resolved' ? 'resolved' : 'unknown'}
+              />
               <span className={classNames(styles.name)}>{row.name}</span>
               <span className={classNames(styles.relation)}>{row.relation}</span>
               {row.kindLabel !== null && (
@@ -280,21 +283,5 @@ function References({
         </li>
       ))}
     </ul>
-  );
-}
-
-/** Graphite's provenance by form: a solid line (resolved), or an open stub ending in a hollow circle (unknown). */
-function Provenance({ resolved }: { readonly resolved: boolean }) {
-  return (
-    <svg className={classNames(styles.provenance)} viewBox="0 0 16 8" aria-hidden="true">
-      {resolved ? (
-        <line x1="1" y1="4" x2="15" y2="4" />
-      ) : (
-        <>
-          <line x1="1" y1="4" x2="9" y2="4" />
-          <circle cx="12" cy="4" r="2.5" />
-        </>
-      )}
-    </svg>
   );
 }

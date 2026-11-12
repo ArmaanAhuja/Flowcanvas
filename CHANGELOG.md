@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-11-12 — Phase 6: the graph model
+
+Each project's code becomes a flow graph inside its workspace: every function, method, component and class, and every call between them, each marked as proven by the compiler or not known, never guessed. Each version of the graph is saved and can be compared with the last. It's what the canvas will draw from the next phase. Workspaces still run on your own computer (`pnpm dev`).
+
+### Try it
+
+1. Open **Labs** and turn on **Graph stats**.
+2. Open a project with its workspace running. The inspector's **Details** tab shows its graph: nodes and edges by kind, how each edge is known, and how long it took to build, save and load.
+3. Edit a file: the graph is brought up to date within seconds.
+
+### Added
+
+- **The flow graph:** code units and their calls, built in the workspace after the project is indexed and brought up to date as files change; every edge says how it's known.
+- **Versions of the graph,** saved in the workspace and compared with each other (what changed is the basis for the live canvas later).
+- **Labs → Graph stats** in the inspector's Details tab: every kind listed, those not detected yet with the phase they arrive in.
+- **Files no tsconfig includes** (like an untyped Express backend) are now understood, for the graph and for Callers and Callees.
+- **Design system:** Graph stats, and a provenance glyph for all five ways an edge can be known, in the catalogue.
+
+### Changed
+
+- **Whatever isn't built yet says which phase it arrives in:** entry points (phase 8), flows (phase 7), the Sequence view (phase 13), the Runs and Changes tabs (phases 30 and 23), agent sessions (phase 19) and their review (phase 32).
+
+### Security
+
+- **Asking for the graph never keeps a workspace awake.**
+- **Every answer about the graph is checked exactly** by the workspace host and the API before it reaches the page.
+
 ## [0.9.0] — 2026-11-12 — Phase 5: TypeScript semantics
 
 Right-click a function in the Code view to see who calls it and what it calls, as TypeScript itself resolves them. Every row says how it's known, and calls TypeScript can't resolve (a package that isn't installed, a function passed in at run time) are shown as unresolved, never guessed. Workspaces still run on your own computer (`pnpm dev`).

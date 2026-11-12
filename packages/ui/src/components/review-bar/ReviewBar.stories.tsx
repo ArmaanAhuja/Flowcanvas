@@ -12,7 +12,9 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 /** Before any agent session: nothing to review, and it says so. */
-export const Empty: Story = { args: { summary: 'No agent session yet.' } };
+export const Empty: Story = {
+  args: { summary: 'Agent sessions arrive with the agent panel (phase 19).' },
+};
 
 /** After a session, as on Figma 06 (catalogue example content). */
 export const AfterSession: Story = {

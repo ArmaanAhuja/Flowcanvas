@@ -9,18 +9,36 @@ import type {
   ReferencesResult,
   SemanticOp,
 } from '../protocol.js';
-import type { FromWorker, ToWorker, WorkerStart } from './worker.js';
+import type { FromWorker, GraphWire, ToWorker, WorkerStart } from './worker.js';
 
 /** The heap cap for the worker, in MB: the workspace has 4 GiB, and the indexer and SQLite need the rest. */
 export const WORKER_HEAP_MB = 2500;
 /** A question that takes longer than this is answered with a "too slow" message rather than left hanging. */
 export const ANSWER_TIMEOUT_MS = 60_000;
+/** A whole-project graph pass: about a minute for Twenty on the laptop (ADR 0027), slower on a workspace's CPUs. */
+export const GRAPH_TIMEOUT_MS = 15 * 60_000;
 
 export const SEMANTIC_MESSAGES = {
   tooLarge: 'This project is too large to resolve calls in here. Search and the code still work.',
   failed: 'TypeScript couldn’t answer that. Try again, or reopen the project.',
   slow: 'TypeScript took too long to answer. Try again in a moment.',
 } as const;
+
+/** Why there's no new graph, in words safe to show. */
+export const GRAPH_FAILED = {
+  tooLarge: 'This project is too large to analyse here. Search and the code still work.',
+  failed: 'The graph couldn’t be built. It’s tried again after the next change.',
+  slow: 'Building the graph took too long. It’s tried again after the next change.',
+} as const;
+
+const graphFailure = (reason: string) => ({
+  failed:
+    reason === SEMANTIC_MESSAGES.tooLarge
+      ? GRAPH_FAILED.tooLarge
+      : reason === SEMANTIC_MESSAGES.slow
+        ? GRAPH_FAILED.slow
+        : GRAPH_FAILED.failed,
+});
 
 /** What the client needs from a worker; tests pass a fake. */
 export interface WorkerLike {
@@ -45,8 +63,9 @@ export function threadWorker(workerUrl: URL): StartWorker {
 type Answer<Op extends SemanticOp> = EngineResults[Op];
 
 interface Pending {
-  readonly op: SemanticOp;
   readonly resolve: (result: unknown) => void;
+  /** What to answer when the worker can't: an empty answer for a question, a failure for a graph. */
+  readonly fail: (reason: string) => unknown;
   readonly timer: NodeJS.Timeout;
 }
 
@@ -57,6 +76,7 @@ export interface SemanticClientOptions {
   /** The project's files at the moment the worker starts (the agent's list). */
   readonly listFiles: () => Promise<readonly string[]>;
   readonly timeoutMs?: number;
+  readonly graphTimeoutMs?: number;
 }
 
 export class SemanticClient {
@@ -75,16 +95,37 @@ export class SemanticClient {
     return this.#ask(op, position) as Promise<Answer<Op>>;
   }
 
-  async #ask(op: SemanticOp, position: CodePosition): Promise<unknown> {
+  #ask(op: SemanticOp, position: CodePosition): Promise<unknown> {
+    return this.#send(
+      (id) => ({ type: 'ask', id, op, ...position }),
+      (reason) => emptyAnswer(op, reason),
+      this.#options.timeoutMs ?? ANSWER_TIMEOUT_MS,
+    );
+  }
+
+  /** A graph pass (ADR 0027): the whole project the first time, then what changed since. */
+  graph(): Promise<GraphWire | { readonly failed: string }> {
+    return this.#send(
+      (id) => ({ type: 'graph', id }),
+      graphFailure,
+      this.#options.graphTimeoutMs ?? GRAPH_TIMEOUT_MS,
+    ) as Promise<GraphWire | { readonly failed: string }>;
+  }
+
+  async #send(
+    message: (id: number) => ToWorker,
+    fail: (reason: string) => unknown,
+    timeoutMs: number,
+  ): Promise<unknown> {
     const worker = await this.#start();
     const id = this.#nextId++;
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.#pending.delete(id);
-        resolve(emptyAnswer(op, SEMANTIC_MESSAGES.slow));
-      }, this.#options.timeoutMs ?? ANSWER_TIMEOUT_MS);
-      this.#pending.set(id, { op, resolve, timer });
-      worker.postMessage({ type: 'ask', id, op, ...position });
+        resolve(fail(SEMANTIC_MESSAGES.slow));
+      }, timeoutMs);
+      this.#pending.set(id, { resolve, fail, timer });
+      worker.postMessage(message(id));
     });
   }
 
@@ -119,9 +160,7 @@ export class SemanticClient {
         this.#pending.delete(message.id);
         clearTimeout(pending.timer);
         pending.resolve(
-          message.type === 'answer'
-            ? message.result
-            : emptyAnswer(pending.op, SEMANTIC_MESSAGES.failed),
+          message.type === 'answer' ? message.result : pending.fail(SEMANTIC_MESSAGES.failed),
         );
       });
       const ended = (reason: string) => {
@@ -129,7 +168,7 @@ export class SemanticClient {
         this.#worker = undefined;
         for (const [id, pending] of this.#pending) {
           clearTimeout(pending.timer);
-          pending.resolve(emptyAnswer(pending.op, reason));
+          pending.resolve(pending.fail(reason));
           this.#pending.delete(id);
         }
       };
