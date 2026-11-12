@@ -13142,3 +13142,25 @@ pnpm test:visual
 **Risks:** none new. **Laptop:** nothing heavy at close.
 
 **Commit:** `docs: phase 6 close`.
+
+### Step 6.7a — A check that "arrives later" texts stay true (done by Claude, at the owner's request)
+
+**Goal:** a text about something coming later can't go stale or vague without a test failing.
+
+**Why:** a catalogue example (`Shell/TopBar`) kept showing the Code view as disabled and "arriving in a later phase" from phase 2 until phase 6, though Code shipped in phase 3. The visual tests compare each example with its approved screenshot: they proved it hadn't changed, not that it was still true, and nothing else checked it.
+
+**Files:** `apps/web/src/later-phases.test.ts` (4 tests); `apps/web/src/labs/flags.ts` (two texts it caught).
+
+**Concepts:**
+- **Reading only what's shown:** TypeScript's parser picks out string literals, template text and JSX text, so code comments (which name phases all the time) aren't read. https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API
+- **Truth from one place:** which phases are accepted comes from `docs/STATUS.md`, so accepting a phase makes any text still promising it fail.
+
+**Found and fixed on the way:** the canvas stress test's switch said "Finished in phase 2" (accepted 7 Nov); now phase 42. Graph stats' description said the flows "arrive with the flow builder" without its phase; now "(phase 7)".
+
+**Tests:** web 183 (4 new). Mutation-checked: the original top-bar example put back fails it; a text naming phase 4 (accepted) fails it.
+
+**Run and check it:** `pnpm --filter @flowcanvas/web exec vitest run src/later-phases.test.ts`
+
+**Risks:** none. **Laptop:** unit tests only.
+
+**Commit:** `test(web): texts about what arrives later name their phase, and never one already accepted`.

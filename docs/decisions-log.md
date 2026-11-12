@@ -557,3 +557,6 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 - Agent sessions in the review bar: the agent panel (phase 19); the review of a session's changes: the review panel (phase 32).
 - Workspaces on the owner's computer until a cloud provider is connected (phase 1d).
 - Already so: Graph stats' zeros ("arrives in phase 8") and Labs ("Finished in phase 7").
+- **Graph stats' Labs switch: "Finished in phase 7"** (Claude's choice, the flow builder draws the graph itself; owner, 12 Nov 2026: "you can have your choice").
+- **The canvas stress test's switch: "Finished in phase 42"** (Claude, under the same delegation): it said phase 2, accepted on 7 Nov, though the switch stays; large canvases are finished by the performance phase's WebGL renderer ("2,000 nodes stay smooth"). Found by the new check below.
+- **A test now holds every visible text to this** (`apps/web/src/later-phases.test.ts`, run with the web unit tests on every commit): no "later" without a phase, no "arrives" without one, and no phase named as still to come once STATUS.md marks it accepted; Labs' and Graph stats' phase numbers included. Asked for by the owner after a catalogue example kept showing the Code view as "arriving in a later phase" two phases after it shipped: the visual tests proved the example hadn't changed, not that it was still true.

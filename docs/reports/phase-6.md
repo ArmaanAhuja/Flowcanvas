@@ -86,7 +86,8 @@ Like phases 1d to 5, **workspaces run only on the owner's computer** until a clo
 
 1. **Inferred programs** (not in the plan): files no `tsconfig.json` includes now get a program, as in TypeScript's own editors. LibreChat's whole Express backend (1,342 files) and 983 of Twenty's were invisible to the graph and to phase 5's Calls tab (ADR 0027 §2).
 2. **Snapshots are one compact blob per version,** not a row per node and edge: rows took 749 ms to load Twenty on the laptop, too close to 1 s (ADR 0027 §5).
-3. **Graph stats' Labs switch says "Finished in phase 7"**, chosen by Claude: nothing in the documents says when it leaves Labs, and the flow builder draws the graph itself. The owner may change it.
+3. **Graph stats' Labs switch says "Finished in phase 7"** (Claude's choice, left to Claude by the owner): the flow builder draws the graph itself. The canvas stress test's switch moved from phase 2 (accepted) to phase 42, the performance phase that finishes large canvases.
+5. **A check that texts about what arrives later stay true** (`apps/web/src/later-phases.test.ts`, owner's request): a catalogue example had shown the Code view as "arriving in a later phase" since phase 2, though it shipped in phase 3. The visual tests compared it with its approved screenshot, so they proved it hadn't changed, not that it was still true. The check reads every visible text in the site and the catalogue (with TypeScript's parser) and fails on "later" without a phase, "arrives" without one, or a phase STATUS.md marks accepted. It caught the stress test's stale "phase 2" on its first run, and the original example when put back (mutation-checked).
 4. **The empty-state texts were reworded** with their phases (owner, 12 Nov 2026), which changed every project screen's baseline (each diff checked to lie only in the changed texts).
 
 ## Decision records added
