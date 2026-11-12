@@ -110,3 +110,97 @@ export function compareCalls(
     callees: difference(label.callees.map(calleeLine), answeredCallees(callees)),
   };
 }
+
+// Phase 6's hand-checked samples: the flow graph held to the same labels as the Calls tab (labels/calls.json) and to
+// labels/graph.json, by turning a labelled function's node and its edges into the Calls tab's entries and comparing
+// them exactly. Built-ins aren't in the graph (owner, 12 Nov 2026), so they're set aside from the labels. Here, not in
+// a module of its own: this file has no imports, so the workspace host's tests can import it as it is.
+
+interface GraphPlace {
+  readonly path: string;
+  readonly line: number;
+  readonly column: number;
+}
+export interface LabelGraph {
+  readonly nodes: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly place: GraphPlace | null;
+  }[];
+  readonly edges: readonly {
+    readonly from: string;
+    readonly to: string | null;
+    readonly target: string | null;
+    readonly relation: string | null;
+    readonly provenance: string;
+    readonly lines: readonly number[];
+  }[];
+}
+
+export interface GraphCheck {
+  /** The labelled function's node; null when the graph has none at its place. */
+  readonly node: string | null;
+  readonly callers: Difference;
+  readonly callees: Difference;
+}
+
+/** The labelled function in the graph, compared with its labels: its node, who reaches it, and what it reaches. */
+export function checkGraph(graph: LabelGraph, label: CallsLabel): GraphCheck {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const node = graph.nodes.find(
+    (n) =>
+      n.place?.path === label.path &&
+      n.place.line === label.line &&
+      n.place.column === label.column,
+  );
+  const withoutBuiltIns: CallsLabel = {
+    ...label,
+    callees: label.callees.filter((c) => !c.builtIn),
+  };
+  if (node === undefined) {
+    return { node: null, ...compareCalls(withoutBuiltIns, [], []) };
+  }
+  const entry = (
+    name: string,
+    relation: string | null,
+    provenance: string,
+    place: GraphPlace | null,
+    sitesIn: string,
+    lines: readonly number[],
+  ): AnsweredEntry => ({
+    name,
+    relation: relation ?? 'calls',
+    // The graph's unknown is the Calls tab's unresolved (decisions log, 12 Nov 2026).
+    provenance: provenance === 'unknown' ? 'unresolved' : provenance,
+    builtIn: false,
+    place: place === null ? null : { path: place.path, line: place.line },
+    sites: lines.map((line) => ({ path: sitesIn, line })),
+  });
+  const callees = graph.edges
+    .filter((e) => e.from === node.id)
+    .map((e) => {
+      const to = e.to === null ? undefined : byId.get(e.to);
+      return entry(
+        to?.name ?? e.target ?? '?',
+        e.relation,
+        e.provenance,
+        to?.place ?? null,
+        label.path,
+        e.lines,
+      );
+    });
+  const callers = graph.edges
+    .filter((e) => e.to === node.id)
+    .map((e) => {
+      const from = byId.get(e.from);
+      return entry(
+        from?.name ?? '?',
+        e.relation,
+        e.provenance,
+        null,
+        from?.place?.path ?? '?',
+        e.lines,
+      );
+    });
+  return { node: node.id, ...compareCalls(withoutBuiltIns, callers, callees) };
+}

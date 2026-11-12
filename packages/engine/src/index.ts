@@ -30,3 +30,9 @@ export {
   type IndexProgress,
   type IndexRun,
 } from './indexer.js';
+export {
+  SNAPSHOT_STORE_FORMAT,
+  SNAPSHOTS_KEPT,
+  SnapshotStore,
+  type SnapshotMeta,
+} from './snapshots.js';
