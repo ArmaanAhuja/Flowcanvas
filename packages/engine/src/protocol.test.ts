@@ -4,6 +4,7 @@ import {
   EngineProblem,
   isEngineResponse,
   parseEngineRequest,
+  TYPESCRIPT_OPS,
   type EngineRequest,
   type EngineStatus,
   type SymbolHit,
@@ -316,6 +317,12 @@ describe('flows (phase 7)', () => {
     expect(parseEngineRequest({ op: 'flow', ...at })).toEqual(request);
     expect(() => parseEngineRequest({ op: 'flow', path: '../x.ts', line: 1, column: 1 })).toThrow(
       new EngineProblem('invalid_request', 'Give a file in the project, like src/index.ts.'),
+    );
+  });
+
+  it('may wait on TypeScript, so it has the questions’ longer timeouts', () => {
+    expect([...TYPESCRIPT_OPS].sort()).toEqual(
+      ['callees', 'callers', 'definition', 'flow', 'references'].sort(),
     );
   });
 

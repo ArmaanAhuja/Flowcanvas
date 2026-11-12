@@ -65,6 +65,11 @@ export type EngineRequest =
 // TypeScript semantics (phase 5, ADR 0026): questions about the name at a place in a file.
 export const SEMANTIC_OPS = ['definition', 'references', 'callers', 'callees'] as const;
 export type SemanticOp = (typeof SEMANTIC_OPS)[number];
+/**
+ * What may wait on TypeScript, whose first answer about a package builds its programs (seconds): its questions, and
+ * a flow opened from inside a function (phase 7). Given the longer timeouts.
+ */
+export const TYPESCRIPT_OPS: readonly EngineRequest['op'][] = [...SEMANTIC_OPS, 'flow'];
 
 /** A place in the project: a project-relative path, a 1-based line and a 1-based column in UTF-16 units. */
 export interface CodePosition {

@@ -7,7 +7,8 @@
 // (corpus/labels/calls.json, 10 in each of the plan's two forks) must match the labels exactly.
 // Phase 6's Done when: the flow graph built in each workspace; the plan's four forks (Rallly, Documenso, LibreChat,
 // Twenty) ready and complete, snapshots saved and loaded in under 1 s each, and every labelled function found in the
-// stored graph with exactly its labelled callers and callees (labels/calls.json and labels/graph.json).
+// stored graph with exactly its labelled callers and callees (labels/calls.json and labels/graph.json). Phase 7: each
+// labelled function's flow opens through the engine, from its name and from inside it, at its own node.
 // Needs Docker 28+ and the internet. Run with `pnpm test:docker`. Everything it creates is removed.
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -220,6 +221,7 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
         // The stored version, copied out (with its write-ahead log) and loaded: loading decodes it and checks it
         // against the schema, then the labelled functions are found in it.
         const graphDiffering: string[] = [];
+        const roots: { readonly label: CallsLabel; readonly id: string }[] = [];
         const sampled = [...(callLabels[repo.id] ?? []), ...(graphLabels[repo.id] ?? [])];
         if (graph.state === 'ready' && graph.snapshot !== null && sampled.length > 0) {
           const copy = mkdtempSync(join(tmpdir(), 'fc-graph-'));
@@ -237,6 +239,7 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
             if (loaded === undefined) throw new Error('the reported version isn’t stored');
             for (const label of sampled) {
               const found = checkGraph(loaded.graph, label);
+              if (found.node !== null) roots.push({ label, id: found.node });
               const problems = [
                 found.node === null ? ['no node at its place'] : [],
                 found.callers.missing.map((line) => `missing caller: ${line}`),
@@ -248,6 +251,30 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
             }
           } finally {
             rmSync(copy, { recursive: true, force: true });
+          }
+        }
+
+        // Phase 7: each labelled function's flow through the engine, from its name (found in the graph itself) and
+        // from a line inside it where it makes a call (TypeScript names the function): both start at its node.
+        const flowsDiffering: string[] = [];
+        const flowMs: number[] = [];
+        for (const { label, id } of roots) {
+          const inside = label.callees.flatMap((c) => c.lines).find((line) => line !== label.line);
+          const places = [
+            { line: label.line, column: label.column },
+            ...(inside === undefined ? [] : [{ line: inside, column: 1 }]),
+          ];
+          for (const place of places) {
+            const asked = performance.now();
+            const answer = await host.index(ref, { op: 'flow', path: label.path, ...place });
+            flowMs.push(performance.now() - asked);
+            const said = !answer.ok
+              ? answer.error.message
+              : 'flow' in answer.result
+                ? (answer.result.flow?.root ?? answer.result.message)
+                : 'not a flow';
+            if (said !== id)
+              flowsDiffering.push(`${label.name} from line ${String(place.line)}: ${String(said)}`);
           }
         }
 
@@ -285,6 +312,12 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
                 graphLabels: `${String(sampled.length - graphDiffering.length)} of ${String(sampled.length)}`,
               }
             : {}),
+          ...(flowMs.length > 0
+            ? {
+                flows: `${String(flowMs.length - flowsDiffering.length)} of ${String(flowMs.length)}`,
+                flowMaxMs: Math.round(Math.max(...flowMs)),
+              }
+            : {}),
         };
         report.push(row);
         console.log(JSON.stringify(row));
@@ -297,6 +330,7 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
           expect(graph.snapshot?.saveMs).toBeLessThan(SNAPSHOT_MS);
           expect(graph.snapshot?.loadMs).toBeLessThan(SNAPSHOT_MS);
           expect(graphDiffering).toEqual([]);
+          expect(flowsDiffering).toEqual([]);
         }
         expect(current.byStatus.parsed).toBeGreaterThan(0);
         if (held) {

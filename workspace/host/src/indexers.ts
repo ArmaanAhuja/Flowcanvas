@@ -14,7 +14,7 @@ import {
   ENGINE_LIMITS,
   ENGINE_PROTOCOL,
   isEngineResponse,
-  SEMANTIC_OPS,
+  TYPESCRIPT_OPS,
   type EngineRequest,
   type EngineResponse,
 } from '@flowcanvas/engine/protocol';
@@ -92,8 +92,7 @@ export function dockerEngine(docker: Docker): StartEngine {
 const engineProtocol: LineProtocol<EngineRequest, EngineResponse> = {
   version: ENGINE_PROTOCOL,
   maxLineBytes: ENGINE_LIMITS.lineBytes,
-  timeoutMs: (request) =>
-    (SEMANTIC_OPS as readonly string[]).includes(request.op) ? SEMANTIC_TIMEOUT_MS : TIMEOUT_MS,
+  timeoutMs: (request) => (TYPESCRIPT_OPS.includes(request.op) ? SEMANTIC_TIMEOUT_MS : TIMEOUT_MS),
   check: (request, body): body is EngineResponse => isEngineResponse(request, body),
   messages: ENGINE_MESSAGES,
 };

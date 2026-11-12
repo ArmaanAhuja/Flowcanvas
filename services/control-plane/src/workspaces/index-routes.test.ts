@@ -1,4 +1,4 @@
-// /api/projects/:id/workspace/index/{status,search} through the whole API, with a fake provider (phase 4).
+// /api/projects/:id/workspace/index/… through the whole API, with a fake provider (phases 4 to 7).
 // @vitest-environment node
 import type { EngineStatus, GraphStatus } from '@flowcanvas/engine/protocol';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -215,6 +215,40 @@ describe('TypeScript’s answers (phase 5)', () => {
     expect(await call('GET', path)).toEqual({
       status: 400,
       json: { error, code: 'invalid_request' },
+    });
+    expect(provider.indexRequests).toEqual([]);
+  });
+});
+
+describe('flows (phase 7)', () => {
+  beforeEach(async () => {
+    await call('POST', '/open');
+  });
+
+  it('opens the flow from the function at a place, and counts as activity', async () => {
+    const answer = {
+      flow: null,
+      message: 'The graph is still being built. Flows open once it’s ready.',
+      version: null,
+      takenAt: null,
+      current: false,
+      complete: false,
+    };
+    provider.indexAnswer = { ok: true, result: answer };
+    now += 9 * 60_000;
+    expect(
+      await call('GET', '/index/flow?path=apps%2Fweb%2Fsrc%2Fsend.ts&line=12&column=17'),
+    ).toEqual({ status: 200, json: answer });
+    expect(provider.indexRequests.map(({ request }) => request)).toEqual([
+      { op: 'flow', path: 'apps/web/src/send.ts', line: 12, column: 17 },
+    ]);
+    expect(await lastActive()).toBe(now);
+  });
+
+  it('refuses a place outside the project itself, without asking the workspace', async () => {
+    expect(await call('GET', '/index/flow?path=..%2Fx.ts&line=1&column=1')).toEqual({
+      status: 400,
+      json: { error: 'Give a file in the project, like src/index.ts.', code: 'invalid_request' },
     });
     expect(provider.indexRequests).toEqual([]);
   });
