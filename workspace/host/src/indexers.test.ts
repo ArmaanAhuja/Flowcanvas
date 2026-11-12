@@ -92,7 +92,7 @@ describe('Indexers', () => {
     let status;
     do {
       status = await indexers.call('ws', { op: 'status' });
-    } while (status.ok && 'state' in status.result && status.result.state !== 'ready');
+    } while (status.ok && 'byStatus' in status.result && status.result.state !== 'ready');
     expect(status).toMatchObject({ ok: true, result: { state: 'ready', files: 1, symbols: 1 } });
     expect(await indexers.call('ws', { op: 'search', query: 'poll', limit: 5 })).toMatchObject({
       ok: true,

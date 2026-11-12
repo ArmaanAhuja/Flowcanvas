@@ -344,7 +344,7 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
     await sh(ref, 'printf "FLOWCANVAS_CANARY=phase4-canary-7f3a\\n" > /workspace/project/.env');
     const status = async () => {
       const response = await host.index(ref, { op: 'status' });
-      if (!response.ok || !('state' in response.result)) throw new Error('no status');
+      if (!response.ok || !('byStatus' in response.result)) throw new Error('no status');
       return response.result;
     };
     const search = async (query: string) => {

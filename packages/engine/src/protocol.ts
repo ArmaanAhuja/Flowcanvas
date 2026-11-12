@@ -1,6 +1,14 @@
 // The engine's protocol (phase 4 step 3, ADR 0025): one JSON message per line over the engine process's stdin
 // and stdout, through the workspace host, like the agent's (ADR 0016). Shared by the engine, the host and the
-// control plane, so it has no imports and no Node APIs: the control plane bundles it into its Worker.
+// control plane, so it has no Node APIs: the control plane bundles it into its Worker. Its one import is the graph
+// model's vocabulary (plain data, phase 6), so the graph's kinds are named in one place.
+import {
+  CODE_UNIT_KINDS,
+  EDGE_KINDS,
+  NODE_KINDS,
+  PROVENANCES as GRAPH_PROVENANCES,
+  type GraphStats,
+} from '@flowcanvas/graph-model';
 
 export const ENGINE_PROTOCOL = 1;
 
@@ -8,6 +16,8 @@ export const ENGINE_PROTOCOL = 1;
 export const ENGINE_HOME = '/tmp/flowcanvas-engine';
 /** The index: in the workspace's volume (it survives sleep and restarts), outside the project. */
 export const INDEX_FILE = '/workspace/.flowcanvas/index.db';
+/** The flow graph's versions (phase 6, ADR 0027): beside the index, in a file of its own so a rebuilt index keeps them. */
+export const GRAPH_FILE = '/workspace/.flowcanvas/graph.db';
 
 export const ENGINE_LIMITS = {
   /** Longest search, in characters. */
@@ -41,6 +51,7 @@ export type FileStatusName = (typeof FILE_STATUSES)[number];
 export type EngineRequest =
   | { readonly op: 'hello' }
   | { readonly op: 'status' }
+  | { readonly op: 'graph' }
   | { readonly op: 'search'; readonly query: string; readonly limit: number }
   | ({ readonly op: SemanticOp } & CodePosition);
 
@@ -146,9 +157,42 @@ export interface SearchResult {
   readonly ms: number;
 }
 
+/**
+ * The flow graph's state (phase 6, ADR 0027):
+ * - `waiting`: the index isn't ready yet; the graph is built after it.
+ * - `building`: a pass is running (`snapshot` is the last one, if any).
+ * - `ready`: `snapshot` is up to date with the files.
+ * - `failed`: the last pass couldn't finish; `message` says why (`snapshot` is the last good one, if any).
+ */
+export const GRAPH_STATES = ['waiting', 'building', 'ready', 'failed'] as const;
+export type GraphState = (typeof GRAPH_STATES)[number];
+
+/** What Graph stats shows about one snapshot: counts by kind (every kind, zeros included) and its timings. */
+export interface GraphSnapshotInfo {
+  /** The SHA-256 of its encoding. */
+  readonly version: string;
+  readonly takenAt: string;
+  readonly complete: boolean;
+  readonly note: string | null;
+  readonly files: number;
+  readonly builtInCalls: number;
+  readonly stats: GraphStats;
+  /** How long the pass took; and saving and loading the snapshot (the Done when's "under 1 s"). */
+  readonly buildMs: number;
+  readonly saveMs: number;
+  readonly loadMs: number;
+}
+
+export interface GraphStatus {
+  readonly state: GraphState;
+  readonly message: string | null;
+  readonly snapshot: GraphSnapshotInfo | null;
+}
+
 export interface EngineResults {
   readonly hello: { readonly protocol: number };
   readonly status: EngineStatus;
+  readonly graph: GraphStatus;
   readonly search: SearchResult;
   readonly definition: DefinitionResult;
   readonly references: ReferencesResult;
@@ -191,6 +235,8 @@ export function parseEngineRequest(input: unknown): EngineRequest {
       return { op: 'hello' };
     case 'status':
       return { op: 'status' };
+    case 'graph':
+      return { op: 'graph' };
     case 'search': {
       if (typeof fields.query !== 'string') {
         throw new EngineProblem('invalid_request', 'Give something to search for.');
@@ -262,6 +308,47 @@ function isStatus(value: unknown): value is EngineStatus {
   );
 }
 
+/** Exactly these keys, each a count. */
+const isCounts = (value: unknown, keys: readonly string[]) => {
+  const r = record(value);
+  return (
+    r !== undefined && Object.keys(r).length === keys.length && keys.every((key) => isCount(r[key]))
+  );
+};
+
+function isGraphStatus(value: unknown): value is GraphStatus {
+  const g = record(value);
+  if (
+    g === undefined ||
+    !(GRAPH_STATES as readonly unknown[]).includes(g.state) ||
+    !(g.message === null || (typeof g.message === 'string' && g.message.length <= 300))
+  ) {
+    return false;
+  }
+  if (g.snapshot === null) return true;
+  const s = record(g.snapshot);
+  const stats = record(s?.stats);
+  return (
+    s !== undefined &&
+    stats !== undefined &&
+    typeof s.version === 'string' &&
+    /^[0-9a-f]{64}$/.test(s.version) &&
+    typeof s.takenAt === 'string' &&
+    !Number.isNaN(Date.parse(s.takenAt)) &&
+    s.takenAt.length <= 40 &&
+    typeof s.complete === 'boolean' &&
+    (s.note === null || (typeof s.note === 'string' && s.note.length <= 300)) &&
+    [s.files, s.builtInCalls, s.buildMs, s.saveMs, s.loadMs, stats.nodes, stats.edges].every(
+      isCount,
+    ) &&
+    isCounts(stats.byNodeKind, NODE_KINDS) &&
+    isCounts(stats.byCodeUnit, CODE_UNIT_KINDS) &&
+    isCounts(stats.byEdgeKind, EDGE_KINDS) &&
+    isCounts(stats.byProvenance, GRAPH_PROVENANCES) &&
+    Object.keys(stats).length === 6
+  );
+}
+
 function isHit(value: unknown): value is SymbolHit {
   const h = record(value);
   return (
@@ -299,6 +386,8 @@ export function isEngineResponse(request: EngineRequest, value: unknown): value 
       return isCount(result?.protocol);
     case 'status':
       return isStatus(result);
+    case 'graph':
+      return isGraphStatus(result);
     case 'search':
       return (
         result !== undefined &&

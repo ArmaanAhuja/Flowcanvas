@@ -10,7 +10,8 @@ import { startWatcher } from '@flowcanvas/workspace-agent/watch';
 import { ENGINE_SEMANTICS_WORKER } from './bundle-files.js';
 import { useGrammarDirectory } from './grammars.js';
 import { Indexer } from './indexer.js';
-import { INDEX_FILE } from './protocol.js';
+import { GRAPH_FILE, INDEX_FILE } from './protocol.js';
+import { SnapshotStore } from './snapshots.js';
 import { SemanticClient, threadWorker } from './semantics/client.js';
 import { serveEngine } from './serve.js';
 import { startEngineService } from './service.js';
@@ -23,6 +24,7 @@ await mkdir(dirname(INDEX_FILE), { recursive: true, mode: 0o700 });
 // The same file list as the file tree: the agent's own (git's files, never secret ones).
 const agent = createAgent({ root: PROJECT_ROOT });
 const store = new IndexStore(INDEX_FILE);
+const snapshots = new SnapshotStore(GRAPH_FILE);
 const indexer = new Indexer({ root: PROJECT_ROOT, store });
 const listFiles = async () => {
   const result = await agent.handle({ op: 'files' });
@@ -44,10 +46,12 @@ const service = startEngineService({
   listFiles,
   watch: (emit) => startWatcher({ root: PROJECT_ROOT, emit }),
   semantics,
+  snapshots,
 });
 
 await serveEngine(service, process.stdin, process.stdout);
 service.close();
 await indexer.close();
 store.close();
+snapshots.close();
 process.exit(0);

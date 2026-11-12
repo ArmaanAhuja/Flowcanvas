@@ -94,7 +94,7 @@ describe('the corpus in real workspaces (phases 4 and 5)', { timeout: 600_000 },
 
         const status = async (): Promise<EngineStatus> => {
           const answer = await host.index(ref, { op: 'status' });
-          if (!answer.ok || !('state' in answer.result)) throw new Error('no status');
+          if (!answer.ok || !('byStatus' in answer.result)) throw new Error('no status');
           return answer.result;
         };
         const search = async (query: string, limit = 50): Promise<SearchResult> => {

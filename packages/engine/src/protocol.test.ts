@@ -180,3 +180,71 @@ describe('the semantic questions (phase 5)', () => {
     ).toBe(false);
   });
 });
+
+describe('the graph (phase 6)', () => {
+  const graph: EngineRequest = { op: 'graph' };
+  const snapshot = {
+    version: 'a'.repeat(64),
+    takenAt: '2026-11-12T10:00:00.000Z',
+    complete: true,
+    note: null,
+    files: 1168,
+    builtInCalls: 3930,
+    stats: {
+      nodes: 3327,
+      edges: 16394,
+      byNodeKind: {
+        'entry-point': 0,
+        'code-unit': 3327,
+        decision: 0,
+        'data-access': 0,
+        'async-handoff': 0,
+        'external-boundary': 0,
+      },
+      byCodeUnit: { function: 1603, method: 189, component: 1081, class: 38, module: 416 },
+      byEdgeKind: { call: 16394, branch: 0, data: 0, handoff: 0, boundary: 0 },
+      byProvenance: { observed: 0, resolved: 7514, convention: 0, suggested: 0, unknown: 8880 },
+    },
+    buildMs: 4100,
+    saveMs: 20,
+    loadMs: 10,
+  };
+  const ok = (result: unknown) => isEngineResponse(graph, { ok: true, result });
+
+  it('is an operation of its own', () => {
+    expect(parseEngineRequest({ op: 'graph' })).toEqual({ op: 'graph' });
+  });
+
+  it('accepts its states, with or without a snapshot', () => {
+    expect(ok({ state: 'ready', message: null, snapshot })).toBe(true);
+    expect(ok({ state: 'waiting', message: null, snapshot: null })).toBe(true);
+    expect(ok({ state: 'failed', message: 'Too large.', snapshot })).toBe(true);
+  });
+
+  it('refuses anything else: a bad version, a kind missing or extra, a count that isn’t one', () => {
+    const stats = snapshot.stats;
+    for (const bad of [
+      { state: 'done', message: null, snapshot: null },
+      { state: 'ready', message: 'x'.repeat(301), snapshot: null },
+      { state: 'ready', message: null, snapshot: { ...snapshot, version: '../etc/passwd' } },
+      { state: 'ready', message: null, snapshot: { ...snapshot, takenAt: 'yesterday' } },
+      { state: 'ready', message: null, snapshot: { ...snapshot, loadMs: -1 } },
+      {
+        state: 'ready',
+        message: null,
+        snapshot: { ...snapshot, stats: { ...stats, byNodeKind: { 'code-unit': 1 } } },
+      },
+      {
+        state: 'ready',
+        message: null,
+        snapshot: {
+          ...snapshot,
+          stats: { ...stats, byProvenance: { ...stats.byProvenance, guessed: 1 } },
+        },
+      },
+      { state: 'ready', message: null, snapshot: { ...snapshot, stats: { ...stats, extra: 1 } } },
+    ]) {
+      expect(ok(bad), JSON.stringify(bad).slice(0, 80)).toBe(false);
+    }
+  });
+});

@@ -1,6 +1,7 @@
 // The engine as a service in the workspace (phase 4 step 3, ADR 0025): a full index when it starts, then
 // re-indexing as the watcher reports changes, and answers to status and search. Its files and watcher are
 // passed in, so tests run it without a container.
+import { graphStats } from '@flowcanvas/graph-model';
 import type { WatchEvent } from '@flowcanvas/workspace-agent/protocol';
 import type { Indexer } from './indexer.js';
 import type {
@@ -9,11 +10,16 @@ import type {
   EngineResults,
   EngineState,
   EngineStatus,
+  GraphSnapshotInfo,
+  GraphState,
+  GraphStatus,
   SearchResult,
   SemanticOp,
 } from './protocol.js';
 import { ENGINE_PROTOCOL } from './protocol.js';
-import { emptyAnswer } from './semantics/client.js';
+import { emptyAnswer, GRAPH_FAILED } from './semantics/client.js';
+import type { GraphWire } from './semantics/worker.js';
+import type { SnapshotStore } from './snapshots.js';
 import type { IndexStore } from './store.js';
 
 export interface EngineServiceOptions {
@@ -27,12 +33,18 @@ export interface EngineServiceOptions {
   readonly refreshDelayMs?: number;
   /** TypeScript's answers (phase 5, ADR 0026): the semantic worker's client. Kept current with the same events. */
   readonly semantics?: Semantics;
+  /** Where the flow graph's versions are kept (phase 6, ADR 0027); with `semantics`, the graph is built. */
+  readonly snapshots?: SnapshotStore;
+  /** After changes are indexed, the graph waits this long for more before it's brought up to date. */
+  readonly graphDelayMs?: number;
 }
 
 /** What the engine needs from the semantic worker's client (semantics/client.ts). */
 export interface Semantics {
   ask<Op extends SemanticOp>(op: Op, position: CodePosition): Promise<EngineResults[Op]>;
   changed(paths: readonly string[], files?: readonly string[]): void;
+  /** A graph pass (ADR 0027). */
+  graph(): Promise<GraphWire | { readonly failed: string }>;
   close(): Promise<void>;
 }
 
@@ -41,6 +53,8 @@ export interface EngineService {
   handle(request: EngineRequest): Promise<EngineResults[keyof EngineResults]>;
   /** Waits for the current pass and any pending changes to be indexed (for tests and shutdown). */
   settled(): Promise<void>;
+  /** Waits until no graph pass is running or waiting to start (for tests and shutdown). */
+  graphSettled(): Promise<void>;
   close(): void;
 }
 
@@ -54,6 +68,10 @@ const REFRESH_DELAY_MS = 200;
 
 /** Where no semantic worker was given (tests of the index alone). */
 export const NO_SEMANTICS = 'TypeScript’s answers aren’t available here.';
+/** Where there's no semantic worker or no snapshot store. */
+export const NO_GRAPH = 'The graph isn’t available here.';
+
+const GRAPH_DELAY_MS = 2000;
 
 export function startEngineService(options: EngineServiceOptions): EngineService {
   const { store, indexer } = options;
@@ -67,6 +85,92 @@ export function startEngineService(options: EngineServiceOptions): EngineService
   const pending = new Map<string, boolean>();
   let timer: NodeJS.Timeout | undefined;
   let work: Promise<unknown> = Promise.resolve();
+
+  // The flow graph (phase 6, ADR 0027): built after the first index, then brought up to date once edits settle.
+  // One pass at a time; a request during one runs once more after it.
+  const { semantics, snapshots } = options;
+  const graphDelayMs = options.graphDelayMs ?? GRAPH_DELAY_MS;
+  let graphState: GraphState =
+    semantics !== undefined && snapshots !== undefined ? 'waiting' : 'failed';
+  let graphMessage: string | null = graphState === 'failed' ? NO_GRAPH : null;
+  let graphInfo: GraphSnapshotInfo | null = null;
+  let graphTimer: NodeJS.Timeout | undefined;
+  let graphRunning: Promise<void> | undefined;
+  let graphAgain = false;
+
+  // The last version from before a restart is shown until the first pass replaces it.
+  if (snapshots !== undefined) {
+    try {
+      const latest = snapshots.latest();
+      const loaded = latest === undefined ? undefined : snapshots.load(latest.version);
+      if (latest !== undefined && loaded !== undefined) {
+        graphInfo = {
+          ...latest,
+          stats: graphStats(loaded.graph),
+          buildMs: 0,
+          saveMs: 0,
+          loadMs: Math.round(loaded.ms),
+        };
+      }
+    } catch {
+      // An unreadable version is replaced by the next pass.
+    }
+  }
+
+  const runGraph = () => {
+    graphTimer = undefined;
+    if (semantics === undefined || snapshots === undefined || closed) return;
+    if (graphRunning !== undefined) {
+      graphAgain = true;
+      return;
+    }
+    graphState = 'building';
+    graphRunning = (async () => {
+      const started = performance.now();
+      const result = await semantics.graph();
+      const buildMs = Math.round(performance.now() - started);
+      if ('failed' in result) {
+        graphState = 'failed';
+        graphMessage = result.failed;
+        return;
+      }
+      const saved = snapshots.save(result.encoded, {
+        complete: result.complete,
+        note: result.note,
+        files: result.files,
+        builtInCalls: result.builtInCalls,
+      });
+      // Loaded straight back: every version proves it reads, and how fast (the Done when's "under 1 s").
+      const loaded = snapshots.load(saved.meta.version);
+      if (loaded === undefined) throw new Error('not stored');
+      graphInfo = {
+        ...saved.meta,
+        stats: graphStats(loaded.graph),
+        buildMs,
+        saveMs: Math.round(saved.ms),
+        loadMs: Math.round(loaded.ms),
+      };
+      graphState = 'ready';
+      graphMessage = null;
+    })()
+      .catch(() => {
+        graphState = 'failed';
+        graphMessage = GRAPH_FAILED.failed;
+      })
+      .finally(() => {
+        graphRunning = undefined;
+        if (graphAgain && !closed) {
+          graphAgain = false;
+          runGraph();
+        }
+      });
+  };
+
+  const requestGraph = (delayMs: number) => {
+    if (semantics === undefined || snapshots === undefined || closed) return;
+    if (graphTimer !== undefined) clearTimeout(graphTimer);
+    graphTimer = setTimeout(runGraph, delayMs);
+  };
 
   // Every pass and refresh goes through `work`, so `settled` can wait for all of it. The indexer queues
   // them itself as well.
@@ -86,6 +190,7 @@ export function startEngineService(options: EngineServiceOptions): EngineService
         });
         lastFullMs = run.ms;
         state = 'ready';
+        requestGraph(0);
       } catch {
         state = 'failed';
         message = INDEXING_FAILED;
@@ -106,6 +211,7 @@ export function startEngineService(options: EngineServiceOptions): EngineService
             changes.map((c) => c.path),
             await options.listFiles(),
           );
+          requestGraph(graphDelayMs);
         }
       } catch {
         // The full index is still there; the next change or a reopen tries again.
@@ -179,6 +285,12 @@ export function startEngineService(options: EngineServiceOptions): EngineService
           return Promise.resolve({ protocol: ENGINE_PROTOCOL });
         case 'status':
           return Promise.resolve(status());
+        case 'graph':
+          return Promise.resolve({
+            state: graphState,
+            message: graphMessage,
+            snapshot: graphInfo,
+          } satisfies GraphStatus);
         case 'search':
           return Promise.resolve(search(request.query, request.limit));
         case 'definition':
@@ -203,9 +315,19 @@ export function startEngineService(options: EngineServiceOptions): EngineService
         await seen;
       }
     },
+    graphSettled: async () => {
+      while (graphTimer !== undefined || graphRunning !== undefined) {
+        if (graphTimer !== undefined) {
+          clearTimeout(graphTimer);
+          runGraph();
+        }
+        await graphRunning;
+      }
+    },
     close: () => {
       closed = true;
       if (timer !== undefined) clearTimeout(timer);
+      if (graphTimer !== undefined) clearTimeout(graphTimer);
       watcher?.close();
       void options.semantics?.close();
     },
