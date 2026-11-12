@@ -12875,8 +12875,8 @@ pnpm test && pnpm test:e2e && pnpm test:visual && pnpm test:docker
 | # | Step | Milestone | Status |
 | --- | --- | --- | --- |
 | 0 | The plan and decisions; branch | A | done (Claude, 12 Nov) |
-| 1 | Spike: one pass over each program for code units and call edges; snapshot save and load in SQLite; on the four forks. ADR | A | *next* |
-| 2 | The graph types, validation and snapshot diff in `@flowcanvas/graph-model` | A | *planned* |
+| 1 | Spike: one pass over each program for code units and call edges; snapshot save and load in SQLite; on the four forks. ADR 0027 | A | done (Claude, 12 Nov) |
+| 2 | The graph types, validation and snapshot diff in `@flowcanvas/graph-model` | A | *next* |
 | 3 | The engine: the graph pass and the snapshot store, kept current on changes | A | *planned* |
 | 4 | The API through the host and control plane | B | *planned* |
 | 5 | UI: the Graph stats panel behind its Labs switch | B | *planned* |
@@ -12895,9 +12895,9 @@ pnpm test && pnpm test:e2e && pnpm test:visual && pnpm test:docker
 
 | # | Risk | How we keep it in check | Status |
 | --- | --- | --- | --- |
-| R1 | Twenty's whole-project pass needs too much memory or time | One program at a time, released after; a partial graph says so | *to measure (step 1)* |
-| R2 | Large snapshots miss 1 s | Measured in the spike; a compact encoding if rows are too slow | *to measure (step 1)* |
-| R3 | Node identity breaks diffs when lines move | Identity from file and qualified name, not position | *design (step 1)* |
+| R1 | Twenty's whole-project pass needs too much memory or time | One program at a time, released after; a partial graph says so | **measured:** Twenty 61 s, 2.06 GB peak against the 2.5 GB cap (laptop) |
+| R2 | Large snapshots miss 1 s | Measured in the spike; a compact encoding if rows are too slow | **measured:** rows load Twenty in 749 ms; a compact gzip blob in 240 ms (laptop), chosen |
+| R3 | Node identity breaks diffs when lines move | Identity from file and qualified name, not position | **decided:** ADR 0027 §4 |
 | R4 | **Laptop:** four forks analysed | One at a time; heavy runs on CI | *in check* |
 
 ### Step 6.0 — The plan and the owner's decisions (done by Claude)
@@ -12907,3 +12907,29 @@ pnpm test && pnpm test:e2e && pnpm test:visual && pnpm test:docker
 **Files:** `docs/decisions-log.md` (phase 6 decisions), this section.
 
 **Commit:** `docs: phase 6 plan and the owner's decisions`.
+
+### Step 6.1 — Spike: a whole-project pass with TypeScript, and snapshots in SQLite (done by Claude; ADR 0027)
+
+**Goal:** measure, on every corpus fork, what a one-pass graph of code units and call edges costs, and how a snapshot is best saved and loaded, before building either.
+
+**What a person can do now:** read ADR 0027's numbers. Nothing in the app changes.
+
+**Files:** `docs/adr/0027-graph-model.md`. The spike's scripts stayed outside the repository (they read the corpus forks, whose code never enters it).
+
+**Concepts:**
+- **A whole-project call graph in one pass:** walk every file's syntax tree once and ask the type checker what each call site refers to, instead of asking per function. https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API
+- **Inferred projects:** files no `tsconfig.json` includes still get a program with default options, as in TypeScript's own editors. https://github.com/microsoft/TypeScript/wiki/Standalone-Server-(tsserver)
+- **Content-addressed snapshots:** a version named by the SHA-256 of its encoding. https://git-scm.com/book/en/v2/Git-Internals-Git-Objects
+
+**Found on the way:**
+- **Twenty fits** when programs are walked one at a time (61 s, 2.06 GB peak), where every program at once ran out of memory in phase 5.
+- **1,342 of LibreChat's source files (its whole Express backend) and 983 of Twenty's are in no tsconfig,** so phase 5's Calls tab doesn't see them either. Inferred programs fix both (step 3).
+- **Rows were too slow for Twenty's snapshot** (749 ms to load on the laptop); a compact blob loads in 240 ms.
+
+**Tests:** none (a spike). Measured on all six forks, one at a time.
+
+**Run and check it:** ADR 0027's tables.
+
+**Risks:** R1–R3 updated above. **Laptop:** one fork at a time, about 4 minutes in all; load under 2.
+
+**Commit:** `docs: phase 6 spike, the graph pass and snapshot encoding (ADR 0027)`.
