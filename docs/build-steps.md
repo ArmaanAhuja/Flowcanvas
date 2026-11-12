@@ -12880,8 +12880,8 @@ pnpm test && pnpm test:e2e && pnpm test:visual && pnpm test:docker
 | 3 | The engine: the graph pass and the snapshot store, kept current on changes | A | done (Claude, 12 Nov) |
 | 4 | The API through the host and control plane | B | done (Claude, 12 Nov) |
 | 5 | UI: the Graph stats panel behind its Labs switch | B | done (Claude, 12 Nov) |
-| 6 | Proof: the forks in real workspaces (hand-checked samples, save and load times); walkthrough; screens | B | *in review (CI)* |
-| 7 | Close: report, 0.10.0 | B | *planned* |
+| 6 | Proof: the forks in real workspaces (hand-checked samples, save and load times); walkthrough; screens | B | done (Claude, 12 Nov) |
+| 7 | Close: report, 0.10.0 | B | done (Claude, 12 Nov) |
 
 ### How each Done-when item is proven
 
@@ -13078,3 +13078,67 @@ pnpm --filter @flowcanvas/ui storybook   # Shell/GraphStats
 **Risks:** none new. **Laptop:** unit tests only.
 
 **Commits:** `625d398` `feat(ui): Graph stats, and every provenance's line form as one glyph`; `b631f0f` `feat(web): Labs → Graph stats in the inspector's Details tab`.
+
+### Step 6.6 — Proof: the four forks' graphs in real workspaces, 26 labelled functions, the walkthrough and screens (done by Claude)
+
+**Goal:** the Done when: the schema handles all 4 forks; snapshot save and load under 1 s.
+
+**What a person can do now:** read the corpus report on CI (`Workspaces against real Docker`): each fork's graph, its timings and its labels.
+
+**How the samples were made:** phase 5's 20 labelled functions (Rallly and Documenso) are reused, and 6 more were labelled by reading the source, 3 in LibreChat (its untyped Express backend, an inferred program) and 3 in Twenty (a front-end utility, a component's callee, a NestJS service method). Each function's node must be in the stored graph at its place, with exactly its labelled callers and callees (built-ins aside: they're counted, not in the graph).
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `corpus/labels/graph.json` | The 6 new labelled functions |
+| `corpus/src/calls.ts` (+ `graph.test.ts`) | `checkGraph`: a labelled function's node and edges as the Calls tab's entries, compared exactly |
+| `workspace/host/src/corpus.docker.test.ts` | Waits for each fork's graph; the four held to a ready, complete snapshot saved and loaded in under 1 s; the stored version copied out (with its write-ahead log), loaded, and the labels found in it |
+| `packages/engine/src/index.ts` | `SnapshotStore` exported, for the test to read a copied store |
+| `e2e/try-it/phase-6.spec.ts` | The walkthrough: Labs → Graph stats on, the project opened, the graph read |
+| `e2e/visual/screens.spec.ts` (+ baselines) | The Graph stats screen; 6 Graph stats stories |
+| `docs/reports/phase-6-figma-differences.md` | For the owner's review |
+
+**Concepts:**
+- **Checking what's stored, not what's reported:** the test reads the version the engine saved, so it proves the encoding, the store and the schema together.
+- **SQLite's write-ahead log:** recent writes live in `graph.db-wal` until a checkpoint, so the copy includes it. https://www.sqlite.org/wal.html
+
+**Found and fixed on the way:**
+- **The host can't import a corpus module that imports another** (`.ts` suffixes under `nodenext`): the graph check lives beside `compareCalls` in `calls.ts`, which imports nothing.
+- **The empty-state texts read as broken** once the project was analysed (the owner's question): every later feature now names its phase (decisions log, 12 Nov 2026; the next commit).
+
+**Tests:**
+- **Corpus (Docker, CI run 43230077468, `2c8a177`):** Rallly, Documenso, LibreChat and Twenty ready and complete; save 14–143 ms, load 37–454 ms; labels 10 of 10, 10 of 10, 3 of 3, 3 of 3. Excalidraw and Medusa reported, complete. Counts identical to the laptop's.
+- **In-process (laptop):** all 26 labelled functions matched before the Docker run.
+- **Corpus unit:** 21 (3 new). **Walkthrough:** `try-it/phase-6.spec.ts`. **Visual:** 162 (14 new), every existing baseline unchanged.
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts   # real Docker, about 10 minutes
+pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-6.spec.ts
+pnpm test:visual
+```
+
+**Risks:** R1 measured in real workspaces (Twenty 68 s). **Laptop:** one visual run in Docker at a time; the corpus Docker test on CI only.
+
+**Commits:** `2c8a177` `test: phase 6's proof`; `ae12d1c` `feat(web): whatever arrives in a later phase says so, with its phase`.
+
+### Step 6.7 — Close the phase: report, 0.10.0, ready for review (done by Claude)
+
+**Goal:** the phase written up for the owner's acceptance, with every check green.
+
+**What a person can do now:** read `docs/reports/phase-6.md` and `docs/reports/phase-6-figma-differences.md`; What's new shows 0.10.0.
+
+**Files:** `docs/reports/phase-6.md`; `CHANGELOG.md`, `package.json` (0.10.0); `docs/STATUS.md`, `docs/RUN-AND-FEATURES.md`, `ARCHITECTURE.md`.
+
+**Concepts:** none new. **Found and fixed on the way:** none at close.
+
+**Upgrade-later review:** nothing new deferred; 3 and 33 unchanged.
+
+**Tests:** CI on the closing commit, every job green (recorded in the report).
+
+**Run and check it:** `pnpm dev`, Labs → Graph stats on, open Rallly with its workspace running.
+
+**Risks:** none new. **Laptop:** nothing heavy at close.
+
+**Commit:** `docs: phase 6 close`.
