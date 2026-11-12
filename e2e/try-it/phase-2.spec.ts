@@ -176,7 +176,7 @@ test('phase 2: panels collapse, resize by mouse and keyboard, and keep their lay
     await page.getByRole('button', { name: 'Show review' }).click();
     await expect.poll(() => height(page, 'review-bar')).toBe(300);
     await expect(page.locator('[data-region="review-bar"]')).toContainText(
-      'Changes from an agent session',
+      'arrives with the review panel (phase 32)',
     );
     await page.getByRole('button', { name: 'Hide review' }).click();
     await expect.poll(() => height(page, 'review-bar')).toBe(40);

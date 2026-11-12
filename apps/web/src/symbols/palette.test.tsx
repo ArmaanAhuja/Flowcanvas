@@ -173,6 +173,8 @@ describe('⌘K', () => {
     expect(await palette()).toBeTruthy();
   });
 
+  // The Try it itself: typing in the palette and opening CodeMirror, about 1 s on the laptop; past 5 s once on CI's
+  // busy runner (phase 6). The steps are what's tested, so the limit is set for them.
   it('opens a symbol in the Code view at its line (the Try it)', async () => {
     const user = userEvent.setup();
     renderPage(fakeApi());
@@ -207,7 +209,7 @@ describe('⌘K', () => {
       within(screen.getByRole('group', { name: 'Editor status' })).getByText('Ln 3, Col 17'),
     ).toBeTruthy();
     expect(searches.at(-1)).toBe('createpoll');
-  });
+  }, 15_000);
 
   it('says why symbols aren’t there when the search fails', async () => {
     searchAnswer = {

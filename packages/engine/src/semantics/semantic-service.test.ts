@@ -6,6 +6,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import * as ts from 'typescript';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// These tests build real TypeScript programs: up to about 0.65 s each on the laptop, about 3 times that on CI's
+// runner, and past 5 s when every package's tests share its two cores (phase 6: the graph tests run two passes and a
+// question). The work is what's tested, so the limit is set for it rather than the work cut.
+vi.setConfig({ testTimeout: 20_000 });
 import { validateGraph } from '@flowcanvas/graph-model';
 import type { GraphPass } from './graph.js';
 import { PARTLY, SemanticService } from './semantic-service.js';
