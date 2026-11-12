@@ -21,12 +21,12 @@ const PROVIDER_STATUS: Record<ProviderErrorKind, 409 | 502 | 503> = {
 };
 
 /**
- * The project index (phase 4, ADR 0025): /api/projects/:projectId/workspace/index/{status,search} and (phase 5)
- * /index/{definition,references,callers,callees}. Only the
- * project's owner, only while the workspace runs.
+ * The project index (phase 4, ADR 0025): /api/projects/:projectId/workspace/index/{status,search}; (phase 5)
+ * /index/{definition,references,callers,callees}; and (phase 6, ADR 0027) /index/graph, the flow graph's state and
+ * its latest version's counts. Only the project's owner, only while the workspace runs.
  *
  * Indexing is not activity (decisions log, 9 Nov 2026): the page asks for the status while it shows progress,
- * and that must never keep a workspace awake. A search is the person using the project, like opening a file,
+ * and that must never keep a workspace awake. The graph's state is asked for the same way, while it's built. A search is the person using the project, like opening a file,
  * so it counts.
  */
 export function indexRoutes(deps: WorkspaceDependencies) {
@@ -82,6 +82,7 @@ export function indexRoutes(deps: WorkspaceDependencies) {
   }
 
   index.get('/index/status', (c) => ask(c, { op: 'status' }, false));
+  index.get('/index/graph', (c) => ask(c, { op: 'graph' }, false));
   index.get('/index/search', (c) => {
     const limit = c.req.query('limit');
     return ask(
