@@ -29,19 +29,19 @@ const READY: GraphStatus = {
     files: 1168,
     builtInCalls: 3930,
     stats: {
-      nodes: 3327,
-      edges: 16394,
+      nodes: 5381,
+      edges: 22574,
       byNodeKind: {
         'entry-point': 0,
         'code-unit': 3327,
-        decision: 0,
+        decision: 2054,
         'data-access': 0,
         'async-handoff': 0,
         'external-boundary': 0,
       },
       byCodeUnit: { function: 1603, method: 189, component: 1081, class: 38, module: 416 },
-      byEdgeKind: { call: 16394, branch: 0, data: 0, handoff: 0, boundary: 0 },
-      byProvenance: { observed: 0, resolved: 7514, convention: 0, suggested: 0, unknown: 8880 },
+      byEdgeKind: { call: 16394, branch: 6180, data: 0, handoff: 0, boundary: 0 },
+      byProvenance: { observed: 0, resolved: 11870, convention: 0, suggested: 0, unknown: 10704 },
     },
     buildMs: 4100,
     saveMs: 20,
@@ -126,7 +126,7 @@ describe('Labs → Graph stats', () => {
     // Asked again while it builds, without anyone doing anything.
     expect(
       await within(details()).findByText(
-        '3,327 nodes · 16,394 edges',
+        '5,381 nodes · 22,574 edges',
         {},
         { timeout: GRAPH_POLL.buildingMs + 2000 },
       ),
@@ -138,6 +138,8 @@ describe('Labs → Graph stats', () => {
     expect(within(details()).getByText(/Entry points/).textContent).toBe(
       'Entry points arrives in phase 8',
     );
+    // Decisions are in the graph since phase 7: counted, with no "arrives in".
+    expect(within(details()).getByText(/^Decisions/).textContent).toBe('Decisions');
   });
 
   it('says to open the workspace when it isn’t running, and asks nothing', async () => {
