@@ -13194,8 +13194,8 @@ pnpm test:visual
 | # | Step | Milestone | Status |
 | --- | --- | --- | --- |
 | 0 | The plan and decisions; branch | A | done (Claude, 12 Nov) |
-| 1 | Spike: ELK layout time; conditions per call site. ADR | A | *next* |
-| 2 | The engine: `flow` (downstream from a function, with decisions and stubs) and `details` (what the inspector shows) | A | *planned* |
+| 1 | Spike: ELK layout time; conditions per call site. ADR 0028 | A | done (Claude, 12 Nov) |
+| 2 | The engine: `flow` (downstream from a function, with decisions and stubs) and `details` (what the inspector shows) | A | *next* |
 | 3 | The API through the host and control plane | A | *planned* |
 | 4 | UI: the decision node, the flow's layout, the pill, the inspector's body, in the design system | B | *planned* |
 | 5 | The page: opening flows from three places; selecting nodes; Open code | B | *planned* |
@@ -13214,7 +13214,34 @@ pnpm test:visual
 
 | # | Risk | How we keep it in check | Status |
 | --- | --- | --- | --- |
-| R1 | Layout too slow for the page | ELK in a Web Worker; 60 nodes measured | *to measure (step 1)* |
-| R2 | Conditions unreadable (long expressions) | Cut at 60 characters, the full text in the inspector | *to check (step 1)* |
+| R1 | Layout too slow for the page | ELK in a Web Worker; 60 nodes measured | **measured:** 63 ms median for 60 nodes, 337 ms for 500 (Node, laptop) |
+| R2 | Conditions unreadable (long expressions) | Cut at 60 characters, the full text in the inspector | **checked:** Documenso's `sendDocument`, every condition read correctly; some long ones need cutting |
 | R3 | Flows built from a stale graph after edits | Built from the latest snapshot; the page says when the graph is being brought up to date | *design (step 2)* |
 | R4 | **Laptop:** none new | — | *in check* |
+
+### Step 7.0 — The plan and the owner's decisions (done by Claude)
+
+**Goal:** the phase's plan, the owner's four answers, and a branch from `main` after phase 6's merge (`336208d`, CI green).
+
+**Files:** `docs/decisions-log.md` (phase 7 decisions), this section. **Commit:** `docs: phase 7 plan and the owner's decisions`.
+
+### Step 7.1 — Spike: ELK's layout time, and conditions per call (done by Claude; ADR 0028)
+
+**Goal:** measure layout before building it, and check that conditions read well from real code.
+
+**What a person can do now:** read ADR 0028. Nothing in the app changes.
+
+**Files:** `docs/adr/0028-flows.md`. The spike's scripts stayed outside the repository.
+
+**Concepts:**
+- **Layered graph layout (Sugiyama):** nodes in columns by depth, edges crossing as little as possible. https://eclipse.dev/elk/reference/algorithms/org-eclipse-elk-layered.html
+- **Control flow from syntax:** what a call sits under, found by walking up the syntax tree from it. https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API
+
+**Found on the way:**
+- **ELK is fast enough for the page:** 63 ms median for 60 nodes; 337 ms for 500.
+- **Conditions read correctly on real code** (Documenso's `sendDocument`, 55 call sites); long ones need cutting.
+- **`elkjs`'s licence** (EPL-2.0 or GPL-3.0) allows using it unchanged.
+
+**Tests:** none (a spike). **Run and check it:** ADR 0028. **Risks:** R1 and R2 updated. **Laptop:** seconds.
+
+**Commit:** `docs: phase 7 spike, decisions in the graph, flows from the snapshot (ADR 0028)`.
