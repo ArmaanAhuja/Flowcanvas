@@ -321,10 +321,16 @@ describe('the flow graph (phase 6)', () => {
     files = ['a.ts'];
     let running = 0;
     let most = 0;
+    // The first pass stays running until the test lets it finish: what's seen meanwhile doesn't depend on the
+    // machine's speed (with a fixed 80 ms pass, a busy machine finished it before the change was checked).
+    let finishFirst: () => void = () => undefined;
+    const firstHeld = new Promise<void>((resolve) => {
+      finishFirst = resolve;
+    });
     const graph = vi.fn(async () => {
       running += 1;
       most = Math.max(most, running);
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      if (graph.mock.calls.length === 1) await firstHeld;
       running -= 1;
       return wire(graphOf('one'));
     });
@@ -337,11 +343,12 @@ describe('the flow graph (phase 6)', () => {
     await vi.waitFor(async () => {
       expect((await graphStatus()).state).toBe('building');
     });
-    // Indexed and due for the graph while the first pass is still running.
+    // Indexed and due for the graph while the first pass is still running: it waits for that pass.
     emit({ type: 'changed', path: 'a.ts', deleted: false, version: null });
     await service.settled();
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(graph).toHaveBeenCalledTimes(1);
+    finishFirst();
     await service.graphSettled();
     expect(graph).toHaveBeenCalledTimes(2);
     expect(most).toBe(1);
