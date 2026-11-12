@@ -233,7 +233,7 @@ test('phase 1d: where workspaces can’t run (staging), the page says so and off
   await page.goto('/');
   await expect(
     page.getByText(
-      'Workspaces run locally for now. Open your projects on your own computer with pnpm dev.',
+      'Workspaces run on your own computer until a cloud provider is connected (phase 1d). Open your projects there with pnpm dev.',
     ),
   ).toBeVisible();
   await expect(page.getByText('Rallly', { exact: true })).toBeVisible();

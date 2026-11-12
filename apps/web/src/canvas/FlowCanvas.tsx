@@ -91,7 +91,7 @@ export type CanvasTool = 'select' | 'pan';
 export interface FlowCanvasProps {
   readonly nodes: readonly CanvasNode[];
   readonly edges: readonly CanvasEdge[];
-  /** Shown over an empty canvas, e.g. "Flows appear here once the project is analysed." */
+  /** Shown over an empty canvas, e.g. "Flows arrive with the flow builder (phase 7)." */
   readonly empty: ReactNode;
   /** Shown above the canvas, e.g. that these are example nodes. */
   readonly banner?: ReactNode;

@@ -58,7 +58,7 @@ describe('ReviewBar', () => {
 describe('Tabs: disabled items (the view switch)', () => {
   const items = [
     { id: 'graph', label: 'Graph' },
-    { id: 'sequence', label: 'Sequence', disabled: true, hint: 'Arrives in a later phase' },
+    { id: 'sequence', label: 'Sequence', disabled: true, hint: 'Arrives in phase 13' },
     { id: 'code', label: 'Code' },
   ];
 
@@ -69,7 +69,7 @@ describe('Tabs: disabled items (the view switch)', () => {
     );
     const sequence = screen.getByRole('tab', { name: 'Sequence' });
     expect((sequence as HTMLButtonElement).disabled).toBe(true);
-    expect(sequence.getAttribute('title')).toBe('Arrives in a later phase');
+    expect(sequence.getAttribute('title')).toBe('Arrives in phase 13');
     await userEvent.click(sequence);
     expect(onValueChange).not.toHaveBeenCalled();
   });

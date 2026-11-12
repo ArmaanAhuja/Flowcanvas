@@ -5,12 +5,21 @@ import { useShell } from '../shell/Shell';
 import type { CallsState } from '../symbols/useCalls';
 import styles from './ProjectPage.module.css';
 
-const LATER = 'Arrives in a later phase';
-
+// What arrives later says so, with its phase (owner, 12 Nov 2026).
 const TABS = [
   { id: 'details', label: 'Details' },
-  { id: 'runs', label: 'Runs', disabled: true, hint: LATER },
-  { id: 'changes', label: 'Changes', disabled: true, hint: LATER },
+  {
+    id: 'runs',
+    label: 'Runs',
+    disabled: true,
+    hint: 'Real values from running code arrive with dev-server tracing (phase 30)',
+  },
+  {
+    id: 'changes',
+    label: 'Changes',
+    disabled: true,
+    hint: 'The code diff behind each change arrives with the behavioural diff (phase 23)',
+  },
   { id: 'calls', label: 'Calls' },
 ];
 

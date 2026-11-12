@@ -5,7 +5,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LabsProvider } from '../labs/LabsProvider';
 import { LABS_STORAGE_KEY } from '../labs/storage';
-import { ProjectPage } from '../project/ProjectPage';
+import { EMPTY, ProjectPage } from '../project/ProjectPage';
 import type { Project } from '../projects/api';
 import { GRAPH_POLL } from './useGraphStats';
 
@@ -113,9 +113,7 @@ describe('Labs → Graph stats', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(asked).toBe(0);
     expect(screen.queryByRole('region', { name: 'Graph stats' })).toBeNull();
-    expect(
-      screen.getByText('Select something on the canvas to see its details here.'),
-    ).toBeTruthy();
+    expect(screen.getByText(EMPTY.right)).toBeTruthy();
   });
 
   it('shows the graph in the Details tab: building first, then its counts', async () => {

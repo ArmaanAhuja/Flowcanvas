@@ -550,3 +550,10 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 **Settled by the documents** (applied):
 - **Edge provenance** uses CLAUDE.md's five: observed, resolved, convention, suggested, unknown. Phase 5's *unresolved* is stored as *unknown*; the Calls tab keeps its wording.
 - **Change state** uses the research report's five: added, removed, modified, possibly affected, unchanged; plus *analysing* for freshness (CLAUDE.md section 11).
+
+**Owner decision** (12 Nov 2026, phase 6): **whatever the site shows that arrives in a later phase says so, naming the phase**: an empty panel, a disabled tab or button, a placeholder text, a zero count, a feature stub. Found when the entry points panel said "Entry points appear here once the project is analysed" although the project had been analysed; entry-point detection is phase 8. Applied now:
+- Entry points: entry-point detection (phase 8). Flows on the canvas, and details of what's selected: the flow builder (phase 7).
+- The Sequence view (phase 13). The inspector's Runs tab: dev-server tracing (phase 30); its Changes tab: the behavioural diff (phase 23).
+- Agent sessions in the review bar: the agent panel (phase 19); the review of a session's changes: the review panel (phase 32).
+- Workspaces on the owner's computer until a cloud provider is connected (phase 1d).
+- Already so: Graph stats' zeros ("arrives in phase 8") and Labs ("Finished in phase 7").

@@ -12878,9 +12878,9 @@ pnpm test && pnpm test:e2e && pnpm test:visual && pnpm test:docker
 | 1 | Spike: one pass over each program for code units and call edges; snapshot save and load in SQLite; on the four forks. ADR 0027 | A | done (Claude, 12 Nov) |
 | 2 | The graph types, validation and snapshot diff in `@flowcanvas/graph-model` | A | done (Claude, 12 Nov) |
 | 3 | The engine: the graph pass and the snapshot store, kept current on changes | A | done (Claude, 12 Nov) |
-| 4 | The API through the host and control plane | B | *next* |
-| 5 | UI: the Graph stats panel behind its Labs switch | B | *planned* |
-| 6 | Proof: the forks in real workspaces (hand-checked samples, save and load times); walkthrough; screens | B | *planned* |
+| 4 | The API through the host and control plane | B | done (Claude, 12 Nov) |
+| 5 | UI: the Graph stats panel behind its Labs switch | B | done (Claude, 12 Nov) |
+| 6 | Proof: the forks in real workspaces (hand-checked samples, save and load times); walkthrough; screens | B | *in review (CI)* |
 | 7 | Close: report, 0.10.0 | B | *planned* |
 
 ### How each Done-when item is proven
@@ -13008,3 +13008,73 @@ pnpm --filter @flowcanvas/engine build   # the bundle carries the graph model in
 **Risks:** R1 measured in the engine (Twenty 1.93 GB, LibreChat 2.08 GB against 2.5 GB). **Laptop:** the four forks one at a time, about 2 minutes in all; load under 3.
 
 **Commits:** `4dda64e` `feat(engine): the flow graph from one TypeScript pass, and inferred programs`; `aa91029` `feat(engine): graph snapshots in SQLite`.
+
+### Step 6.4 — The graph's state through the host and the API (done by Claude)
+
+**Goal:** the page can ask a running workspace what its graph holds.
+
+**What a person can do now** (`pnpm dev`, a running workspace): `GET /api/projects/<id>/workspace/index/graph` gives the graph's state (waiting, building, ready, failed) and the latest version's counts and timings.
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `services/control-plane/src/workspaces/index-routes.ts` | The route: the owner's, while running; not activity |
+| `services/control-plane/src/workspaces/index-routes.test.ts` | 1 new test |
+
+The host passes the request on unchanged: the engine's protocol already accepts it and checks the answer exactly (step 3).
+
+**Concepts:**
+- **Polling isn't activity** (decisions log, 9 Nov 2026): Graph stats asks while the graph builds, and that must never keep a workspace awake.
+
+**Found and fixed on the way:** none.
+
+**Tests:** control plane 263 (1 new): the graph's state passed through, without counting as activity.
+
+**Run and check it:** `pnpm --filter @flowcanvas/control-plane test`
+
+**Risks:** none new. **Laptop:** unit tests only.
+
+**Commit:** `fba074e` `feat(api): the flow graph's state through the host and control plane`.
+
+### Step 6.5 — Labs → Graph stats, in the inspector's Details tab (done by Claude)
+
+**Goal:** the Try it: with its Labs switch on, the project's graph counted in the Details tab.
+
+**What a person can do now** (`pnpm dev`, a running workspace): Labs → **Graph stats** on; open a project; Details shows:
+- nodes by kind (every kind, zeros with the phase they arrive in)
+- code units by type, edges by kind
+- how edges are known, each with its line form and its meaning
+- calls into TypeScript's library, counted apart
+- when the version was taken, from how many files, and how long it took to build, save and load
+- while building, "Building the graph…" over the last version; a failure in the engine's words
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `packages/ui/src/components/graph-stats/` | The panel, its 6 stories and 5 tests |
+| `packages/ui/src/components/provenance-glyph/` | All five provenances' line forms, now shared; the Calls panel draws with it (its baselines unchanged) |
+| `apps/web/src/graph/useGraphStats.ts` | Asked for only while the switch is on and the workspace runs: every 2 s while building, every 15 s once ready |
+| `apps/web/src/labs/flags.ts` | The `graph-stats` switch, off by default, "Finished in phase 7" |
+| `apps/web/src/project/Inspector.tsx`, `ProjectPage.tsx` | The Details tab takes its content from the page |
+| `apps/web/src/graph/graph.test.tsx` | 3 page tests |
+
+**Concepts:**
+- **A Labs switch** keeps an unfinished feature out of the default experience (CLAUDE.md rule 10); its content says "Labs · preview".
+
+**Found and fixed on the way:**
+- **The Labs flag needs "the phase that finishes it".** Nothing in the documents says when Graph stats leaves Labs; phase 7 (the flow builder, which draws the graph itself) is used, and listed in the report for the owner to change.
+
+**Tests:** UI 136 (5 new); web 179 (3 new: not asked for while off; building then counts; not running). Bundle: the project page 102.6 of 110 kB (+2.0 kB).
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/ui test
+pnpm --filter @flowcanvas/web test
+pnpm --filter @flowcanvas/ui storybook   # Shell/GraphStats
+```
+
+**Risks:** none new. **Laptop:** unit tests only.
+
+**Commits:** `625d398` `feat(ui): Graph stats, and every provenance's line form as one glyph`; `b631f0f` `feat(web): Labs → Graph stats in the inspector's Details tab`.
