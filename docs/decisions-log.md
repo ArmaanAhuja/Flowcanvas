@@ -560,3 +560,9 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 - **Graph stats' Labs switch: "Finished in phase 7"** (Claude's choice, the flow builder draws the graph itself; owner, 12 Nov 2026: "you can have your choice").
 - **The canvas stress test's switch: "Finished in phase 42"** (Claude, under the same delegation): it said phase 2, accepted on 7 Nov, though the switch stays; large canvases are finished by the performance phase's WebGL renderer ("2,000 nodes stay smooth"). Found by the new check below.
 - **A test now holds every visible text to this** (`apps/web/src/later-phases.test.ts`, run with the web unit tests on every commit): no "later" without a phase, no "arrives" without one, and no phase named as still to come once STATUS.md marks it accepted; Labs' and Graph stats' phase numbers included. Asked for by the owner after a catalogue example kept showing the Code view as "arriving in a later phase" two phases after it shipped: the visual tests proved the example hadn't changed, not that it was still true.
+
+**Owner decisions on the repository review** (12 Nov 2026, end of phase 6):
+1. **`e2e/visual-report/`** (the retired Figma comparison's output, committed on 29 Oct) **stays**: it causes no problems.
+2. **One shared fake workspace for walkthroughs and page tests** (12 files each build their own fake API): accepted, as long as it changes nothing the tests prove. Done alongside the next phase's work.
+3. **The docs' overlap** (build-steps, reports, STATUS, RUN-AND-FEATURES) **stays as it is.**
+4. **The hand-labelled checks stay as they are:** not reduced in size.
