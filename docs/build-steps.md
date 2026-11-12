@@ -13195,9 +13195,9 @@ pnpm test:visual
 | --- | --- | --- | --- |
 | 0 | The plan and decisions; branch | A | done (Claude, 12 Nov) |
 | 1 | Spike: ELK layout time; conditions per call site. ADR 0028 | A | done (Claude, 12 Nov) |
-| 2 | The engine: `flow` (downstream from a function, with decisions and stubs) and `details` (what the inspector shows) | A | *next* |
-| 3 | The API through the host and control plane | A | *planned* |
-| 4 | UI: the decision node, the flow's layout, the pill, the inspector's body, in the design system | B | *planned* |
+| 2 | The engine: `flow` (downstream from a function, with decisions and stubs) and `details` (what the inspector shows) | A | done (Claude, 13 Nov): `6114a7e`, `f4a47a9`, `016d253`; tests `3112fed`, `15d3264` |
+| 3 | The API through the host and control plane | A | done (Claude, 13 Nov): `c5d3a73`, `016d253` |
+| 4 | UI: the decision node, the flow's layout, the pill, the inspector's body, in the design system | B | *next* |
 | 5 | The page: opening flows from three places; selecting nodes; Open code | B | *planned* |
 | 6 | Proof: 10 hand-labelled Documenso flows in real workspaces, every node at its line; the walkthrough; screens | B | *planned* |
 | 7 | Close: report, 0.11.0 | B | *planned* |
@@ -13216,7 +13216,9 @@ pnpm test:visual
 | --- | --- | --- | --- |
 | R1 | Layout too slow for the page | ELK in a Web Worker; 60 nodes measured | **measured:** 63 ms median for 60 nodes, 337 ms for 500 (Node, laptop) |
 | R2 | Conditions unreadable (long expressions) | Cut at 60 characters, the full text in the inspector | **checked:** Documenso's `sendDocument`, every condition read correctly; some long ones need cutting |
-| R3 | Flows built from a stale graph after edits | Built from the latest snapshot; the page says when the graph is being brought up to date | *design (step 2)* |
+| R3 | Flows built from a stale graph after edits | Built from the latest snapshot; the page says when the graph is being brought up to date | **built:** each flow says whether it's current (`current`), and which version it's from |
+| R5 | Snapshots too slow to load with decisions | Measured on Twenty | **fixed:** 1,718 ms → 724 ms on the laptop, 225 ms on CI (checked once before saving, SHA-256 on load, a path table, zstd) |
+| R6 | Opening a flow from inside a function on a large project | The first TypeScript question about a package builds its programs | **measured:** 7.9 s on Twenty (CI), 1.2 s on LibreChat; from a function's name, milliseconds. The page says it's working (step 5) |
 | R4 | **Laptop:** none new | — | *in check* |
 
 ### Step 7.0 — The plan and the owner's decisions (done by Claude)
@@ -13245,3 +13247,65 @@ pnpm test:visual
 **Tests:** none (a spike). **Run and check it:** ADR 0028. **Risks:** R1 and R2 updated. **Laptop:** seconds.
 
 **Commit:** `docs: phase 7 spike, decisions in the graph, flows from the snapshot (ADR 0028)`.
+
+### Step 7.2 — The engine: flows and node details (done by Claude; ADR 0028 addendum)
+
+**Goal:** the engine answers two new questions: the flow downstream of the function at a place, and everything that function's code reveals, for the inspector. Decisions become part of the graph, so flows can draw the conditions on their branches.
+
+**What a person can do now:** nothing new on the page yet (that's step 5). Through the API, a running workspace answers `GET …/index/flow` and `…/index/details` for any place in a TypeScript or JavaScript file. Labs → Graph stats now counts decisions and branches (Rallly: 2,054 and 6,180).
+
+**Files:**
+- `packages/graph-model/src/model.ts`, `validate.ts`, `encoding.ts`, `stats.ts`: edges have a `label`; the rules for branch edges; graph format 2 (a table of paths, labels); decisions and branches no longer "arrive in phase 7".
+- `packages/graph-model/src/flow.ts` (new): `indexGraph`, `buildFlow`, `FLOW_MAX_NODES` (60), `FLOW_LIMITS` (10 lines per edge, 20 unknown calls per node).
+- `packages/engine/src/semantics/graph-pass.ts`: decision nodes and branch edges (`guardsOf`); `unitNodeAt` (the code unit at a place, by the pass's rules); case labels cut like other texts.
+- `packages/engine/src/semantics/details.ts` (new): `detailsAt`.
+- `packages/engine/src/semantics/semantic-service.ts`, `worker.ts`, `client.ts`: `unitAt` and `details`; the worker checks each graph before it's encoded.
+- `packages/engine/src/snapshots.ts`: store format 2 (zstd; the SHA-256 checked on load).
+- `packages/engine/src/service.ts`: the latest version kept decoded and indexed; the `flow` op; `fittingFlow` (halves the node cap until a flow fits one message).
+- `packages/engine/src/protocol.ts`: `flow` and `details` requests and answers, checked with exact shapes and bounds; `TYPESCRIPT_OPS`.
+- Tests: `flow.test.ts` (new), `graph.test.ts`, `service.test.ts`, `protocol.test.ts`, `semantic-service.test.ts`, `client.test.ts`, `snapshots.test.ts`; `corpus/src/calls.ts` (labels compare call edges only).
+- `workspace/host/src/host.docker.test.ts`: search held to the engine's p95, as decided.
+- Graph stats examples: `GraphStats.stories.tsx`, `e2e/visual/screens.spec.ts`, `apps/web/src/graph/graph.test.tsx`, 10 baselines; `apps/web/src/later-phases.test.ts` holds the catalogue's copy of `ARRIVES_IN` to the real one.
+
+**Concepts:**
+- **Breadth-first search with a budget:** visit nodes level by level from the start, stopping at a count, so the nearest calls are always shown first. https://en.wikipedia.org/wiki/Breadth-first_search
+- **Content addressing:** a version is named by the SHA-256 of its bytes, so loading can prove the bytes are the ones that were checked, without checking them again. https://nodejs.org/api/crypto.html#class-hash
+- **zstd:** a compression format much faster to decompress than gzip, in Node's own `zlib` since Node 23.8. https://nodejs.org/api/zlib.html#zlibzstdcompresssyncbuffer-options
+- **CPU quotas (cgroups):** `--cpus 2` gives a container 200 ms of CPU every 100 ms; once its threads use it up, all of them wait for the next period, whatever their priority. https://docs.kernel.org/scheduler/sched-bwc.html
+- **TypeScript's checker for details:** `getSignatureFromDeclaration`, `signatureToString`, `getExportsOfModule`. https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API
+
+**Found and fixed:**
+- **Twenty's snapshot took 1,718 ms to load with decisions** (over phase 6's 1 s). Checking against the schema was 1,051 ms of it. Now the graph is checked once, in the worker, before it's saved; loading checks the SHA-256 instead; a path table and zstd cut the rest. 724 ms on the laptop, 225 ms on CI.
+- **A constant's name gave the file's top level.** From `sendDocument`'s name in `export const sendDocument = async (…) => …`, the code unit at the place was the top level: the name sits outside the function the constant holds. ⌘K and the Calls tab give names, so the inspector would have shown the wrong node. Now a constant's or property's name gives its function, as `callableAt` does.
+- **A constant that's only called was taken for a unit.** Inside `export const config = { made: outer() }`, the unit was `#config`, but the graph gives those calls to the top level. Now the pass's own rule decides.
+- **`details` was refused as an unknown operation:** the request parser lists each operation by name. Found by its protocol test.
+- **Two CI runs failed phase 4's one-search check** (118 and 151 ms). Investigated: the workspace's CPU quota, not the engine (above, and the ADR addendum); the test now holds the engine's p95, as the decisions log sets. Lowering the worker thread's priority was measured and doesn't help. Item 46 in `docs/upgrade-later.md`.
+- **The catalogue still said decisions arrive in phase 7**, from its own copy of the phases: removed, and a test now holds the copy to the graph model's.
+
+**Tests:** 1,057 unit and component tests pass (`pnpm test`). New: 9 for `buildFlow`; 6 for the service's flows; 3 for the client's `unit`; 2 for the code unit at a place; 3 for details on a real TypeScript project; flows and details in the protocol (good answers accepted, 32 malformed ones refused). Mutation checks: 5 of 5 on `buildFlow`, 5 of 5 on the service's flows, 7 of 7 on details (two needed the fixture extended), 1 of 1 on the unit rule. In-process on the corpus: all 20 labelled functions of Rallly and Documenso are found by name, from inside, and by details at their own node. On CI (Docker corpus): every labelled function's flow opens at its node, from its name and from inside it (50 of 50).
+
+**Run and check it:** `pnpm --filter @flowcanvas/graph-model test`, `pnpm --filter @flowcanvas/engine test`. With Docker: `pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts` (each fork's row has `flows: "N of N"`). On the page, flows open in step 5.
+
+**Risks and laptop:** R3, R5 and R6 above. The engine holds the latest graph in memory (about 60 MB for Twenty). Laptop: the corpus measurements ran one at a time; nothing new runs in the background.
+
+**Commits:** `feat(engine): decisions in the graph, snapshot format 2` (`6114a7e`); `test(host): hold search to the engine's p95, as decided` (`3112fed`); `feat(engine): flows from the latest version of the graph` (`f4a47a9`); `test(web): Graph stats examples count decisions and branches` (`15d3264`); `feat(engine): a node's details for the inspector` (`016d253`).
+
+### Step 7.3 — The API through the host and control plane (done by Claude)
+
+**Goal:** the page can ask for flows and details through the same path as every other question: browser → control plane → host → workspace.
+
+**What a person can do now:** `GET /api/projects/:id/workspace/index/flow?path=…&line=…&column=…` and `…/index/details?…`, signed in, while the workspace runs. Both count as activity (the person opening a flow or reading a node).
+
+**Files:** `services/control-plane/src/workspaces/index-routes.ts` (the two routes); `local-host.ts` and `workspace/host/src/indexers.ts` (both wait as long for a flow as for TypeScript's answers, `TYPESCRIPT_OPS`); `index-routes.test.ts`; `workspace/host/src/corpus.docker.test.ts` (flows and details through a real engine).
+
+**Concepts:** none new: the routes follow phase 5's (ADR 0026).
+
+**Found and fixed:** a flow can wait on TypeScript (to name the function from inside it), so it needed TypeScript's longer timeouts (90 s in the host, 100 s in the provider) rather than the 15 s for status and search.
+
+**Tests:** 4 route tests (a flow, details, a place outside the project refused without asking the workspace, activity counted); the protocol test of which operations wait on TypeScript. On CI, the corpus Docker test opened 50 flows through real workspaces, every one at its labelled node (run 43283633641); and, from `016d253`, the 26 labelled functions' details, each about its own node (run 43285554872).
+
+**Run and check it:** `pnpm --filter @flowcanvas/control-plane exec vitest run src/workspaces/index-routes.test.ts`.
+
+**Risks and laptop:** none new.
+
+**Commits:** `feat(control-plane): GET /index/flow, the flow from the function at a place` (`c5d3a73`); the details route came with `016d253`.

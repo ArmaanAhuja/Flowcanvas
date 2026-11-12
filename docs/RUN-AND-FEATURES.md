@@ -45,9 +45,9 @@ If the host can't start, its log line says why: the token, Docker, or another `p
 
 | Command | What it checks | Time |
 | --- | --- | --- |
-| `pnpm test` | 903 unit and component tests, with no Docker or network | about 25 s |
+| `pnpm test` | 1,057 unit and component tests, with no Docker or network | about 30 s |
 | `pnpm lint`, `pnpm typecheck`, `pnpm format:check` | Lint (with the design-token rules), strict TypeScript, formatting | — |
-| `pnpm test:docker` | 53 tests against real containers: isolation, the network allowlist, clone time, sleep and resume, the guard, no secret kept anywhere; (phase 3) the file list, a save refused after a terminal edit, the journal surviving a restart, a terminal edit reaching the page's events socket in about 160 ms; (phase 4) Rallly indexed in a real workspace with an edit searchable in about 300 ms, and the corpus: all six forks at their pins indexed in real workspaces, Rallly and Documenso held to under 30 s and 100 ms, 21 hand-labelled symbols checked. Needs Docker 28+ and the internet | about 5 min |
+| `pnpm test:docker` | 53 tests against real containers: isolation, the network allowlist, clone time, sleep and resume, the guard, no secret kept anywhere; (phase 3) the file list, a save refused after a terminal edit, the journal surviving a restart, a terminal edit reaching the page's events socket in about 160 ms; (phase 4) Rallly indexed in a real workspace with an edit searchable in about 300 ms, and the corpus: all six forks at their pins indexed in real workspaces, Rallly and Documenso held to under 30 s and 100 ms, 21 hand-labelled symbols checked; (phase 5) 20 labelled functions' callers and callees; (phase 6) four forks' graphs, saved and loaded under 1 s; (phase 7) each labelled function's flow and details, at its own node. Needs Docker 28+ and the internet | about 6 min (CI) |
 | `pnpm test:e2e` | 19 recorded walkthroughs of each phase's *Try it*, under the production security policy (1 needs a real API: CI, or a running `pnpm dev`) | about 40 s |
 | `pnpm test:perf` | The canvas with 500 nodes, panned and zoomed: frame times, long tasks, input to paint. Headless (as on CI) only catches large regressions; `PERF_REAL=1 pnpm test:perf` opens a real window on your GPU for about 30 s, which is what decides. Then (phase 4) symbol search on 100,000 names, run alone: p95 under 100 ms (13.6 ms) | about 45 s |
 | `pnpm test:visual` | 130 screenshots in both themes against approved baselines, plus accessibility checks (axe): every catalogue story, and the project page's screens (empty, 1280 × 800, 500 nodes, review open, full screen, workspace popover; the Code view, a conflict, quick-open; the index's progress, the command palette) | about 2 min |
@@ -148,4 +148,8 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
   - ✅ **Every later feature names its phase** on the page.
   - ✅ **Proof:** `pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts` (the four forks' graphs, save and load under 1 s, 26 labelled functions); walkthrough `pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-6.spec.ts`.
   - **Try it:** `pnpm dev`, Labs → Graph stats on, open Rallly with its workspace running, read the Details tab.
-- **After that:** stage 1 draws real flows from code, and stage 2 adds live frames of the running app.
+- **Phase 7 (in progress):** flows and the inspector.
+  - ✅ **Decisions in the graph:** the conditions a function's calls sit under (`if`, ternaries, `&&`/`||`/`??`, `switch`, `catch`), with their outcomes on branch edges; Labs → Graph stats counts them.
+  - 🟡 **Flows and node details from the engine,** through the API (`/index/flow`, `/index/details`): every labelled function's flow opens at its node in real workspaces. On the page with steps 4 and 5 of this phase: the flow on the canvas with ELK's layout, opening flows from the right-click menu, ⌘K and the Calls tab, and the inspector's Details.
+  - **Proof so far:** `pnpm --filter @flowcanvas/engine test`, `pnpm --filter @flowcanvas/graph-model test`; `pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts` (each row's `flows`).
+- **After that:** stage 1 goes on with entry points (phase 8), and stage 2 adds live frames of the running app.
