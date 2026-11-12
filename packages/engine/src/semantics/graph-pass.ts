@@ -160,6 +160,78 @@ function targetOf(ctx: GraphContext, declaration: TS.Declaration): TS.Node | und
   return isUnit(ts, declaration) ? declaration : undefined;
 }
 
+/** A construct that decides whether a call happens (ADR 0028 §1), and which of its outcomes the call is on. */
+interface Guard {
+  readonly construct: TS.Node;
+  /** The condition, or for a switch the switched expression; a try's is "on error". */
+  readonly name: string;
+  readonly outcome: string;
+  /** Where the decision is: its condition's start. */
+  readonly at: TS.Node;
+}
+
+/**
+ * The decisions a call sits under, outermost first: `if`/`else` (yes, no), a ternary or `&&` (yes) or `||`/`??` (no),
+ * a `switch` case, and a `catch` (error). Calls in a `try` block or a `finally` aren't conditional.
+ */
+function guardsOf(ts: TypeScript, source: TS.SourceFile, call: TS.Node, owner: TS.Node): Guard[] {
+  const found: Guard[] = [];
+  const text = (node: TS.Node) => node.getText(source);
+  for (
+    let child = call, parent = call.parent;
+    parent !== owner;
+    child = parent, parent = parent.parent
+  ) {
+    if (ts.isSourceFile(parent)) break;
+    if (ts.isIfStatement(parent) && child !== parent.expression) {
+      found.push({
+        construct: parent,
+        name: text(parent.expression),
+        outcome: child === parent.thenStatement ? 'yes' : 'no',
+        at: parent.expression,
+      });
+    } else if (ts.isConditionalExpression(parent) && child !== parent.condition) {
+      found.push({
+        construct: parent,
+        name: text(parent.condition),
+        outcome: child === parent.whenTrue ? 'yes' : 'no',
+        at: parent.condition,
+      });
+    } else if (
+      ts.isBinaryExpression(parent) &&
+      child === parent.right &&
+      [
+        ts.SyntaxKind.AmpersandAmpersandToken,
+        ts.SyntaxKind.BarBarToken,
+        ts.SyntaxKind.QuestionQuestionToken,
+      ].includes(parent.operatorToken.kind)
+    ) {
+      found.push({
+        construct: parent,
+        name: text(parent.left),
+        outcome: parent.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ? 'yes' : 'no',
+        at: parent.left,
+      });
+    } else if (ts.isCaseClause(parent) || ts.isDefaultClause(parent)) {
+      const switched = parent.parent.parent;
+      found.push({
+        construct: switched,
+        name: text(switched.expression),
+        outcome: ts.isCaseClause(parent) ? `case ${text(parent.expression)}` : 'default',
+        at: switched.expression,
+      });
+    } else if (ts.isCatchClause(parent)) {
+      found.push({
+        construct: parent.parent,
+        name: 'on error',
+        outcome: 'error',
+        at: parent.parent,
+      });
+    }
+  }
+  return found.reverse();
+}
+
 /** One file's code units and calls. */
 export function walkFile(ctx: GraphContext, program: TS.Program, source: TS.SourceFile): FileGraph {
   const { ts } = ctx;
@@ -173,17 +245,49 @@ export function walkFile(ctx: GraphContext, program: TS.Program, source: TS.Sour
   const top = `${path}#(top level)`;
 
   const add = (edge: Omit<GraphEdge, 'lines'>, line: number) => {
-    const key = `${edge.from}\u0000${edge.to ?? `?${edge.target ?? ''}`}\u0000${edge.relation ?? ''}`;
+    const key = [
+      edge.from,
+      edge.to ?? `?${edge.target ?? ''}`,
+      edge.kind,
+      edge.relation ?? '',
+      edge.label ?? '',
+    ].join('\u0000');
     const known = edges.get(key);
     if (known === undefined) edges.set(key, { edge, lines: new Set([line]) });
     else known.lines.add(line);
   };
 
-  const visit = (node: TS.Node, owner: string): void => {
+  // Decisions (ADR 0028 §1): one node per construct that guards a call, numbered within its function.
+  const decisions = new Map<TS.Node, string>();
+  const decisionsIn = new Map<string, number>();
+  const decisionOf = (guard: Guard, owner: string): string => {
+    const known = decisions.get(guard.construct);
+    if (known !== undefined) return known;
+    const n = (decisionsIn.get(owner) ?? 0) + 1;
+    decisionsIn.set(owner, n);
+    const id = `${owner}?${String(n)}`;
+    decisions.set(guard.construct, id);
+    const at = source.getLineAndCharacterOfPosition(guard.at.getStart(source));
+    nodes.set(id, {
+      id,
+      kind: 'decision',
+      name: cut(guard.name),
+      place: { path, line: at.line + 1, column: at.character + 1 },
+      unit: null,
+      change: 'unchanged',
+    });
+    return id;
+  };
+  const lineOf = (node: TS.Node) =>
+    source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+
+  const visit = (node: TS.Node, owner: string, ownerNode: TS.Node): void => {
     let current = owner;
+    let currentNode = ownerNode;
     const id = own.get(node);
     if (id !== undefined && isNamedCallable(ts, node)) {
       current = id;
+      currentNode = node;
       nodes.set(id, nodeOf(ctx, node, id));
     }
     const jsx = ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node);
@@ -228,41 +332,52 @@ export function walkFile(ctx: GraphContext, program: TS.Program, source: TS.Sour
               change: 'unchanged',
             });
           }
+          const reaches =
+            target !== undefined && targetId !== undefined
+              ? { to: targetId, target: null, provenance: 'resolved' as const }
+              : {
+                  to: null,
+                  target: cut(calleeText(ts, callee, source)),
+                  provenance: 'unknown' as const,
+                };
           if (target !== undefined && targetId !== undefined) {
             // Every target's node, so an edge never reaches a node the graph lacks (its own file's wins).
             targets.set(targetId, nodeOf(ctx, target, targetId));
+          }
+          // The call itself, as it always was: callers and callees don't change (ADR 0028 §1).
+          add({ from: current, kind: 'call', relation, label: null, ...reaches }, line);
+          // And through the decisions it sits under: into the first, from each to the next, out to the call.
+          const guards = guardsOf(ts, source, node, currentNode);
+          let from = current;
+          let outcome: string | null = null;
+          for (const guard of guards) {
+            const decision = decisionOf(guard, current);
             add(
               {
-                from: current,
-                to: targetId,
+                from,
+                to: decision,
                 target: null,
-                kind: 'call',
-                relation,
+                kind: 'branch',
+                relation: null,
+                label: outcome,
                 provenance: 'resolved',
               },
-              line,
+              lineOf(guard.at),
             );
-          } else {
-            add(
-              {
-                from: current,
-                to: null,
-                target: cut(calleeText(ts, callee, source)),
-                kind: 'call',
-                relation,
-                provenance: 'unknown',
-              },
-              line,
-            );
+            from = decision;
+            outcome = guard.outcome;
+          }
+          if (outcome !== null) {
+            add({ from, kind: 'branch', relation, label: outcome, ...reaches }, line);
           }
         }
       }
     }
     ts.forEachChild(node, (child) => {
-      visit(child, current);
+      visit(child, current, currentNode);
     });
   };
-  visit(source, top);
+  visit(source, top, source);
 
   return {
     nodes: [...nodes.values()],

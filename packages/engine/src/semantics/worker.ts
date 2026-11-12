@@ -2,7 +2,7 @@
 // whoever starts it, so running out of memory ends this thread and never the indexer or search.
 import { createRequire } from 'node:module';
 import { parentPort, workerData } from 'node:worker_threads';
-import { encodeGraph } from '@flowcanvas/graph-model';
+import { encodeGraph, validateGraph } from '@flowcanvas/graph-model';
 import type { CodePosition, SemanticOp } from '../protocol.js';
 import { SemanticService } from './semantic-service.js';
 import type { TypeScript } from './projects.js';
@@ -61,6 +61,9 @@ if (port !== null) {
           for (let tries = 0; tries < GRAPH_TRIES; tries += 1) {
             const pass = await service.graph(pause);
             if (pass === null) continue;
+            // Checked here, once, before it's saved: loading trusts what was checked (ADR 0028). A graph that breaks
+            // the schema is a fault in the pass, answered as a failed pass and never stored.
+            if (validateGraph(pass.graph, 1).length > 0) break;
             const wire: GraphWire = {
               encoded: encodeGraph(pass.graph),
               files: pass.files,

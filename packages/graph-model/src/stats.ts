@@ -52,8 +52,6 @@ export const ARRIVES_IN: Readonly<Partial<Record<NodeKind | EdgeKind, number>>> 
   'data-access': 10,
   'external-boundary': 10,
   'async-handoff': 11,
-  decision: 7,
-  branch: 7,
   data: 10,
   boundary: 10,
   handoff: 11,

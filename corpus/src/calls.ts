@@ -128,6 +128,8 @@ export interface LabelGraph {
     readonly place: GraphPlace | null;
   }[];
   readonly edges: readonly {
+    /** Calls only are compared; a decision's branches (phase 7) repeat calls already there. */
+    readonly kind?: string;
     readonly from: string;
     readonly to: string | null;
     readonly target: string | null;
@@ -176,7 +178,8 @@ export function checkGraph(graph: LabelGraph, label: CallsLabel): GraphCheck {
     place: place === null ? null : { path: place.path, line: place.line },
     sites: lines.map((line) => ({ path: sitesIn, line })),
   });
-  const callees = graph.edges
+  const calls = graph.edges.filter((e) => (e.kind ?? 'call') === 'call');
+  const callees = calls
     .filter((e) => e.from === node.id)
     .map((e) => {
       const to = e.to === null ? undefined : byId.get(e.to);
@@ -189,7 +192,7 @@ export function checkGraph(graph: LabelGraph, label: CallsLabel): GraphCheck {
         e.lines,
       );
     });
-  const callers = graph.edges
+  const callers = calls
     .filter((e) => e.to === node.id)
     .map((e) => {
       const from = byId.get(e.from);

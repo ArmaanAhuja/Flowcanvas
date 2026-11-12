@@ -490,3 +490,87 @@ describe('graph (phase 6)', () => {
     expect(again?.files).toBe(5);
   });
 });
+
+describe('decisions in the graph (phase 7, ADR 0028)', () => {
+  it('records each construct that guards a call, with branches in and out, and leaves the calls as they were', async () => {
+    const send = 'apps/web/src/send.ts';
+    write(
+      send,
+      [
+        "import { formatTitle } from './lib/format';",
+        'export function send(kind: string, draft: boolean, name?: string) {',
+        '  if (draft) {',
+        "    formatTitle('draft');",
+        '    if (kind === "x") later();',
+        '  } else {',
+        "    formatTitle('sent');",
+        '  }',
+        "  const shown = draft ? formatTitle('a') : name;",
+        '  draft && later();',
+        '  name ?? later();',
+        '  switch (kind) {',
+        "    case 'a':",
+        '      later();',
+        '      break;',
+        '    default:',
+        '      void 0;',
+        '  }',
+        '  try {',
+        '    later();',
+        '  } catch {',
+        "    formatTitle('error');",
+        '  }',
+        '  return shown;',
+        '}',
+        'function later() {}',
+        '',
+      ].join('\n'),
+    );
+    service.changed([send], [...Object.keys(FILES), send]);
+    const pass = await service.graph(() => Promise.resolve());
+    if (pass === null) throw new Error('no pass');
+    expect(validateGraph(pass.graph)).toEqual([]);
+    const decisions = pass.graph.nodes
+      .filter((n) => n.kind === 'decision')
+      .map((n) => `${n.id} "${n.name}" @${String(n.place?.line)}`);
+    expect(decisions).toEqual([
+      `${send}#send?1 "draft" @3`,
+      `${send}#send?2 "kind === "x"" @5`,
+      `${send}#send?3 "draft" @9`,
+      `${send}#send?4 "draft" @10`,
+      `${send}#send?5 "name" @11`,
+      `${send}#send?6 "kind" @12`,
+      `${send}#send?7 "on error" @19`,
+    ]);
+    const short = (id: string | null) =>
+      (id ?? '').replace(`${send}#`, '').replace('apps/web/src/lib/format.ts#', 'format:');
+    const branches = pass.graph.edges
+      .filter((e) => e.kind === 'branch' && e.from.startsWith(`${send}#send`))
+      .map((e) => `${short(e.from)} -${e.label ?? ''}-> ${short(e.to)} @${e.lines.join(',')}`)
+      .sort();
+    expect(branches).toEqual([
+      'send --> send?1 @3',
+      'send --> send?3 @9',
+      'send --> send?4 @10',
+      'send --> send?5 @11',
+      'send --> send?6 @12',
+      'send --> send?7 @19',
+      'send?1 -no-> format:formatTitle @7',
+      'send?1 -yes-> format:formatTitle @4',
+      'send?1 -yes-> send?2 @5',
+      'send?2 -yes-> later @5',
+      'send?3 -yes-> format:formatTitle @9',
+      'send?4 -yes-> later @10',
+      'send?5 -no-> later @11',
+      "send?6 -case 'a'-> later @14",
+      'send?7 -error-> format:formatTitle @22',
+    ]);
+    // The calls themselves are unchanged: send calls formatTitle and later, at every line (the try block's call
+    // isn't conditional, so it has no branch).
+    const calls = pass.graph.edges
+      .filter((e) => e.kind === 'call' && e.from === `${send}#send`)
+      .map((e) => `${short(e.to)} @${e.lines.join(',')}`)
+      .sort();
+    expect(calls).toEqual(['format:formatTitle @4,7,9,22', 'later @5,10,11,14,20']);
+  });
+});

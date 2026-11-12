@@ -3,11 +3,12 @@
 // SHA-256 of the encoding: the same graph is stored once.
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { gunzipSync, gzipSync } from 'node:zlib';
+import { zstdCompressSync, zstdDecompressSync } from 'node:zlib';
 import { decodeGraph, type Graph } from '@flowcanvas/graph-model';
 
 /** Raise when the table changes: snapshots under another format are dropped (the next pass makes a new one). */
-export const SNAPSHOT_STORE_FORMAT = 1;
+/** 2 (phase 7, ADR 0028): zstd rather than gzip, checked against the version's SHA-256 on load. */
+export const SNAPSHOT_STORE_FORMAT = 2;
 /** Versions kept; checkpoints that pin their own arrive in stage 3. */
 export const SNAPSHOTS_KEPT = 20;
 
@@ -86,7 +87,7 @@ export class SnapshotStore {
           details.note,
           details.files,
           details.builtInCalls,
-          gzipSync(encoded, { level: 1 }),
+          zstdCompressSync(encoded),
         );
     } else {
       this.#db
@@ -125,7 +126,14 @@ export class SnapshotStore {
     const started = performance.now();
     const row = this.#db.prepare('SELECT data FROM snapshots WHERE version = ?').get(version);
     if (row === undefined) return undefined;
-    const graph = decodeGraph(gunzipSync(row.data as Uint8Array).toString('utf8'));
+    const encoded = zstdDecompressSync(row.data as Uint8Array).toString('utf8');
+    // The graph was checked against the schema before it was saved (the worker, ADR 0028); here the bytes are checked
+    // against the version they're named by, which proves they're the ones checked. On Twenty, a full check on every
+    // load took it past 1 s.
+    if (createHash('sha256').update(encoded).digest('hex') !== version) {
+      throw new Error('The stored version of the graph is damaged.');
+    }
+    const graph = decodeGraph(encoded, { validate: false });
     return { graph, ms: performance.now() - started };
   }
 
