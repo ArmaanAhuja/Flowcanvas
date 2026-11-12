@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.setConfig({ testTimeout: 20_000 });
 import { validateGraph } from '@flowcanvas/graph-model';
 import type { GraphPass } from './graph.js';
-import { PARTLY, SemanticService } from './semantic-service.js';
+import { NO_DETAILS, PARTLY, SemanticService } from './semantic-service.js';
 
 const FILES: Record<string, string> = {
   'package.json': JSON.stringify({ name: 'fixture', private: true }),
@@ -593,15 +593,22 @@ describe('the code unit at a place (phase 7)', () => {
         '  }', // 10
         '}', // 11
         'outer();', // 12
+        'export const config = {', // 13
+        '  made: outer(),', // 14
+        '};', // 15
         '',
       ].join('\n'),
     );
     write('apps/web/README.md', '# Not code\n');
     service.changed([file], [...Object.keys(FILES), file, 'apps/web/README.md']);
     expect(service.unitAt(file, 3, 5)).toBe(`${file}#outer.inner`);
+    // From a constant's name, outside the function it holds (⌘K and the Calls tab give names).
+    expect(service.unitAt(file, 2, 9)).toBe(`${file}#outer.inner`);
     expect(service.unitAt(file, 5, 3)).toBe(`${file}#outer`);
     expect(service.unitAt(file, 9, 5)).toBe(`${file}#Store.save`);
     expect(service.unitAt(file, 12, 1)).toBe(`${file}#(top level)`);
+    // A constant isn't a unit of its own: its calls are the top level's, as in the graph.
+    expect(service.unitAt(file, 14, 9)).toBe(`${file}#(top level)`);
     expect(service.unitAt('apps/web/README.md', 1, 1)).toBeNull();
     // The same ids as the graph's nodes.
     const pass = await service.graph(() => Promise.resolve());
@@ -609,5 +616,143 @@ describe('the code unit at a place (phase 7)', () => {
     for (const id of ['outer.inner', 'outer', 'Store.save', '(top level)']) {
       expect(ids.has(`${file}#${id}`), id).toBe(true);
     }
+  });
+});
+
+describe('details (phase 7, ADR 0028 §3)', () => {
+  const file = 'apps/web/src/sending.ts';
+  beforeEach(() => {
+    write(
+      file,
+      [
+        'let saved = 0;', // 1
+        'export const cache = new Map<string, number>();', // 2
+        "export async function send(kind: 'a' | 'b', draft: boolean, name?: string): Promise<number> {", // 3
+        '  if (draft) {', // 4
+        '    saved += 1; missing.other();', // 5
+        '  } else {', // 6
+        '    cache.set(kind, 1);', // 7
+        '  }', // 8
+        '  const shown = draft ? 1 : 2;', // 9
+        '  switch (kind) {', // 10
+        "    case 'a':", // 11
+        '      await later();', // 12
+        '      break;', // 13
+        '    default:', // 14
+        "      throw new Error('unknown kind');", // 15
+        '  }', // 16
+        '  try {', // 17
+        '    await missing.thing();', // 18
+        '  } catch {', // 19
+        '    cache.clear();', // 20
+        '  }', // 21
+        "  const inner = () => { if (name) throw new Error('inner'); };", // 22
+        '  let local = 0; local += 1; inner();', // 23
+        '  return shown;', // 24
+        '}', // 25
+        'async function later() {}', // 26
+        'declare const missing: any;', // 27
+        'export class Store {', // 28
+        '  constructor(private readonly db: string, size = 2) {}', // 29
+        '}', // 30
+        'export const quick = async () => later();', // 31
+        '',
+      ].join('\n'),
+    );
+    write('apps/web/NOTES.md', '# Notes\n');
+    service.changed([file], [...Object.keys(FILES), file, 'apps/web/NOTES.md']);
+  });
+
+  it('shows what a function’s code reveals, and nothing of the functions inside it', () => {
+    const { details, message } = service.details(file, 9, 5);
+    expect(message).toBeNull();
+    expect(details).toMatchObject({
+      id: `${file}#send`,
+      name: 'send',
+      unit: 'function',
+      place: { path: file, line: 3, column: 23 },
+      async: true,
+      exported: true,
+      returns: 'Promise<number>',
+    });
+    expect(details?.signature).toBe(
+      '(kind: "a" | "b", draft: boolean, name?: string): Promise<number>',
+    );
+    expect(details?.params.items.map((p) => [p.name, p.optional])).toEqual([
+      ['kind', false],
+      ['draft', false],
+      ['name', true],
+    ]);
+    expect(details?.params.items[1]?.type).toBe('boolean');
+    expect(details?.decisions).toEqual({
+      items: [
+        { kind: 'if', condition: 'draft', outcomes: ['yes', 'no'], line: 4 },
+        { kind: 'ternary', condition: 'draft', outcomes: ['yes', 'no'], line: 9 },
+        { kind: 'switch', condition: 'kind', outcomes: ["case 'a'", 'default'], line: 10 },
+        { kind: 'catch', condition: 'on error', outcomes: ['error'], line: 19 },
+      ],
+      total: 4,
+    });
+    // inner's own `if` and `throw` (line 22) are inner's, not send's.
+    expect(details?.throws).toEqual({
+      items: [{ text: "new Error('unknown kind')", line: 15 }],
+      total: 1,
+    });
+    expect(details?.awaits).toEqual({
+      items: [
+        { text: 'later', line: 12 },
+        { text: 'missing.thing', line: 18 },
+      ],
+      total: 2,
+    });
+    // `local` (line 23) is the function's own, not module state.
+    expect(details?.writes).toEqual({ items: [{ text: 'saved', line: 5 }], total: 1 });
+    // Each once, guarded or not (a guarded one is also a branch edge in the graph).
+    expect(details?.unresolved).toEqual({
+      items: [
+        { text: 'missing.other', lines: [5] },
+        { text: 'missing.thing', lines: [18] },
+      ],
+      total: 2,
+    });
+  });
+
+  it('gives a nested function its own, a class its constructor’s inputs, and a file its top level', () => {
+    expect(service.details(file, 22, 25).details).toMatchObject({
+      id: `${file}#send.inner`,
+      // No else: one outcome.
+      decisions: {
+        items: [{ kind: 'if', condition: 'name', outcomes: ['yes'], line: 22 }],
+        total: 1,
+      },
+      throws: { items: [{ text: "new Error('inner')", line: 22 }] },
+    });
+    // A function held by an exported constant, from inside it and from its name: exported, and async.
+    expect(service.details(file, 31, 14).details?.id).toBe(`${file}#quick`);
+    expect(service.details(file, 31, 35).details).toMatchObject({
+      id: `${file}#quick`,
+      exported: true,
+      async: true,
+      awaits: { total: 0 },
+    });
+    const store = service.details(file, 28, 14).details;
+    expect(store).toMatchObject({ id: `${file}#Store`, unit: 'class', signature: null });
+    expect(store?.params.items).toEqual([
+      { name: 'db', type: 'string', optional: false },
+      { name: 'size', type: 'number', optional: true },
+    ]);
+    expect(service.details(file, 1, 1).details).toMatchObject({
+      id: `${file}#(top level)`,
+      name: 'sending.ts (top level)',
+      unit: 'module',
+      exported: false,
+    });
+  });
+
+  it('says why there are none outside TypeScript and JavaScript', () => {
+    expect(service.details('apps/web/NOTES.md', 1, 1)).toEqual({
+      details: null,
+      message: NO_DETAILS,
+    });
   });
 });

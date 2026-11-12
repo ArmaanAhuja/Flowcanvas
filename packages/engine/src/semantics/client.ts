@@ -5,6 +5,7 @@ import type {
   CallsResult,
   CodePosition,
   DefinitionResult,
+  DetailsResult,
   EngineResults,
   ReferencesResult,
   SemanticOp,
@@ -208,5 +209,7 @@ export function emptyAnswer(op: SemanticOp, message: string): unknown {
     case 'callers':
     case 'callees':
       return { target: null, entries: [], complete: false, message } satisfies CallsResult;
+    case 'details':
+      return { details: null, message } satisfies DetailsResult;
   }
 }

@@ -255,7 +255,8 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
         }
 
         // Phase 7: each labelled function's flow through the engine, from its name (found in the graph itself) and
-        // from a line inside it where it makes a call (TypeScript names the function): both start at its node.
+        // from a line inside it where it makes a call (TypeScript names the function): both start at its node. Its
+        // details, from its name, are about the same node.
         const flowsDiffering: string[] = [];
         const flowMs: number[] = [];
         for (const { label, id } of roots) {
@@ -276,6 +277,19 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
             if (said !== id)
               flowsDiffering.push(`${label.name} from line ${String(place.line)}: ${String(said)}`);
           }
+          // The inspector's details, from its name: about the same node.
+          const details = await host.index(ref, {
+            op: 'details',
+            path: label.path,
+            line: label.line,
+            column: label.column,
+          });
+          const named = !details.ok
+            ? details.error.message
+            : 'details' in details.result
+              ? (details.result.details?.id ?? details.result.message)
+              : 'not details';
+          if (named !== id) flowsDiffering.push(`${label.name} details: ${String(named)}`);
         }
 
         const row = {

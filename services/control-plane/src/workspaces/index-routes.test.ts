@@ -220,7 +220,7 @@ describe('TypeScript’s answers (phase 5)', () => {
   });
 });
 
-describe('flows (phase 7)', () => {
+describe('flows and details (phase 7)', () => {
   beforeEach(async () => {
     await call('POST', '/open');
   });
@@ -241,6 +241,23 @@ describe('flows (phase 7)', () => {
     ).toEqual({ status: 200, json: answer });
     expect(provider.indexRequests.map(({ request }) => request)).toEqual([
       { op: 'flow', path: 'apps/web/src/send.ts', line: 12, column: 17 },
+    ]);
+    expect(await lastActive()).toBe(now);
+  });
+
+  it('gives a node’s details for the inspector, and counts as activity', async () => {
+    const answer = {
+      details: null,
+      message: 'Details are shown for code in TypeScript or JavaScript files.',
+    };
+    provider.indexAnswer = { ok: true, result: answer };
+    now += 9 * 60_000;
+    expect(await call('GET', '/index/details?path=README.md&line=1&column=1')).toEqual({
+      status: 200,
+      json: answer,
+    });
+    expect(provider.indexRequests.map(({ request }) => request)).toEqual([
+      { op: 'details', path: 'README.md', line: 1, column: 1 },
     ]);
     expect(await lastActive()).toBe(now);
   });

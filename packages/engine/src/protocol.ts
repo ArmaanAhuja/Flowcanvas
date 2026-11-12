@@ -11,6 +11,7 @@ import {
   NODE_KINDS,
   PROVENANCES as GRAPH_PROVENANCES,
   RELATIONS as GRAPH_RELATIONS,
+  type CodeUnitKind,
   type Flow,
   type GraphStats,
 } from '@flowcanvas/graph-model';
@@ -63,7 +64,7 @@ export type EngineRequest =
   | ({ readonly op: 'flow' } & CodePosition);
 
 // TypeScript semantics (phase 5, ADR 0026): questions about the name at a place in a file.
-export const SEMANTIC_OPS = ['definition', 'references', 'callers', 'callees'] as const;
+export const SEMANTIC_OPS = ['definition', 'references', 'callers', 'callees', 'details'] as const;
 export type SemanticOp = (typeof SEMANTIC_OPS)[number];
 /**
  * What may wait on TypeScript, whose first answer about a package builds its programs (seconds): its questions, and
@@ -217,6 +218,66 @@ export interface FlowResult {
   readonly complete: boolean;
 }
 
+/** What the inspector shows of a code unit (phase 7, ADR 0028 §3): each list's first items, and how many in all. */
+export const DETAIL_LIMITS = { items: 50, params: 30, outcomes: 30, text: 300 } as const;
+export const DECISION_KINDS = ['if', 'switch', 'ternary', 'catch'] as const;
+export type DecisionKind = (typeof DECISION_KINDS)[number];
+
+/** Something at a line of the unit's file: a thrown error, an awaited call, a write. */
+export interface DetailLine {
+  readonly text: string;
+  readonly line: number;
+}
+
+export interface DetailList<T> {
+  readonly items: readonly T[];
+  readonly total: number;
+}
+
+export interface DetailDecision {
+  readonly kind: DecisionKind;
+  /** The condition as written (a switch's: the switched expression; a catch's: "on error"). */
+  readonly condition: string;
+  /** "yes" and "no" ("yes" alone without an else), each case, or "error". */
+  readonly outcomes: readonly string[];
+  readonly line: number;
+}
+
+export interface DetailParam {
+  readonly name: string;
+  /** Its type, as the compiler sees it. */
+  readonly type: string;
+  readonly optional: boolean;
+}
+
+export interface NodeDetails {
+  /** Its node in the graph. */
+  readonly id: string;
+  readonly name: string;
+  readonly unit: CodeUnitKind;
+  /** Where its name is (a top level: line 1). */
+  readonly place: CodePosition;
+  /** `(poll: PollInput): Promise<Poll>`; null for a class or a top level. */
+  readonly signature: string | null;
+  readonly params: DetailList<DetailParam>;
+  readonly returns: string | null;
+  readonly async: boolean;
+  readonly exported: boolean;
+  readonly decisions: DetailList<DetailDecision>;
+  readonly throws: DetailList<DetailLine>;
+  readonly awaits: DetailList<DetailLine>;
+  /** Calls whose target wasn't found, as written, with their lines (the flow's open stub). */
+  readonly unresolved: DetailList<{ readonly text: string; readonly lines: readonly number[] }>;
+  /** Assignments to variables declared at a file's top level (module state). */
+  readonly writes: DetailList<DetailLine>;
+}
+
+export interface DetailsResult {
+  readonly details: NodeDetails | null;
+  /** Why there are none (not in a TypeScript or JavaScript file, or TypeScript couldn't answer). */
+  readonly message: string | null;
+}
+
 export interface EngineResults {
   readonly hello: { readonly protocol: number };
   readonly status: EngineStatus;
@@ -227,6 +288,7 @@ export interface EngineResults {
   readonly callers: CallsResult;
   readonly callees: CallsResult;
   readonly flow: FlowResult;
+  readonly details: DetailsResult;
 }
 
 export const ENGINE_ERROR_CODES = ['invalid_request', 'failed'] as const;
@@ -288,6 +350,7 @@ export function parseEngineRequest(input: unknown): EngineRequest {
     case 'references':
     case 'callers':
     case 'callees':
+    case 'details':
     case 'flow': {
       const { path, line, column } = fields;
       if (
@@ -476,6 +539,71 @@ function isFlow(value: unknown): value is Flow {
   );
 }
 
+const isDetailText = (value: unknown) =>
+  typeof value === 'string' && value.length > 0 && value.length <= DETAIL_LIMITS.text;
+const isDetailList = (value: unknown, most: number, each: (item: unknown) => boolean) => {
+  const list = record(value);
+  return (
+    list !== undefined &&
+    isList(list.items, most, each) &&
+    isCount(list.total) &&
+    list.total >= (list.items as readonly unknown[]).length
+  );
+};
+const isDetailLine = (value: unknown) => {
+  const d = record(value);
+  return d !== undefined && isDetailText(d.text) && isCount(d.line) && d.line >= 1;
+};
+
+function isDetails(value: unknown): value is NodeDetails {
+  const d = record(value);
+  const place = record(d?.place);
+  return (
+    d !== undefined &&
+    place !== undefined &&
+    isText(d.id) &&
+    isText(d.name) &&
+    (CODE_UNIT_KINDS as readonly unknown[]).includes(d.unit) &&
+    isPosition(place) &&
+    (d.signature === null || isDetailText(d.signature)) &&
+    (d.returns === null || isDetailText(d.returns)) &&
+    typeof d.async === 'boolean' &&
+    typeof d.exported === 'boolean' &&
+    isDetailList(d.params, DETAIL_LIMITS.params, (p) => {
+      const param = record(p);
+      return (
+        param !== undefined &&
+        isDetailText(param.name) &&
+        isDetailText(param.type) &&
+        typeof param.optional === 'boolean'
+      );
+    }) &&
+    isDetailList(d.decisions, DETAIL_LIMITS.items, (item) => {
+      const decision = record(item);
+      return (
+        decision !== undefined &&
+        (DECISION_KINDS as readonly unknown[]).includes(decision.kind) &&
+        isDetailText(decision.condition) &&
+        isList(decision.outcomes, DETAIL_LIMITS.outcomes, isDetailText) &&
+        isCount(decision.line) &&
+        decision.line >= 1
+      );
+    }) &&
+    isDetailList(d.throws, DETAIL_LIMITS.items, isDetailLine) &&
+    isDetailList(d.awaits, DETAIL_LIMITS.items, isDetailLine) &&
+    isDetailList(d.writes, DETAIL_LIMITS.items, isDetailLine) &&
+    isDetailList(d.unresolved, DETAIL_LIMITS.items, (item) => {
+      const call = record(item);
+      return (
+        call !== undefined &&
+        isDetailText(call.text) &&
+        isList(call.lines, FLOW_LIMITS.lines, (line) => isCount(line) && line >= 1) &&
+        (call.lines as readonly unknown[]).length > 0
+      );
+    })
+  );
+}
+
 function isFlowResult(value: unknown): value is FlowResult {
   const r = record(value);
   return (
@@ -533,6 +661,12 @@ export function isEngineResponse(request: EngineRequest, value: unknown): value 
       return isGraphStatus(result);
     case 'flow':
       return isFlowResult(result);
+    case 'details':
+      return (
+        result !== undefined &&
+        (result.details === null || isDetails(result.details)) &&
+        isMessage(result.message)
+      );
     case 'search':
       return (
         result !== undefined &&

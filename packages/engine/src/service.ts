@@ -379,7 +379,8 @@ export function startEngineService(options: EngineServiceOptions): EngineService
         case 'definition':
         case 'references':
         case 'callers':
-        case 'callees': {
+        case 'callees':
+        case 'details': {
           const { path, line, column } = request;
           return options.semantics === undefined
             ? Promise.resolve(emptyAnswer(request.op, NO_SEMANTICS) as EngineResults[SemanticOp])

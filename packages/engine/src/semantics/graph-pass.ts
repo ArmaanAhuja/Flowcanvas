@@ -27,11 +27,11 @@ export interface GraphContext {
   readonly builtIn: (file: string) => boolean;
 }
 
-const projectPath = (ctx: GraphContext, file: string) =>
+export const projectPath = (ctx: GraphContext, file: string) =>
   relative(ctx.root, file).split(sep).join('/');
 
 /** A declaration's own name: a function's, a method's, or the constant or property it's assigned to. */
-function nameOf(ts: TypeScript, node: TS.Node): string {
+export function nameOf(ts: TypeScript, node: TS.Node): string {
   if (ts.isConstructorDeclaration(node)) return 'constructor';
   const named = (node as { readonly name?: TS.Node }).name;
   if (
@@ -77,7 +77,7 @@ function isScope(ts: TypeScript, node: TS.Node): boolean {
   );
 }
 
-function unitOf(ts: TypeScript, node: TS.Node, name: string): GraphNode['unit'] {
+export function unitOf(ts: TypeScript, node: TS.Node, name: string): GraphNode['unit'] {
   if (ts.isClassLike(node)) return 'class';
   if (
     ts.isMethodDeclaration(node) ||
@@ -129,23 +129,39 @@ function idsOf(ctx: GraphContext, source: TS.SourceFile): Map<TS.Node, string> {
 }
 
 /**
- * The code unit a place is in, by the graph's id (phase 7, ADR 0028): the innermost one, or the file's top level.
- * The same ids as the pass, so a flow can start from wherever the person is in the code.
+ * The code unit a place is in (phase 7, ADR 0028): the innermost one, or the file's top level (`node` null). The
+ * pass's own ids and rule for whose code is whose (a constant that's only called isn't a unit of its own), so a flow
+ * or the inspector starts from the node the graph gives that code.
  */
-export function unitAt(ctx: GraphContext, source: TS.SourceFile, offset: number): string {
+export function unitNodeAt(
+  ctx: GraphContext,
+  source: TS.SourceFile,
+  offset: number,
+): { readonly node: TS.Node | null; readonly id: string } {
   const own = idsOf(ctx, source);
   for (
     let node = findNode(ctx.ts, source, offset);
     node !== undefined && !ctx.ts.isSourceFile(node);
     node = node.parent
   ) {
-    const id = own.get(node);
-    if (id !== undefined) return id;
+    // On a constant's or property's name, outside the function it's given: that function (as `callableAt`).
+    const unit =
+      (ctx.ts.isVariableDeclaration(node) || ctx.ts.isPropertyDeclaration(node)) &&
+      node.initializer !== undefined
+        ? node.initializer
+        : node;
+    const id = own.get(unit);
+    if (id !== undefined && isNamedCallable(ctx.ts, unit)) return { node: unit, id };
   }
-  return `${projectPath(ctx, source.fileName)}#(top level)`;
+  return { node: null, id: `${projectPath(ctx, source.fileName)}#(top level)` };
 }
 
-function placeOf(ctx: GraphContext, node: TS.Node): GraphNode['place'] {
+/** Whether `node` is a code unit of its own within `owner`'s code: the pass's rule (`walkFile`). */
+export function ownsItsCode(ctx: GraphContext, node: TS.Node): boolean {
+  return idsOf(ctx, node.getSourceFile()).has(node) && isNamedCallable(ctx.ts, node);
+}
+
+export function placeOf(ctx: GraphContext, node: TS.Node): GraphNode['place'] {
   const source = node.getSourceFile();
   const name = ctx.ts.getNameOfDeclaration(node as TS.Declaration) ?? node;
   const { line, character } = source.getLineAndCharacterOfPosition(name.getStart(source));

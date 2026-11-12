@@ -322,7 +322,7 @@ describe('flows (phase 7)', () => {
 
   it('may wait on TypeScript, so it has the questions’ longer timeouts', () => {
     expect([...TYPESCRIPT_OPS].sort()).toEqual(
-      ['callees', 'callers', 'definition', 'flow', 'references'].sort(),
+      ['callees', 'callers', 'definition', 'details', 'flow', 'references'].sort(),
     );
   });
 
@@ -370,6 +370,59 @@ describe('flows (phase 7)', () => {
       { ...result, message: 'x'.repeat(301) },
     ]) {
       expect(ok(bad)).toBe(false);
+    }
+  });
+});
+
+describe('details (phase 7)', () => {
+  const at = { path: 'src/poll.ts', line: 3, column: 17 };
+  const request: EngineRequest = { op: 'details', ...at };
+  const list = <T>(items: T[]) => ({ items, total: items.length });
+  const details = {
+    id: 'src/poll.ts#create',
+    name: 'create',
+    unit: 'function',
+    place: at,
+    signature: '(input: PollInput): Promise<Poll>',
+    params: list([{ name: 'input', type: 'PollInput', optional: false }]),
+    returns: 'Promise<Poll>',
+    async: true,
+    exported: true,
+    decisions: list([{ kind: 'if', condition: '!input.title', outcomes: ['yes'], line: 4 }]),
+    throws: list([{ text: "new Error('No title')", line: 5 }]),
+    awaits: list([{ text: 'prisma.poll.create', line: 7 }]),
+    unresolved: { items: [{ text: 'prisma.poll.create', lines: [7] }], total: 3 },
+    writes: list([]),
+  };
+  const ok = (value: unknown) => isEngineResponse(request, { ok: true, result: value });
+
+  it('is asked about a place, like the other questions', () => {
+    expect(parseEngineRequest({ op: 'details', ...at })).toEqual(request);
+  });
+
+  it('accepts details, or none with a reason', () => {
+    expect(ok({ details, message: null })).toBe(true);
+    expect(ok({ details: { ...details, signature: null, returns: null }, message: null })).toBe(
+      true,
+    );
+    expect(ok({ details: null, message: 'Not code.' })).toBe(true);
+  });
+
+  it('refuses details that aren’t bounded and well-formed', () => {
+    for (const bad of [
+      { ...details, unit: 'decision' },
+      { ...details, place: { ...at, path: '../x.ts' } },
+      { ...details, signature: 'x'.repeat(301) },
+      { ...details, params: { items: details.params.items, total: 0 } },
+      { ...details, decisions: list([{ kind: 'loop', condition: 'x', outcomes: [], line: 1 }]) },
+      { ...details, decisions: list([{ kind: 'if', condition: '', outcomes: ['yes'], line: 1 }]) },
+      { ...details, throws: list([{ text: 'x', line: 0 }]) },
+      { ...details, awaits: list(Array.from({ length: 51 }, () => ({ text: 'x', line: 1 }))) },
+      { ...details, unresolved: list([{ text: 'x', lines: [] }]) },
+      { ...details, writes: undefined },
+      { ...details, async: 'yes' },
+    ]) {
+      expect(ok({ details: bad, message: null }), JSON.stringify(bad).slice(0, 100)).toBe(false);
     }
   });
 });

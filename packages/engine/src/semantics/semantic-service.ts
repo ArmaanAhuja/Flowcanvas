@@ -11,12 +11,14 @@ import {
   type CodeItem,
   type CodePosition,
   type DefinitionResult,
+  type DetailsResult,
   type ReferencesResult,
   type Relation,
   type SymbolKindName,
 } from '../protocol.js';
 import { assemble, GRAPH_FILES_BETWEEN_PAUSES, GRAPH_HEAP_SHARE, type GraphPass } from './graph.js';
-import { unitAt, walkFile, type FileGraph, type GraphContext } from './graph-pass.js';
+import { detailsAt } from './details.js';
+import { unitNodeAt, walkFile, type FileGraph, type GraphContext } from './graph-pass.js';
 import { createProjectHost, type ProjectHost } from './host.js';
 import {
   callableAt,
@@ -299,6 +301,16 @@ export class SemanticService {
     };
   }
 
+  /** What the inspector shows of the code unit at a place (phase 7, ADR 0028 §3). */
+  details(path: string, line: number, column: number): DetailsResult {
+    const file = join(this.#root, path);
+    for (const { program, source } of this.#holding(this.#model.configsFor(file), file)) {
+      const offset = this.#offset(source, line, column);
+      return { details: detailsAt(this.#context(), program, source, offset), message: null };
+    }
+    return { details: null, message: NO_DETAILS };
+  }
+
   /**
    * The code unit a place is in, by the graph's id (phase 7): where a flow starts when it's opened from inside a
    * function. Null when no program has the file (it isn't TypeScript or JavaScript).
@@ -306,7 +318,7 @@ export class SemanticService {
   unitAt(path: string, line: number, column: number): string | null {
     const file = join(this.#root, path);
     for (const { source } of this.#holding(this.#model.configsFor(file), file)) {
-      return unitAt(this.#context(), source, this.#offset(source, line, column));
+      return unitNodeAt(this.#context(), source, this.#offset(source, line, column)).id;
     }
     return null;
   }
@@ -690,6 +702,9 @@ interface CallSite {
     readonly container: string | null;
   } | null;
 }
+
+/** Where the file isn't in any program: not TypeScript or JavaScript. */
+export const NO_DETAILS = 'Details are shown for code in TypeScript or JavaScript files.';
 
 function nothingCallable(): CallsResult {
   return {

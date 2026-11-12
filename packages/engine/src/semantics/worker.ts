@@ -95,7 +95,9 @@ if (port !== null) {
               ? service.references(path, line, column)
               : message.op === 'callers'
                 ? service.callers(path, line, column)
-                : service.callees(path, line, column);
+                : message.op === 'callees'
+                  ? service.callees(path, line, column)
+                  : service.details(path, line, column);
       reply = { type: 'answer', id: message.id, result };
     } catch {
       // Never the error itself: it could name paths or hold file content.
