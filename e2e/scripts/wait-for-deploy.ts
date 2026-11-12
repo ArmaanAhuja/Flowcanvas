@@ -12,6 +12,14 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 
 const WORKER = 'flowcanvas';
+/**
+ * A new deployment reaches Cloudflare's servers over a short while: one request can get it while the next still gets
+ * the old one. Found on 12 Nov 2026 (run 43271058049): the check saw the new commit once, then phase 1's walkthrough
+ * got the previous build three times in a minute. So the commit must be served this many times in a row, this far
+ * apart, before tests run; a miss starts the count again.
+ */
+const STABLE_CHECKS = 5;
+const STABLE_GAP_MS = 5_000;
 
 function fail(message: string): never {
   console.error(`wait-for-deploy: ${message}`);
@@ -69,20 +77,30 @@ async function main(): Promise<void> {
 
   const deadline = Date.now() + Number(values.timeout) * 1000;
   console.log(`Waiting for ${base} to serve ${shortCommit}…`);
+  let inARow = 0;
   for (;;) {
+    let served = false;
     try {
-      if (await servesCommit(base, shortCommit)) break;
+      served = await servesCommit(base, shortCommit);
     } catch (error) {
       console.log(`  not reachable yet (${(error as Error).message})`);
     }
+    if (served) {
+      inARow += 1;
+      if (inARow >= STABLE_CHECKS) break;
+    } else {
+      if (inARow > 0)
+        console.log(`  served ${String(inARow)} time(s), then an older build: waiting again`);
+      inARow = 0;
+    }
     if (Date.now() > deadline) {
       fail(
-        `${base} still doesn't serve ${shortCommit} after ${values.timeout} s. Check the Cloudflare build.`,
+        `${base} still doesn't serve ${shortCommit} steadily after ${values.timeout} s. Check the Cloudflare build.`,
       );
     }
-    await sleep(10_000);
+    await sleep(served ? STABLE_GAP_MS : 10_000);
   }
-  console.log(`${base} serves ${shortCommit}.`);
+  console.log(`${base} serves ${shortCommit} (${String(STABLE_CHECKS)} checks in a row).`);
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `url=${base}\n`);
 }
 

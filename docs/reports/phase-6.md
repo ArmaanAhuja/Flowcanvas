@@ -109,6 +109,7 @@ The draft PR (#20) ran CI on every push.
 - **Milestone A** was green on its last commit (`b91c8e5`), including the real-Docker job with the engine carrying the graph pass.
 - **The proof commit** (`2c8a177`): every job green, with the corpus numbers above.
 - **Closing commit:** every job green (see the PR's checks).
+- **After acceptance, one walkthrough failed on a docs-only commit** (`ffa1a5f`, run 43271058049), investigated: the page was the previous build (`8a265b9`). The readiness check had seen the new commit once, but Cloudflare's servers hadn't all switched yet, so the browser's next requests got the old build. The check now needs the commit served 5 times in a row, 5 s apart (`e2e/scripts/wait-for-deploy.ts`; about 25 s per run).
 
 ## Next phase preview
 
