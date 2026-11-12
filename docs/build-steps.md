@@ -12876,9 +12876,9 @@ pnpm test && pnpm test:e2e && pnpm test:visual && pnpm test:docker
 | --- | --- | --- | --- |
 | 0 | The plan and decisions; branch | A | done (Claude, 12 Nov) |
 | 1 | Spike: one pass over each program for code units and call edges; snapshot save and load in SQLite; on the four forks. ADR 0027 | A | done (Claude, 12 Nov) |
-| 2 | The graph types, validation and snapshot diff in `@flowcanvas/graph-model` | A | *next* |
-| 3 | The engine: the graph pass and the snapshot store, kept current on changes | A | *planned* |
-| 4 | The API through the host and control plane | B | *planned* |
+| 2 | The graph types, validation and snapshot diff in `@flowcanvas/graph-model` | A | done (Claude, 12 Nov) |
+| 3 | The engine: the graph pass and the snapshot store, kept current on changes | A | done (Claude, 12 Nov) |
+| 4 | The API through the host and control plane | B | *next* |
 | 5 | UI: the Graph stats panel behind its Labs switch | B | *planned* |
 | 6 | Proof: the forks in real workspaces (hand-checked samples, save and load times); walkthrough; screens | B | *planned* |
 | 7 | Close: report, 0.10.0 | B | *planned* |
@@ -12933,3 +12933,78 @@ pnpm test && pnpm test:e2e && pnpm test:visual && pnpm test:docker
 **Risks:** R1–R3 updated above. **Laptop:** one fork at a time, about 4 minutes in all; load under 2.
 
 **Commit:** `docs: phase 6 spike, the graph pass and snapshot encoding (ADR 0027)`.
+
+### Step 6.2 — The graph's vocabulary, validation, encoding and diff (done by Claude; ADR 0027)
+
+**Goal:** the graph as shared, plain data: what nodes and edges are, the rules every graph keeps, one canonical compact encoding, and what changed between two versions.
+
+**What a person can do now:** nothing visible; the engine and the page build on it (steps 3 and 5).
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `packages/graph-model/src/model.ts` | Six node kinds, five edge kinds, the five provenances, change states, `Graph` and `Snapshot`; identity by file and qualified name |
+| `packages/graph-model/src/validate.ts` | Every rule, as sentences: ids once, edges between nodes in the graph, an unknown edge never reaching a node and always carrying the call's text, a code unit saying what it is, lines ascending |
+| `packages/graph-model/src/encoding.ts` | Canonical (sorted) and compact (edges refer to nodes and texts by index); decoding checks the result |
+| `packages/graph-model/src/diff.ts` | Nodes added, removed and modified (moved, or its calls changed); edges added and removed; change states with removed nodes kept as ghosts |
+| `packages/graph-model/src/stats.ts` | Counts by kind and provenance, zeros included; the phase each missing kind arrives in |
+
+**Concepts:**
+- **A property graph with a small vocabulary:** typed nodes and edges with attributes; the kinds fixed, the attributes per kind. https://en.wikipedia.org/wiki/Property_graph
+- **Canonical encoding:** the same graph always encodes to the same bytes, so its hash can name it.
+
+**Found and fixed on the way:** none.
+
+**Tests:** 13 (graph-model): the rules (12 ways to break them), round trips and order-independence, the diff (moved code is modified, not removed and added), stats with zeros. Mutation-checked: canonical order, a changed call modifying its caller, unknown edges reaching a node.
+
+**Run and check it:** `pnpm --filter @flowcanvas/graph-model test`
+
+**Risks:** none new. **Laptop:** unit tests only.
+
+**Commit:** `6c87bc0` `feat(graph-model): the flow graph's vocabulary, validation, compact encoding, diff and stats`.
+
+### Step 6.3 — The engine: the graph pass, inferred programs, and snapshots in SQLite (done by Claude; ADR 0027 and its addendum)
+
+**Goal:** every project's graph built in its workspace from its code, kept up to date as files change, and saved as versions.
+
+**What a person can do now** (`pnpm dev`, a running workspace): the engine builds the graph after the index and again once edits settle, and answers the new `graph` request (through the API in step 4).
+
+**Files:**
+
+| File | What |
+| --- | --- |
+| `packages/engine/src/semantics/projects.ts` | Inferred programs: the source files no tsconfig includes, per package, with `allowJs` |
+| `packages/engine/src/semantics/callables.ts` | Phase 5's call-site rules, moved here so the Calls tab and the graph share them |
+| `packages/engine/src/semantics/graph-pass.ts`, `graph.ts` | One file's code units and calls; the graph assembled from the files' parts |
+| `packages/engine/src/semantics/semantic-service.ts` | The pass: every file first, then the changed ones and those calling into them; yields to questions; starts again on a structural change; releases the programs it built |
+| `packages/engine/src/semantics/worker.ts`, `client.ts` | The graph request across the thread, with its own failures and a 15-minute limit |
+| `packages/engine/src/snapshots.ts` | Versions in their own SQLite file, by SHA-256, the last 20 kept |
+| `packages/engine/src/service.ts`, `protocol.ts`, `main.ts` | When passes run, the `graph` request, its exact check |
+
+**Concepts:**
+- **Inferred projects:** files outside every tsconfig still get a program, as in TypeScript's own editors. https://github.com/microsoft/TypeScript/wiki/Standalone-Server-(tsserver)
+- **Yielding a long task:** `setImmediate` between files lets the worker answer questions mid-pass. https://nodejs.org/en/learn/asynchronous-work/event-loop-timers-and-nexttick
+- **Incremental by reverse dependency:** a renamed function's callers are walked again, so their calls stop reaching it.
+
+**Found and fixed on the way:**
+- **Twenty ran out of memory in the engine** (not in the spike): programs held in the questions' cache. Programs built for the pass are now released once walked (61 s, 1.93 GB peak).
+- **LibreChat's Express backend was invisible** to the Calls tab and the graph: in no tsconfig. Inferred programs fix both.
+- **TypeScript's references stop at CommonJS shorthand exports,** so Callers misses those callers; the graph has them. Recorded in ADR 0027's addendum as a follow-up.
+- **A test could pass with the "never two passes at once" guard removed:** the first test only proved the timer coalesces changes. A second test makes a change land mid-pass.
+- **Host tests told the index's status apart by `state`,** which the graph's status has too; they use `byStatus` now.
+
+**Tests:**
+- **Engine:** 166 (16 new): the fixture graph exactly (nodes, edges, built-ins counted); an edit re-walking callers; a restart on a structural change; programs released; inferred programs (CommonJS); the snapshot store (save, load, dedupe, the last 20, reopen, a format change, a corrupt version); the client's graph request and its failures; when passes run, one at a time, a mid-pass change, a failure keeping the last good version, a restart showing it; the protocol's check.
+- **Mutation-checked:** dependents re-walked, the restart, built-ins kept out, HTML tags not calls, inferred programs, programs released, one pass at a time, exact keys, a version stored once.
+- **On the forks (laptop, in-process):** Rallly 4.1 s, Documenso 9.8 s, LibreChat 36.7 s, Twenty 60.9 s; every graph valid and complete (ADR 0027 addendum).
+
+**Run and check it:**
+```fish
+pnpm --filter @flowcanvas/engine test
+pnpm --filter @flowcanvas/engine build   # the bundle carries the graph model into the workspace
+```
+
+**Risks:** R1 measured in the engine (Twenty 1.93 GB, LibreChat 2.08 GB against 2.5 GB). **Laptop:** the four forks one at a time, about 2 minutes in all; load under 3.
+
+**Commits:** `4dda64e` `feat(engine): the flow graph from one TypeScript pass, and inferred programs`; `aa91029` `feat(engine): graph snapshots in SQLite`.

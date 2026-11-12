@@ -49,7 +49,7 @@ One pass over each program: build it, walk every project file once (a file in se
 The graph pass runs in the engine's existing TypeScript worker (ADR 0026), so there's one 2.5 GB cap, not two:
 - **Programs one at a time:** each is built, its files walked, then released. A file is walked once, in the first program that includes it.
 - **Questions keep priority:** the pass yields between files, so a Calls question waits at most for a program to build (the longest measured: 20 s on Twenty, laptop).
-- **When it runs:** after the index's first full pass; again after edits settle (step 3), re-walking the changed files and the files that import them.
+- **When it runs:** after the index's first full pass; again 2 s after edits settle, re-walking the changed files and the files with calls into them (a renamed function's callers are walked again, so their calls stop reaching it). One pass at a time; a change during one runs once more after it.
 - **If memory runs short,** the pass stops and the snapshot says it is partial, with how many files were walked.
 
 ### 2. Inferred programs for files no tsconfig includes
@@ -88,3 +88,20 @@ A node's ID is its file and its qualified name (`apps/web/src/poll.ts#PollServic
 - **The first graph of a large project takes about a minute** (Twenty, laptop); Graph stats says it's being built until then.
 - **Phase 5's Calls tab now sees files no tsconfig includes** (LibreChat's backend).
 - **Most edges are unknown until connectors arrive.** That's honest, and phase 10 turns Prisma's into data access.
+
+## Addendum: what building it found (step 3, 12 Nov 2026)
+
+**The engine's pass, laptop, every fork at its pin** (the worker's 2.5 GB cap; graphs checked against the schema, all valid and complete):
+
+| Fork | Pass | Peak heap | Files | Nodes | Edges (resolved / unknown) | Built-in calls |
+| --- | --- | --- | --- | --- | --- | --- |
+| **Rallly** | 4.1 s | 0.48 GB | 1,168 | 3,327 | 16,394 (7,514 / 8,880) | 3,930 |
+| **Documenso** | 9.8 s | 0.95 GB | 2,231 | 4,912 | 35,307 (12,102 / 23,205) | 6,589 |
+| **LibreChat** | 36.7 s | 2.08 GB | 6,208 | 34,488 | 164,991 (50,172 / 114,819) | 85,132 |
+| **Twenty** | 60.9 s | 1.93 GB | 32,518 | 61,810 | 237,263 (96,719 / 140,544) | 66,376 |
+
+More edges resolve than in the spike: calls to module-level constants and interface members reach their declarations (phase 5's rule), and fewer unknown edges repeat.
+
+**Found and fixed:**
+1. **Twenty ran out of memory in the engine** where the spike didn't. The pass went through the questions' service cache, which keeps programs until the heap is 70% full and frees only before building the next; one large program on top of the cached ones passed the cap. The pass now releases every program it built as soon as its files are walked; programs the questions already had stay warm (tested).
+2. **TypeScript's references don't follow CommonJS shorthand exports** (`module.exports = { slug }` then `const { slug } = require(…)`), so its call hierarchy finds no callers there: phase 5's Callers misses them in LibreChat's backend. The graph is built forwards (each call resolved to its target), and has them. Answering Callers from the graph is a follow-up for the flow phases.

@@ -257,6 +257,11 @@ inside the workspace: the agent's watcher (in process) ──► refresh ──�
   - **What it reads:** only inside the project (never secret files, never through a link out, nothing over 1 MB) and TypeScript's own lib (whatever its size: `lib.dom.d.ts` is 2.3 MB).
   - **Shipping:** TypeScript ships beside the engine as one archive the host unpacks.
   - **The page** (`apps/web/src/symbols/useCalls.ts`, `src/project/Inspector.tsx`): the Code view catches F12, Shift+F12 and right-clicks on the editor's host (CodeMirror is in a shadow root) and finds the place under the pointer. The right-click menu is `ContextMenu` (`packages/ui`). Answers fill the inspector's Calls tab (`CallsPanel`), which a new question brings into view; late answers are dropped. A row opens its place in the Code view.
+- **The flow graph** (phase 6, ADR 0027): `@flowcanvas/graph-model` holds the vocabulary (six node kinds, five edge kinds, five provenances, change states), the rules, a canonical compact encoding, the diff and stats; plain data, used by the engine, the protocol and the page.
+  - **Built** in the TypeScript worker: one pass over every program (and inferred programs for files no tsconfig includes), one at a time and released after, yielding to questions; code units with their calls, resolved or unknown, built-ins counted apart. Then incrementally: changed files and those with calls into them.
+  - **When:** after the first index; 2 s after edits settle; one pass at a time.
+  - **Kept** in `/workspace/.flowcanvas/graph.db` (its own SQLite file): versions by SHA-256, gzipped, the last 20; each loaded straight back to time it.
+  - **Asked for** with the engine's `graph` request: the state, and the latest version's counts and timings.
 - **Proof:** `workspace/host/src/corpus.docker.test.ts` indexes all six corpus forks in real workspaces, and checks the callers and callees of 20 hand-labelled functions in Rallly and Documenso exactly (`corpus/labels/calls.json`, `corpus/src/calls.ts`); `packages/engine/src/search.perf.test.ts` times search on 100,000 names, run alone in CI's performance job.
 
 ## Workspace lifecycle (phase 1d, step 3)

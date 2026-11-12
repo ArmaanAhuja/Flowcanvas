@@ -141,4 +141,8 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
   - ✅ **Through path aliases, workspace packages and re-exports,** without installing anything; packages that aren't installed are shown as unresolved, never guessed.
   - ✅ **Proof:** `pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts` (20 hand-labelled functions, exact); walkthrough `pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-5.spec.ts`.
   - **Try it:** `pnpm dev`, open Rallly with its workspace running, Code view, open `apps/web/src/features/poll/mutations.ts`, right-click `createPoll` (line 98) → Callers: the two API route modules, each at its lines.
+- **Phase 6 (in progress):** the graph model.
+  - 🟡 Milestone A done (the engine, not yet in the page): with `pnpm dev` and a running workspace, the engine builds the project's flow graph (code units and calls, each resolved or unknown) after indexing, keeps it up to date as files change, and saves each version in `/workspace/.flowcanvas/graph.db`.
+  - ✅ **The Calls tab now sees files no tsconfig includes** (LibreChat's Express backend).
+  - **Check it:** `pnpm --filter @flowcanvas/graph-model test` and `pnpm --filter @flowcanvas/engine test`.
 - **After that:** stage 1 draws real flows from code, and stage 2 adds live frames of the running app.
