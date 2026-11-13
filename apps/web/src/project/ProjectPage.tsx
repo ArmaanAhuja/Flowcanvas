@@ -26,7 +26,10 @@ import { fetchTree } from '../code/api';
 import { useWorkspaceEvents } from '../code/events';
 import { useCodeFiles } from '../code/useCodeFiles';
 import { fetchProjects, isProblem, type Project } from '../projects/api';
-import { FlowCanvas } from '../canvas/FlowCanvas';
+import { FlowCanvas, type CanvasEdge, type CanvasNode } from '../canvas/FlowCanvas';
+import { FlowInspector } from '../flow/FlowInspector';
+import { FlowStatus } from '../flow/FlowStatus';
+import { useFlow, type FlowState } from '../flow/useFlow';
 import { EXAMPLE_BANNER, exampleGraph } from '../canvas/examples';
 import { useLabs } from '../labs/LabsProvider';
 import { useGraphStats } from '../graph/useGraphStats';
@@ -68,8 +71,9 @@ const WorkspaceTerminal = lazy(async () => ({
  */
 export const EMPTY = {
   left: 'Entry points arrive with entry-point detection (phase 8): pages, routes, event handlers and jobs found in the code.',
-  canvas: 'Flows arrive with the flow builder (phase 7).',
-  right: 'Details of what you select on the canvas arrive with the flow builder (phase 7).',
+  canvas:
+    'Choose a function to see its flow: right-click its name in the Code view and choose Show flow, or find it with Search.',
+  right: 'Select a node in a flow to see what its code reveals.',
   review: 'Agent sessions arrive with the agent panel (phase 19).',
   reviewDetail:
     'Reviewing an agent session’s changes, with their tests and what’s still unverified, arrives with the review panel (phase 32).',
@@ -273,6 +277,10 @@ function ReadyProject({
   const graphStatsOn = useLabs().isOn('graph-stats');
   const graph = useGraphStats(project.id, running, graphStatsOn, fetcher);
   const calls = useCalls(project.id, fetcher);
+  // Flows (phase 7): opened from the right-click menu, ⌘K and the Calls tab; one on the canvas at a time.
+  const flows = useFlow(project.id, fetcher);
+  const [selected, setSelected] = useState<CanvasNode | null>(null);
+  const [selections, setSelections] = useState(0);
   const [menu, setMenu] = useState<{
     readonly at: CallPlace;
     readonly pointer: { readonly x: number; readonly y: number };
@@ -293,6 +301,19 @@ function ReadyProject({
         calls.notice('It’s defined in TypeScript’s standard library, not in the project.');
       else calls.notice(answer.message ?? 'TypeScript found no definition for this.');
     });
+  };
+  const showFlow = (at: CallPlace) => {
+    if (view !== 'graph') setView('graph');
+    setSelected(null);
+    void flows.open(at);
+  };
+  const select = (node: CanvasNode | null) => {
+    // Nothing selected, and nothing was: no change (React Flow reports an empty selection as it starts).
+    if (node === null && selected === null) return;
+    setSelected(node);
+    if (node !== null) setSelections((n) => n + 1);
+    // A function's details; a decision and the open ends are read from the flow itself.
+    void flows.select(node?.type === 'flow' && node.data.place != null ? node.data.place : null);
   };
   const semantic = (op: 'definition' | 'references' | 'callers' | 'callees', at: CallPlace) => {
     if (op === 'definition') goToDefinition(at);
@@ -388,6 +409,9 @@ function ReadyProject({
                   if (view !== 'code') setView('code');
                   code.open(symbol.path, { line: symbol.line, column: symbol.column });
                 }}
+                onShowFlow={(symbol) => {
+                  showFlow({ path: symbol.path, line: symbol.line, column: symbol.column });
+                }}
               />
             </Suspense>
           )}
@@ -406,7 +430,15 @@ function ReadyProject({
               />
             </Suspense>
           ) : (
-            <ProjectCanvas status={<IndexChip status={index.status} />} />
+            <ProjectCanvas
+              index={<IndexChip status={index.status} />}
+              flow={flows.flow}
+              onSelectNode={select}
+              onOpenNode={(node) => {
+                const place = node.type === 'stub' ? null : node.data.place;
+                if (place != null) openPlace(place);
+              }}
+            />
           )}
           {menu !== null && (
             <ContextMenu
@@ -424,6 +456,8 @@ function ReadyProject({
                   key === 'callees'
                 ) {
                   semantic(key, menu.at);
+                } else if (key === 'flow') {
+                  showFlow(menu.at);
                 }
               }}
             >
@@ -435,6 +469,7 @@ function ReadyProject({
               </MenuItem>
               <MenuItem id="callers">Callers</MenuItem>
               <MenuItem id="callees">Callees</MenuItem>
+              <MenuItem id="flow">Show flow</MenuItem>
             </ContextMenu>
           )}
         </>
@@ -442,8 +477,17 @@ function ReadyProject({
       right={
         <Inspector
           calls={calls.state}
+          selected={selections}
+          onShowFlow={showFlow}
           details={
-            graphStatsOn ? (
+            flows.flow.kind === 'ready' && flows.flow.result.flow !== null && selected !== null ? (
+              <FlowInspector
+                flow={flows.flow.result.flow}
+                selected={selected}
+                details={flows.details}
+                onOpen={openPlace}
+              />
+            ) : graphStatsOn ? (
               <GraphStats
                 state={graph.state}
                 message={graph.message}
@@ -610,17 +654,61 @@ function Dock({ project, running }: { readonly project: Project; readonly runnin
   );
 }
 
-/** No flows until the project is analysed (phase 4 onwards); the Labs stress test shows labelled examples. */
-function ProjectCanvas({ status }: { readonly status: ReactNode }) {
+/**
+ * The flow opened (phase 7), laid out by ELK; before one is opened, the Labs stress test's labelled examples, or how
+ * to open one.
+ */
+function ProjectCanvas({
+  index,
+  flow,
+  onSelectNode,
+  onOpenNode,
+}: {
+  readonly index: ReactNode;
+  readonly flow: FlowState;
+  readonly onSelectNode: (node: CanvasNode | null) => void;
+  readonly onOpenNode: (node: CanvasNode) => void;
+}) {
   const stressTest = useLabs().isOn('canvas-stress-test');
   const examples = useMemo(() => (stressTest ? exampleGraph() : undefined), [stressTest]);
+  const laid = flow.kind === 'ready' ? flow.laid : null;
+  const nodes = useMemo<readonly CanvasNode[]>(
+    () => (laid === null ? (examples?.nodes ?? []) : laid.nodes),
+    [laid, examples],
+  );
+  const edges = useMemo<readonly CanvasEdge[]>(
+    () => (laid === null ? (examples?.edges ?? []) : laid.edges),
+    [laid, examples],
+  );
+  const said =
+    flow.kind === 'loading'
+      ? 'Building the flow…'
+      : flow.kind === 'problem'
+        ? flow.message
+        : flow.kind === 'ready' && flow.result.flow === null
+          ? (flow.result.message ?? 'There’s no flow to show from there.')
+          : EMPTY.canvas;
   return (
     <FlowCanvas
-      nodes={examples?.nodes ?? []}
-      edges={examples?.edges ?? []}
-      empty={<p className={styles.empty}>{EMPTY.canvas}</p>}
-      status={status}
-      {...(examples === undefined ? {} : { banner: EXAMPLE_BANNER })}
+      nodes={nodes}
+      edges={edges}
+      empty={
+        <p className={styles.empty} role="status">
+          {said}
+        </p>
+      }
+      status={
+        <>
+          {index}
+          {flow.kind === 'ready' && <FlowStatus result={flow.result} />}
+        </>
+      }
+      onSelectNode={onSelectNode}
+      onOpenNode={onOpenNode}
+      {...(laid !== null && flow.kind === 'ready' && flow.result.flow !== null
+        ? { focus: flow.result.flow.root }
+        : {})}
+      {...(examples === undefined || laid !== null ? {} : { banner: EXAMPLE_BANNER })}
     />
   );
 }

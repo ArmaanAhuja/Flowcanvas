@@ -25,6 +25,7 @@ const call = (
   target: null,
   kind: 'call',
   relation: 'calls',
+  label: null,
   provenance: 'resolved',
   lines,
   ...extra,
@@ -35,6 +36,7 @@ const unknown = (from: string, target: string, lines = [4]): GraphEdge => ({
   target,
   kind: 'call',
   relation: 'calls',
+  label: null,
   provenance: 'unknown',
   lines,
 });
@@ -118,12 +120,46 @@ describe('encodeGraph and decodeGraph', () => {
     expect(encodeGraph(shuffled)).toBe(text);
   });
 
+  it('stores each file path once, for ids and places alike', () => {
+    const encoded = JSON.parse(encodeGraph(POLL)) as { paths: string[]; nodes: unknown[][] };
+    expect(encoded.paths.sort()).toEqual(['src/form.tsx', 'src/poll.ts', 'src/route.ts']);
+    expect(JSON.stringify(encoded.nodes)).not.toContain('src/poll.ts');
+  });
+
+  it('skips the schema check only when asked: for bytes the caller has proved', () => {
+    const invalid = encodeGraph({
+      nodes: [unit('a.ts#f')],
+      edges: [call('a.ts#f', 'a.ts#f', [2, 1])],
+    });
+    expect(() => decodeGraph(invalid)).toThrow(/Invalid graph/);
+    expect(decodeGraph(invalid, { validate: false }).edges).toHaveLength(1);
+  });
+
   it('stores an unknown target once however many edges reach it', () => {
     const graph: Graph = {
       nodes: [unit('a.ts#f'), unit('a.ts#g')],
       edges: [unknown('a.ts#f', 'useState()'), unknown('a.ts#g', 'useState()')],
     };
     expect((JSON.parse(encodeGraph(graph)) as { texts: string[] }).texts).toEqual(['useState()']);
+  });
+
+  it("keeps a call's guarded lines, and checks they are some of its lines", () => {
+    const guarded: Graph = {
+      nodes: [unit('a.ts#f'), unit('a.ts#g')],
+      edges: [{ ...call('a.ts#f', 'a.ts#g', [2, 4]), guarded: [4] }],
+    };
+    expect(decodeGraph(encodeGraph(guarded))).toEqual(guarded);
+    // An edge with none encodes as before: no ninth field.
+    const plain = JSON.parse(encodeGraph(POLL)) as { edges: unknown[][] };
+    expect(plain.edges.every((edge) => edge.length === 8)).toBe(true);
+    expect(
+      validateGraph({
+        nodes: guarded.nodes,
+        edges: [{ ...call('a.ts#f', 'a.ts#g', [2, 4]), guarded: [3] }],
+      }),
+    ).toEqual([
+      'edge a.ts#f → a.ts#g: its guarded lines must be some of its lines, ascending, each once',
+    ]);
   });
 
   it('refuses another format, a bad index, and an invalid graph', () => {
@@ -215,11 +251,93 @@ describe('graphStats', () => {
       unknown: 1,
     });
     expect(stats.byEdgeKind.call).toBe(4);
-    // Every kind phase 6 can't fill yet names its phase (build plan, stage 1).
+    // Every kind not filled yet names its phase (build plan, stage 1); code units and decisions are filled.
     for (const [kind, count] of Object.entries(stats.byNodeKind)) {
-      if (kind !== 'code-unit')
-        expect(ARRIVES_IN[kind as keyof typeof ARRIVES_IN], kind).toBeGreaterThan(6);
-      else expect(count).toBe(4);
+      if (kind === 'code-unit') expect(count).toBe(4);
+      else if (kind !== 'decision') {
+        expect(ARRIVES_IN[kind as keyof typeof ARRIVES_IN], kind).toBeGreaterThan(7);
+      }
     }
+    expect(ARRIVES_IN).not.toHaveProperty('decision');
+    expect(ARRIVES_IN).not.toHaveProperty('branch');
+  });
+});
+
+describe('decisions (phase 7, ADR 0028)', () => {
+  const decision = (id: string, name: string, line: number): GraphNode => ({
+    id,
+    kind: 'decision',
+    name,
+    place: { path: 'src/send.ts', line, column: 3 },
+    unit: null,
+    change: 'unchanged',
+  });
+  const branch = (
+    from: string,
+    to: string | null,
+    label: string | null,
+    extra: Partial<GraphEdge> = {},
+  ): GraphEdge => ({
+    from,
+    to,
+    target: null,
+    kind: 'branch',
+    relation: label === null ? null : 'calls',
+    label,
+    provenance: 'resolved',
+    lines: [10],
+    ...extra,
+  });
+  const SEND: Graph = {
+    nodes: [
+      unit('src/send.ts#sendDocument', 5),
+      unit('src/send.ts#notify', 40),
+      decision('src/send.ts#sendDocument?1', 'envelope.status === DRAFT', 10),
+    ],
+    edges: [
+      // The call stays as it was; the flow draws it through its decision.
+      call('src/send.ts#sendDocument', 'src/send.ts#notify', [11]),
+      branch('src/send.ts#sendDocument', 'src/send.ts#sendDocument?1', null),
+      branch('src/send.ts#sendDocument?1', 'src/send.ts#notify', 'yes', { lines: [11] }),
+      branch('src/send.ts#sendDocument?1', null, 'no', {
+        target: 'prisma.envelope.update',
+        provenance: 'unknown',
+        lines: [13],
+      }),
+    ],
+  };
+
+  it('accepts a decision with branches in and out, and round-trips its labels', () => {
+    expect(validateGraph(SEND)).toEqual([]);
+    const back = decodeGraph(encodeGraph(SEND));
+    expect(back.edges.filter((e) => e.label !== null).map((e) => e.label)).toEqual(['no', 'yes']);
+    expect(graphStats(SEND).byNodeKind.decision).toBe(1);
+    expect(graphStats(SEND).byEdgeKind.branch).toBe(3);
+  });
+
+  it('says what breaks the branch rules', () => {
+    const broken: Graph = {
+      nodes: SEND.nodes,
+      edges: [
+        // Out of a decision with no outcome.
+        branch('src/send.ts#sendDocument?1', 'src/send.ts#notify', null, { relation: 'calls' }),
+        // From code, but not into a decision.
+        branch('src/send.ts#sendDocument', 'src/send.ts#notify', null),
+        // A label on a call.
+        call('src/send.ts#sendDocument', 'src/send.ts#notify', [11], { label: 'yes' }),
+      ],
+    };
+    expect(validateGraph(broken)).toEqual([
+      'edge src/send.ts#sendDocument?1 → src/send.ts#notify: a call needs calls or renders, and only a call has one',
+      'edge src/send.ts#sendDocument?1 → src/send.ts#notify: a branch out of a decision needs its outcome',
+      'edge src/send.ts#sendDocument → src/send.ts#notify: a branch from code goes into a decision, without a label',
+      'edge src/send.ts#sendDocument → src/send.ts#notify: only a branch has a label',
+    ]);
+  });
+
+  it('refuses a format 1 encoding', () => {
+    expect(() => decodeGraph('{"format":1,"nodes":[],"texts":[],"edges":[]}')).toThrow(
+      'Unsupported graph format 1',
+    );
   });
 });

@@ -5,6 +5,7 @@ import type {
   CallsResult,
   CodePosition,
   DefinitionResult,
+  DetailsResult,
   EngineResults,
   ReferencesResult,
   SemanticOp,
@@ -72,6 +73,8 @@ interface Pending {
 export interface SemanticClientOptions {
   readonly root: string;
   readonly typescriptPath: string;
+  /** Where the pass stores each file's units and details (phase 7, `FactsStore`). */
+  readonly factsFile?: string;
   readonly start: StartWorker;
   /** The project's files at the moment the worker starts (the agent's list). */
   readonly listFiles: () => Promise<readonly string[]>;
@@ -101,6 +104,15 @@ export class SemanticClient {
       (reason) => emptyAnswer(op, reason),
       this.#options.timeoutMs ?? ANSWER_TIMEOUT_MS,
     );
+  }
+
+  /** The graph id of the code unit at a place (phase 7): null when it isn't in a TypeScript or JavaScript file. */
+  unit(position: CodePosition): Promise<string | null | { readonly failed: string }> {
+    return this.#send(
+      (id) => ({ type: 'unit', id, ...position }),
+      (reason) => ({ failed: reason }),
+      this.#options.timeoutMs ?? ANSWER_TIMEOUT_MS,
+    ) as Promise<string | null | { readonly failed: string }>;
   }
 
   /** A graph pass (ADR 0027): the whole project the first time, then what changed since. */
@@ -152,6 +164,7 @@ export class SemanticClient {
         root: this.#options.root,
         files,
         typescriptPath: this.#options.typescriptPath,
+        ...(this.#options.factsFile === undefined ? {} : { factsFile: this.#options.factsFile }),
       });
       this.#ended = undefined;
       worker.on('message', (message) => {
@@ -199,5 +212,7 @@ export function emptyAnswer(op: SemanticOp, message: string): unknown {
     case 'callers':
     case 'callees':
       return { target: null, entries: [], complete: false, message } satisfies CallsResult;
+    case 'details':
+      return { details: null, message } satisfies DetailsResult;
   }
 }

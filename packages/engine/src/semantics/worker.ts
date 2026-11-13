@@ -2,8 +2,9 @@
 // whoever starts it, so running out of memory ends this thread and never the indexer or search.
 import { createRequire } from 'node:module';
 import { parentPort, workerData } from 'node:worker_threads';
-import { encodeGraph } from '@flowcanvas/graph-model';
+import { encodeGraph, validateGraph } from '@flowcanvas/graph-model';
 import type { CodePosition, SemanticOp } from '../protocol.js';
+import { FactsStore } from '../facts.js';
 import { SemanticService } from './semantic-service.js';
 import type { TypeScript } from './projects.js';
 
@@ -12,6 +13,8 @@ export interface WorkerStart {
   readonly files: readonly string[];
   /** Where typescript.js is: beside the bundle in a workspace, the package elsewhere. */
   readonly typescriptPath: string;
+  /** Where the pass stores each file's units and details (phase 7); none, nothing is stored. */
+  readonly factsFile?: string;
 }
 
 export type ToWorker =
@@ -21,7 +24,9 @@ export type ToWorker =
       readonly paths: readonly string[];
       readonly files?: readonly string[];
     }
-  | { readonly type: 'graph'; readonly id: number };
+  | { readonly type: 'graph'; readonly id: number }
+  /** The graph id of the code unit at a place (phase 7): a string, or null. */
+  | ({ readonly type: 'unit'; readonly id: number } & CodePosition);
 
 /** A graph pass's result across the thread: the graph as its encoding (one string is quick to send). */
 export interface GraphWire {
@@ -48,7 +53,13 @@ const port = parentPort;
 if (port !== null) {
   const start = workerData as WorkerStart;
   const ts = createRequire(import.meta.url)(start.typescriptPath) as TypeScript;
-  const service = new SemanticService({ ts, root: start.root, files: start.files });
+  const facts = start.factsFile === undefined ? undefined : new FactsStore(start.factsFile);
+  const service = new SemanticService({
+    ts,
+    root: start.root,
+    files: start.files,
+    ...(facts === undefined ? {} : { facts }),
+  });
   port.on('message', (message: ToWorker) => {
     if (message.type === 'changed') {
       service.changed(message.paths, message.files);
@@ -61,6 +72,9 @@ if (port !== null) {
           for (let tries = 0; tries < GRAPH_TRIES; tries += 1) {
             const pass = await service.graph(pause);
             if (pass === null) continue;
+            // Checked here, once, before it's saved: loading trusts what was checked (ADR 0028). A graph that breaks
+            // the schema is a fault in the pass, answered as a failed pass and never stored.
+            if (validateGraph(pass.graph, 1).length > 0) break;
             const wire: GraphWire = {
               encoded: encodeGraph(pass.graph),
               files: pass.files,
@@ -82,13 +96,17 @@ if (port !== null) {
     try {
       const { path, line, column } = message;
       const result =
-        message.op === 'definition'
-          ? service.definition(path, line, column)
-          : message.op === 'references'
-            ? service.references(path, line, column)
-            : message.op === 'callers'
-              ? service.callers(path, line, column)
-              : service.callees(path, line, column);
+        message.type === 'unit'
+          ? service.unitAt(path, line, column)
+          : message.op === 'definition'
+            ? service.definition(path, line, column)
+            : message.op === 'references'
+              ? service.references(path, line, column)
+              : message.op === 'callers'
+                ? service.callers(path, line, column)
+                : message.op === 'callees'
+                  ? service.callees(path, line, column)
+                  : service.details(path, line, column);
       reply = { type: 'answer', id: message.id, result };
     } catch {
       // Never the error itself: it could name paths or hold file content.

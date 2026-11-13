@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { gzipSync } from 'node:zlib';
+import { zstdCompressSync } from 'node:zlib';
 import { encodeGraph, type Graph } from '@flowcanvas/graph-model';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SNAPSHOTS_KEPT, SNAPSHOT_STORE_FORMAT, SnapshotStore } from './snapshots.js';
@@ -24,6 +24,7 @@ const graphOf = (name: string): Graph => ({
       to: null,
       target: 'prisma.poll.create',
       kind: 'call',
+      label: null,
       relation: 'calls',
       provenance: 'unknown',
       lines: [2],
@@ -96,14 +97,15 @@ describe('SnapshotStore', () => {
     const store = new SnapshotStore(file);
     const { version } = store.save(encodeGraph(graphOf('ok')), details).meta;
     store.close();
-    // Corrupted in place, as a broken disk could: an edge from a node that isn't there.
+    // Changed in place, as a broken disk could.
     const raw = new DatabaseSync(file);
     raw
       .prepare('UPDATE snapshots SET data = ? WHERE version = ?')
-      .run(gzipSync('{"format":1,"nodes":[],"texts":["x"],"edges":[[0,-1,0,0,0,4,[1]]]}'), version);
+      .run(zstdCompressSync('{"format":2,"paths":[],"nodes":[],"texts":[],"edges":[]}'), version);
     raw.close();
     const reopened = new SnapshotStore(file);
-    expect(() => reopened.load(version)).toThrow('Bad node index 0');
+    // Not the bytes the version is named by: refused, whatever they decode to.
+    expect(() => reopened.load(version)).toThrow('The stored version of the graph is damaged.');
     reopened.close();
   });
 });

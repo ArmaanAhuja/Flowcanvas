@@ -1,7 +1,7 @@
 import {
   EngineProblem,
   parseEngineRequest,
-  SEMANTIC_OPS,
+  TYPESCRIPT_OPS,
   type EngineRequest,
   type EngineResponse,
 } from '@flowcanvas/engine/protocol';
@@ -22,8 +22,9 @@ const PROVIDER_STATUS: Record<ProviderErrorKind, 409 | 502 | 503> = {
 
 /**
  * The project index (phase 4, ADR 0025): /api/projects/:projectId/workspace/index/{status,search}; (phase 5)
- * /index/{definition,references,callers,callees}; and (phase 6, ADR 0027) /index/graph, the flow graph's state and
- * its latest version's counts. Only the project's owner, only while the workspace runs.
+ * /index/{definition,references,callers,callees}; (phase 6, ADR 0027) /index/graph, the flow graph's state and
+ * its latest version's counts; and (phase 7, ADR 0028) /index/flow, the flow from the function at a place. Only the
+ * project's owner, only while the workspace runs.
  *
  * Indexing is not activity (decisions log, 9 Nov 2026): the page asks for the status while it shows progress,
  * and that must never keep a workspace awake. The graph's state is asked for the same way, while it's built. A search is the person using the project, like opening a file,
@@ -96,8 +97,9 @@ export function indexRoutes(deps: WorkspaceDependencies) {
     );
   });
 
-  // TypeScript's answers about the name at a place (phase 5, ADR 0026): the person asking, so activity.
-  for (const op of SEMANTIC_OPS) {
+  // TypeScript's answers about the name at a place (phase 5, ADR 0026), and the flow from the function at a place
+  // (phase 7, ADR 0028): the person asking, so activity.
+  for (const op of TYPESCRIPT_OPS) {
     index.get(`/index/${op}`, (c) =>
       ask(
         c,

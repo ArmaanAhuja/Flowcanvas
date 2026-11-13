@@ -5,18 +5,27 @@ import { heap } from './v8.js';
 import { basename, dirname, join, relative, sep } from 'node:path';
 import type * as TS from 'typescript';
 import {
+  PARTLY,
   SEMANTIC_LIMITS,
   type CallEntry,
   type CallsResult,
   type CodeItem,
   type CodePosition,
   type DefinitionResult,
+  type DetailsResult,
   type ReferencesResult,
   type Relation,
-  type SymbolKindName,
 } from '../protocol.js';
 import { assemble, GRAPH_FILES_BETWEEN_PAUSES, GRAPH_HEAP_SHARE, type GraphPass } from './graph.js';
-import { walkFile, type FileGraph, type GraphContext } from './graph-pass.js';
+import { contentHash, type FileFacts } from '../facts.js';
+import { detailsAt, fileFacts } from './details.js';
+import {
+  projectPath,
+  unitNodeAt,
+  walkFile,
+  type FileGraph,
+  type GraphContext,
+} from './graph-pass.js';
 import { createProjectHost, type ProjectHost } from './host.js';
 import {
   callableAt,
@@ -26,6 +35,7 @@ import {
   isFixedCallee,
   isNamedCallable,
   kindOfDeclaration,
+  kindOf,
 } from './callables.js';
 import { findPackages, ProjectModel, type ProjectConfig, type TypeScript } from './projects.js';
 
@@ -37,13 +47,19 @@ export interface SemanticOptions {
   readonly files: readonly string[];
   /** Release language services when the heap passes this share of its limit (ADR 0026 §2). */
   readonly memoryShare?: number;
+  /** Where the pass stores each file's units and details as it walks it (phase 7): `FactsStore`. */
+  readonly facts?: FactsSink;
+}
+
+/** What the pass writes each file's facts to. */
+export interface FactsSink {
+  put(path: string, facts: FileFacts | null): void;
+  flush(): void;
+  keepOnly(paths: ReadonlySet<string>): void;
 }
 
 /** Said when part of the project couldn't be looked at. */
-export const PARTLY = {
-  memory: 'Part of this project is too large to look at here, so some callers may be missing.',
-  limit: 'Showing the first results only.',
-} as const;
+export { PARTLY } from '../protocol.js';
 
 const SOURCE = /\.(?:ts|tsx|js|jsx|mts|cts|mjs|cjs)$/;
 const DECLARATION = /\.d\.[cm]?ts$/;
@@ -67,6 +83,7 @@ export class SemanticService {
   readonly #versions = new Map<string, number>();
   #clock = 0;
   /** Set when a service was released, or couldn't be built, for memory: answers say they may be partial. */
+  readonly #facts: FactsSink | undefined;
   #squeezed = false;
   /** The flow graph, by walked file (ADR 0027 §1): a file's code units and the calls they make. */
   #graphFiles = new Map<string, FileGraph>();
@@ -83,6 +100,7 @@ export class SemanticService {
       options.ts.getDefaultLibFilePath({ target: options.ts.ScriptTarget.ESNext }),
     );
     this.#memoryShare = options.memoryShare ?? 0.7;
+    this.#facts = options.facts;
     this.#files = options.files;
     this.#registry = options.ts.createDocumentRegistry(true, options.root);
     ({ host: this.#host, model: this.#model } = this.#build(options.files));
@@ -142,12 +160,7 @@ export class SemanticService {
     filesBetweenPauses = GRAPH_FILES_BETWEEN_PAUSES,
   ): Promise<GraphPass | null> {
     const generation = this.#generation;
-    const context: GraphContext = {
-      ts: this.#ts,
-      root: this.#root,
-      inProject: (file) => this.#inProject(file),
-      builtIn: (file) => this.#builtIn(file),
-    };
+    const context = this.#context();
     const full = !this.#graphBuilt;
     const changed = [...this.#graphPending];
     this.#graphPending.clear();
@@ -194,9 +207,22 @@ export class SemanticService {
         const source = program.getSourceFile(file);
         seen.add(file);
         if (source === undefined) continue;
-        files.set(file, walkFile(context, program, source));
+        const part = walkFile(context, program, source);
+        // The graph's part is held for the next pass; the calls go to the store with the rest of the facts.
+        files.set(file, {
+          nodes: part.nodes,
+          targets: part.targets,
+          edges: part.edges,
+          builtInCalls: part.builtInCalls,
+        });
+        // Worked out now, while the program is here, and stored rather than held (owner, 13 Nov 2026).
+        this.#facts?.put(projectPath(context, file), {
+          hash: contentHash(source.text),
+          units: fileFacts(context, program, source, part),
+        });
         walked += 1;
         if (walked % filesBetweenPauses === 0) {
+          this.#facts?.flush();
           await pause();
           if (this.#generation !== generation) {
             // The structure changed: start again from everything.
@@ -208,6 +234,16 @@ export class SemanticService {
       }
       if (!warm) this.#release(config);
     }
+    // Files changed but not walked again are gone (deleted, or in no program): so are their facts. After a
+    // whole-project pass, only the files it walked keep theirs.
+    if (full) {
+      this.#facts?.keepOnly(new Set([...files.keys()].map((file) => projectPath(context, file))));
+    } else {
+      for (const file of changed) {
+        if (!files.has(file)) this.#facts?.put(projectPath(context, file), null);
+      }
+    }
+    this.#facts?.flush();
     this.#graphFiles = files;
     this.#graphBuilt = true;
     return assemble(files, complete);
@@ -293,6 +329,37 @@ export class SemanticService {
         yield { service, program, source };
       }
     }
+  }
+
+  #context(): GraphContext {
+    return {
+      ts: this.#ts,
+      root: this.#root,
+      inProject: (file) => this.#inProject(file),
+      builtIn: (file) => this.#builtIn(file),
+    };
+  }
+
+  /** What the inspector shows of the code unit at a place (phase 7, ADR 0028 §3). */
+  details(path: string, line: number, column: number): DetailsResult {
+    const file = join(this.#root, path);
+    for (const { program, source } of this.#holding(this.#model.configsFor(file), file)) {
+      const offset = this.#offset(source, line, column);
+      return { details: detailsAt(this.#context(), program, source, offset), message: null };
+    }
+    return { details: null, message: NO_DETAILS };
+  }
+
+  /**
+   * The code unit a place is in, by the graph's id (phase 7): where a flow starts when it's opened from inside a
+   * function. Null when no program has the file (it isn't TypeScript or JavaScript).
+   */
+  unitAt(path: string, line: number, column: number): string | null {
+    const file = join(this.#root, path);
+    for (const { source } of this.#holding(this.#model.configsFor(file), file)) {
+      return unitNodeAt(this.#context(), source, this.#offset(source, line, column)).id;
+    }
+    return null;
   }
 
   // Places.
@@ -481,7 +548,7 @@ export class SemanticService {
     const entries = new Map<string, CallEntry & { sites: CodePosition[] }>();
     const starts = new Map<string, Set<number>>();
     // Where TypeScript's hierarchy already put a call (its spans start where the callee expression starts).
-    const covered = new Set<number>();
+    const covered = new Set<string>();
     let complete = true;
     const add = (
       key: string,
@@ -517,7 +584,7 @@ export class SemanticService {
     )) {
       const to = this.#item(program, call.to);
       for (const span of call.fromSpans) {
-        covered.add(span.start);
+        covered.add(`${String(span.start)}:${String(span.start + span.length)}`);
         const relation = this.#relation(source, span.start);
         add(
           keyOf(to, call.to.file, call.to.selectionSpan.start, relation),
@@ -532,7 +599,10 @@ export class SemanticService {
     // those it resolves to something its hierarchy doesn't model, such as a constant holding a function (`nanoid`)
     // or a built-in declared as a variable (`Boolean`, `new Error`).
     for (const site of this.#callSites(program, source, item)) {
-      if (covered.has(site.start)) continue;
+      // A call is the hierarchy's when its callee covers the same text, not only the same start:
+      // `getStripe().subscriptions.update()` starts where `getStripe()` does, and was dropped (found by comparing
+      // with the answers the pass stores, phase 7).
+      if (covered.has(`${String(site.start)}:${String(site.end)}`)) continue;
       const declared = site.declaration;
       if (declared === null) {
         add(
@@ -631,6 +701,7 @@ export class SemanticService {
         if (!skip) {
           found.push({
             start: callee.getStart(source),
+            end: callee.getEnd(),
             text: calleeText(ts, callee, source),
             relation: 'calls',
             declaration: declarationOf(name),
@@ -643,6 +714,7 @@ export class SemanticService {
         if (!intrinsic) {
           found.push({
             start: tag.getStart(source),
+            end: tag.getEnd(),
             text: calleeText(ts, tag, source),
             relation: 'renders',
             declaration: declarationOf(name),
@@ -664,6 +736,8 @@ export class SemanticService {
 /** A call in a function's body, and the declaration the compiler resolves its callee to (null: it can't). */
 interface CallSite {
   readonly start: number;
+  /** Where its callee ends: with `start`, the text TypeScript's hierarchy covers. */
+  readonly end: number;
   readonly text: string;
   readonly relation: Relation;
   readonly declaration: {
@@ -674,6 +748,9 @@ interface CallSite {
     readonly container: string | null;
   } | null;
 }
+
+/** Where the file isn't in any program: not TypeScript or JavaScript. */
+export const NO_DETAILS = 'Details are shown for code in TypeScript or JavaScript files.';
 
 function nothingCallable(): CallsResult {
   return {
@@ -691,33 +768,3 @@ const containerOf = (name: string | undefined): string | null =>
     : cut(name);
 
 /** TypeScript's element kinds, in the index's words; components are PascalCase functions (as in ADR 0024). */
-function kindOf(ts: TypeScript, kind: TS.ScriptElementKind, name: string): SymbolKindName | null {
-  const K = ts.ScriptElementKind;
-  switch (kind) {
-    case K.functionElement:
-    case K.localFunctionElement:
-    case K.constElement:
-    case K.letElement:
-    case K.variableElement:
-    case K.localVariableElement:
-      return /^[A-Z]/.test(name) ? 'component' : 'function';
-    case K.memberFunctionElement:
-    case K.constructorImplementationElement:
-    case K.memberGetAccessorElement:
-    case K.memberSetAccessorElement:
-      return 'method';
-    case K.classElement:
-    case K.localClassElement:
-      return 'class';
-    case K.interfaceElement:
-      return 'interface';
-    case K.typeElement:
-      return 'type';
-    case K.enumElement:
-      return 'enum';
-    case K.moduleElement:
-      return null;
-    default:
-      return null;
-  }
-}

@@ -1,4 +1,5 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { FakeWorkspace, runningProject } from './fake-workspace.js';
 import { watchForPageProblems } from './support.js';
 
 // Phase 6 · Try it: Labs → Graph stats shows node and edge counts for each demo fork. In a real browser under the
@@ -7,19 +8,7 @@ import { watchForPageProblems } from './support.js';
 // Rallly's counts from the engine itself (ADR 0027 addendum); the engine's graphs of the four forks are proven in real
 // workspaces by the Docker corpus test (workspace/host/src/corpus.docker.test.ts).
 
-const PROJECT = {
-  id: '3f1c0d2e-0000-4000-8000-0000000000c6',
-  name: 'Rallly',
-  repoUrl: 'https://github.com/ArmaanAhuja-7777/rallly',
-  repoCommit: null,
-  createdAt: '2026-11-12T09:00:00.000Z',
-  workspace: {
-    id: 'w-6',
-    state: 'running',
-    stateChangedAt: '2026-11-12T09:00:00.000Z',
-    failure: null,
-  },
-};
+const PROJECT = runningProject('3f1c0d2e-0000-4000-8000-0000000000c6', '2026-11-12T09:00:00.000Z');
 
 const READY = {
   state: 'ready',
@@ -52,73 +41,36 @@ const READY = {
   },
 };
 
-class FakeWorkspace {
-  /** The graph is being built for this many answers, then ready. */
-  buildingAnswers = 1;
-  graphAsked = 0;
-
-  constructor(page: Page) {
-    void page.context().route('**/api/**', (route) => this.answer(route));
-    void page.context().routeWebSocket(/\/workspace\/events$/, () => undefined);
-  }
-
-  private reply(route: Route, body: unknown, status = 200) {
-    return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
-  }
-
-  private answer(route: Route) {
-    const url = new URL(route.request().url());
-    if (url.pathname === '/api/me') {
-      return this.reply(route, {
-        user: { id: 'u-1', email: 'ada@example.com', displayName: 'Ada', role: 'member' },
-        signIn: 'available',
-        providers: ['github'],
-      });
-    }
-    if (url.pathname === '/api/projects')
-      return this.reply(route, { projects: [PROJECT], workspacesAvailable: true });
-    if (url.pathname === '/api/usage') {
-      return this.reply(route, {
+/** A fake workspace whose graph is being built for one answer, then ready; it counts how often it's asked. */
+function fakeWorkspace(page: Page) {
+  const graph = { buildingAnswers: 1, asked: 0 };
+  new FakeWorkspace(page, {
+    project: PROJECT,
+    answers: {
+      '/api/usage': () => ({
         usage: {
           periodStart: '2026-11-01T00:00:00.000Z',
           resetsAt: '2026-12-01T00:00:00.000Z',
           workspaceSeconds: 0,
           storageByteHours: 0,
         },
-      });
-    }
-    if (url.pathname.endsWith('/workspace/index/graph')) {
-      this.graphAsked += 1;
-      if (this.buildingAnswers > 0) {
-        this.buildingAnswers -= 1;
-        return this.reply(route, { state: 'building', message: null, snapshot: null });
-      }
-      return this.reply(route, READY);
-    }
-    if (url.pathname.endsWith('/workspace/index/status')) {
-      return this.reply(route, {
-        state: 'ready',
-        done: 1958,
-        total: 1958,
-        files: 1958,
-        byStatus: { parsed: 1958, 'no-grammar': 0, 'too-large': 0, binary: 0, unreadable: 0 },
-        symbols: 5874,
-        withSyntaxErrors: 0,
-        partlyRead: 0,
-        lastFullMs: 1015,
-        message: null,
-      });
-    }
-    if (url.pathname.endsWith('/workspace/tree'))
-      return this.reply(route, { files: [], truncated: false, source: 'git' });
-    if (url.pathname.endsWith('/workspace/journal')) return this.reply(route, { entries: [] });
-    return this.reply(route, { error: 'not found' }, 404);
-  }
+      }),
+      '/workspace/index/graph': () => {
+        graph.asked += 1;
+        if (graph.buildingAnswers > 0) {
+          graph.buildingAnswers -= 1;
+          return { state: 'building', message: null, snapshot: null };
+        }
+        return READY;
+      },
+    },
+  });
+  return graph;
 }
 
 test('phase 6: Labs → Graph stats shows the graph’s node and edge counts', async ({ page }) => {
   const watch = watchForPageProblems(page);
-  const workspace = new FakeWorkspace(page);
+  const graph = fakeWorkspace(page);
   await page.setViewportSize({ width: 1440, height: 900 });
 
   await test.step('Turn on Graph stats in Labs: off until then, and the graph isn’t asked for', async () => {
@@ -127,11 +79,11 @@ test('phase 6: Labs → Graph stats shows the graph’s node and edge counts', a
     const labs = page.getByRole('dialog', { name: 'Labs' });
     const graphStats = labs.getByRole('switch', { name: /Graph stats/ });
     await expect(graphStats).not.toBeChecked();
-    await expect(labs).toContainText('Finished in phase 7.');
+    await expect(labs).toContainText('Finished in phase 12.');
     await graphStats.click();
     await expect(graphStats).toBeChecked();
     await page.keyboard.press('Escape');
-    expect(workspace.graphAsked).toBe(0);
+    expect(graph.asked).toBe(0);
   });
 
   await test.step('Open the project: the Details tab says the graph is being built', async () => {

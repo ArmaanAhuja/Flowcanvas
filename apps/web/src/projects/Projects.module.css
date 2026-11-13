@@ -1,4 +1,4 @@
-/* The projects section of the version page, until the phase 2 start screen. */
+/* The projects list at `/`, until the start screen (decisions log, 7 Nov 2026: it gets a phase of its own). */
 .section {
   display: flex;
   flex-direction: column;

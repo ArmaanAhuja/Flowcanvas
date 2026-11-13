@@ -1,4 +1,4 @@
-/* A project's workspace on the version page (design brief 29; Figma 32, 33), until the phase 2 top bar. */
+/* A project's workspace on the projects list (design brief 29; Figma 32, 33). The project page shows it in its top bar. */
 .workspace {
   display: flex;
   flex-direction: column;

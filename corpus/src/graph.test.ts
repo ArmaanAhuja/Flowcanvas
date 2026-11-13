@@ -89,6 +89,41 @@ describe('checkGraph', () => {
     });
   });
 
+  it('compares calls only: a decision’s branches repeat calls already there (phase 7)', () => {
+    const withBranches: LabelGraph = {
+      nodes: [
+        ...graph.nodes,
+        { id: 'src/poll.ts#createPoll?1', name: 'draft', place: place('src/poll.ts', 4) },
+      ],
+      edges: [
+        ...graph.edges,
+        {
+          kind: 'branch',
+          from: 'src/poll.ts#createPoll',
+          to: 'src/poll.ts#createPoll?1',
+          target: null,
+          relation: null,
+          provenance: 'resolved',
+          lines: [4],
+        },
+        {
+          kind: 'branch',
+          from: 'src/poll.ts#createPoll?1',
+          to: 'src/db.ts#save',
+          target: null,
+          relation: 'calls',
+          provenance: 'resolved',
+          lines: [5],
+        },
+      ],
+    };
+    expect(checkGraph(withBranches, label)).toEqual({
+      node: 'src/poll.ts#createPoll',
+      callers: none,
+      callees: none,
+    });
+  });
+
   it('says what differs: no node at the place, a missing caller, an edge drawn as resolved when it isn’t', () => {
     expect(checkGraph({ nodes: [], edges: [] }, label)).toMatchObject({
       node: null,

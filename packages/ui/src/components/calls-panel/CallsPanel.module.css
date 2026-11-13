@@ -185,3 +185,21 @@
   line-height: var(--text-caption-line-height);
   color: var(--color-text-muted);
 }
+
+/* An action beside the place (phase 7's Show flow): words in Small, a link's underline. */
+.action {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  line-height: var(--text-small-line-height);
+  color: var(--color-text-secondary);
+  text-decoration: underline;
+  text-decoration-color: var(--color-border-strong);
+  cursor: pointer;
+}
+
+.action:hover {
+  color: var(--color-text-primary);
+}

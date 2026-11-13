@@ -74,11 +74,22 @@ export interface GraphEdge {
   /** For an unknown edge: the call as written (`prisma.poll.create`), drawn as an open stub. */
   readonly target: string | null;
   readonly kind: EdgeKind;
-  /** For a call: calls or renders. */
+  /** For a call, or a branch reaching a call: calls or renders. */
   readonly relation: Relation | null;
+  /**
+   * For a branch out of a decision (phase 7, ADR 0028): the outcome it's taken on ("yes", "no", "case 'DRAFT'",
+   * "error"). A branch into a decision, and every other edge, has none.
+   */
+  readonly label: string | null;
   readonly provenance: Provenance;
   /** Lines in the `from` node's file where it happens, ascending. */
   readonly lines: readonly number[];
+  /**
+   * On a call: those of its lines where every call sits under a decision of its unit (a flow draws them through the
+   * decision, not straight). Absent when there are none. Said per line by the pass, since `hasId(a) && hasId(b)` has
+   * one call that always happens and one that's guarded on the same line (phase 7's labels found it).
+   */
+  readonly guarded?: readonly number[];
 }
 
 export interface Graph {
@@ -104,4 +115,10 @@ export interface Snapshot {
 
 /** An edge's identity: two edges with the same key are the same connection. */
 export const edgeKey = (edge: GraphEdge): string =>
-  [edge.from, edge.to ?? `?${edge.target ?? ''}`, edge.kind, edge.relation ?? ''].join('\u0000');
+  [
+    edge.from,
+    edge.to ?? `?${edge.target ?? ''}`,
+    edge.kind,
+    edge.relation ?? '',
+    edge.label ?? '',
+  ].join('\u0000');

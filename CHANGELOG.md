@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-11-14 — Phase 7: flows and the inspector
+
+Pick any function and see where it leads: every function it calls, and theirs, laid out top to bottom on the canvas, with the conditions that decide each branch. Click a node to read what its code reveals, and open its code at that line. Every line on the canvas says how it's known, and calls that can't be resolved are shown as such, never guessed. Workspaces still run on your own computer (`pnpm dev`).
+
+### Try it
+
+1. Open a project with its workspace running, and find a function with **⌘K** (or open its file in the Code view).
+2. **Show its flow:** choose it under Flows in ⌘K, right-click its name and choose **Show flow**, or use **Show flow** in the Calls tab.
+3. Read the canvas: each function with its file and line; small diamonds for the `if`, `switch`, ternaries and `catch` that decide a call, with their outcomes on the lines; one open stub per function for the calls that can't be resolved; the counts at the top left.
+4. Click a function: the inspector's **Details** show its signature, inputs and output, its decisions, what it throws and awaits, and its unresolved calls. **Open code** goes to its line.
+
+### Added
+
+- **Flows on the canvas:** downstream from any function, up to 60 functions, then a stub saying how many more there are; laid out by ELK off the page's main thread.
+- **Decisions in the graph:** the conditions that guard each call, so a flow shows when a call happens, not only that it can.
+- **The node inspector** for functions and decisions, from what the engine read in the workspace.
+- **Three ways in:** ⌘K's Flows, the right-click menu, and the Calls tab.
+- **Faster answers:** each file's functions, details and calls are stored when the graph is built, so flows and details answer in milliseconds, and the Calls tab answers from them too, asking TypeScript only for the callers of a class's members.
+- **Design system:** decision nodes, open stubs, the node inspector and the Calls tab's Show flow, in the catalogue.
+
+### Changed
+
+- **Flow nodes** show their folder, file and line, as in the designs, and long names wrap at their words.
+
+### Fixed
+
+- **A call that always happens** is drawn even when a guarded call to the same function shares its line.
 ## [0.10.0] — 2026-11-12 — Phase 6: the graph model
 
 Each project's code becomes a flow graph inside its workspace: every function, method, component and class, and every call between them, each marked as proven by the compiler or not known, never guessed. Each version of the graph is saved and can be compared with the last. It's what the canvas will draw from the next phase. Workspaces still run on your own computer (`pnpm dev`).

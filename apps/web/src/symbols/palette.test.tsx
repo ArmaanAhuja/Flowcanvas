@@ -7,8 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LabsProvider } from '../labs/LabsProvider';
 import type { Project } from '../projects/api';
 import { ProjectPage } from '../project/ProjectPage';
+import { fakeApi, jsdomLayout, reply } from '../test/fake-api';
 import type { IndexStatus, SymbolResult } from './api';
 import { INDEX_TEXT } from './texts';
+
+// The whole project page renders here (React Flow, the editor, the dialogs): about 1 s a test alone, past 5 s when
+// every package's tests share the laptop's cores in `pnpm test` (found in phase 7, once flows added ELK's tests to
+// the run). The work is what's tested, so the limit is set for it.
+vi.setConfig({ testTimeout: 15_000 });
 
 const V1 = '1'.repeat(64);
 const POLL_TS = '// polls\n\nexport function createPoll() {}\n';
@@ -49,46 +55,31 @@ let statusRequests: number;
 let searches: string[];
 let searchAnswer: { status: number; body: unknown };
 
-function fakeApi(state: 'running' | 'sleeping' = 'running'): typeof fetch {
-  return (input) => {
-    const url = new URL(
-      input instanceof Request ? input.url : input.toString(),
-      'https://flowcanvas.example',
-    );
-    const json = (body: unknown, code = 200) =>
-      Promise.resolve(Response.json(body, { status: code }));
-    if (url.pathname === '/api/projects')
-      return json({ projects: [project(state)], workspacesAvailable: true });
-    if (url.pathname.endsWith('/workspace/index/status')) {
+const fakePaletteApi = (state: 'running' | 'sleeping' = 'running') =>
+  fakeApi(project(state), {
+    '/workspace/index/status': () => {
       statusRequests += 1;
       // The last one repeats: the index stays where it got to.
-      return json(statuses.length > 1 ? statuses.shift() : statuses[0]);
-    }
-    if (url.pathname.endsWith('/workspace/index/search')) {
+      return statuses.length > 1 ? statuses.shift() : statuses[0];
+    },
+    '/workspace/index/search': (url) => {
       searches.push(url.searchParams.get('q') ?? '');
-      return json(searchAnswer.body, searchAnswer.status);
-    }
-    if (url.pathname.endsWith('/workspace/tree'))
-      return json({ files: ['src/poll.ts', 'README.md'], truncated: false });
-    if (url.pathname.endsWith('/workspace/file')) {
-      return url.searchParams.get('path') === 'src/poll.ts'
-        ? json({ content: POLL_TS, encoding: 'utf8', version: V1, size: POLL_TS.length })
-        : json({ error: 'There’s nothing at that path.', code: 'not_found' }, 404);
-    }
-    if (url.pathname.endsWith('/workspace/journal/entry'))
-      return json({ error: 'none', code: 'not_found' }, 404);
-    return json({});
-  };
-}
+      return reply(searchAnswer.body, searchAnswer.status);
+    },
+    '/workspace/tree': () => ({ files: ['src/poll.ts', 'README.md'], truncated: false }),
+    '/workspace/file': (url) =>
+      url.searchParams.get('path') === 'src/poll.ts'
+        ? { content: POLL_TS, encoding: 'utf8', version: V1, size: POLL_TS.length }
+        : reply({ error: 'There’s nothing at that path.', code: 'not_found' }, 404),
+    '/workspace/journal/entry': () => reply({ error: 'none', code: 'not_found' }, 404),
+  });
 
 beforeEach(() => {
   statuses = [status('ready', 2, 2)];
   statusRequests = 0;
   searches = [];
   searchAnswer = { status: 200, body: { symbols: [CREATE_POLL], ms: 2 } };
-  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(248);
-  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
-  Element.prototype.scrollIntoView = () => undefined;
+  jsdomLayout();
 });
 afterEach(() => {
   cleanup();
@@ -110,7 +101,7 @@ describe('the index’s progress', () => {
     // Indexing until the test says it's ready: the steps don't depend on how fast this machine is (CI's busy
     // runner once took longer than one answer to show the chip, phase 5 milestone A).
     statuses = [status('indexing', 1240, 2031)];
-    renderPage(fakeApi());
+    renderPage(fakePaletteApi());
     const chips = await screen.findAllByText('Indexing 61%', {}, { timeout: 10_000 });
     // Under the Entry points title and over the canvas (design brief, "Still indexing").
     expect(chips).toHaveLength(2);
@@ -141,7 +132,7 @@ describe('the index’s progress', () => {
         message: 'Indexing stopped. Reopen the project to try again.',
       },
     ];
-    renderPage(fakeApi());
+    renderPage(fakePaletteApi());
     const chips = await screen.findAllByText(INDEX_TEXT.stopped);
     expect(chips[0]?.getAttribute('title')).toBe(
       'Indexing stopped. Reopen the project to try again.',
@@ -149,7 +140,7 @@ describe('the index’s progress', () => {
   });
 
   it('asks nothing while the workspace isn’t running', async () => {
-    renderPage(fakeApi('sleeping'));
+    renderPage(fakePaletteApi('sleeping'));
     await screen.findByText('Rallly');
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(statusRequests).toBe(0);
@@ -159,7 +150,7 @@ describe('the index’s progress', () => {
 describe('⌘K', () => {
   it('opens from the keyboard and from the top bar’s search', async () => {
     const user = userEvent.setup();
-    renderPage(fakeApi());
+    renderPage(fakePaletteApi());
     await screen.findByText('Rallly');
     await user.keyboard('{Control>}k{/Control}');
     expect(await palette()).toBeTruthy();
@@ -177,7 +168,7 @@ describe('⌘K', () => {
   // busy runner (phase 6). The steps are what's tested, so the limit is set for them.
   it('opens a symbol in the Code view at its line (the Try it)', async () => {
     const user = userEvent.setup();
-    renderPage(fakeApi());
+    renderPage(fakePaletteApi());
     await screen.findByText('Rallly');
     await user.keyboard('{Control>}k{/Control}');
     await palette();
@@ -217,7 +208,7 @@ describe('⌘K', () => {
       body: { error: 'The project index stopped. Reopen the project to start it again.' },
     };
     const user = userEvent.setup();
-    renderPage(fakeApi());
+    renderPage(fakePaletteApi());
     await screen.findByText('Rallly');
     await user.keyboard('{Control>}k{/Control}');
     await palette();
@@ -229,7 +220,7 @@ describe('⌘K', () => {
 
   it('says to open the workspace when it isn’t running', async () => {
     const user = userEvent.setup();
-    renderPage(fakeApi('sleeping'));
+    renderPage(fakePaletteApi('sleeping'));
     await screen.findByText('Rallly');
     await user.keyboard('{Control>}k{/Control}');
     await palette();

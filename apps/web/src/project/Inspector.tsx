@@ -32,14 +32,20 @@ type InspectorTab = 'details' | 'calls';
 export function Inspector({
   calls,
   details,
+  selected,
   onViewChange,
   onOpen,
+  onShowFlow,
 }: {
   readonly calls: CallsState;
-  /** The Details tab: nothing selectable yet, so its empty state, or Labs → Graph stats (phase 6). */
+  /** The Details tab: what's selected in a flow (phase 7), Labs → Graph stats (phase 6), or its empty state. */
   readonly details: ReactNode;
+  /** Changes each time something is selected in a flow: the Details tab comes into view. */
+  readonly selected: number;
   readonly onViewChange: (view: CallsView) => void;
   readonly onOpen: (place: CallPlace) => void;
+  /** The Calls tab's "Show flow" (phase 7). */
+  readonly onShowFlow: (place: CallPlace) => void;
 }) {
   const { setOpen } = useShell();
   const [tab, setTab] = useState<InspectorTab>('details');
@@ -50,6 +56,13 @@ export function Inspector({
     setTab('calls');
     setOpen('right', true);
   }, [calls.asked, setOpen]);
+  const seenSelection = useRef(selected);
+  useEffect(() => {
+    if (selected === seenSelection.current) return;
+    seenSelection.current = selected;
+    setTab('details');
+    setOpen('right', true);
+  }, [selected, setOpen]);
 
   return (
     <section className={styles.panel} aria-labelledby="inspector">
@@ -74,6 +87,7 @@ export function Inspector({
               references={calls.references}
               message={calls.message}
               onOpen={onOpen}
+              onShowFlow={onShowFlow}
             />
           ) : (
             details

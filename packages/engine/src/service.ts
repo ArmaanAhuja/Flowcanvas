@@ -1,7 +1,16 @@
 // The engine as a service in the workspace (phase 4 step 3, ADR 0025): a full index when it starts, then
 // re-indexing as the watcher reports changes, and answers to status and search. Its files and watcher are
 // passed in, so tests run it without a container.
-import { graphStats } from '@flowcanvas/graph-model';
+import {
+  FLOW_MAX_NODES,
+  buildFlow,
+  graphStats,
+  indexGraph,
+  placeKey,
+  type Flow,
+  type Graph,
+  type GraphIndex,
+} from '@flowcanvas/graph-model';
 import type { WatchEvent } from '@flowcanvas/workspace-agent/protocol';
 import type { Indexer } from './indexer.js';
 import type {
@@ -13,11 +22,22 @@ import type {
   GraphSnapshotInfo,
   GraphState,
   GraphStatus,
+  FlowResult,
+  NodeDetails,
   SearchResult,
   SemanticOp,
 } from './protocol.js';
-import { ENGINE_PROTOCOL } from './protocol.js';
+import {
+  ENGINE_LIMITS,
+  ENGINE_PROTOCOL,
+  PARTLY,
+  plainEntry,
+  SEMANTIC_LIMITS,
+  type CallEntry,
+  type CallsResult,
+} from './protocol.js';
 import { emptyAnswer, GRAPH_FAILED } from './semantics/client.js';
+import type { UnitFacts } from './semantics/details.js';
 import type { GraphWire } from './semantics/worker.js';
 import type { SnapshotStore } from './snapshots.js';
 import type { IndexStore } from './store.js';
@@ -37,6 +57,24 @@ export interface EngineServiceOptions {
   readonly snapshots?: SnapshotStore;
   /** After changes are indexed, the graph waits this long for more before it's brought up to date. */
   readonly graphDelayMs?: number;
+  /**
+   * Each file's units and details, stored by the pass (phase 7, `FactsStore`): flows from inside a function and the
+   * inspector answer from it, for a file still the text they came from (the store checks).
+   */
+  readonly facts?: FactsReader;
+}
+
+/** What the engine reads from the facts the pass stored. */
+export interface FactsReader {
+  unitAt(path: string, line: number, column: number): UnitFacts | undefined;
+  units(path: string): readonly UnitFacts[] | undefined;
+  callerFiles(place: {
+    readonly path: string;
+    readonly line: number;
+    readonly column: number;
+  }): readonly string[];
+  details(id: string): NodeDetails | undefined;
+  forget(): void;
 }
 
 /** What the engine needs from the semantic worker's client (semantics/client.ts). */
@@ -45,6 +83,8 @@ export interface Semantics {
   changed(paths: readonly string[], files?: readonly string[]): void;
   /** A graph pass (ADR 0027). */
   graph(): Promise<GraphWire | { readonly failed: string }>;
+  /** The graph id of the code unit at a place (phase 7): null when it isn't in a TypeScript or JavaScript file. */
+  unit(position: CodePosition): Promise<string | null | { readonly failed: string }>;
   close(): Promise<void>;
 }
 
@@ -73,6 +113,34 @@ export const NO_GRAPH = 'The graph isn’t available here.';
 
 const GRAPH_DELAY_MS = 2000;
 
+/** Words for flows (phase 7), safe to show. */
+export const FLOW_MESSAGES = {
+  noGraph: 'The graph is still being built. Flows open once it’s ready.',
+  notCode: 'Flows start from functions in TypeScript or JavaScript files.',
+  notYet: 'This isn’t in the graph yet. It will be once the graph has caught up with your changes.',
+  noCalls: 'There’s no function here, and this file’s top level makes no calls.',
+  smaller: (nodes: number) =>
+    `Shown with up to ${String(nodes)} nodes: the whole flow is too large to send at once.`,
+} as const;
+
+/** A flow's answer has to fit in one message line (ENGINE_LIMITS.lineBytes), with room for the rest. */
+const FLOW_BYTES = ENGINE_LIMITS.lineBytes * 0.75;
+
+/** The flow from `root`, made smaller until it fits in a message: halving the node cap, and saying so. */
+export function fittingFlow(
+  index: GraphIndex,
+  root: string,
+): { readonly flow: Flow; readonly message: string | null } | undefined {
+  for (let most = FLOW_MAX_NODES; most >= 1; most = Math.floor(most / 2)) {
+    const flow = buildFlow(index, root, most);
+    if (flow === undefined) return undefined;
+    if (Buffer.byteLength(JSON.stringify(flow)) <= FLOW_BYTES) {
+      return { flow, message: most === FLOW_MAX_NODES ? null : FLOW_MESSAGES.smaller(most) };
+    }
+  }
+  return undefined;
+}
+
 export function startEngineService(options: EngineServiceOptions): EngineService {
   const { store, indexer } = options;
   const refreshDelayMs = options.refreshDelayMs ?? REFRESH_DELAY_MS;
@@ -94,9 +162,16 @@ export function startEngineService(options: EngineServiceOptions): EngineService
     semantics !== undefined && snapshots !== undefined ? 'waiting' : 'failed';
   let graphMessage: string | null = graphState === 'failed' ? NO_GRAPH : null;
   let graphInfo: GraphSnapshotInfo | null = null;
+  // The latest version, decoded and indexed (about 60 MB for Twenty): flows are built from it in milliseconds.
+  let graphIndex: GraphIndex | undefined;
+  const keep = (graph: Graph) => {
+    graphIndex = indexGraph(graph);
+  };
   let graphTimer: NodeJS.Timeout | undefined;
   let graphRunning: Promise<void> | undefined;
   let graphAgain = false;
+  // A change seen since the last pass began: the graph may lack callers in it (stored callers wait for the pass).
+  let unsettled = false;
 
   // The last version from before a restart is shown until the first pass replaces it.
   if (snapshots !== undefined) {
@@ -104,6 +179,7 @@ export function startEngineService(options: EngineServiceOptions): EngineService
       const latest = snapshots.latest();
       const loaded = latest === undefined ? undefined : snapshots.load(latest.version);
       if (latest !== undefined && loaded !== undefined) {
+        keep(loaded.graph);
         graphInfo = {
           ...latest,
           stats: graphStats(loaded.graph),
@@ -125,6 +201,8 @@ export function startEngineService(options: EngineServiceOptions): EngineService
       return;
     }
     graphState = 'building';
+    const startedUnsettled = unsettled;
+    unsettled = false;
     graphRunning = (async () => {
       const started = performance.now();
       const result = await semantics.graph();
@@ -132,7 +210,7 @@ export function startEngineService(options: EngineServiceOptions): EngineService
       if ('failed' in result) {
         graphState = 'failed';
         graphMessage = result.failed;
-        return;
+        throw new Error('pass failed');
       }
       const saved = snapshots.save(result.encoded, {
         complete: result.complete,
@@ -143,6 +221,7 @@ export function startEngineService(options: EngineServiceOptions): EngineService
       // Loaded straight back: every version proves it reads, and how fast (the Done when's "under 1 s").
       const loaded = snapshots.load(saved.meta.version);
       if (loaded === undefined) throw new Error('not stored');
+      keep(loaded.graph);
       graphInfo = {
         ...saved.meta,
         stats: graphStats(loaded.graph),
@@ -152,10 +231,13 @@ export function startEngineService(options: EngineServiceOptions): EngineService
       };
       graphState = 'ready';
       graphMessage = null;
+      options.facts?.forget();
     })()
       .catch(() => {
+        unsettled ||= startedUnsettled;
+        if (graphState !== 'failed' || graphMessage === null) graphMessage = GRAPH_FAILED.failed;
         graphState = 'failed';
-        graphMessage = GRAPH_FAILED.failed;
+        options.facts?.forget();
       })
       .finally(() => {
         graphRunning = undefined;
@@ -224,11 +306,13 @@ export function startEngineService(options: EngineServiceOptions): EngineService
     if (closed) return;
     switch (event.type) {
       case 'changed':
+        unsettled = true;
         pending.set(event.path, event.deleted);
         timer ??= setTimeout(flush, refreshDelayMs);
         return;
       case 'overflow':
         // Too many changes at once (a checkout, an install): look at everything again.
+        unsettled = true;
         pending.clear();
         void fullPass();
         if (options.semantics !== undefined) {
@@ -272,6 +356,114 @@ export function startEngineService(options: EngineServiceOptions): EngineService
     message,
   });
 
+  const flow = async (position: CodePosition): Promise<FlowResult> => {
+    // Read when answering, not when asked: a new version may arrive while TypeScript works out the function.
+    const none = (message: string): FlowResult => ({ flow: null, message, ...aboutGraph() });
+    if (graphIndex === undefined || semantics === undefined) {
+      return none(
+        graphState === 'failed' ? (graphMessage ?? FLOW_MESSAGES.noGraph) : FLOW_MESSAGES.noGraph,
+      );
+    }
+    // A function's name (from search or the Calls tab) is found in the graph itself; anywhere else, the facts the
+    // pass stored say which function the place is in, if the file is still the text they came from (owner, 13 Nov
+    // 2026); failing both, TypeScript does, now.
+    let root =
+      graphIndex.byPlace.get(placeKey(position.path, position.line, position.column)) ??
+      options.facts?.unitAt(position.path, position.line, position.column)?.id;
+    if (root === undefined) {
+      const unit = await semantics.unit(position);
+      if (unit === null) return none(FLOW_MESSAGES.notCode);
+      if (typeof unit !== 'string') return none(unit.failed);
+      root = unit;
+    }
+    // The latest index, read after the await (once set, it's only ever replaced).
+    const built = fittingFlow(graphIndex, root);
+    if (built === undefined) {
+      return none(
+        graphState === 'ready' && root.endsWith('#(top level)')
+          ? FLOW_MESSAGES.noCalls
+          : FLOW_MESSAGES.notYet,
+      );
+    }
+    return { ...built, ...aboutGraph() };
+  };
+
+  /**
+   * The Calls tab's answer from what the pass stored (phase 7, ADR 0029), or undefined when it can't be sure and
+   * TypeScript must answer: only on a function's name (where the Calls tab asks), with the graph up to date with
+   * every change, and every file involved still the text its facts came from.
+   */
+  const storedCalls = (op: 'callers' | 'callees', at: CodePosition): CallsResult | undefined => {
+    const facts = options.facts;
+    if (facts === undefined || graphIndex === undefined || graphState !== 'ready' || unsettled) {
+      return undefined;
+    }
+    const unit = facts.unitAt(at.path, at.line, at.column);
+    const calls = unit?.calls;
+    const place = calls?.item.place;
+    if (unit === undefined || calls === undefined || place === null || place === undefined) {
+      return undefined;
+    }
+    const onName =
+      unit.details.unit !== 'module' &&
+      place.path === at.path &&
+      place.line === at.line &&
+      at.column >= place.column &&
+      at.column < place.column + calls.item.name.length;
+    if (!onName) return undefined;
+    if (op === 'callees') {
+      return {
+        target: calls.item,
+        entries: calls.callees.map(plainEntry),
+        complete: calls.complete,
+        message: calls.complete ? null : PARTLY.limit,
+      };
+    }
+    // A member (a method, a property holding a function) is reached through types and interfaces too, which
+    // TypeScript's incoming calls follow by implementation: its callers are TypeScript's to answer (measured on
+    // Rallly: callers of `getAuthorizationUrl` through its interface were missing from the stored calls).
+    if (calls.item.container !== null) return undefined;
+    // Callers: the stored calls of every unit calling this place, as TypeScript's incoming calls are its callers'
+    // outgoing ones. A caller's file changed since (its hash) means TypeScript answers.
+    const entries: CallEntry[] = [];
+    for (const path of facts.callerFiles(place)) {
+      const units = facts.units(path);
+      if (units === undefined) return undefined;
+      for (const caller of units) {
+        for (const callee of caller.calls?.callees ?? []) {
+          if (
+            caller.calls !== undefined &&
+            callee.hierarchy &&
+            callee.place?.path === place.path &&
+            callee.place.line === place.line &&
+            callee.place.column === place.column
+          ) {
+            entries.push({
+              ...caller.calls.item,
+              relation: callee.relation,
+              provenance: 'resolved',
+              sites: callee.incoming ?? callee.sites,
+            });
+          }
+        }
+      }
+    }
+    const complete = entries.length <= SEMANTIC_LIMITS.entries;
+    return {
+      target: calls.item,
+      entries: entries.slice(0, SEMANTIC_LIMITS.entries),
+      complete,
+      message: complete ? null : PARTLY.limit,
+    };
+  };
+
+  const aboutGraph = () => ({
+    version: graphInfo?.version ?? null,
+    takenAt: graphInfo?.takenAt ?? null,
+    current: graphState === 'ready',
+    complete: graphInfo?.complete ?? false,
+  });
+
   const search = (query: string, limit: number): SearchResult => {
     const started = performance.now();
     const symbols = store.search(query, limit);
@@ -298,9 +490,27 @@ export function startEngineService(options: EngineServiceOptions): EngineService
         case 'callers':
         case 'callees': {
           const { path, line, column } = request;
+          if (request.op === 'callers' || request.op === 'callees') {
+            const stored = storedCalls(request.op, { path, line, column });
+            if (stored !== undefined) return Promise.resolve(stored);
+          }
           return options.semantics === undefined
             ? Promise.resolve(emptyAnswer(request.op, NO_SEMANTICS) as EngineResults[SemanticOp])
             : options.semantics.ask(request.op, { path, line, column });
+        }
+        case 'details': {
+          // From the stored facts if the file is still the text they came from; else TypeScript, now.
+          const { path, line, column } = request;
+          const unit = options.facts?.unitAt(path, line, column);
+          const stored = unit === undefined ? undefined : options.facts?.details(unit.id);
+          if (stored !== undefined) return Promise.resolve({ details: stored, message: null });
+          return options.semantics === undefined
+            ? Promise.resolve(emptyAnswer('details', NO_SEMANTICS) as EngineResults['details'])
+            : options.semantics.ask('details', { path, line, column });
+        }
+        case 'flow': {
+          const { path, line, column } = request;
+          return flow({ path, line, column });
         }
       }
     },

@@ -11,9 +11,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // runner, and past 5 s when every package's tests share its two cores (phase 6: the graph tests run two passes and a
 // question). The work is what's tested, so the limit is set for it rather than the work cut.
 vi.setConfig({ testTimeout: 20_000 });
-import { validateGraph } from '@flowcanvas/graph-model';
+import { buildFlow, indexGraph, validateGraph } from '@flowcanvas/graph-model';
 import type { GraphPass } from './graph.js';
-import { PARTLY, SemanticService } from './semantic-service.js';
+import { FactsStore } from '../facts.js';
+import { NO_DETAILS, PARTLY, SemanticService } from './semantic-service.js';
 
 const FILES: Record<string, string> = {
   'package.json': JSON.stringify({ name: 'fixture', private: true }),
@@ -488,5 +489,391 @@ describe('graph (phase 6)', () => {
     expect(pass).toBeNull();
     const again = await service.graph(now);
     expect(again?.files).toBe(5);
+  });
+});
+
+describe('decisions in the graph (phase 7, ADR 0028)', () => {
+  it('records each construct that guards a call, with branches in and out, and leaves the calls as they were', async () => {
+    const send = 'apps/web/src/send.ts';
+    write(
+      send,
+      [
+        "import { formatTitle } from './lib/format';",
+        'export function send(kind: string, draft: boolean, name?: string) {',
+        '  if (draft) {',
+        "    formatTitle('draft');",
+        '    if (kind === "x") later();',
+        '  } else {',
+        "    formatTitle('sent');",
+        '  }',
+        "  const shown = draft ? formatTitle('a') : name;",
+        '  draft && later();',
+        '  name ?? later();',
+        '  switch (kind) {',
+        "    case 'a':",
+        '      later();',
+        '      break;',
+        '    default:',
+        '      void 0;',
+        '  }',
+        '  try {',
+        '    later();',
+        '  } catch {',
+        "    formatTitle('error');",
+        '  }',
+        '  return shown;',
+        '}',
+        'function later() {}',
+        '',
+      ].join('\n'),
+    );
+    service.changed([send], [...Object.keys(FILES), send]);
+    const pass = await service.graph(() => Promise.resolve());
+    if (pass === null) throw new Error('no pass');
+    expect(validateGraph(pass.graph)).toEqual([]);
+    const decisions = pass.graph.nodes
+      .filter((n) => n.kind === 'decision')
+      .map((n) => `${n.id} "${n.name}" @${String(n.place?.line)}`);
+    expect(decisions).toEqual([
+      `${send}#send?1 "draft" @3`,
+      `${send}#send?2 "kind === "x"" @5`,
+      `${send}#send?3 "draft" @9`,
+      `${send}#send?4 "draft" @10`,
+      `${send}#send?5 "name" @11`,
+      `${send}#send?6 "kind" @12`,
+      `${send}#send?7 "on error" @19`,
+    ]);
+    const short = (id: string | null) =>
+      (id ?? '').replace(`${send}#`, '').replace('apps/web/src/lib/format.ts#', 'format:');
+    const branches = pass.graph.edges
+      .filter((e) => e.kind === 'branch' && e.from.startsWith(`${send}#send`))
+      .map((e) => `${short(e.from)} -${e.label ?? ''}-> ${short(e.to)} @${e.lines.join(',')}`)
+      .sort();
+    expect(branches).toEqual([
+      'send --> send?1 @3',
+      'send --> send?3 @9',
+      'send --> send?4 @10',
+      'send --> send?5 @11',
+      'send --> send?6 @12',
+      'send --> send?7 @19',
+      'send?1 -no-> format:formatTitle @7',
+      'send?1 -yes-> format:formatTitle @4',
+      'send?1 -yes-> send?2 @5',
+      'send?2 -yes-> later @5',
+      'send?3 -yes-> format:formatTitle @9',
+      'send?4 -yes-> later @10',
+      'send?5 -no-> later @11',
+      "send?6 -case 'a'-> later @14",
+      'send?7 -error-> format:formatTitle @22',
+    ]);
+    // The calls themselves are unchanged: send calls formatTitle and later, at every line (the try block's call
+    // isn't conditional, so it has no branch).
+    const calls = pass.graph.edges
+      .filter((e) => e.kind === 'call' && e.from === `${send}#send`)
+      .map((e) => `${short(e.to)} @${e.lines.join(',')} guarded @${(e.guarded ?? []).join(',')}`)
+      .sort();
+    // Each says where a decision guards every call: everywhere but the try block's line 20.
+    expect(calls).toEqual([
+      'format:formatTitle @4,7,9,22 guarded @4,7,9,22',
+      'later @5,10,11,14,20 guarded @5,10,11,14',
+    ]);
+  });
+
+  it('says a line isn’t guarded when one of its calls always happens', async () => {
+    // Found by phase 7's labels (Documenso's `isRecipientBefore`): the first `has` always runs, the second only on yes.
+    const both = 'apps/web/src/both.ts';
+    write(
+      both,
+      [
+        'const has = (n?: number) => typeof n === "number";',
+        'export const before = (a?: number, b?: number) => has(a) && has(b);',
+        '',
+      ].join('\n'),
+    );
+    service.changed([both], [...Object.keys(FILES), both]);
+    const pass = await service.graph(() => Promise.resolve());
+    if (pass === null) throw new Error('no pass');
+    const call = pass.graph.edges.find((e) => e.kind === 'call' && e.from === `${both}#before`);
+    expect(call?.lines).toEqual([2]);
+    expect(call?.guarded).toBeUndefined();
+    const flow = buildFlow(indexGraph(pass.graph), `${both}#before`);
+    expect(
+      flow?.edges.map((e) => `${e.kind} ${e.to.replace(`${both}#`, '')} ${e.label ?? ''}`),
+    ).toEqual(['branch before?1 ', 'call has ', 'branch has yes']);
+  });
+});
+
+describe('the code unit at a place (phase 7)', () => {
+  it('names the innermost unit with the graph’s own id, or the file’s top level', async () => {
+    const file = 'apps/web/src/units.ts';
+    write(
+      file,
+      [
+        'export function outer() {', // 1
+        '  const inner = () => {', // 2
+        '    return 1;', // 3
+        '  };', // 4
+        '  return inner();', // 5
+        '}', // 6
+        'export class Store {', // 7
+        '  save() {', // 8
+        '    return outer();', // 9
+        '  }', // 10
+        '}', // 11
+        'outer();', // 12
+        'export const config = {', // 13
+        '  made: outer(),', // 14
+        '};', // 15
+        '',
+      ].join('\n'),
+    );
+    write('apps/web/README.md', '# Not code\n');
+    service.changed([file], [...Object.keys(FILES), file, 'apps/web/README.md']);
+    expect(service.unitAt(file, 3, 5)).toBe(`${file}#outer.inner`);
+    // From a constant's name, outside the function it holds (⌘K and the Calls tab give names).
+    expect(service.unitAt(file, 2, 9)).toBe(`${file}#outer.inner`);
+    expect(service.unitAt(file, 5, 3)).toBe(`${file}#outer`);
+    expect(service.unitAt(file, 9, 5)).toBe(`${file}#Store.save`);
+    expect(service.unitAt(file, 12, 1)).toBe(`${file}#(top level)`);
+    // A constant isn't a unit of its own: its calls are the top level's, as in the graph.
+    expect(service.unitAt(file, 14, 9)).toBe(`${file}#(top level)`);
+    expect(service.unitAt('apps/web/README.md', 1, 1)).toBeNull();
+    // The same ids as the graph's nodes.
+    const pass = await service.graph(() => Promise.resolve());
+    const ids = new Set(pass?.graph.nodes.map((n) => n.id));
+    for (const id of ['outer.inner', 'outer', 'Store.save', '(top level)']) {
+      expect(ids.has(`${file}#${id}`), id).toBe(true);
+    }
+  });
+});
+
+describe('details (phase 7, ADR 0028 §3)', () => {
+  const file = 'apps/web/src/sending.ts';
+  beforeEach(() => {
+    write(
+      file,
+      [
+        'let saved = 0;', // 1
+        'export const cache = new Map<string, number>();', // 2
+        "export async function send(kind: 'a' | 'b', draft: boolean, name?: string): Promise<number> {", // 3
+        '  if (draft) {', // 4
+        '    saved += 1; missing.other();', // 5
+        '  } else {', // 6
+        '    cache.set(kind, 1);', // 7
+        '  }', // 8
+        '  const shown = draft ? 1 : 2;', // 9
+        '  switch (kind) {', // 10
+        "    case 'a':", // 11
+        '      await later();', // 12
+        '      break;', // 13
+        '    default:', // 14
+        "      throw new Error('unknown kind');", // 15
+        '  }', // 16
+        '  try {', // 17
+        '    await missing.thing();', // 18
+        '  } catch {', // 19
+        '    cache.clear();', // 20
+        '  }', // 21
+        "  const inner = () => { if (name) throw new Error('inner'); };", // 22
+        '  let local = 0; local += 1; inner();', // 23
+        '  return shown;', // 24
+        '}', // 25
+        'async function later() {}', // 26
+        'declare const missing: any;', // 27
+        'export class Store {', // 28
+        '  constructor(private readonly db: string, size = 2) {}', // 29
+        '}', // 30
+        'export const quick = async () => later();', // 31
+        '',
+      ].join('\n'),
+    );
+    write('apps/web/NOTES.md', '# Notes\n');
+    service.changed([file], [...Object.keys(FILES), file, 'apps/web/NOTES.md']);
+  });
+
+  it('shows what a function’s code reveals, and nothing of the functions inside it', () => {
+    const { details, message } = service.details(file, 9, 5);
+    expect(message).toBeNull();
+    expect(details).toMatchObject({
+      id: `${file}#send`,
+      name: 'send',
+      unit: 'function',
+      place: { path: file, line: 3, column: 23 },
+      async: true,
+      exported: true,
+      returns: 'Promise<number>',
+    });
+    expect(details?.signature).toBe(
+      "(kind: 'a' | 'b', draft: boolean, name?: string): Promise<number>",
+    );
+    expect(details?.params.items.map((p) => [p.name, p.optional])).toEqual([
+      ['kind', false],
+      ['draft', false],
+      ['name', true],
+    ]);
+    expect(details?.params.items[1]?.type).toBe('boolean');
+    expect(details?.decisions).toEqual({
+      items: [
+        { kind: 'if', condition: 'draft', outcomes: ['yes', 'no'], line: 4 },
+        { kind: 'ternary', condition: 'draft', outcomes: ['yes', 'no'], line: 9 },
+        { kind: 'switch', condition: 'kind', outcomes: ["case 'a'", 'default'], line: 10 },
+        { kind: 'catch', condition: 'on error', outcomes: ['error'], line: 19 },
+      ],
+      total: 4,
+    });
+    // inner's own `if` and `throw` (line 22) are inner's, not send's.
+    expect(details?.throws).toEqual({
+      items: [{ text: "new Error('unknown kind')", line: 15 }],
+      total: 1,
+    });
+    expect(details?.awaits).toEqual({
+      items: [
+        { text: 'later', line: 12 },
+        { text: 'missing.thing', line: 18 },
+      ],
+      total: 2,
+    });
+    // `local` (line 23) is the function's own, not module state.
+    expect(details?.writes).toEqual({ items: [{ text: 'saved', line: 5 }], total: 1 });
+    // Each once, guarded or not (a guarded one is also a branch edge in the graph).
+    expect(details?.unresolved).toEqual({
+      items: [
+        { text: 'missing.other', lines: [5] },
+        { text: 'missing.thing', lines: [18] },
+      ],
+      total: 2,
+    });
+  });
+
+  it('gives a nested function its own, a class its constructor’s inputs, and a file its top level', () => {
+    expect(service.details(file, 22, 25).details).toMatchObject({
+      id: `${file}#send.inner`,
+      // No else: one outcome.
+      decisions: {
+        items: [{ kind: 'if', condition: 'name', outcomes: ['yes'], line: 22 }],
+        total: 1,
+      },
+      throws: { items: [{ text: "new Error('inner')", line: 22 }] },
+    });
+    // A function held by an exported constant, from inside it and from its name: exported, and async.
+    expect(service.details(file, 31, 14).details?.id).toBe(`${file}#quick`);
+    expect(service.details(file, 31, 35).details).toMatchObject({
+      id: `${file}#quick`,
+      exported: true,
+      async: true,
+      awaits: { total: 0 },
+    });
+    const store = service.details(file, 28, 14).details;
+    expect(store).toMatchObject({ id: `${file}#Store`, unit: 'class', signature: null });
+    expect(store?.params.items).toEqual([
+      { name: 'db', type: 'string', optional: false },
+      { name: 'size', type: 'number', optional: true },
+    ]);
+    expect(service.details(file, 1, 1).details).toMatchObject({
+      id: `${file}#(top level)`,
+      name: 'sending.ts (top level)',
+      unit: 'module',
+      exported: false,
+    });
+  });
+
+  it('says why there are none outside TypeScript and JavaScript', () => {
+    expect(service.details('apps/web/NOTES.md', 1, 1)).toEqual({
+      details: null,
+      message: NO_DETAILS,
+    });
+  });
+});
+
+describe('facts stored by the pass (phase 7; owner, 13 Nov 2026)', () => {
+  it('give, at every place in a file, the same unit and details as asking TypeScript now', async () => {
+    const file = 'apps/web/src/stored.ts';
+    const text = [
+      'let count = 0;',
+      'export const config = { made: outer() };',
+      'export async function outer(kind?: string): Promise<number> {',
+      '  const inner = () => {',
+      '    if (kind) throw new Error(kind);',
+      '  };',
+      '  try {',
+      '    await later();',
+      '  } catch {',
+      '    count += 1;',
+      '  }',
+      '  inner();',
+      '  return kind === undefined ? 0 : 1;',
+      '}',
+      'class Store {',
+      '  save = async (id: string) => outer(id);',
+      '  load(): void {',
+      '    missing.call();',
+      '  }',
+      '}',
+      'async function later() {}',
+      'declare const missing: any;',
+      'export default Store;',
+      '',
+    ].join('\n');
+    write(file, text);
+    const facts = new FactsStore(':memory:');
+    const stored = new SemanticService({ ts, root, files: [...Object.keys(FILES), file], facts });
+    try {
+      const pass = await stored.graph(() => Promise.resolve());
+      if (pass === null) throw new Error('no pass');
+      const lines = text.split('\n');
+      let compared = 0;
+      for (const [index, content] of lines.entries()) {
+        for (let column = 1; column <= content.length + 1; column += 1) {
+          const line = index + 1;
+          const id = facts.unitAt(file, line, column)?.id;
+          expect(id, `${String(line)}:${String(column)}`).toBe(stored.unitAt(file, line, column));
+          expect(facts.details(id ?? ''), `${String(line)}:${String(column)}`).toEqual(
+            stored.details(file, line, column).details,
+          );
+          compared += 1;
+        }
+      }
+      expect(compared).toBeGreaterThan(400);
+      // Every unit of the file is stored, and each one is a node in the graph.
+      const ids = new Set(pass.graph.nodes.map((n) => n.id));
+      const units = facts.units(file) ?? [];
+      // A constant that's only called isn't a unit (`config`); a property holding a function is that function.
+      expect(units.map((u) => u.id.slice(file.length))).toEqual([
+        '#(top level)',
+        '#outer',
+        '#outer.inner',
+        '#Store',
+        '#Store.save',
+        '#Store.load',
+        '#later',
+      ]);
+      for (const unit of units)
+        expect(ids.has(unit.id) || unit.id.endsWith('#(top level)')).toBe(true);
+    } finally {
+      stored.dispose();
+      facts.close();
+    }
+  });
+
+  it('are removed with their file, and only the walked files keep theirs after a whole pass', async () => {
+    const file = 'apps/web/src/gone.ts';
+    write(file, 'export function gone() { return 1; }\n');
+    const facts = new FactsStore(':memory:');
+    facts.put('apps/web/src/never.ts', { hash: 'h', units: [] });
+    facts.flush();
+    const stored = new SemanticService({ ts, root, files: [...Object.keys(FILES), file], facts });
+    try {
+      await stored.graph(() => Promise.resolve());
+      expect(facts.units(file)).toBeDefined();
+      expect(facts.units('apps/web/src/never.ts')).toBeUndefined();
+      rmSync(join(root, file));
+      stored.changed([file], Object.keys(FILES));
+      await stored.graph(() => Promise.resolve());
+      facts.forget();
+      expect(facts.units(file)).toBeUndefined();
+    } finally {
+      stored.dispose();
+      facts.close();
+    }
   });
 });

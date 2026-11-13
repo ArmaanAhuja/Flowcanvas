@@ -1,0 +1,124 @@
+/*
+ * The inspector's Details for a code unit (phase 7): the signature in Mono, then groups (Small strong titles with a
+ * muted count), rows on the 4 px grid with code in Mono small and each line a link. Provenance by form only.
+ */
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  min-width: 0;
+}
+
+.signature {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--text-mono-font-family);
+  font-size: var(--text-mono-font-size);
+  line-height: var(--text-mono-line-height);
+  color: var(--color-text-primary);
+}
+
+.marks,
+.more {
+  margin: 0;
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  line-height: var(--text-small-line-height);
+  color: var(--color-text-muted);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--text-small-strong-font-family);
+  font-size: var(--text-small-strong-font-size);
+  font-weight: var(--text-small-strong-font-weight);
+  line-height: var(--text-small-strong-line-height);
+  color: var(--color-text-primary);
+}
+
+.count,
+.kind,
+.outcomes {
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  font-weight: var(--text-caption-font-weight);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+}
+
+.kind,
+.outcomes {
+  flex: none;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+  min-height: var(--size-row-compact);
+  min-width: 0;
+}
+
+.code,
+.type {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  line-height: var(--text-mono-small-line-height);
+  color: var(--color-text-secondary);
+}
+
+.code {
+  flex: 1;
+}
+
+.type {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.glyph {
+  flex: none;
+}
+
+/* Each line opens its place: a 24 px target at least (WCAG 2.2 target size, as the Calls tab's). */
+.line {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--space-24);
+  min-height: var(--space-24);
+  padding: 0 var(--space-4);
+  border: 0;
+  background: none;
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  line-height: var(--text-mono-small-line-height);
+  color: var(--color-text-secondary);
+  text-decoration: underline;
+  text-decoration-color: var(--color-border-strong);
+  cursor: pointer;
+}
+
+.line:hover {
+  color: var(--color-text-primary);
+}

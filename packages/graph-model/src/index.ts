@@ -23,3 +23,16 @@ export { validateGraph } from './validate.js';
 export { GRAPH_FORMAT, decodeGraph, encodeGraph } from './encoding.js';
 export { diffGraphs, withChanges, type GraphDiff } from './diff.js';
 export { ARRIVES_IN, graphStats, type GraphStats } from './stats.js';
+export {
+  FLOW_LIMITS,
+  FLOW_MAX_NODES,
+  buildFlow,
+  indexGraph,
+  placeKey,
+  type Flow,
+  type FlowCut,
+  type FlowEdge,
+  type FlowUnknownCall,
+  type FlowUnknownGroup,
+  type GraphIndex,
+} from './flow.js';

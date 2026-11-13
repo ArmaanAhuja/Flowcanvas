@@ -1,6 +1,6 @@
 {
   "name": "flowcanvas",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "private": true,
   "description": "Canvas-first, AI-native development environment (working name)",
   "type": "module",
@@ -10,11 +10,11 @@
   },
   "scripts": {
     "dev": "turbo run dev",
-    "build": "FLOWCANVAS_COMMIT=$(git rev-parse HEAD) turbo run build",
+    "build": "FLOWCANVAS_COMMIT=${FLOWCANVAS_COMMIT:-$(git rev-parse HEAD)} turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "test:e2e": "FLOWCANVAS_COMMIT=$(git rev-parse HEAD) turbo run test:e2e",
-    "test:perf": "turbo run build --filter=@flowcanvas/web && pnpm --filter @flowcanvas/e2e --fail-if-no-match test:perf && pnpm --filter @flowcanvas/engine --fail-if-no-match test:perf",
+    "test:e2e": "FLOWCANVAS_COMMIT=${FLOWCANVAS_COMMIT:-$(git rev-parse HEAD)} turbo run test:e2e",
+    "test:perf": "turbo run build --filter=@flowcanvas/web && pnpm --filter @flowcanvas/e2e --fail-if-no-match test:perf && pnpm --filter @flowcanvas/engine --fail-if-no-match test:perf && pnpm --filter @flowcanvas/web --fail-if-no-match test:perf",
     "lint": "turbo run lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -29,7 +29,10 @@
     "workspace:image": "pnpm --filter @flowcanvas/workspace-image --fail-if-no-match run image",
     "workspace:clean": "pnpm --filter @flowcanvas/workspace-host --fail-if-no-match run docker-clean",
     "workspace:resources": "pnpm --filter @flowcanvas/workspace-host --fail-if-no-match run resources",
-    "test:docker": "turbo run test:docker"
+    "test:docker": "turbo run test:docker",
+    "docs:check": "pnpm --filter @flowcanvas/docs-check exec tsx src/cli.ts",
+    "docs:update": "pnpm --filter @flowcanvas/docs-check exec tsx src/cli.ts --update",
+    "docs:milestone": "pnpm --filter @flowcanvas/docs-check exec tsx src/cli.ts --milestone"
   },
   "devDependencies": {
     "@eslint/js": "catalog:",

@@ -24,6 +24,7 @@ const meta = {
     view: 'callers',
     onViewChange: () => undefined,
     onOpen: () => undefined,
+    onShowFlow: () => undefined,
     status: 'ready',
     target: {
       name: 'createPoll',

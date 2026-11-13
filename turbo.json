@@ -46,7 +46,7 @@
     "test:docker": {
       "dependsOn": ["^build"],
       "cache": false,
-      "passThroughEnv": ["WORKSPACE_HOST_TEST_PRESSURE"]
+      "passThroughEnv": ["WORKSPACE_HOST_TEST_PRESSURE", "CORPUS_ONLY", "CORPUS_EXCEPT"]
     },
     "build-storybook": {
       "dependsOn": ["^build"],

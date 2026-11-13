@@ -1,0 +1,18 @@
+{
+  "name": "@flowcanvas/docs-check",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

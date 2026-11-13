@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { FakeWorkspace, INDEX_READY, runningProject } from './fake-workspace.js';
 import { watchForPageProblems } from './support.js';
 
 // Phase 4 · Try it: press ⌘K and jump to any function in Rallly. In a real browser under the production CSP: the
@@ -8,21 +8,7 @@ import { watchForPageProblems } from './support.js';
 // Documenso is proven by the Docker corpus test (workspace/host/src/corpus.docker.test.ts). The browser's half of
 // "search under 100 ms" is measured here: keypress to results, with the API answering at once.
 
-const PROJECT = {
-  id: '3f1c0d2e-0000-4000-8000-0000000000c4',
-  name: 'Rallly',
-  repoUrl: 'https://github.com/ArmaanAhuja-7777/rallly',
-  repoCommit: null,
-  createdAt: '2026-11-11T09:00:00.000Z',
-  workspace: {
-    id: 'w-4',
-    state: 'running',
-    stateChangedAt: '2026-11-11T09:00:00.000Z',
-    failure: null,
-  },
-};
-
-const sha = (text: string) => createHash('sha256').update(text).digest('hex');
+const PROJECT = runningProject('3f1c0d2e-0000-4000-8000-0000000000c4', '2026-11-11T09:00:00.000Z');
 
 // createPoll at line 98, column 14, as in Rallly at its pin (corpus/labels/symbols.json).
 const MUTATIONS = [
@@ -51,86 +37,39 @@ const SYMBOLS = (
   exported: true,
 }));
 
-class FakeWorkspace {
-  readonly files = new Map<string, string>([
-    ['apps/web/src/features/poll/mutations.ts', MUTATIONS],
-    ['README.md', '# Rallly\n'],
-  ]);
-  /** The index answers "indexing" this many times, then "ready". */
-  indexingAnswers = 2;
-  searches: string[] = [];
-
-  constructor(page: Page) {
-    void page.context().route('**/api/**', (route) => this.answer(route));
-    void page.context().routeWebSocket(/\/workspace\/events$/, () => undefined);
-  }
-
-  private reply(route: Route, body: unknown, status = 200) {
-    return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
-  }
-
-  private status() {
-    const indexing = this.indexingAnswers > 0;
-    if (indexing) this.indexingAnswers -= 1;
-    const done = indexing ? 980 : 1958;
-    return {
-      state: indexing ? 'indexing' : 'ready',
-      done,
-      total: 1958,
-      files: done,
-      byStatus: { parsed: done, 'no-grammar': 0, 'too-large': 0, binary: 0, unreadable: 0 },
-      symbols: done * 3,
-      withSyntaxErrors: 0,
-      partlyRead: 0,
-      lastFullMs: indexing ? null : 1015,
-      message: null,
-    };
-  }
-
-  private answer(route: Route) {
-    const url = new URL(route.request().url());
-    const path = url.searchParams.get('path') ?? '';
-    if (url.pathname === '/api/me') {
-      return this.reply(route, {
-        user: { id: 'u-1', email: 'ada@example.com', displayName: 'Ada', role: 'member' },
-        signIn: 'available',
-        providers: ['github'],
-      });
-    }
-    if (url.pathname === '/api/projects')
-      return this.reply(route, { projects: [PROJECT], workspacesAvailable: true });
-    if (url.pathname.endsWith('/workspace/index/status')) return this.reply(route, this.status());
-    if (url.pathname.endsWith('/workspace/index/search')) {
-      const query = url.searchParams.get('q') ?? '';
-      this.searches.push(query);
-      // Whole names only: then a row can appear only because of the keystroke that completes its name, which
-      // is what the timing below measures. Ranking and partial matches are the engine's, tested on its own.
-      const symbols = SYMBOLS.filter((s) => s.name.toLowerCase() === query.trim().toLowerCase());
-      return this.reply(route, { symbols, ms: 1 });
-    }
-    if (url.pathname.endsWith('/workspace/tree'))
-      return this.reply(route, {
-        files: [...this.files.keys()].sort(),
-        truncated: false,
-        source: 'git',
-      });
-    if (url.pathname.endsWith('/workspace/journal')) return this.reply(route, { entries: [] });
-    if (url.pathname.endsWith('/workspace/journal/entry'))
-      return this.reply(route, { error: 'none', code: 'not_found' }, 404);
-    if (url.pathname.endsWith('/workspace/file')) {
-      const content = this.files.get(path);
-      return content === undefined
-        ? this.reply(route, { error: 'There’s nothing at that path.', code: 'not_found' }, 404)
-        : this.reply(route, {
-            path,
-            size: content.length,
-            encoding: 'utf8',
-            content,
-            version: sha(content),
-          });
-    }
-    return this.reply(route, { error: 'not found' }, 404);
-  }
+/** A fake workspace whose index answers "indexing" twice, then "ready"; it keeps what was searched for. */
+function fakeWorkspace(page: Page) {
+  let indexingAnswers = 2;
+  const searches: string[] = [];
+  new FakeWorkspace(page, {
+    project: PROJECT,
+    files: { 'apps/web/src/features/poll/mutations.ts': MUTATIONS, 'README.md': '# Rallly\n' },
+    indexStatus: () => {
+      const indexing = indexingAnswers > 0;
+      if (indexing) indexingAnswers -= 1;
+      const done = indexing ? 980 : 1958;
+      return {
+        ...INDEX_READY,
+        state: indexing ? 'indexing' : 'ready',
+        done,
+        files: done,
+        byStatus: { ...INDEX_READY.byStatus, parsed: done },
+        symbols: done * 3,
+        lastFullMs: indexing ? null : 1015,
+      };
+    },
+    answers: {
+      '/workspace/index/search': (url) => {
+        const query = url.searchParams.get('q') ?? '';
+        searches.push(query);
+        // Whole names only: then a row can appear only because of the keystroke that completes its name, which
+        // is what the timing below measures. Ranking and partial matches are the engine's, tested on its own.
+        const symbols = SYMBOLS.filter((s) => s.name.toLowerCase() === query.trim().toLowerCase());
+        return { symbols, ms: 1 };
+      },
+    },
+  });
+  return { searches };
 }
 
 /**
@@ -170,7 +109,7 @@ async function keyToResult(page: Page, key: string, option: string): Promise<num
 
 test('phase 4: press ⌘K and jump to any function in Rallly', async ({ page }) => {
   const watch = watchForPageProblems(page);
-  const workspace = new FakeWorkspace(page);
+  const { searches } = fakeWorkspace(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/p/${PROJECT.id}`);
 
@@ -255,6 +194,6 @@ test('phase 4: press ⌘K and jump to any function in Rallly', async ({ page }) 
     await expect(line).toContainText('export const xcreatePoll');
   });
 
-  expect(workspace.searches).toContain('createPoll');
+  expect(searches).toContain('createPoll');
   expect(watch.problems()).toEqual([]);
 });

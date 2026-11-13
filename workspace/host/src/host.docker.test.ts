@@ -369,7 +369,31 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
     expect(current.symbols).toBeGreaterThan(5000);
 
     const found = await search('createPoll');
-    expect(found.ms).toBeLessThan(100);
+    // "Under 100 ms" is the engine's p95 (decisions log, 9 Nov 2026), not one search: the graph pass starts as the
+    // index becomes ready, and while it runs, the workspace's 2-CPU quota can pause every thread in it for tens of
+    // milliseconds (measured in phase 7; a lower priority for the pass doesn't help, the quota is the container's).
+    // A p95 needs a sample: over 19 searches it was the second slowest, and two stalls failed it on CI (228 ms on
+    // 13 Nov 2026, while the corpus test's p95 over 312 searches in the same run was 5 ms). Six rounds: 109 searches.
+    const times = [found.ms];
+    for (let round = 0; round < 6; round += 1) {
+      for (const query of [
+        'poll',
+        'user',
+        'space',
+        'create',
+        'get',
+        'Page',
+        'use',
+        'send',
+        'update',
+      ]) {
+        times.push((await search(query)).ms, (await search(query.slice(0, 3))).ms);
+      }
+    }
+    times.sort((a, b) => a - b);
+    const p95 = times[Math.ceil(times.length * 0.95) - 1] ?? Infinity;
+    console.log(`Rallly: search p95 ${String(p95)} ms over ${String(times.length)} searches`);
+    expect(p95).toBeLessThan(100);
     expect(found.symbols[0]).toMatchObject({
       name: 'createPoll',
       path: 'apps/web/src/features/poll/mutations.ts',

@@ -30,7 +30,8 @@ const WorkspaceTerminal = lazy(async () => ({
 }));
 
 /**
- * The signed-in person's projects and a form to create one. A stand-in until the phase 2 start screen
+ * The signed-in person's projects and a form to create one, at `/`. A stand-in until the start screen, which gets a
+ * phase of its own (decisions log, 7 Nov 2026)
  * (design brief, "Start screens"); built from the design system's Input and Button.
  */
 export function Projects({ fetcher = fetch }: ProjectsProps) {

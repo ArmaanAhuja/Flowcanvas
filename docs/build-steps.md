@@ -13164,3 +13164,441 @@ pnpm test:visual
 **Risks:** none. **Laptop:** unit tests only.
 
 **Commit:** `test(web): texts about what arrives later name their phase, and never one already accepted`.
+
+## Phase 7 — Flow builder and inspector
+
+**From the build plan:**
+- **Build:** build a downstream flow from any function; ELK layout; click a node to open its code; conditions on branches; node inspector showing every detail the code reveals (see "What every node shows").
+- **Done when:** flows for 10 functions render correctly and every node opens the right line.
+- **Try it:** pick any function in Documenso, open its flow, click nodes and read the inspector; compare with Figma 06.
+
+**Decisions** (decisions log, 12 Nov 2026): opened from the right-click menu, ⌘K and the Calls tab; up to 60 nodes, then a stub; one grouped stub per node for unknown calls; 10 functions in Documenso, labelled by Claude.
+
+**Expected outcome:**
+- Choose a function (right-click → Show flow, ⌘K, or the Calls tab): its downstream flow appears on the canvas, top to bottom (as Figma 06). Every function it reaches is a node with its file and line; calls made under an `if`, `switch` or `catch` hang off small decision diamonds labelled with their conditions; a node's unknown calls are one open stub ("4 unknown calls").
+- Click a node: the inspector's Details tab shows its signature and typed inputs and outputs, its branches and their conditions, what it throws and awaits, the calls it makes that can't be resolved, and its callers. "Open code" (or a double-click) opens the Code view at its line.
+- A completeness pill at the flow's top left says how many of its edges are proven.
+
+**Concepts this phase introduces** (each with a primer in its step):
+- **Graph layout:** layered (Sugiyama-style) layout with ELK. https://eclipse.dev/elk/reference/algorithms/org-eclipse-elk-layered.html
+- **Web Workers:** heavy work off the page's main thread. https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API
+- **Control flow from syntax:** which conditions a call sits under, from the syntax tree.
+- **Breadth-first search** with a node budget.
+
+**Scope:**
+- **In:** the engine's flow and node details; decision nodes; the API; the flow on the canvas (ELK, the completeness pill, the 60-node stub, grouped unknown stubs); the inspector's Details for code units; opening flows from three places; Open code.
+- **Out:** expand and collapse, groups, filters, per-call unknown stubs (phase 12); entry points (8); UI → API links (9); data access and external boundaries (10); background lanes (11); the Sequence view (13); runtime values (30); editing in place (22a).
+
+### Steps (planned)
+
+| # | Step | Milestone | Status |
+| --- | --- | --- | --- |
+| 0 | The plan and decisions; branch | A | done (Claude, 12 Nov) |
+| 1 | Spike: ELK layout time; conditions per call site. ADR 0028 | A | done (Claude, 12 Nov) |
+| 2 | The engine: `flow` (downstream from a function, with decisions and stubs) and `details` (what the inspector shows) | A | done (Claude, 13 Nov): `6114a7e`, `f4a47a9`, `016d253`; tests `3112fed`, `15d3264` |
+| 3 | The API through the host and control plane | A | done (Claude, 13 Nov): `c5d3a73`, `016d253` |
+| 3a | Compute once, store, reuse (owner, 13 Nov): each file's units and details stored by the pass; flows from inside a function and details answer from them. ADR 0029 | A | done (Claude, 13 Nov): `1da5575` |
+| 4 | The Calls tab from stored data (each unit's calls as TypeScript gives them, kept by the pass), TypeScript only where the store can't be sure (ADR 0029) | B | done (Claude, 13 Nov): `7aba981` |
+| 5 | UI: the decision node, the flow's layout, the pill, the inspector's body, in the design system | B | done (Claude, 13 Nov): `dc91add` |
+| 6 | The page: opening flows from three places; selecting nodes; Open code; answers and layouts kept per graph version, so going back is instant (ADR 0029) | B | done (Claude, 13 Nov): `58a4c50` |
+| 6a | The living docs held to the code (owner, 13 Nov) | B | done (Claude, 13 Nov): `6e418b5`, `77324e4`, `5f6fdd6` |
+| 6b | CI deploys every target; the Docker job in shards; the docs gate (owner, 13 Nov) | B | done (Claude, 13 Nov): `a473e20`, `b31c774`, `cfddb64`, `f8b0221`, `ee7a59b`, `fff9bd0`, `bedd815` |
+| 7 | Proof: 10 hand-labelled Documenso flows in real workspaces, every node at its line; the walkthrough; screens; the shared fake workspace for page tests (owner, 12 Nov) | B | done (Claude, 14 Nov): `c59edae`, `ab81e33`, `f8fdf7c`, `113ffbc`, `78cff55` |
+| 8 | Close: report, 0.11.0 | B | done (Claude, 14 Nov): `181d09d`, `b355e54`, `docs: phase 7 close` |
+| 9 | After acceptance: open at 100%; triggers reached when their phase starts (owner, 14 Nov) | B | done (Claude, 14 Nov): `7727c97`, `1a32ef0`, `7d8ea46`, `1c57abe` |
+
+### How each Done-when item is proven
+
+| Item | Test |
+| --- | --- |
+| Flows for 10 functions render correctly | Docker corpus test: 10 Documenso functions' flows, from the engine in a real workspace, compared exactly with hand labels (nodes, edges, conditions, stubs); and the page's rendering of a flow checked in page tests and screenshots |
+| Every node opens the right line | The same labels hold each node's place; the walkthrough opens nodes and checks the Code view's line |
+| The Try it | Walkthrough `try-it/phase-7.spec.ts` |
+
+### Risks (checked at every milestone)
+
+| # | Risk | How we keep it in check | Status |
+| --- | --- | --- | --- |
+| R1 | Layout too slow for the page | ELK in a Web Worker; 60 nodes measured | **measured:** 63 ms median for 60 nodes, 337 ms for 500 (Node, laptop) |
+| R2 | Conditions unreadable (long expressions) | Cut at 60 characters, the full text in the inspector | **checked:** Documenso's `sendDocument`, every condition read correctly; some long ones need cutting |
+| R3 | Flows built from a stale graph after edits | Built from the latest snapshot; the page says when the graph is being brought up to date | **built:** each flow says whether it's current (`current`), and which version it's from |
+| R5 | Snapshots too slow to load with decisions | Measured on Twenty | **fixed:** 1,718 ms → 724 ms on the laptop, 225 ms on CI (checked once before saving, SHA-256 on load, a path table, zstd) |
+| R6 | Opening a flow from inside a function on a large project | The first TypeScript question about a package builds its programs | **fixed (step 3a):** answered from the facts the pass stored (0.04 ms a lookup); TypeScript only for a file changed since. Held under 1 s round trip on CI |
+| R7 | Storing details makes the pass slower or run out of memory | Measured on Twenty | **measured:** 86.9 s against 91.8 s before (noise), heap peak 2.03 GB of the worker's 2.5 GB; first version was 146 s and 2.25 GB, fixed (exports once per file, signatures from written types, rows written as the pass goes) |
+| R8 | React wrappers: `const X = forwardRef(…)` | Its callback's calls belong to the file's top level, so a flow from `X` shows little | **known:** React's wrappers are the React connector's (phase 10) |
+| R4 | **Laptop:** none new | — | *in check* |
+
+### Step 7.0 — The plan and the owner's decisions (done by Claude)
+
+**Goal:** the phase's plan, the owner's four answers, and a branch from `main` after phase 6's merge (`336208d`, CI green).
+
+**What a person can do now:** read the plan above and the owner's phase 7 decisions in the decisions log. Nothing in the app changes.
+
+**Files:** `docs/decisions-log.md` (phase 7 decisions), this section.
+
+**Concepts:** none new. **Found and fixed on the way:** none. **Tests:** none (a plan). **Run and check it:** nothing to run. **Risks and laptop:** R1 to R5 listed above; nothing runs.
+
+**Commit:** `docs: phase 7 plan and the owner's decisions`.
+
+### Step 7.1 — Spike: ELK's layout time, and conditions per call (done by Claude; ADR 0028)
+
+**Goal:** measure layout before building it, and check that conditions read well from real code.
+
+**What a person can do now:** read ADR 0028. Nothing in the app changes.
+
+**Files:** `docs/adr/0028-flows.md`. The spike's scripts stayed outside the repository.
+
+**Concepts:**
+- **Layered graph layout (Sugiyama):** nodes in columns by depth, edges crossing as little as possible. https://eclipse.dev/elk/reference/algorithms/org-eclipse-elk-layered.html
+- **Control flow from syntax:** what a call sits under, found by walking up the syntax tree from it. https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API
+
+**Found on the way:**
+- **ELK is fast enough for the page:** 63 ms median for 60 nodes; 337 ms for 500.
+- **Conditions read correctly on real code** (Documenso's `sendDocument`, 55 call sites); long ones need cutting.
+- **`elkjs`'s licence** (EPL-2.0 or GPL-3.0) allows using it unchanged.
+
+**Tests:** none (a spike). **Run and check it:** ADR 0028. **Risks:** R1 and R2 updated. **Laptop:** seconds.
+
+**Commit:** `docs: phase 7 spike, decisions in the graph, flows from the snapshot (ADR 0028)`.
+
+### Step 7.2 — The engine: flows and node details (done by Claude; ADR 0028 addendum)
+
+**Goal:** the engine answers two new questions: the flow downstream of the function at a place, and everything that function's code reveals, for the inspector. Decisions become part of the graph, so flows can draw the conditions on their branches.
+
+**What a person can do now:** nothing new on the page yet (that's step 5). Through the API, a running workspace answers `GET …/index/flow` and `…/index/details` for any place in a TypeScript or JavaScript file. Labs → Graph stats now counts decisions and branches (Rallly: 2,054 and 6,180).
+
+**Files:**
+- `packages/graph-model/src/model.ts`, `validate.ts`, `encoding.ts`, `stats.ts`: edges have a `label`; the rules for branch edges; graph format 2 (a table of paths, labels); decisions and branches no longer "arrive in phase 7".
+- `packages/graph-model/src/flow.ts` (new): `indexGraph`, `buildFlow`, `FLOW_MAX_NODES` (60), `FLOW_LIMITS` (10 lines per edge, 20 unknown calls per node).
+- `packages/engine/src/semantics/graph-pass.ts`: decision nodes and branch edges (`guardsOf`); `unitNodeAt` (the code unit at a place, by the pass's rules); case labels cut like other texts.
+- `packages/engine/src/semantics/details.ts` (new): `detailsAt`.
+- `packages/engine/src/semantics/semantic-service.ts`, `worker.ts`, `client.ts`: `unitAt` and `details`; the worker checks each graph before it's encoded.
+- `packages/engine/src/snapshots.ts`: store format 2 (zstd; the SHA-256 checked on load).
+- `packages/engine/src/service.ts`: the latest version kept decoded and indexed; the `flow` op; `fittingFlow` (halves the node cap until a flow fits one message).
+- `packages/engine/src/protocol.ts`: `flow` and `details` requests and answers, checked with exact shapes and bounds; `TYPESCRIPT_OPS`.
+- Tests: `flow.test.ts` (new), `graph.test.ts`, `service.test.ts`, `protocol.test.ts`, `semantic-service.test.ts`, `client.test.ts`, `snapshots.test.ts`; `corpus/src/calls.ts` (labels compare call edges only).
+- `workspace/host/src/host.docker.test.ts`: search held to the engine's p95, as decided.
+- Graph stats examples: `GraphStats.stories.tsx`, `e2e/visual/screens.spec.ts`, `apps/web/src/graph/graph.test.tsx`, 10 baselines; `apps/web/src/later-phases.test.ts` holds the catalogue's copy of `ARRIVES_IN` to the real one.
+
+**Concepts:**
+- **Breadth-first search with a budget:** visit nodes level by level from the start, stopping at a count, so the nearest calls are always shown first. https://en.wikipedia.org/wiki/Breadth-first_search
+- **Content addressing:** a version is named by the SHA-256 of its bytes, so loading can prove the bytes are the ones that were checked, without checking them again. https://nodejs.org/api/crypto.html#class-hash
+- **zstd:** a compression format much faster to decompress than gzip, in Node's own `zlib` since Node 23.8. https://nodejs.org/api/zlib.html#zlibzstdcompresssyncbuffer-options
+- **CPU quotas (cgroups):** `--cpus 2` gives a container 200 ms of CPU every 100 ms; once its threads use it up, all of them wait for the next period, whatever their priority. https://docs.kernel.org/scheduler/sched-bwc.html
+- **TypeScript's checker for details:** `getSignatureFromDeclaration`, `signatureToString`, `getExportsOfModule`. https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API
+
+**Found and fixed:**
+- **Twenty's snapshot took 1,718 ms to load with decisions** (over phase 6's 1 s). Checking against the schema was 1,051 ms of it. Now the graph is checked once, in the worker, before it's saved; loading checks the SHA-256 instead; a path table and zstd cut the rest. 724 ms on the laptop, 225 ms on CI.
+- **A constant's name gave the file's top level.** From `sendDocument`'s name in `export const sendDocument = async (…) => …`, the code unit at the place was the top level: the name sits outside the function the constant holds. ⌘K and the Calls tab give names, so the inspector would have shown the wrong node. Now a constant's or property's name gives its function, as `callableAt` does.
+- **A constant that's only called was taken for a unit.** Inside `export const config = { made: outer() }`, the unit was `#config`, but the graph gives those calls to the top level. Now the pass's own rule decides.
+- **`details` was refused as an unknown operation:** the request parser lists each operation by name. Found by its protocol test.
+- **Two CI runs failed phase 4's one-search check** (118 and 151 ms). Investigated: the workspace's CPU quota, not the engine (above, and the ADR addendum); the test now holds the engine's p95, as the decisions log sets. Lowering the worker thread's priority was measured and doesn't help. Item 46 in `docs/upgrade-later.md`.
+- **The catalogue still said decisions arrive in phase 7**, from its own copy of the phases: removed, and a test now holds the copy to the graph model's.
+
+**Tests:** 1,057 unit and component tests pass (`pnpm test`). New: 9 for `buildFlow`; 6 for the service's flows; 3 for the client's `unit`; 2 for the code unit at a place; 3 for details on a real TypeScript project; flows and details in the protocol (good answers accepted, 32 malformed ones refused). Mutation checks: 5 of 5 on `buildFlow`, 5 of 5 on the service's flows, 7 of 7 on details (two needed the fixture extended), 1 of 1 on the unit rule. In-process on the corpus: all 20 labelled functions of Rallly and Documenso are found by name, from inside, and by details at their own node. On CI (Docker corpus): every labelled function's flow opens at its node, from its name and from inside it (50 of 50).
+
+**Run and check it:** `pnpm --filter @flowcanvas/graph-model test`, `pnpm --filter @flowcanvas/engine test`. With Docker: `pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts` (each fork's row has `flows: "N of N"`). On the page, flows open in step 5.
+
+**Risks and laptop:** R3, R5 and R6 above. The engine holds the latest graph in memory (about 60 MB for Twenty). Laptop: the corpus measurements ran one at a time; nothing new runs in the background.
+
+**Commits:** `feat(engine): decisions in the graph, snapshot format 2` (`6114a7e`); `test(host): hold search to the engine's p95, as decided` (`3112fed`); `feat(engine): flows from the latest version of the graph` (`f4a47a9`); `test(web): Graph stats examples count decisions and branches` (`15d3264`); `feat(engine): a node's details for the inspector` (`016d253`).
+
+### Step 7.3 — The API through the host and control plane (done by Claude)
+
+**Goal:** the page can ask for flows and details through the same path as every other question: browser → control plane → host → workspace.
+
+**What a person can do now:** `GET /api/projects/:id/workspace/index/flow?path=…&line=…&column=…` and `…/index/details?…`, signed in, while the workspace runs. Both count as activity (the person opening a flow or reading a node).
+
+**Files:** `services/control-plane/src/workspaces/index-routes.ts` (the two routes); `local-host.ts` and `workspace/host/src/indexers.ts` (both wait as long for a flow as for TypeScript's answers, `TYPESCRIPT_OPS`); `index-routes.test.ts`; `workspace/host/src/corpus.docker.test.ts` (flows and details through a real engine).
+
+**Concepts:** none new: the routes follow phase 5's (ADR 0026).
+
+**Found and fixed:** a flow can wait on TypeScript (to name the function from inside it), so it needed TypeScript's longer timeouts (90 s in the host, 100 s in the provider) rather than the 15 s for status and search.
+
+**Tests:** 4 route tests (a flow, details, a place outside the project refused without asking the workspace, activity counted); the protocol test of which operations wait on TypeScript. On CI, the corpus Docker test opened 50 flows through real workspaces, every one at its labelled node (run 43283633641); and, from `016d253`, the 26 labelled functions' details, each about its own node (run 43285554872).
+
+**Run and check it:** `pnpm --filter @flowcanvas/control-plane exec vitest run src/workspaces/index-routes.test.ts`.
+
+**Risks and laptop:** none new.
+
+**Commits:** `feat(control-plane): GET /index/flow, the flow from the function at a place` (`c5d3a73`); the details route came with `016d253`.
+
+### Step 7.3a — Compute once, store, reuse (done by Claude; ADR 0029)
+
+**Goal:** the owner's direction (13 Nov): nothing a person does should wait on work that was already done. A flow opened from inside a function, and a node's details, no longer wait on TypeScript loading a package (7.9 s on Twenty).
+
+**What a person can do now:** through the API, `…/index/flow` from anywhere in a function and `…/index/details` answer in milliseconds once the project's first pass is done, and after restarts. On the page in step 6.
+
+**Files:**
+- `packages/engine/src/facts.ts` (new): `FactsStore` (one row per file, compressed, with the hash of its text; checked on every read), `contentHash`.
+- `packages/engine/src/semantics/details.ts`: `fileFacts` (every unit of a file, its range and details); a file's exports read once; signatures from types as written.
+- `packages/engine/src/semantics/graph-pass.ts`: `unitsOf`; a class property holding a function is that function (was `Store.save.save`).
+- `packages/engine/src/semantics/semantic-service.ts`, `worker.ts`, `client.ts`, `main.ts`, `protocol.ts` (`FACTS_FILE`): the pass writes the store; the engine reads it.
+- `packages/engine/src/service.ts`: flows and details from the store, TypeScript where it has no answer; it forgets its decoded copies after each pass.
+- Tests: `facts.test.ts` (new), `semantic-service.test.ts`, `service.test.ts`; `workspace/host/src/corpus.docker.test.ts` holds flows and details under 1 s.
+- Docs: ADR 0029, the decisions log (13 Nov).
+
+**Concepts:**
+- **Precomputing in the background:** do the work where it's already being done (the pass has every program) instead of when someone waits for it.
+- **Content hashes as cache keys:** a stored answer carries the hash of what it came from; comparing it with the file now proves it isn't stale, however the file changed. https://nodejs.org/api/crypto.html#cryptocreatehashalgorithm-options
+- **SQLite's write-ahead log:** one connection writes (the worker) while another reads (the engine). https://www.sqlite.org/wal.html
+- **CPU profiles:** `node --cpu-prof` writes where time went, by function, to find what to make cheaper. https://nodejs.org/api/cli.html#--cpu-prof
+
+**Found and fixed:**
+- **The first version cost too much:** Twenty's pass went from about 92 s to 146 s, and the worker's heap reached 2.25 GB of 2.5 GB (it held every file's details until the pass ended). A CPU profile showed why: the module's exports read once per unit (quadratic), and whole signatures printed by the checker (half the details' time on Documenso), plus a check walking up to the source file for every syntax node. Now exports are read once per file, signatures are built from types as written, units come from a set made once per file, and rows are written as the pass goes. Twenty: 86.9 s, 2.03 GB.
+- **Past a file's last character** the store had no unit, where TypeScript says the top level: now the top level, as the test comparing every place found.
+- **A class property holding a function had the id `Store.save.save`** (phase 6's rule counted the property and its function): now `Store.save`, like a constant's.
+- **Change tracking replaced by a hash check:** tracking edits missed changes made while the engine was stopped; the hash check costs one small file read per answer and covers every way a file can change.
+- **Known, for phase 10:** `const X = React.forwardRef(…)` has no code of its own in the graph (its callback's calls are the top level's), so its flow shows little (R8).
+
+**Tests:** 195 engine tests pass. New: 5 for the store (round trip, innermost unit, removed files, two connections, the hash check with a byte-order mark, the format reset); 2 comparing the store with TypeScript at every place of a file (over 400 places, units and details) and removal; 2 for the service (from the store without asking TypeScript; TypeScript where the store has no answer). Mutation checks: 3 of 3 on ranges and ids, 2 of 2 on the hash check, 5 of 5 on the service (before the tracking was replaced). In-process, each sampled graph node looked up at its own place: Documenso 463 of 485 found themselves, and the 22 that didn't were all nodes with no code of their own (constants that are only called, like `const AlertTitle = forwardRef(…)`, and interface members), where TypeScript gives the same answer; Twenty 438 of 500, its 62 not listed one by one.
+
+**Run and check it:** `pnpm --filter @flowcanvas/engine test`. With Docker: `pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts` (each held fork's row has `flowMaxMs` and `detailsMaxMs`, held under 1,000).
+
+**Risks and laptop:** R6 to R8 above. Measurements ran one at a time on the laptop; the stores they wrote were in the scratch folder, now removed.
+
+**On CI** (run 43372184116, green): every held fork's flows and details answered from the store, the slowest round trip 32 ms (Twenty's slowest flow was 11,274 ms in the run before, LibreChat's 1,480 ms).
+
+**Commit:** `feat(engine): store each file's units and details in the pass, answer from them` (`1da5575`).
+
+### Step 7.4 — The Calls tab from what the pass stored (done by Claude; ADR 0029 addendum)
+
+**Goal:** the Calls tab (phase 5) answers without waiting on TypeScript: before this step, the first question about a package took seconds (5.9 s on Documenso on CI in phase 5), and every question was asked again.
+
+**What a person can do now:** in the Code view, right-click a function's name → Callers or Callees: once the project's graph is built and nothing is being edited, the answer comes from the store (2.9 ms on average on Rallly, against 7.8 ms from TypeScript; 48 ms against 556 ms on Documenso). It's the same answer: 705 of 710 compared were identical, and the 5 left are TypeScript's own quirks (below).
+
+**Files:**
+- `packages/engine/src/semantics/graph-pass.ts`: `walkFile` records each unit's calls in the Calls tab's shape (`WalkedFile.calls`); `containerOf` (TypeScript's rule); `calledName` (where incoming calls place a call); `placeOf` places a property's function at its name.
+- `packages/engine/src/semantics/details.ts`: `fileFacts` attaches each unit's calls and its own item; `StoredCallee`, `StoredCalls`.
+- `packages/engine/src/semantics/callables.ts`: `kindOf` (moved here, shared by the live answers and the walk).
+- `packages/engine/src/facts.ts`: `calls_into` (which files call each place), `callerFiles`; format 2.
+- `packages/engine/src/service.ts`: `storedCalls` (callees, and callers of non-members, from the store when it can be sure; else TypeScript).
+- `packages/engine/src/semantics/semantic-service.ts`: the live Calls tab matches calls by their whole callee (a fix).
+- `packages/engine/src/protocol.ts`: `PARTLY`, `plainEntry` (shared).
+- `packages/engine/src/semantics/in-process.ts` (new): the semantic service behind the engine in one thread, for tests and measurements.
+- Tests: `stored-calls.test.ts` (new), `facts.test.ts`, `service.test.ts`; `workspace/host/src/corpus.docker.test.ts` asks the labelled functions' calls again once the graph is built.
+
+**Concepts:**
+- **Answering from an index, with a proof it's current:** the store answers only when it can show nothing it depends on changed (the graph's state, and each file's hash); otherwise the live path does. https://martinfowler.com/bliki/TwoHardThings.html
+- **Inverting a relation:** a function's callers are exactly the calls other functions make to it, so storing every function's outgoing calls, indexed by target, answers "who calls this" without searching the project.
+- **Equivalence testing:** running the new path and the old one on the same inputs and comparing every answer finds differences no hand-written case would. https://en.wikipedia.org/wiki/Differential_testing
+
+**Found and fixed:**
+- **Asking TypeScript's call hierarchy for every unit in the pass** made the stored answers TypeScript's by construction, but Twenty's pass went past 10 minutes (from 87 s). Measured, then replaced by recording calls in the walk the pass already does: 93.6 s.
+- **Callers through the graph's edges missed some:** methods called through an interface or a type (TypeScript's incoming calls follow implementations), and calls the graph resolves differently. Callers now come from the stored calls themselves, indexed by target; members' callers stay with TypeScript.
+- **The live Calls tab dropped an unresolved call starting where a resolved one does** (`getStripe().subscriptions.update()`): it matched calls by start only. Now by the whole callee. A first fix (never skipping an unresolved call) duplicated calls to functions declared inside components; the comparison caught it.
+- **Containers and kinds** were taken from the graph's ids and unit kinds; TypeScript's differ (none for a function inside a function, a method signature in an interface, or a built-in method; "function" for a property holding an arrow). Now by TypeScript's rules, from the declaration.
+- **A class property holding a function was placed at the arrow's start**, not its name.
+- **The comparison itself took an hour on Documenso** (TypeScript answering callers live, its memory releasing and rebuilding programs): stopped, and rerun on 40 sampled functions plus the labelled ones. Its scratch files were removed.
+- **The first CI run failed the corpus test's 1 s limit at 1,008 ms** on Documenso, with every stored answer matching its labels (10 of 10 in both forks; Rallly's slowest 24 ms). Two of Documenso's labelled functions are class methods (`distanceTo`, `addPoint`), whose callers are TypeScript's by design: the test held TypeScript's answer to the store's limit. It now times members' callers apart (`membersCallersMaxMs`, reported) and holds only the store's answers under 1 s.
+- **Known, not imitated:** TypeScript lists some built-in property reads (`el.style`) as calls and names some built-ins' containers inconsistently; and it lists a function passed as a value (`dynamic(… m.RichTextEditor)`, `{ setView: instance.api.setView }`) as a call. The store doesn't.
+
+**Tests:** 198 engine tests pass. New: the stored-calls test (at every function name of a small project, both ends of the name, callers and callees equal TypeScript's; members' callers asked of TypeScript; TypeScript again after an edit until the next pass); the store's caller index (which files call a place, updated when a caller's file is rewritten or removed, only the hierarchy's calls counted). The comparison on Rallly and Documenso (705 of 710). On CI: the labelled functions' callers and callees asked again once the graph is built, held to the labels and under 1 s.
+
+**Run and check it:** `pnpm --filter @flowcanvas/engine exec vitest run src/stored-calls.test.ts`. With Docker: the corpus test's rows show `storedCalls` (labelled functions matched from the store) and `storedCallsMaxMs`.
+
+**Risks and laptop:** the store is bigger (Twenty 97.8 MB, from 29.6 MB), still a fraction of a workspace's 10 GiB. The measurements ran two or three at a time (owner, 13 Nov: allowed); the laptop stayed under 20 GiB used.
+
+**Commits:** `feat(engine): the Calls tab from what the pass stored` (`7aba981`); `test(host): time members' callers apart from the store's answers; docs for step 7.4` (`ca9f122`).
+
+### Step 7.5 — The flow's parts in the design system, and its layout (done by Claude)
+
+**Goal:** everything a flow is drawn with, built and reviewed in the catalogue before it's used on the page (CLAUDE.md section 10: components first), and the layout that places it.
+
+**What a person can do now:** in the catalogue, see the decision node, the flow's stubs and the inspector's node details with real Documenso content, in both themes.
+
+**Files:**
+- `packages/ui/src/components/decision-node/` (new): `DecisionNode`, a 12 px diamond in the edge colour with its condition in Mono small, up to two lines, the whole of it on hover and for screen readers (`role="img"`).
+- `packages/ui/src/components/flow-stub/` (new): `FlowStub`, "N unknown calls" as Graphite's open stub (a hollow circle) and "N more calls not shown" in a dashed outline.
+- `packages/ui/src/components/node-details/` (new): `NodeDetails` (the inspector's body) and `completenessText` (the pill's words).
+- `apps/web/src/flow/layout.ts` (new): `layoutFlow`, ELK's layered layout, top to bottom; `apps/web/src/canvas/flow-parts.tsx` (new): the canvas's decision and stub nodes and its edge by provenance.
+- `apps/web/src/canvas/FlowCanvas.tsx`, `FlowCanvas.module.css`: the new node and edge types; arrowheads in the edge colour.
+- `pnpm-workspace.yaml`, `apps/web/package.json`: `elkjs` 0.13.0 (EPL-2.0 or GPL-3.0; used unchanged, ADR 0028).
+- 20 new catalogue baselines.
+
+**Concepts:**
+- **Layered (Sugiyama) layout:** nodes in layers by depth, crossings reduced, edges routed at right angles. https://eclipse.dev/elk/reference/algorithms/org-eclipse-elk-layered.html
+- **React Flow custom nodes and edges:** our components inside its nodes, our own SVG path and labels for edges. https://reactflow.dev/learn/customization/custom-edges
+- **ARIA roles for diagrams:** a figure read as one thing gets `role="img"` and a label. https://www.w3.org/WAI/ARIA/apg/practices/names-and-descriptions/
+
+**Found and fixed:**
+- **Figma 06 draws flows top to bottom**, the design brief left to right; the plan had followed the brief. Figma ranks above the brief (CLAUDE.md section 2), and the canvas already joins nodes top to bottom: corrected in the decisions log and ADR 0028.
+- **Axe found the decision's label ignored** (`aria-prohibited-attr`: a label on a `div` with no role): it's now a figure, `role="img"`.
+- **Long conditions were cut at about 25 characters**, by the node's width, before the intended 60: they now wrap to two lines.
+- **The Figma generator sets the stub's text in `text/tertiary`,** which Graphite keeps for marks only (it fails contrast for text): `text/muted`, as Graphite wins on visuals.
+
+**Tests:** 5 for the components (the cut condition and its label, the stubs' words, the details' groups and "and N more", empty groups left out, each line opening its place, the pill's order); 2 for the layout (top to bottom, each node below its caller, stubs below their node, a catch's outcome as a failure path; 60 nodes with no overlaps). Visual and accessibility: the new stories pass axe in both themes.
+
+**Run and check it:** `pnpm --filter @flowcanvas/ui exec vitest run src/components/node-details`, `pnpm --filter @flowcanvas/web exec vitest run src/flow`; the catalogue's Components → Decision node, Flow stub, and Shell → Node details.
+
+**Risks and laptop:** none new.
+
+**Commit:** `feat(ui): the flow's parts: decisions, stubs, node details, ELK layout` (`dc91add`).
+
+### Step 7.6 — The page: opening a flow, and what's selected in it (done by Claude)
+
+**Goal:** the owner's three ways to open a flow, the flow on the canvas, and its nodes in the inspector, with what took work kept for going back (ADR 0029).
+
+**What a person can do now:** with a workspace running and its graph built:
+- In the Code view, right-click a function's name → **Show flow**; or press ⌘K (Ctrl K), type part of its name, and choose it under **Flows**; or, on the Calls tab, choose **Show flow** beside the function.
+- The Graph view shows the flow top to bottom: functions as nodes with their file and line, decisions as diamonds with their conditions, outcome labels on the edges, a `catch`'s outcome as a thin red failure path, a node's unknown calls as one open stub, and "N more calls not shown" where the flow stopped. Top left: the function's name and the counts ("18 edges · 11 resolved · 1 unknown"), and a note when it's from the last version.
+- Click a node: the inspector's Details shows a function's signature, inputs, output, decisions, throws, awaits, unknown calls and writes; a decision's whole condition and where each outcome leads; a stub's calls. **Open code** (or a double-click) opens its line.
+
+**Files:**
+- `apps/web/src/flow/api.ts`, `elk.ts`, `useFlow.ts`, `FlowInspector.tsx`, `FlowStatus.tsx` (new), with styles; `fixtures.ts`, `flow.test.tsx`, `layout.perf.test.ts` (new).
+- `apps/web/src/project/ProjectPage.tsx`, `Inspector.tsx`: the three ways in, the canvas's flow, the Details tab; new empty texts.
+- `packages/ui/src/components/calls-panel/`: the Show flow link; "Finding calls…" (answers come from the store too). `packages/ui/src/components/command-palette/`: the Flows section.
+- `apps/web/scripts/bundle-size.ts`: ELK's own budget. `apps/web/package.json`, `package.json`: `test:perf` for the web app.
+- `e2e/try-it/phase-2.spec.ts`, `phase-5.spec.ts`: the new empty text and menu item; 38 updated baselines (the empty texts and the Calls tab's link).
+
+**Concepts:**
+- **Web Workers through Vite:** `import Worker from '…?worker'` builds the worker as its own file, which the security policy allows (`script-src 'self'`). https://vite.dev/guide/features#web-workers
+- **Stable callbacks:** a component given a new function every render may treat it as a change; holding the latest in a ref and passing one stable function stops that. https://react.dev/reference/react/useCallback
+- **Bundle budgets:** a large dependency loaded only when needed gets its own line and reason, rather than raising the total. https://web.dev/articles/performance-budgets-101
+
+**Found and fixed:**
+- **A render loop:** React Flow reported the empty selection as it started; the page updated its state; the new render gave React Flow a new handler; it reported again. Four page test files hung. Its handlers are now stable, and "nothing selected" when nothing was is a no-op.
+- **"⌘K" in the empty text** while the top bar shows "Ctrl K" on Linux: the text names Search instead.
+- **"Show flow" styled as a path** (Mono): an action, in Small.
+- **Three page tests timed out, and the layout's timing went over 1 s, only in the full `pnpm test`**, where every package's tests share the laptop's cores (load average 12.8 on 16 cores). Alone, the web suite passes in 12 s. The files that render the whole page now have 15 s per test, with the reason beside it (phase 6 did the same for TypeScript's tests); the layout's timing moved to `layout.perf.test.ts`, run alone with `pnpm test:perf`: median 56 ms, worst 70 ms for 60 nodes.
+- **ELK's worker is 444 kB gzipped:** its own budget line (490 kB), with the reason; never in the first load. The project page's own chunk is at 108.1 of 110 kB.
+
+**Tests:** 192 web tests pass. New: the page opens a flow from ⌘K and shows its name and counts once laid out; it says when the flow is from the last version and why there's no flow; the inspector shows a decision's outcomes and opens its line, lists a node's unknown calls and opens their lines, says what wasn't shown and when expanding arrives, and says it's reading a function's details while they load; the Calls tab's Show flow; ⌘K's Flows section (only functions, methods and components; choosing one opens its flow, not its code).
+
+**Run and check it:** `pnpm dev`, open Rallly with its workspace running, wait for the graph (Labs → Graph stats shows "ready"), then in the Code view open `apps/web/src/features/poll/mutations.ts`, right-click `createPoll` → Show flow. Tests: `pnpm --filter @flowcanvas/web test`; performance: `pnpm --filter @flowcanvas/web test:perf`.
+
+**Risks and laptop:** the project page's chunk is near its budget (108.1 of 110 kB). Laptop: the visual suite ran twice in Playwright's container, a few minutes each.
+
+**On CI** (run 43457304615, green): every job, the walkthroughs on the deployed preview included; in real workspaces every flow, details and stored Calls answer within 23 ms.
+
+**Docs:** RUN-AND-FEATURES re-read in full (the owner found its "Last updated" five days old): release, progress, counts and phase sections corrected.
+
+**Commit:** `feat(web): open a flow from the right-click menu, ⌘K or the Calls tab` (`58a4c50`).
+
+### Step 7.6a — The living docs held to the code (done by Claude; owner's request, 13 Nov)
+
+**Goal:** stale docs caught by CI, not by the owner. RUN-AND-FEATURES said "last updated 8 Nov" five days and three phases late, with an old release, old counts and accepted phases under "Coming next".
+
+**What a person can do now:** `pnpm docs:check` says what in the docs disagrees with the code, with the file and line; `pnpm docs:update` rewrites the test counts. CI runs the check after the unit tests.
+
+**Files:** `tools/docs-check/` (new: `checks.ts`, the checks; `cli.ts`, the command; `checks.test.ts`); `package.json` (`docs:check`, `docs:update`); `.github/workflows/ci.yml` (one step in the unit-test job, whose name is unchanged); `docs/RUN-AND-FEATURES.md` (counts between markers, phase 4's section); `ARCHITECTURE.md`; `apps/web/src/projects/` and `e2e/try-it/phase-1d.spec.ts` (comments corrected).
+
+**Concepts:**
+- **Docs as tested claims:** a doc's facts (versions, counts, paths, what's done) are checked against the repository like code, so they can't drift silently. https://www.writethedocs.org/guide/docs-as-code/
+- **Generated over hand-written:** numbers a tool can count are written by the tool. https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions
+
+**Found and fixed (the first sweep):**
+- **Four comments called the projects pages a stand-in "until the phase 2 start screen" or "top bar"**; phase 2 built the project page, not a start screen, which has no phase yet (decisions log, 7 Nov). Corrected; the start screen's phase is a question for the owner.
+- **An e2e comment** described a width "until the phase 2 app shell", which didn't change it. Corrected.
+- **Phase 4's section** didn't say it was accepted; **ARCHITECTURE** lacked the new tool.
+- **The tool's own first mistakes:** it read a Rallly path in a Try-it line as ours, and "search (phase 4)" beside "arrives in phase 13" as said to arrive; both fixed, with tests. And `vitest list` doesn't expand `it.each` (it found 3 of the tokens' 49 tests): the unit count comes from `pnpm test`'s own totals instead (replayed from Turborepo's cache), while Docker tests, none of them table-driven, are listed.
+
+**Tests:** 12 for the checks (each check's finding, and the cases it must leave alone). End to end: a planted old release, a 5-day-old date and a renamed path each fail `pnpm docs:check`. The check takes about 20 s.
+
+**Run and check it:** `pnpm docs:check`; `pnpm --filter @flowcanvas/docs-check test`.
+
+**Risks and laptop:** a check too strict would block work; each rule is about the living docs only, with a 2-day allowance for the date. None for the laptop.
+
+**Commits:** `ci: hold the living docs to the code (pnpm docs:check)` (`6e418b5`); two fixes found on CI, where the check first ran: `fix(docs-check): build the catalogue before counting its screenshots` (`77324e4`; CI had no built catalogue) and `fix(docs-check): read the unit tests' totals the same way on CI` (`5f6fdd6`; GitHub Actions drops Turborepo's prefixes unless `--log-prefix=task`).
+
+### Step 7.6b — CI deploys every target; the Docker job in shards; the docs gate (done by Claude; owner, 13 Nov)
+
+**Goal:** faster, more reliable CI, and docs that can't drift. Cloudflare's GitHub app dropped two pushes (`9a07d81`, `dc91add`) and the walkthroughs waited 10 minutes for builds that never came; the Docker job took 9 minutes; the owner found ARCHITECTURE dated "end of phase 1b" in phase 7 and asked how every doc stays true.
+
+**What a person can do now:** every pull request's preview (app and catalogue) is deployed by CI within seconds of its build, and staging will be on the next merge to `main`; CI's Docker work finishes in about 4 minutes instead of 9; `pnpm docs:check` also holds ARCHITECTURE to the code and finds dated stamps, stale upgrade-later triggers and references to items or ADRs that don't exist; `pnpm docs:milestone` is the gate before every milestone report (and on CI once a pull request is ready for review).
+
+**Files:**
+- `e2e/scripts/deploy.ts` (new; replaces `deploy-preview.ts`): `--worker app|catalogue --to preview|staging`; refuses an app build that doesn't carry its commit. `e2e/scripts/wait-for-deploy.ts` (3-minute wait once CI deployed). `.github/workflows/ci.yml`: deploy steps in the walkthroughs and visual jobs; the Docker job as a matrix of four shards; the gate on ready-for-review pull requests. Root `package.json`: `FLOWCANVAS_COMMIT` kept when CI sets it; `docs:milestone`.
+- `corpus/src/select.ts` (new, with tests): which projects a shard opens (`CORPUS_ONLY`, `CORPUS_EXCEPT`); `workspace/host/src/corpus.docker.test.ts` reads it; `turbo.json` passes both through. `corpus/src/check.ts`: two retries on GitHub's own 5xx errors.
+- `tools/docs-check/src/checks.ts`, `cli.ts`, `checks.test.ts`: stamps, ARCHITECTURE's parts and dependencies, "still to come" in every tracked file, upgrade-later triggers, dangling references, and the milestone gate (Reviewed lines, step entries, commits named).
+- `ARCHITECTURE.md` brought up to date; `**Reviewed:**` lines in the living docs; `docs/STATUS.md`'s current milestone; ADR 0005's addendum; decisions log; upgrade-later 9, 10, 17, 20 and 24.
+
+**Concepts:**
+- **Deploying from CI:** `wrangler versions upload --preview-alias` makes a branch's preview without making it live; `wrangler deploy` makes it live. https://developers.cloudflare.com/workers/configuration/previews/
+- **A job matrix:** one job definition, several runners in parallel. https://docs.github.com/en/actions/using-jobs/using-a-matrix-for-your-jobs
+- **A sample big enough for its statistic:** a p95 over 19 values is the second largest; over 109 it means what it says. https://en.wikipedia.org/wiki/Percentile
+
+**Found and fixed on the way:**
+- **The built app carried an empty commit** on CI: the root build replaced CI's `FLOWCANVAS_COMMIT` with `git rev-parse`, which fails in CI's container (`b31c774`, with a guard in the deploy script). A GitHub 502 failed `corpus:check` once: two retries for 5xx only (`b31c774`).
+- **ARCHITECTURE** said "end of phase 1b"; its parts table stopped at phase 3 for the web app and phase 4 for the engine; four package dependencies were missing (`ee7a59b`).
+- **11 commits weren't written up** in this file, and step 7.0 lacked most fields: found by the new gate the first time it ran.
+- **Rallly's search p95 failed once on CI (228 ms)** with a sample of 19 searches, in a run whose corpus test measured 5 ms over 312: the sample is now 109 searches; locally 23 and 27 ms (`fff9bd0`).
+- **upgrade-later items 20 and 24** had reached triggers nobody acted on; both are questions for the owner.
+
+**Tests:** corpus 3 new (`select.test.ts`); docs-check 23 (11 new: stamps, parts, dependencies, the gate, triggers, references). On CI: the four Docker shards each opened exactly their projects (Twenty, Medusa, LibreChat; Rallly, Documenso and Excalidraw in `rest`), the slowest in 3 min 53 s; the CI-deployed preview passed the walkthroughs; the catalogue deployed after its visual checks.
+
+**Run and check it:** `pnpm docs:check`; `pnpm docs:milestone` (fails until each living doc is re-read at this milestone); `CORPUS_ONLY=excalidraw pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts`.
+
+**Risks and laptop:** staging deploys from CI only after the next merge, so Cloudflare's own build for `main` stays on until then (two deploys of the same commit are harmless). A fork's pull request gets no preview (upgrade-later 10). Laptop: one Excalidraw shard and the host Docker file, a minute each.
+
+**Commits:** `ci: deploy each pull request's preview from CI` (`a473e20`); `fix(ci): stamp the preview with CI's commit; retry GitHub's own errors` (`b31c774`); `ci: wait 3 minutes for a preview CI deployed itself, not 10` (`cfddb64`); `ci: deploy staging and the catalogue from CI; run the Docker job as shards` (`f8b0221`); `fix(docs): bring ARCHITECTURE up to date and hold it to the code` (`ee7a59b`); `test(host): measure Rallly's search p95 over 109 searches, not 19` (`fff9bd0`); `docs: the milestone gate, and the records checked for what's missing` (`bedd815`).
+
+### Step 7.7 — Proof: 10 hand-labelled flows, the walkthrough, the screens, one shared fake (done by Claude)
+
+**Goal:** the Done when: flows for 10 Documenso functions render correctly and every node opens the right line. And the owner's 12 Nov decision: one shared fake workspace for walkthroughs and page tests, changing nothing they prove.
+
+**What a person can do now:** run phase 7's Try it as a walkthrough (`e2e/try-it/phase-7.spec.ts`): Documenso's `deleteFolder` found with ⌘K, its flow from the right-click menu, getTeam's details, Open code at `get-team.ts:38`, a decision's outcomes. On the canvas, edges now follow ELK's routes around the nodes, a node shows `folder/file:line` as Figma's do, and long names wrap at their words.
+
+**Files:**
+- **Labels:** `corpus/labels/flows.json` (10 flows, 261 lines, each written by reading the function and everything it reaches at the pin); `corpus/src/flows.ts` (a flow as sorted lines; compared exactly) with `flows.test.ts`; `workspace/host/src/corpus.docker.test.ts` asks each flow of the real workspace's engine and compares it.
+- **The engine:** `packages/graph-model/src/` (`GraphEdge.guarded`, graph format 3; `flow.ts` draws from it), `packages/engine/src/semantics/graph-pass.ts`, `snapshots.ts` (store format 3).
+- **Drawing:** `apps/web/src/flow/route.ts` (an edge along ELK's route, rounded corners, the outcome's place; tested), `layout.ts` (keeps each route and node size; `shortPlace`), `canvas/flow-parts.tsx`; `packages/ui/src/components/flow-node/wrap.ts` (where text wraps, and each node's height; tested) and `FlowNode.tsx`.
+- **Shared fakes:** `e2e/try-it/fake-workspace.ts` (the walkthroughs of phases 3 to 7 and the screens test); `apps/web/src/test/fake-api.ts` (the Code view, Calls, ⌘K, graph stats and flow page tests).
+- **Walkthrough and screens:** `e2e/try-it/phase-7.spec.ts` with `fixtures/phase-7-delete-folder.json` (the engine's own flow and details for `deleteFolder`, thrown expressions cut to their call: corpus code isn't copied here); two screens in `e2e/visual/screens.spec.ts`, both themes.
+
+**Concepts:**
+- **Labels written by reading the code**, compared with the engine's answers as sorted lines, so a difference reads as one line. https://en.wikipedia.org/wiki/Ground_truth
+- **Drawing a layout's own routes:** ELK returns each edge's sections (start, bend points, end); drawing those keeps edges where ELK made room for them. https://eclipse.dev/elk/documentation/tooldevelopers/graphdatastructure/coordinatesystems.html
+- **Word breaks in identifiers:** `<wbr>` marks where a line may break inside a word. https://developer.mozilla.org/en-US/docs/Web/HTML/Element/wbr
+
+**Found and fixed on the way:**
+- **The engine hid a call that always happens** (`hasPersistedId(a) && hasPersistedId(b)`): guarded calls were subtracted by line, and the second, guarded call shares the first's line. The pass now says which lines of a call are fully guarded (graph format 3). Found by the labels: the engine then matched all 10 (`c59edae`).
+- **Edges ran behind nodes:** the canvas drew its own step between the nodes' handles, ignoring ELK's routes. Now each edge is drawn along its route (`f8fdf7c`).
+- **Names and paths broke at any character** ("canAccessTeamDocumen" / "t"), making nodes taller than ELK had placed them: names now wrap at their words, paths after a folder or a dash (never inside `.ts`), nodes show `folder/file:line`, and ELK gets each node's real height (`f8fdf7c`). Six catalogue screenshots of the flow node changed for this, by the wrapping alone.
+- **A screen's ⌘K was pressed before the page listened**, in one theme: the screens open the palette from the Search button.
+
+**Tests:** corpus 32 (4 new: flows as lines, the comparison, the labels' shape); graph model 29 (2 new); engine 199 (2 new); ui 14 for the flow node (3 new: wrapping, lines, heights); web 199 before and after the shared fake (7 new for routes and layout: drawing a route, the label's place, real heights, every edge routed from its source to its target). In real workspaces on CI: Documenso's 10 labelled flows **10 of 10**, every labelled function's flow opening at its node **20 of 20**. Walkthroughs: phase 7's, and phases 3 to 6 unchanged on the shared fake. Visual: 186 of 186 (two new screens in both themes, six flow-node images updated). Mutation check: breaking the shared fake's flow route fails the two page tests that open flows.
+
+**Run and check it:** `pnpm --filter @flowcanvas/corpus test`; `CORPUS_ONLY=documenso pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts` (needs Docker; about a minute); `pnpm test:e2e` (the walkthroughs); `pnpm test:visual`.
+
+**Risks and laptop:** the format change drops stored snapshots once; the next pass rebuilds them. Node heights are estimated from character widths (erring tall), not measured: a font change would need the estimate checked. Laptop: Documenso in a real workspace (a minute), the visual suite in Playwright's container three times (4 minutes each), the walkthroughs headless.
+
+**Commits:** `fix(engine): draw a call that always happens beside a guarded one on its line` (`c59edae`); `test(corpus): 10 hand-labelled Documenso flows, compared exactly in real workspaces` (`ab81e33`); `fix(canvas): draw edges along ELK's routes; wrap node text at word boundaries` (`f8fdf7c`); `test(e2e): one shared fake workspace; phase 7's walkthrough and screens` (`113ffbc`); `test(web): one shared fake API for the page tests` (`78cff55`).
+
+### Step 7.8 — Close: the report, 0.11.0, and the milestone gate (done by Claude)
+
+**Goal:** the phase written up for the owner's acceptance, every living doc re-read in full at this milestone, every check green.
+
+**What a person can do now:** read `docs/reports/phase-7.md` and `docs/reports/phase-7-figma-differences.md`; What's new shows 0.11.0.
+
+**Files:** `docs/reports/phase-7.md`, `phase-7-figma-differences.md`, `phase-7/` (the built screens); `CHANGELOG.md` and `package.json` (0.11.0); `docs/STATUS.md`; the living docs re-read in full, each with its **Reviewed** line: README (still true), ARCHITECTURE (Node 26, the version's path, usage recorded since 1d, graph format 3, edges along ELK's routes, the labelled flows, the Docker jobs), RUN-AND-FEATURES (the editor no longer "API only", phase 7's section, the Docker and docs rows, CI's deploys, Coming next), STATUS (phase 7 in review), upgrade-later (items 7, 10 and 23); `tools/docs-check` (`unreleasedVersion`: package.json may run ahead of staging only for a phase in review).
+
+**Concepts:** none new. **Found and fixed on the way:** CI's screen test found the canvas saying "Choose a function to see its flow" for one render under a flow just laid out: it judged emptiness by React Flow's copy of the nodes, which catches up an effect late; it now goes by the nodes it's given (`181d09d`). The milestone gate's first run found it treated phase 6 as current once phase 7 was in review (the current phase is now the last in STATUS that isn't planned), and that `bedd815` was named only by its message. `docs:check` would have refused 0.11.0 before the merge, since staging still serves 0.10.0: it now allows that for a phase in review, with a test. The re-read found the stale passages listed above.Measuring CI for upgrade-later 7 found that its slowest step is the report job's 3-minute download of the walkthroughs' recordings (a question in the report).
+
+**Tests:** docs-check 24 (1 new for the current phase, 1 for an unreleased version); CI on the closing commit, every job green; `pnpm docs:milestone` passing; three mutation checks run for the report (the pass's guarded lines, the flow's use of them, the facts' hash check).
+
+**Run and check it:** `pnpm docs:milestone`; `pnpm dev` and the report's "How to try it".
+
+**Risks and laptop:** none new. Laptop: one web build and the bundle check.
+
+**Commits:** `fix(canvas): never say "Choose a function" under a flow just laid out` (`181d09d`); `chore: release 0.11.0 (phase 7)` (`b355e54`); `docs: phase 7 close: report, 0.11.0, the living docs re-read`.
+
+### Step 7.9 — After acceptance: the owner's answers (done by Claude, 14 Nov)
+
+**Goal:** the owner's answers to the report's questions, before the merge.
+
+**What a person can do now:** a flow opens at 100% on the function it's from, near the top, and **F** fits the whole flow.
+
+**Files:** `apps/web/src/canvas/FlowCanvas.tsx` (`focus`: a node to open on), `project/ProjectPage.tsx` (a flow's root); `e2e/try-it/phase-7.spec.ts` (100%, then F); `e2e/visual/screens.spec.ts` and the two flow screens; `tools/docs-check/src/checks.ts` (a trigger reached when its phase starts); the decisions log, upgrade-later 7 and 23, STATUS, RUN-AND-FEATURES and the report.
+
+**Concepts:** **the viewport:** the canvas's pan and zoom, set once when a flow arrives, the person's after that. https://reactflow.dev/api-reference/types/viewport
+
+**Found and fixed on the way:** accepting phase 7 made `docs:check` find a test's sample and a comment still saying decisions and branches arrive in phase 7, and the site's text test find Graph stats' switch saying "Finished in phase 7" (now phase 12; decisions log). At 100% only the nodes on screen are drawn, so the walkthrough checks the names after F fits. The report's "3 minutes a push" for the report step was one run: GitHub's download action finished in 5 s and then hung for 3 minutes; other runs took 3 and 7 s. Nothing to change; the report and upgrade-later 7 are corrected.
+
+**Tests:** docs-check 24 (one case added: a trigger reached when its phase starts); the phase 7 walkthrough; the four flow screenshots regenerated and stable on a second run.
+
+**Run and check it:** `pnpm dev`, ⌘K → a function → Show the flow: 100%, then F.
+
+**Risks and laptop:** none new. Laptop: the walkthrough and the flow screens in Playwright's container.
+
+**Commits:** `feat(canvas): open a flow at 100% on its function; F fits it` (`7727c97`); `fix(docs-check): an upgrade-later trigger is reached when its phase starts` (`1a32ef0`); `test: nothing says phase 7 is still to come, now it's accepted` (`7d8ea46`); `fix(web): Graph stats is finished in phase 12, not 7` (`1c57abe`).

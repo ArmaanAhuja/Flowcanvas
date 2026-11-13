@@ -16,7 +16,7 @@ import {
 } from '@flowcanvas/workspace-agent/protocol';
 import {
   isEngineResponse,
-  SEMANTIC_OPS,
+  TYPESCRIPT_OPS,
   type EngineRequest,
   type EngineResponse,
 } from '@flowcanvas/engine/protocol';
@@ -145,7 +145,7 @@ export function localHostProvider(options: {
     },
     async index(ref: string, request: EngineRequest): Promise<EngineResponse> {
       // TypeScript's answers can take a while the first time (the host allows 90 s); the rest are quick.
-      const semantic = (SEMANTIC_OPS as readonly string[]).includes(request.op);
+      const semantic = TYPESCRIPT_OPS.includes(request.op);
       const response = await call(
         PATHS.index(ref),
         request,

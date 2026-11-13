@@ -5,6 +5,8 @@ name: CI
 
 on:
   pull_request:
+    # ready_for_review too: marking a phase's pull request ready runs the milestone gate (docs:check --milestone).
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
@@ -36,10 +38,10 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Cloudflare's own build, on this fresh checkout and before anything else builds a package: only the web
-      # app's build task, then the Worker bundled. It failed unseen from phase 1d step 4 to step 11, when the
-      # Worker started bundling packages that task didn't build.
-      - name: Cloudflare's build, as Cloudflare runs it
+      # The deploy's build (deploy.ts; it was Cloudflare's own until 13 Nov 2026), on this fresh checkout and before
+      # anything else builds a package: only the web app's build task, then the Worker bundled. It failed unseen from
+      # phase 1d step 4 to step 11, when the Worker started bundling packages that task didn't build.
+      - name: The deploy's build, on a fresh checkout
         run: |
           pnpm build --filter=@flowcanvas/web
           pnpm exec wrangler versions upload --dry-run
@@ -56,15 +58,47 @@ jobs:
       - run: pnpm corpus:check
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      # The living docs held to the code: release, progress, counts, phases still to come, paths, packages (phase 7).
+      # A pull request ready for review (a phase closing) also passes the milestone gate: every living doc re-read at
+      # this milestone, every step written up in full, every commit named in build-steps (owner, 13 Nov 2026).
+      - name: Docs held to the code (and the milestone gate, once ready for review)
+        env:
+          READY: ${{ github.event_name == 'pull_request' && !github.event.pull_request.draft }}
+        run: |
+          if [ "$READY" = true ]; then
+            # The checkout is one commit deep: the gate needs the branch's history back to main.
+            git fetch --quiet --unshallow origin +refs/heads/main:refs/remotes/origin/main
+            pnpm docs:milestone
+          else
+            pnpm docs:check
+          fi
 
   docker:
-    name: Workspaces against real Docker
+    # Not a required check. Split into parallel shards (owner, 13 Nov 2026): the corpus test was 8½ of the job's 9
+    # minutes, most of it the three largest projects. Each large project gets its own runner; the `rest` shard runs
+    # every other Docker test and every other project (CORPUS_EXCEPT), so a project added later is still tested.
+    name: Workspaces against real Docker (${{ matrix.shard }})
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      # One shard failing doesn't hide what the others found.
+      fail-fast: false
+      matrix:
+        include:
+          - shard: rest
+            except: twenty,medusa,librechat
+          - shard: twenty
+            only: twenty
+          - shard: medusa
+            only: medusa
+          - shard: librechat
+            only: librechat
     env:
       # A runner isn't the owner's laptop: its small disk would read as pressure and refuse every workspace.
       # Only test hosts (fc-test- prefixes) accept this; the guard's own tests still run in `pnpm test`.
       WORKSPACE_HOST_TEST_PRESSURE: none
+      CORPUS_ONLY: ${{ matrix.only }}
+      CORPUS_EXCEPT: ${{ matrix.except }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -81,8 +115,14 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Isolation, the egress allowlist, clone time, sleep and resume, the guard, no secrets kept.
-      - run: pnpm test:docker
+      # Isolation, the egress allowlist, clone time, sleep and resume, the guard, no secrets kept, and the corpus.
+      - if: ${{ matrix.shard == 'rest' }}
+        run: pnpm test:docker
+      # A large project's shard: only the corpus test, for that project.
+      - if: ${{ matrix.shard != 'rest' }}
+        run: |
+          pnpm turbo run build --filter='@flowcanvas/workspace-host^...'
+          pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts
 
   perf:
     name: Canvas performance (headless, regressions only)
@@ -126,6 +166,8 @@ jobs:
       options: --ipc=host --init
     env:
       FLOWCANVAS_IN_PLAYWRIGHT_IMAGE: 1
+      # Whether CI can deploy the catalogue (a fork's pull request has no secrets); the token stays in its step.
+      CAN_DEPLOY: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -142,6 +184,20 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:visual
+      # The catalogue just built and checked: as the branch's preview, or staging from main (owner, 13 Nov 2026; it
+      # was Cloudflare's own build). Only once its checks pass.
+      - name: Deploy the catalogue (preview, or staging from main)
+        if: ${{ env.CAN_DEPLOY == 'true' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            node e2e/scripts/deploy.ts --worker catalogue --to preview --branch "$HEAD_REF" --commit "$COMMIT"
+          else
+            node e2e/scripts/deploy.ts --worker catalogue --to staging --commit "$COMMIT"
+          fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
@@ -155,6 +211,9 @@ jobs:
     name: Walkthroughs (try-it) on the deployed app
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    env:
+      # Whether CI can deploy the preview (a fork's pull request has no secrets); the token itself stays in its step.
+      CAN_DEPLOY: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
     container:
       image: mcr.microsoft.com/playwright:v1.64.1-noble
       options: --ipc=host --init
@@ -170,7 +229,25 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Cloudflare builds the preview (PRs) or staging (main) at the same time; wait for this exact commit.
+      # CI deploys this exact commit (owner, 13 Nov 2026): a pull request's preview, and staging from main. Cloudflare's
+      # GitHub app dropped some pushes, and the walkthroughs waited for builds that never came. A fork's pull request
+      # has no secrets: it gets no preview from CI, and its walkthroughs wait for one and fail (said in the log).
+      - name: Deploy this commit (preview, or staging from main)
+        if: ${{ env.CAN_DEPLOY == 'true' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FLOWCANVAS_COMMIT: ${{ env.COMMIT }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          pnpm build --filter=@flowcanvas/web
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            node e2e/scripts/deploy.ts --worker app --to preview --branch "$HEAD_REF" --commit "$COMMIT"
+          else
+            node e2e/scripts/deploy.ts --worker app --to staging --commit "$COMMIT"
+          fi
+      # Then wait until the preview (PRs) or staging (main) serves this exact commit: within seconds once deployed,
+      # so fail in 3 minutes, not 10.
       - name: Wait for the deployment of this commit
         id: deploy
         working-directory: e2e
@@ -178,10 +255,13 @@ jobs:
           CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
           HEAD_REF: ${{ github.head_ref }}
         run: |
+          if [ "$CAN_DEPLOY" != true ]; then
+            echo "No Cloudflare token here (a fork's pull request?): CI didn't deploy, so there may be no preview to test."
+          fi
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            node scripts/wait-for-deploy.ts --branch "$HEAD_REF" --commit "$COMMIT"
+            node scripts/wait-for-deploy.ts --branch "$HEAD_REF" --commit "$COMMIT" --timeout 180
           else
-            node scripts/wait-for-deploy.ts --url "https://flowcanvas.${CLOUDFLARE_WORKERS_SUBDOMAIN}.workers.dev/" --commit "$COMMIT"
+            node scripts/wait-for-deploy.ts --url "https://flowcanvas.${CLOUDFLARE_WORKERS_SUBDOMAIN}.workers.dev/" --commit "$COMMIT" --timeout 180
           fi
       - name: Walkthroughs
         run: pnpm --filter @flowcanvas/e2e test:e2e

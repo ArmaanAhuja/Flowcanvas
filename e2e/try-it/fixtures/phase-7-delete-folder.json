@@ -1,0 +1,820 @@
+{
+  "about": "The engine’s own answers for Documenso’s deleteFolder at its pin (corpus/manifest.json), captured from the engine at commit c59edae: its flow (one of the ten in corpus/labels/flows.json) and the details of each function in it. Thrown expressions are cut to their call (new AppError(…)): the corpus’s code isn’t copied into this repository. The engine’s answers themselves are proven in real workspaces by the Docker corpus test.",
+  "flow": {
+    "flow": {
+      "root": "packages/lib/server-only/folder/delete-folder.ts#deleteFolder",
+      "nodes": [
+        {
+          "id": "packages/lib/server-only/folder/delete-folder.ts#deleteFolder",
+          "kind": "code-unit",
+          "name": "deleteFolder",
+          "place": {
+            "path": "packages/lib/server-only/folder/delete-folder.ts",
+            "line": 14,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/lib/server-only/folder/delete-folder.ts#deleteFolder?1",
+          "kind": "decision",
+          "name": "!folder",
+          "place": {
+            "path": "packages/lib/server-only/folder/delete-folder.ts",
+            "line": 30,
+            "column": 7
+          },
+          "unit": null,
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/lib/server-only/folder/delete-folder.ts#deleteFolder?2",
+          "kind": "decision",
+          "name": "!hasPermission",
+          "place": {
+            "path": "packages/lib/server-only/folder/delete-folder.ts",
+            "line": 38,
+            "column": 7
+          },
+          "unit": null,
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/lib/server-only/team/get-team.ts#getTeamById",
+          "kind": "code-unit",
+          "name": "getTeamById",
+          "place": {
+            "path": "packages/lib/server-only/team/get-team.ts",
+            "line": 11,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/lib/utils/teams.ts#buildTeamWhereQuery",
+          "kind": "code-unit",
+          "name": "buildTeamWhereQuery",
+          "place": {
+            "path": "packages/lib/utils/teams.ts",
+            "line": 129,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/lib/utils/teams.ts#canAccessTeamDocument",
+          "kind": "code-unit",
+          "name": "canAccessTeamDocument",
+          "place": {
+            "path": "packages/lib/utils/teams.ts",
+            "line": 61,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/lib/errors/app-error.ts#AppError",
+          "kind": "code-unit",
+          "name": "AppError",
+          "place": {
+            "path": "packages/lib/errors/app-error.ts",
+            "line": 184,
+            "column": 14
+          },
+          "unit": "class",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/lib/server-only/team/get-team.ts#getTeam",
+          "kind": "code-unit",
+          "name": "getTeam",
+          "place": {
+            "path": "packages/lib/server-only/team/get-team.ts",
+            "line": 38,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/lib/server-only/team/get-team.ts#getTeam?1",
+          "kind": "decision",
+          "name": "!team",
+          "place": {
+            "path": "packages/lib/server-only/team/get-team.ts",
+            "line": 69,
+            "column": 7
+          },
+          "unit": null,
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/lib/utils/teams.ts#getHighestTeamRoleInGroup",
+          "kind": "code-unit",
+          "name": "getHighestTeamRoleInGroup",
+          "place": {
+            "path": "packages/lib/utils/teams.ts",
+            "line": 80,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/lib/utils/teams.ts#extractDerivedTeamSettings",
+          "kind": "code-unit",
+          "name": "extractDerivedTeamSettings",
+          "place": {
+            "path": "packages/lib/utils/teams.ts",
+            "line": 222,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        }
+      ],
+      "edges": [
+        {
+          "from": "packages/lib/server-only/folder/delete-folder.ts#deleteFolder",
+          "to": "packages/lib/server-only/folder/delete-folder.ts#deleteFolder?1",
+          "kind": "branch",
+          "relation": null,
+          "label": null,
+          "provenance": "resolved",
+          "lines": [30],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/server-only/folder/delete-folder.ts#deleteFolder",
+          "to": "packages/lib/server-only/folder/delete-folder.ts#deleteFolder?2",
+          "kind": "branch",
+          "relation": null,
+          "label": null,
+          "provenance": "resolved",
+          "lines": [38],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/server-only/folder/delete-folder.ts#deleteFolder",
+          "to": "packages/lib/server-only/team/get-team.ts#getTeamById",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [15],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/server-only/folder/delete-folder.ts#deleteFolder",
+          "to": "packages/lib/utils/teams.ts#buildTeamWhereQuery",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [20],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/server-only/folder/delete-folder.ts#deleteFolder",
+          "to": "packages/lib/utils/teams.ts#canAccessTeamDocument",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [36],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/server-only/folder/delete-folder.ts#deleteFolder?1",
+          "to": "packages/lib/errors/app-error.ts#AppError",
+          "kind": "branch",
+          "relation": "calls",
+          "label": "yes",
+          "provenance": "resolved",
+          "lines": [31],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/server-only/folder/delete-folder.ts#deleteFolder?2",
+          "to": "packages/lib/errors/app-error.ts#AppError",
+          "kind": "branch",
+          "relation": "calls",
+          "label": "yes",
+          "provenance": "resolved",
+          "lines": [39],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/server-only/team/get-team.ts#getTeamById",
+          "to": "packages/lib/server-only/team/get-team.ts#getTeam",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [12],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/server-only/team/get-team.ts#getTeam",
+          "to": "packages/lib/server-only/team/get-team.ts#getTeam?1",
+          "kind": "branch",
+          "relation": null,
+          "label": null,
+          "provenance": "resolved",
+          "lines": [69],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/server-only/team/get-team.ts#getTeam",
+          "to": "packages/lib/utils/teams.ts#buildTeamWhereQuery",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [41],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/server-only/team/get-team.ts#getTeam",
+          "to": "packages/lib/utils/teams.ts#getHighestTeamRoleInGroup",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [80],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/server-only/team/get-team.ts#getTeam",
+          "to": "packages/lib/utils/teams.ts#extractDerivedTeamSettings",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [82],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/server-only/team/get-team.ts#getTeam?1",
+          "to": "packages/lib/errors/app-error.ts#AppError",
+          "kind": "branch",
+          "relation": "calls",
+          "label": "yes",
+          "provenance": "resolved",
+          "lines": [70],
+          "sites": 1
+        }
+      ],
+      "unknown": [
+        {
+          "from": "packages/lib/server-only/folder/delete-folder.ts#deleteFolder",
+          "total": 2,
+          "calls": [
+            {
+              "target": "prisma.folder.findFirst",
+              "relation": "calls",
+              "label": null,
+              "lines": [17],
+              "sites": 1
+            },
+            {
+              "target": "prisma.folder.delete",
+              "relation": "calls",
+              "label": null,
+              "lines": [44],
+              "sites": 1
+            }
+          ]
+        },
+        {
+          "from": "packages/lib/server-only/team/get-team.ts#getTeam",
+          "total": 1,
+          "calls": [
+            {
+              "target": "prisma.team.findFirst",
+              "relation": "calls",
+              "label": null,
+              "lines": [39],
+              "sites": 1
+            }
+          ]
+        }
+      ],
+      "cut": [],
+      "hidden": 0,
+      "byProvenance": {
+        "observed": 0,
+        "resolved": 10,
+        "convention": 0,
+        "suggested": 0,
+        "unknown": 3
+      }
+    },
+    "message": null,
+    "version": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "takenAt": "2026-11-13T18:00:00.000Z",
+    "current": true,
+    "complete": true
+  },
+  "details": {
+    "packages/lib/server-only/folder/delete-folder.ts#deleteFolder": {
+      "details": {
+        "id": "packages/lib/server-only/folder/delete-folder.ts#deleteFolder",
+        "name": "deleteFolder",
+        "unit": "function",
+        "place": {
+          "path": "packages/lib/server-only/folder/delete-folder.ts",
+          "line": 14,
+          "column": 14
+        },
+        "signature": "({ userId, teamId, folderId }: DeleteFolderOptions): Promise<any>",
+        "params": {
+          "items": [
+            {
+              "name": "{ userId, teamId, folderId }",
+              "type": "DeleteFolderOptions",
+              "optional": false
+            }
+          ],
+          "total": 1
+        },
+        "returns": "Promise<any>",
+        "async": true,
+        "exported": true,
+        "decisions": {
+          "items": [
+            {
+              "kind": "if",
+              "condition": "!folder",
+              "outcomes": ["yes"],
+              "line": 30
+            },
+            {
+              "kind": "if",
+              "condition": "!hasPermission",
+              "outcomes": ["yes"],
+              "line": 38
+            }
+          ],
+          "total": 2
+        },
+        "throws": {
+          "items": [
+            {
+              "text": "new AppError(…)",
+              "line": 31
+            },
+            {
+              "text": "new AppError(…)",
+              "line": 39
+            }
+          ],
+          "total": 2
+        },
+        "awaits": {
+          "items": [
+            {
+              "text": "getTeamById",
+              "line": 15
+            },
+            {
+              "text": "prisma.folder.findFirst",
+              "line": 17
+            },
+            {
+              "text": "prisma.folder.delete",
+              "line": 44
+            }
+          ],
+          "total": 3
+        },
+        "unresolved": {
+          "items": [
+            {
+              "text": "prisma.folder.findFirst",
+              "lines": [17]
+            },
+            {
+              "text": "prisma.folder.delete",
+              "lines": [44]
+            }
+          ],
+          "total": 2
+        },
+        "writes": {
+          "items": [],
+          "total": 0
+        }
+      },
+      "message": null
+    },
+    "packages/lib/server-only/team/get-team.ts#getTeamById": {
+      "details": {
+        "id": "packages/lib/server-only/team/get-team.ts#getTeamById",
+        "name": "getTeamById",
+        "unit": "function",
+        "place": {
+          "path": "packages/lib/server-only/team/get-team.ts",
+          "line": 11,
+          "column": 14
+        },
+        "signature": "({ userId, teamId }: GetTeamByIdOptions): Promise<any>",
+        "params": {
+          "items": [
+            {
+              "name": "{ userId, teamId }",
+              "type": "GetTeamByIdOptions",
+              "optional": false
+            }
+          ],
+          "total": 1
+        },
+        "returns": "Promise<any>",
+        "async": true,
+        "exported": true,
+        "decisions": {
+          "items": [],
+          "total": 0
+        },
+        "throws": {
+          "items": [],
+          "total": 0
+        },
+        "awaits": {
+          "items": [
+            {
+              "text": "getTeam",
+              "line": 12
+            }
+          ],
+          "total": 1
+        },
+        "unresolved": {
+          "items": [],
+          "total": 0
+        },
+        "writes": {
+          "items": [],
+          "total": 0
+        }
+      },
+      "message": null
+    },
+    "packages/lib/utils/teams.ts#buildTeamWhereQuery": {
+      "details": {
+        "id": "packages/lib/utils/teams.ts#buildTeamWhereQuery",
+        "name": "buildTeamWhereQuery",
+        "unit": "function",
+        "place": {
+          "path": "packages/lib/utils/teams.ts",
+          "line": 129,
+          "column": 14
+        },
+        "signature": "({ teamId, userId, roles, }: BuildTeamWhereQueryOptions): Prisma.TeamWhereUniqueInput",
+        "params": {
+          "items": [
+            {
+              "name": "{ teamId, userId, roles, }",
+              "type": "BuildTeamWhereQueryOptions",
+              "optional": false
+            }
+          ],
+          "total": 1
+        },
+        "returns": "Prisma.TeamWhereUniqueInput",
+        "async": false,
+        "exported": true,
+        "decisions": {
+          "items": [
+            {
+              "kind": "if",
+              "condition": "!roles",
+              "outcomes": ["yes"],
+              "line": 135
+            }
+          ],
+          "total": 1
+        },
+        "throws": {
+          "items": [],
+          "total": 0
+        },
+        "awaits": {
+          "items": [],
+          "total": 0
+        },
+        "unresolved": {
+          "items": [],
+          "total": 0
+        },
+        "writes": {
+          "items": [],
+          "total": 0
+        }
+      },
+      "message": null
+    },
+    "packages/lib/utils/teams.ts#canAccessTeamDocument": {
+      "details": {
+        "id": "packages/lib/utils/teams.ts#canAccessTeamDocument",
+        "name": "canAccessTeamDocument",
+        "unit": "function",
+        "place": {
+          "path": "packages/lib/utils/teams.ts",
+          "line": 61,
+          "column": 14
+        },
+        "signature": "(role: TeamMemberRole, visibility: DocumentVisibility): boolean",
+        "params": {
+          "items": [
+            {
+              "name": "role",
+              "type": "TeamMemberRole",
+              "optional": false
+            },
+            {
+              "name": "visibility",
+              "type": "DocumentVisibility",
+              "optional": false
+            }
+          ],
+          "total": 2
+        },
+        "returns": "boolean",
+        "async": false,
+        "exported": true,
+        "decisions": {
+          "items": [],
+          "total": 0
+        },
+        "throws": {
+          "items": [],
+          "total": 0
+        },
+        "awaits": {
+          "items": [],
+          "total": 0
+        },
+        "unresolved": {
+          "items": [],
+          "total": 0
+        },
+        "writes": {
+          "items": [],
+          "total": 0
+        }
+      },
+      "message": null
+    },
+    "packages/lib/errors/app-error.ts#AppError": {
+      "details": {
+        "id": "packages/lib/errors/app-error.ts#AppError",
+        "name": "AppError",
+        "unit": "class",
+        "place": {
+          "path": "packages/lib/errors/app-error.ts",
+          "line": 184,
+          "column": 14
+        },
+        "signature": null,
+        "params": {
+          "items": [
+            {
+              "name": "errorCode",
+              "type": "string",
+              "optional": false
+            },
+            {
+              "name": "options",
+              "type": "AppErrorOptions",
+              "optional": true
+            }
+          ],
+          "total": 2
+        },
+        "returns": null,
+        "async": false,
+        "exported": true,
+        "decisions": {
+          "items": [],
+          "total": 0
+        },
+        "throws": {
+          "items": [],
+          "total": 0
+        },
+        "awaits": {
+          "items": [],
+          "total": 0
+        },
+        "unresolved": {
+          "items": [],
+          "total": 0
+        },
+        "writes": {
+          "items": [],
+          "total": 0
+        }
+      },
+      "message": null
+    },
+    "packages/lib/server-only/team/get-team.ts#getTeam": {
+      "details": {
+        "id": "packages/lib/server-only/team/get-team.ts#getTeam",
+        "name": "getTeam",
+        "unit": "function",
+        "place": {
+          "path": "packages/lib/server-only/team/get-team.ts",
+          "line": 38,
+          "column": 14
+        },
+        "signature": "({ teamReference, userId }: { teamReference: number | string; userId: number }): Promise<any>",
+        "params": {
+          "items": [
+            {
+              "name": "{ teamReference, userId }",
+              "type": "{ teamReference: number | string; userId: number }",
+              "optional": false
+            }
+          ],
+          "total": 1
+        },
+        "returns": "Promise<any>",
+        "async": true,
+        "exported": true,
+        "decisions": {
+          "items": [
+            {
+              "kind": "ternary",
+              "condition": "typeof teamReference === 'number'",
+              "outcomes": ["yes", "no"],
+              "line": 42
+            },
+            {
+              "kind": "ternary",
+              "condition": "typeof teamReference === 'string'",
+              "outcomes": ["yes", "no"],
+              "line": 43
+            },
+            {
+              "kind": "if",
+              "condition": "!team",
+              "outcomes": ["yes"],
+              "line": 69
+            }
+          ],
+          "total": 3
+        },
+        "throws": {
+          "items": [
+            {
+              "text": "new AppError(…)",
+              "line": 70
+            }
+          ],
+          "total": 1
+        },
+        "awaits": {
+          "items": [
+            {
+              "text": "prisma.team.findFirst",
+              "line": 39
+            }
+          ],
+          "total": 1
+        },
+        "unresolved": {
+          "items": [
+            {
+              "text": "prisma.team.findFirst",
+              "lines": [39]
+            }
+          ],
+          "total": 1
+        },
+        "writes": {
+          "items": [],
+          "total": 0
+        }
+      },
+      "message": null
+    },
+    "packages/lib/utils/teams.ts#getHighestTeamRoleInGroup": {
+      "details": {
+        "id": "packages/lib/utils/teams.ts#getHighestTeamRoleInGroup",
+        "name": "getHighestTeamRoleInGroup",
+        "unit": "function",
+        "place": {
+          "path": "packages/lib/utils/teams.ts",
+          "line": 80,
+          "column": 14
+        },
+        "signature": "(groups: TeamGroup[]): TeamMemberRole",
+        "params": {
+          "items": [
+            {
+              "name": "groups",
+              "type": "TeamGroup[]",
+              "optional": false
+            }
+          ],
+          "total": 1
+        },
+        "returns": "TeamMemberRole",
+        "async": false,
+        "exported": true,
+        "decisions": {
+          "items": [
+            {
+              "kind": "if",
+              "condition": "currentRolePriority > highestTeamRolePriority",
+              "outcomes": ["yes"],
+              "line": 87
+            }
+          ],
+          "total": 1
+        },
+        "throws": {
+          "items": [],
+          "total": 0
+        },
+        "awaits": {
+          "items": [],
+          "total": 0
+        },
+        "unresolved": {
+          "items": [],
+          "total": 0
+        },
+        "writes": {
+          "items": [],
+          "total": 0
+        }
+      },
+      "message": null
+    },
+    "packages/lib/utils/teams.ts#extractDerivedTeamSettings": {
+      "details": {
+        "id": "packages/lib/utils/teams.ts#extractDerivedTeamSettings",
+        "name": "extractDerivedTeamSettings",
+        "unit": "function",
+        "place": {
+          "path": "packages/lib/utils/teams.ts",
+          "line": 222,
+          "column": 14
+        },
+        "signature": "(organisationSettings: Omit<OrganisationGlobalSettings, 'id'>, teamSettings: Omit<TeamGlobalSettings, 'id'>): Omit<OrganisationGlobalSettings, 'id'>",
+        "params": {
+          "items": [
+            {
+              "name": "organisationSettings",
+              "type": "Omit<OrganisationGlobalSettings, 'id'>",
+              "optional": false
+            },
+            {
+              "name": "teamSettings",
+              "type": "Omit<TeamGlobalSettings, 'id'>",
+              "optional": false
+            }
+          ],
+          "total": 2
+        },
+        "returns": "Omit<OrganisationGlobalSettings, 'id'>",
+        "async": false,
+        "exported": true,
+        "decisions": {
+          "items": [
+            {
+              "kind": "if",
+              "condition": "teamValue !== null",
+              "outcomes": ["yes"],
+              "line": 234
+            }
+          ],
+          "total": 1
+        },
+        "throws": {
+          "items": [],
+          "total": 0
+        },
+        "awaits": {
+          "items": [],
+          "total": 0
+        },
+        "unresolved": {
+          "items": [],
+          "total": 0
+        },
+        "writes": {
+          "items": [],
+          "total": 0
+        }
+      },
+      "message": null
+    }
+  }
+}

@@ -8,8 +8,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LabsProvider } from '../labs/LabsProvider';
 import type { Project } from '../projects/api';
 import { ProjectPage } from '../project/ProjectPage';
+import { fakeApi, jsdomLayout, reply } from '../test/fake-api';
 import { CODE_TEXT, restoredText } from './CodeView';
 import { FILES_TEXT } from './texts';
+
+// The whole project page renders here (React Flow, the editor, the dialogs): about 1 s a test alone, past 5 s when
+// every package's tests share the laptop's cores in `pnpm test` (found in phase 7, once flows added ELK's tests to
+// the run). The work is what's tested, so the limit is set for it.
+vi.setConfig({ testTimeout: 15_000 });
 
 const V1 = '1'.repeat(64);
 const V2 = '2'.repeat(64);
@@ -39,54 +45,41 @@ let saves: { path: string; body: unknown }[];
 let journal: Map<string, unknown>;
 let saveAnswer: { status: number; body: unknown };
 
-function fakeApi(state: 'running' | 'sleeping' = 'running'): typeof fetch {
-  return (input, init) => {
-    const url = new URL(
-      input instanceof Request ? input.url : input.toString(),
-      'https://flowcanvas.example',
-    );
-    const json = (body: unknown, status = 200) => Promise.resolve(Response.json(body, { status }));
-    if (url.pathname === '/api/projects')
-      return json({ projects: [project(state)], workspacesAvailable: true });
-    if (url.pathname.endsWith('/workspace/tree')) {
-      return json({
-        files: ['.env.example', 'public/logo.png', 'src/index.ts', 'src/two.ts', 'src/.env'],
-        truncated: false,
-      });
-    }
-    if (url.pathname.endsWith('/workspace/journal/entry') && init?.method !== 'PUT') {
+const fakeCodeApi = (state: 'running' | 'sleeping' = 'running') =>
+  fakeApi(project(state), {
+    '/workspace/tree': () => ({
+      files: ['.env.example', 'public/logo.png', 'src/index.ts', 'src/two.ts', 'src/.env'],
+      truncated: false,
+    }),
+    // A saved draft is answered by the catch-all's `{}`, as before; a read finds the journal's entry, if any.
+    '/workspace/journal/entry': (url, init) => {
+      if (init?.method === 'PUT') return {};
       const entry = journal.get(url.searchParams.get('path') ?? '');
-      return entry === undefined ? json({ error: 'none', code: 'not_found' }, 404) : json(entry);
-    }
-    if (url.pathname.endsWith('/workspace/file')) {
+      return entry ?? reply({ error: 'none', code: 'not_found' }, 404);
+    },
+    '/workspace/file': (url, init) => {
       const path = url.searchParams.get('path') ?? '';
       if (init?.method === 'PUT') {
         saves.push({ path, body: JSON.parse(typeof init.body === 'string' ? init.body : '') });
-        return json(saveAnswer.body, saveAnswer.status);
+        return reply(saveAnswer.body, saveAnswer.status);
       }
       if (path === 'src/.env') {
-        return json(
+        return reply(
           { error: 'Secrets live in the project’s vault, not in .env files.', code: 'secret_file' },
           403,
         );
       }
-      const file = FILES[path];
-      return file === undefined
-        ? json({ error: 'There’s nothing at that path.', code: 'not_found' }, 404)
-        : json(file);
-    }
-    return json({});
-  };
-}
+      return (
+        FILES[path] ?? reply({ error: 'There’s nothing at that path.', code: 'not_found' }, 404)
+      );
+    },
+  });
 
-// jsdom has no layout: give the file tree's virtualizer a viewport.
 beforeEach(() => {
   saves = [];
   journal = new Map();
   saveAnswer = { status: 200, body: { path: 'src/index.ts', size: 27, version: V2 } };
-  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(248);
-  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
-  Element.prototype.scrollIntoView = () => undefined;
+  jsdomLayout();
 });
 afterEach(() => {
   cleanup();
@@ -133,7 +126,7 @@ const row = (name: string) =>
 
 describe('the Code view', () => {
   it('lists the files on the left, and asks for one to be chosen', async () => {
-    renderPage(fakeApi());
+    renderPage(fakeCodeApi());
     await openCode();
     expect(await screen.findByRole('heading', { name: 'Files' })).toBeTruthy();
     await screen.findByRole('treegrid', { name: 'Files' });
@@ -141,7 +134,7 @@ describe('the Code view', () => {
   });
 
   it('opens a file from the tree, in a tab, with its path and status', async () => {
-    renderPage(fakeApi());
+    renderPage(fakeCodeApi());
     const user = await openCode();
     await screen.findByRole('treegrid', { name: 'Files' });
     await user.click(row('src'));
@@ -163,7 +156,7 @@ describe('the Code view', () => {
   });
 
   it('shows the shown file’s cursor in the status bar after switching files (regression, phase 5)', async () => {
-    renderPage(fakeApi());
+    renderPage(fakeCodeApi());
     const user = await openCode();
     await screen.findByRole('treegrid', { name: 'Files' });
     await user.click(row('src'));
@@ -192,7 +185,7 @@ describe('the Code view', () => {
   });
 
   it('marks unsaved changes, saves with Ctrl+S from the opened version, and clears the mark', async () => {
-    renderPage(fakeApi());
+    renderPage(fakeCodeApi());
     const user = await openCode();
     await screen.findByRole('treegrid', { name: 'Files' });
     await user.click(row('src'));
@@ -225,7 +218,7 @@ describe('the Code view', () => {
   });
 
   it('undoing back to the saved text clears the mark', async () => {
-    renderPage(fakeApi());
+    renderPage(fakeCodeApi());
     const user = await openCode();
     await screen.findByRole('treegrid', { name: 'Files' });
     await user.click(row('src'));
@@ -242,7 +235,7 @@ describe('the Code view', () => {
       status: 409,
       body: { error: 'This file changed in the workspace since you opened it.', code: 'conflict' },
     };
-    renderPage(fakeApi());
+    renderPage(fakeCodeApi());
     const user = await openCode();
     await screen.findByRole('treegrid', { name: 'Files' });
     await user.click(row('src'));
@@ -264,7 +257,7 @@ describe('the Code view', () => {
   });
 
   it('shows a binary file and a .env file honestly, never as text', async () => {
-    renderPage(fakeApi());
+    renderPage(fakeCodeApi());
     const user = await openCode();
     await screen.findByRole('treegrid', { name: 'Files' });
     await user.click(row('public'));
@@ -279,14 +272,14 @@ describe('the Code view', () => {
   });
 
   it('remembers the open files for next time', async () => {
-    renderPage(fakeApi());
+    renderPage(fakeCodeApi());
     const user = await openCode();
     await screen.findByRole('treegrid', { name: 'Files' });
     await user.click(row('src'));
     await user.click(row('index.ts'));
     await editorView();
     cleanup();
-    renderPage(fakeApi());
+    renderPage(fakeCodeApi());
     expect(await editorView()).toBeTruthy();
     expect(screen.getByRole('button', { name: 'index.ts' }).getAttribute('aria-current')).toBe(
       'true',
@@ -294,7 +287,7 @@ describe('the Code view', () => {
   });
 
   it('says to open the workspace when it is not running', async () => {
-    renderPage(fakeApi('sleeping'));
+    renderPage(fakeCodeApi('sleeping'));
     await openCode();
     expect(screen.getAllByText(FILES_TEXT.notRunning)).toHaveLength(2);
   });
@@ -313,7 +306,7 @@ describe('the Code view', () => {
       JSON.stringify({ open: ['src/index.ts'], active: 'src/index.ts' }),
     );
     localStorage.setItem('flowcanvas-view-p-1', 'code');
-    renderPage(fakeApi());
+    renderPage(fakeCodeApi());
     const view = await editorView();
     expect(view.state.doc.toString()).toBe('export const answer = 43; // unsaved\n');
     expect(await screen.findByText(restoredText(at))).toBeTruthy();
@@ -321,7 +314,7 @@ describe('the Code view', () => {
   });
 
   it('has an autosave switch, on by default and remembered', async () => {
-    renderPage(fakeApi());
+    renderPage(fakeCodeApi());
     const user = await openCode();
     await screen.findByRole('treegrid', { name: 'Files' });
     await user.click(row('src'));
@@ -346,7 +339,7 @@ describe('the Code view', () => {
       'flowcanvas-code-p-1',
       JSON.stringify({ open: ['src/index.ts'], active: 'src/index.ts' }),
     );
-    renderPage(fakeApi());
+    renderPage(fakeCodeApi());
     await openCode();
     await editorView();
     expect(await screen.findByRole('button', { name: 'index.ts, unsaved changes' })).toBeTruthy();

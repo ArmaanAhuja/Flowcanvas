@@ -43,6 +43,7 @@ export function validateGraph(graph: Graph, limit = 50): string[] {
       say(`node ${node.id}: its place isn't a path with a 1-based line and column`);
     }
   }
+  const kinds = new Map(graph.nodes.map((node) => [node.id, node.kind]));
   const keys = new Set<string>();
   for (const edge of graph.edges) {
     const name = `edge ${edge.from} → ${edge.to ?? (edge.target === null || edge.target === '' ? '?' : edge.target)}`;
@@ -51,8 +52,25 @@ export function validateGraph(graph: Graph, limit = 50): string[] {
     if (!has(PROVENANCES, edge.provenance)) {
       say(`${name}: unknown provenance ${edge.provenance}`);
     }
-    if (edge.kind === 'call' ? !has(RELATIONS, edge.relation) : edge.relation !== null) {
+    // A branch out of a decision reaches a call: it says calls or renders, as the call does (ADR 0028).
+    const toDecision = edge.to !== null && kinds.get(edge.to) === 'decision';
+    const reachesCall =
+      edge.kind === 'call' || (edge.kind === 'branch' && edge.label !== null && !toDecision);
+    if (reachesCall ? !has(RELATIONS, edge.relation) : edge.relation !== null) {
       say(`${name}: a call needs calls or renders, and only a call has one`);
+    }
+    const fromDecision = kinds.get(edge.from) === 'decision';
+    if (edge.kind !== 'branch' && edge.label !== null) say(`${name}: only a branch has a label`);
+    if (edge.kind === 'branch') {
+      if (fromDecision && (typeof edge.label !== 'string' || edge.label === '')) {
+        say(`${name}: a branch out of a decision needs its outcome`);
+      }
+      if (
+        !fromDecision &&
+        (edge.label !== null || edge.to === null || kinds.get(edge.to) !== 'decision')
+      ) {
+        say(`${name}: a branch from code goes into a decision, without a label`);
+      }
     }
     // Unknown means the target wasn't found: never a node, always the call's text. Anything else reaches a node.
     if (edge.provenance === 'unknown') {
@@ -71,6 +89,18 @@ export function validateGraph(graph: Graph, limit = 50): string[] {
       )
     ) {
       say(`${name}: its lines must be 1-based, ascending, each once`);
+    }
+    if (edge.guarded !== undefined) {
+      if (edge.kind !== 'call') say(`${name}: only a call has guarded lines`);
+      const lines = new Set(edge.lines);
+      if (
+        edge.guarded.length === 0 ||
+        !edge.guarded.every(
+          (line, i) => lines.has(line) && (i === 0 || line > (edge.guarded?.[i - 1] ?? 0)),
+        )
+      ) {
+        say(`${name}: its guarded lines must be some of its lines, ascending, each once`);
+      }
     }
     const key = edgeKey(edge);
     if (keys.has(key)) say(`${name}: appears twice`);

@@ -4,6 +4,7 @@ import {
   EngineProblem,
   isEngineResponse,
   parseEngineRequest,
+  TYPESCRIPT_OPS,
   type EngineRequest,
   type EngineStatus,
   type SymbolHit,
@@ -245,6 +246,183 @@ describe('the graph (phase 6)', () => {
       { state: 'ready', message: null, snapshot: { ...snapshot, stats: { ...stats, extra: 1 } } },
     ]) {
       expect(ok(bad), JSON.stringify(bad).slice(0, 80)).toBe(false);
+    }
+  });
+});
+
+describe('flows (phase 7)', () => {
+  const at = { path: 'src/poll.ts', line: 3, column: 17 };
+  const request: EngineRequest = { op: 'flow', ...at };
+  const node = (id: string, kind = 'code-unit') => ({
+    id,
+    kind,
+    name: id.split('#')[1],
+    place: { path: 'src/poll.ts', line: 3, column: 17 },
+    unit: kind === 'code-unit' ? 'function' : null,
+    change: 'unchanged',
+  });
+  const flow = {
+    root: 'src/poll.ts#create',
+    nodes: [
+      node('src/poll.ts#create'),
+      node('src/poll.ts#create?1', 'decision'),
+      node('src/db.ts#save'),
+    ],
+    edges: [
+      {
+        from: 'src/poll.ts#create',
+        to: 'src/poll.ts#create?1',
+        kind: 'branch',
+        relation: null,
+        label: null,
+        provenance: 'resolved',
+        lines: [4],
+        sites: 1,
+      },
+      {
+        from: 'src/poll.ts#create?1',
+        to: 'src/db.ts#save',
+        kind: 'branch',
+        relation: 'calls',
+        label: 'yes',
+        provenance: 'resolved',
+        lines: [5],
+        sites: 1,
+      },
+    ],
+    unknown: [
+      {
+        from: 'src/poll.ts#create',
+        total: 3,
+        calls: [
+          { target: 'prisma.poll.create', relation: 'calls', label: null, lines: [6], sites: 1 },
+        ],
+      },
+    ],
+    cut: [{ from: 'src/db.ts#save', nodes: 2 }],
+    hidden: 2,
+    byProvenance: { observed: 0, resolved: 1, convention: 0, suggested: 0, unknown: 3 },
+  };
+  const result = {
+    flow,
+    message: null,
+    version: 'b'.repeat(64),
+    takenAt: '2026-11-12T10:00:00.000Z',
+    current: true,
+    complete: true,
+  };
+  const ok = (value: unknown) => isEngineResponse(request, { ok: true, result: value });
+
+  it('starts from a place, checked like the other questions', () => {
+    expect(parseEngineRequest({ op: 'flow', ...at })).toEqual(request);
+    expect(() => parseEngineRequest({ op: 'flow', path: '../x.ts', line: 1, column: 1 })).toThrow(
+      new EngineProblem('invalid_request', 'Give a file in the project, like src/index.ts.'),
+    );
+  });
+
+  it('may wait on TypeScript, so it has the questions’ longer timeouts', () => {
+    expect([...TYPESCRIPT_OPS].sort()).toEqual(
+      ['callees', 'callers', 'definition', 'details', 'flow', 'references'].sort(),
+    );
+  });
+
+  it('accepts a flow, or none with a reason', () => {
+    expect(ok(result)).toBe(true);
+    expect(ok({ ...result, flow: null, message: 'Not yet.', current: false })).toBe(true);
+    expect(ok({ ...result, flow: null, version: null, takenAt: null, complete: false })).toBe(true);
+  });
+
+  it('refuses a flow that isn’t whole, bounded and well-formed', () => {
+    const [first, second] = flow.edges;
+    const group = flow.unknown[0];
+    const many = Array.from({ length: 61 }, (_, i) => node(`a.ts#f${String(i)}`));
+    for (const bad of [
+      { ...flow, root: 'src/other.ts#x' },
+      { ...flow, nodes: [] },
+      { ...flow, nodes: many, root: 'a.ts#f0', edges: [], unknown: [], cut: [] },
+      { ...flow, nodes: [...flow.nodes, node('src/poll.ts#create')] },
+      {
+        ...flow,
+        nodes: [{ ...node('a.ts#x'), place: { path: '/etc/passwd', line: 1, column: 1 } }],
+      },
+      { ...flow, nodes: [{ ...node('a.ts#x'), kind: 'guess' }] },
+      { ...flow, edges: [{ ...first, to: 'src/elsewhere.ts#x' }] },
+      { ...flow, edges: [{ ...second, provenance: 'guessed' }] },
+      { ...flow, edges: [{ ...second, kind: 'data' }] },
+      {
+        ...flow,
+        edges: [{ ...second, lines: Array.from({ length: 11 }, (_, i) => i + 1), sites: 11 }],
+      },
+      { ...flow, edges: [{ ...second, lines: [1, 2], sites: 1 }] },
+      { ...flow, unknown: [{ ...group, from: 'src/elsewhere.ts#x' }] },
+      { ...flow, unknown: [{ ...group, total: 0 }] },
+      { ...flow, unknown: [{ ...group, calls: [{ ...group?.calls[0], target: '' }] }] },
+      { ...flow, cut: [{ from: 'src/db.ts#save', nodes: 0 }] },
+      { ...flow, hidden: -1 },
+      { ...flow, byProvenance: { resolved: 1 } },
+    ]) {
+      expect(ok({ ...result, flow: bad }), JSON.stringify(bad).slice(0, 120)).toBe(false);
+    }
+    for (const bad of [
+      { ...result, version: 'not-a-version' },
+      { ...result, takenAt: 'yesterday' },
+      { ...result, current: 'yes' },
+      { ...result, message: 'x'.repeat(301) },
+    ]) {
+      expect(ok(bad)).toBe(false);
+    }
+  });
+});
+
+describe('details (phase 7)', () => {
+  const at = { path: 'src/poll.ts', line: 3, column: 17 };
+  const request: EngineRequest = { op: 'details', ...at };
+  const list = <T>(items: T[]) => ({ items, total: items.length });
+  const details = {
+    id: 'src/poll.ts#create',
+    name: 'create',
+    unit: 'function',
+    place: at,
+    signature: '(input: PollInput): Promise<Poll>',
+    params: list([{ name: 'input', type: 'PollInput', optional: false }]),
+    returns: 'Promise<Poll>',
+    async: true,
+    exported: true,
+    decisions: list([{ kind: 'if', condition: '!input.title', outcomes: ['yes'], line: 4 }]),
+    throws: list([{ text: "new Error('No title')", line: 5 }]),
+    awaits: list([{ text: 'prisma.poll.create', line: 7 }]),
+    unresolved: { items: [{ text: 'prisma.poll.create', lines: [7] }], total: 3 },
+    writes: list([]),
+  };
+  const ok = (value: unknown) => isEngineResponse(request, { ok: true, result: value });
+
+  it('is asked about a place, like the other questions', () => {
+    expect(parseEngineRequest({ op: 'details', ...at })).toEqual(request);
+  });
+
+  it('accepts details, or none with a reason', () => {
+    expect(ok({ details, message: null })).toBe(true);
+    expect(ok({ details: { ...details, signature: null, returns: null }, message: null })).toBe(
+      true,
+    );
+    expect(ok({ details: null, message: 'Not code.' })).toBe(true);
+  });
+
+  it('refuses details that aren’t bounded and well-formed', () => {
+    for (const bad of [
+      { ...details, unit: 'decision' },
+      { ...details, place: { ...at, path: '../x.ts' } },
+      { ...details, signature: 'x'.repeat(301) },
+      { ...details, params: { items: details.params.items, total: 0 } },
+      { ...details, decisions: list([{ kind: 'loop', condition: 'x', outcomes: [], line: 1 }]) },
+      { ...details, decisions: list([{ kind: 'if', condition: '', outcomes: ['yes'], line: 1 }]) },
+      { ...details, throws: list([{ text: 'x', line: 0 }]) },
+      { ...details, awaits: list(Array.from({ length: 51 }, () => ({ text: 'x', line: 1 }))) },
+      { ...details, unresolved: list([{ text: 'x', lines: [] }]) },
+      { ...details, writes: undefined },
+      { ...details, async: 'yes' },
+    ]) {
+      expect(ok({ details: bad, message: null }), JSON.stringify(bad).slice(0, 100)).toBe(false);
     }
   });
 });

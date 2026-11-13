@@ -28,7 +28,9 @@ export const LABS_FLAGS: readonly LabsFlag[] = [
     id: 'graph-stats',
     label: 'Graph stats',
     description:
-      'Shows what the project’s flow graph holds in the inspector’s Details tab: nodes and edges by kind, how each edge is known, and how long the graph took to build, save and load. It counts the graph the canvas will draw; the flows themselves arrive with the flow builder (phase 7).',
-    phase: '7',
+      'Shows what the project’s whole flow graph holds in the inspector’s Details tab, when nothing on the canvas is selected: nodes and edges by kind, how each edge is known, and how long the graph took to build, save and load. Flows on the canvas show one function’s part of it.',
+    // The whole graph as something to browse (grouped, expanded and collapsed) is phase 12's (Claude's choice under
+    // the owner's 12 Nov delegation, made when phase 7 was accepted).
+    phase: '12',
   },
 ];

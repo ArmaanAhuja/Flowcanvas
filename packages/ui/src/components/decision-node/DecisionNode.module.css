@@ -1,0 +1,50 @@
+/*
+ * A decision (phase 7): a 12 px diamond on the edge line, in the edge colour, with its condition in Mono small
+ * beside it. No hue: a decision isn't a change state (Graphite: colour only carries meaning).
+ */
+.decision {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  box-sizing: border-box;
+  max-width: var(--size-node-width);
+  padding: var(--space-4) var(--space-8);
+  border: var(--border-width-default) solid transparent;
+  border-radius: var(--radius-control);
+  background: var(--color-surface-canvas);
+  transition: border-color var(--duration-hover) ease-out;
+}
+
+.decision:hover {
+  border-color: var(--color-border-subtle);
+}
+
+.decision[data-selected] {
+  border-color: var(--color-accent-solid);
+}
+
+.diamond {
+  flex: none;
+  /* Centred on the first line (16 px line, 12 px diamond). */
+  margin-block: var(--space-2);
+  width: var(--space-12);
+  height: var(--space-12);
+  border: var(--border-width-edge) solid var(--color-edge-default);
+  background: var(--color-surface-raised);
+  transform: rotate(45deg);
+}
+
+.condition {
+  /* Up to two lines within the node's width: about the 60 characters kept, the rest on hover and in the inspector. */
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  line-height: var(--text-mono-small-line-height);
+  color: var(--color-text-secondary);
+}

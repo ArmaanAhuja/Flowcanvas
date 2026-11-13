@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { GraphStats, type GraphStatsSnapshot } from './GraphStats';
 
-// Catalogue example content: Rallly's graph as the engine built it (ADR 0027 addendum).
+// Catalogue example content: Rallly's graph as the engine built it, decisions included (ADRs 0027 and 0028).
 const rallly: GraphStatsSnapshot = {
   takenAt: '2026-11-12T10:42:00.000Z',
   complete: true,
@@ -9,19 +9,19 @@ const rallly: GraphStatsSnapshot = {
   files: 1168,
   builtInCalls: 3930,
   stats: {
-    nodes: 3327,
-    edges: 16394,
+    nodes: 5381,
+    edges: 22574,
     byNodeKind: {
       'entry-point': 0,
       'code-unit': 3327,
-      decision: 0,
+      decision: 2054,
       'data-access': 0,
       'async-handoff': 0,
       'external-boundary': 0,
     },
     byCodeUnit: { function: 1603, method: 189, component: 1081, class: 38, module: 416 },
-    byEdgeKind: { call: 16394, branch: 0, data: 0, handoff: 0, boundary: 0 },
-    byProvenance: { observed: 0, resolved: 7514, convention: 0, suggested: 0, unknown: 8880 },
+    byEdgeKind: { call: 16394, branch: 6180, data: 0, handoff: 0, boundary: 0 },
+    byProvenance: { observed: 0, resolved: 11870, convention: 0, suggested: 0, unknown: 10704 },
   },
   buildMs: 4100,
   saveMs: 20,
@@ -29,11 +29,9 @@ const rallly: GraphStatsSnapshot = {
 };
 const ARRIVES_IN = {
   'entry-point': 8,
-  decision: 7,
   'data-access': 10,
   'external-boundary': 10,
   'async-handoff': 11,
-  branch: 7,
   data: 10,
   boundary: 10,
   handoff: 11,

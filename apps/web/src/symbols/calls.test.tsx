@@ -16,8 +16,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LabsProvider } from '../labs/LabsProvider';
 import type { Project } from '../projects/api';
 import { ProjectPage } from '../project/ProjectPage';
+import { INDEX_READY, fakeApi, jsdomLayout, reply } from '../test/fake-api';
 import type { CallsAnswer, DefinitionAnswer, ReferencesAnswer } from './api';
 import { useCalls } from './useCalls';
+
+// The whole project page renders here (React Flow, the editor, the dialogs): about 1 s a test alone, past 5 s when
+// every package's tests share the laptop's cores in `pnpm test` (found in phase 7, once flows added ELK's tests to
+// the run). The work is what's tested, so the limit is set for it.
+vi.setConfig({ testTimeout: 15_000 });
 
 const V1 = '1'.repeat(64);
 const POLL_TS = 'import { save } from "./db";\n\nexport function createPoll() {\n  save();\n}\n';
@@ -66,75 +72,55 @@ let asked: { op: string; path: string | null; line: string | null; column: strin
 let definition: DefinitionAnswer;
 let references: ReferencesAnswer;
 
-function fakeApi(): typeof fetch {
-  return (input) => {
-    const url = new URL(
-      input instanceof Request ? input.url : input.toString(),
-      'https://flowcanvas.example',
-    );
-    const json = (body: unknown, code = 200) =>
-      Promise.resolve(Response.json(body, { status: code }));
-    if (url.pathname === '/api/projects')
-      return json({ projects: [project], workspacesAvailable: true });
-    const op = /\/workspace\/index\/(definition|references|callers|callees)$/.exec(
-      url.pathname,
-    )?.[1];
-    if (op !== undefined) {
-      asked.push({
-        op,
-        path: url.searchParams.get('path'),
-        line: url.searchParams.get('line'),
-        column: url.searchParams.get('column'),
-      });
-      if (op === 'definition') return json(definition);
-      if (op === 'references') return json(references);
-      return json(CALLERS);
-    }
-    if (url.pathname.endsWith('/workspace/index/status'))
-      return json({
-        state: 'ready',
-        done: 1,
-        total: 1,
-        files: 1,
-        byStatus: { parsed: 1, 'no-grammar': 0, 'too-large': 0, binary: 0, unreadable: 0 },
-        symbols: 1,
-        withSyntaxErrors: 0,
-        partlyRead: 0,
-        lastFullMs: 10,
-        message: null,
-      });
-    if (url.pathname.endsWith('/workspace/index/search'))
-      return json({
-        symbols: [
-          {
-            path: 'src/poll.ts',
-            name: 'createPoll',
-            kind: 'function',
-            container: null,
-            line: 3,
-            column: 17,
-            exported: true,
-          },
-        ],
-        ms: 1,
-      });
-    if (url.pathname.endsWith('/workspace/tree'))
-      return json({ files: ['src/poll.ts'], truncated: false });
-    if (url.pathname.endsWith('/workspace/file'))
-      return json({ content: POLL_TS, encoding: 'utf8', version: V1, size: POLL_TS.length });
-    if (url.pathname.endsWith('/workspace/journal/entry'))
-      return json({ error: 'none', code: 'not_found' }, 404);
-    return json({});
+/** Asked about a place: kept in `asked`, answered with `body()`. */
+const question =
+  (op: string, body: () => unknown) =>
+  (url: URL): unknown => {
+    asked.push({
+      op,
+      path: url.searchParams.get('path'),
+      line: url.searchParams.get('line'),
+      column: url.searchParams.get('column'),
+    });
+    return body();
   };
-}
+
+const fakeCallsApi = () =>
+  fakeApi(project, {
+    '/workspace/index/definition': question('definition', () => definition),
+    '/workspace/index/references': question('references', () => references),
+    '/workspace/index/callers': question('callers', () => CALLERS),
+    '/workspace/index/callees': question('callees', () => CALLERS),
+    '/workspace/index/status': () => INDEX_READY,
+    '/workspace/index/search': () => ({
+      symbols: [
+        {
+          path: 'src/poll.ts',
+          name: 'createPoll',
+          kind: 'function',
+          container: null,
+          line: 3,
+          column: 17,
+          exported: true,
+        },
+      ],
+      ms: 1,
+    }),
+    '/workspace/tree': () => ({ files: ['src/poll.ts'], truncated: false }),
+    '/workspace/file': () => ({
+      content: POLL_TS,
+      encoding: 'utf8',
+      version: V1,
+      size: POLL_TS.length,
+    }),
+    '/workspace/journal/entry': () => reply({ error: 'none', code: 'not_found' }, 404),
+  });
 
 beforeEach(() => {
   asked = [];
   definition = { definitions: [], message: null };
   references = { target: CREATE_POLL, references: [], complete: true, message: null };
-  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(248);
-  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
-  Element.prototype.scrollIntoView = () => undefined;
+  jsdomLayout();
 });
 afterEach(() => {
   cleanup();
@@ -154,7 +140,7 @@ async function openCreatePoll() {
   );
   render(
     <LabsProvider>
-      <ProjectPage projectId="p-1" fetcher={fakeApi()} />
+      <ProjectPage projectId="p-1" fetcher={fakeCallsApi()} />
     </LabsProvider>,
   );
   const host = await waitFor(
@@ -188,7 +174,7 @@ describe('the Code view’s right-click menu', () => {
     expect(view?.state.selection.main.head).toBe(pointed);
     const menu = await screen.findByRole('menu', { name: 'Code' });
     expect([...menu.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent)).toEqual(
-      ['Go to definitionF12', 'Find referencesShift+F12', 'Callers', 'Callees'],
+      ['Go to definitionF12', 'Find referencesShift+F12', 'Callers', 'Callees', 'Show flow'],
     );
     await user.click(screen.getByRole('menuitem', { name: 'Callers' }));
 

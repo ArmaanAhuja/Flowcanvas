@@ -38,3 +38,8 @@ Cloudflare's dashboard also now creates new projects as **Workers** (with static
   - deploys and the e2e test from CI once Actions work (items 8, 10)
   - control-plane hosting (item 12)
   - faster image builds (item 12)
+
+## Addendum, 13 Nov 2026 (phase 7, owner)
+
+Deploys moved from Cloudflare Workers Builds to GitHub Actions: Workers Builds dropped two pushes on 13 Nov (`9a07d81`, `dc91add`), and the walkthroughs waited 10 minutes for builds that never came. CI now deploys this exact commit with `e2e/scripts/deploy.ts`: pull requests as preview versions (`wrangler versions upload --preview-alias`), `main` to staging (`wrangler deploy`), for both the app and the catalogue. Hosting, URLs and Wrangler's config are unchanged; Cloudflare's Git builds are switched off in its dashboard once CI has deployed both Workers. A pull request from a fork has no secrets and gets no preview (upgrade-later 10).
+

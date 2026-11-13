@@ -53,6 +53,17 @@ describe('CallsPanel', () => {
     expect(onViewChange).toHaveBeenCalledWith('callees');
   });
 
+  it('opens the flow from the function looked at, when the page offers it (phase 7)', async () => {
+    const user = userEvent.setup();
+    const onShowFlow = vi.fn();
+    renderPanel({ onShowFlow });
+    await user.click(screen.getByRole('button', { name: 'Show flow' }));
+    expect(onShowFlow).toHaveBeenCalledWith(place('src/poll.ts', 98));
+    cleanup();
+    renderPanel();
+    expect(screen.queryByRole('button', { name: 'Show flow' })).toBeNull();
+  });
+
   it('lists callers with how each is known, and opens where the call is', async () => {
     const user = userEvent.setup();
     const { onOpen } = renderPanel({
@@ -124,7 +135,7 @@ describe('CallsPanel', () => {
 
   it('says it is working, says what an answer lacks, and says when there is nothing', () => {
     renderPanel({ status: 'loading' });
-    expect(screen.getByRole('status').textContent).toBe('Asking TypeScript…');
+    expect(screen.getByRole('status').textContent).toBe('Finding calls…');
     cleanup();
     renderPanel({ message: 'Part of this project is too large to look at here.' });
     expect(screen.getByRole('status').textContent).toMatch(/too large/);

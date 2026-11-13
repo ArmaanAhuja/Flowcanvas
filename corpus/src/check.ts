@@ -82,6 +82,10 @@ export async function checkRepo(repo: CorpusRepo, api: GitHubApi): Promise<Check
 }
 
 /** The real GitHub REST API; uses GITHUB_TOKEN when set (higher rate limit), anonymous otherwise. */
+/** GitHub server errors retried, and the wait before the first retry (doubled for the next). */
+export const RETRIES = 2;
+export const RETRY_MS = 2_000;
+
 export function gitHubApi(token = process.env.GITHUB_TOKEN): GitHubApi {
   const headers = (accept: string): Record<string, string> => ({
     Accept: accept,
@@ -90,7 +94,13 @@ export function gitHubApi(token = process.env.GITHUB_TOKEN): GitHubApi {
     ...(token !== undefined && token !== '' ? { Authorization: `Bearer ${token}` } : {}),
   });
   const get = async (path: string, accept: string): Promise<Response | undefined> => {
-    const response = await fetch(`https://api.github.com/${path}`, { headers: headers(accept) });
+    // GitHub's own errors (5xx) are retried: one 502 failed CI on 13 Nov 2026 (run 43462859685) for a file that
+    // was there a minute later. A 4xx is an answer, never retried.
+    let response = await fetch(`https://api.github.com/${path}`, { headers: headers(accept) });
+    for (let retry = 1; retry <= RETRIES && response.status >= 500; retry += 1) {
+      await new Promise((resolve) => setTimeout(resolve, RETRY_MS * retry));
+      response = await fetch(`https://api.github.com/${path}`, { headers: headers(accept) });
+    }
     if (response.status === 404) return undefined;
     if (!response.ok) throw new Error(`GitHub API ${String(response.status)} for ${path}`);
     return response;

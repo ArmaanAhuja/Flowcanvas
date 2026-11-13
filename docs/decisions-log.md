@@ -568,3 +568,65 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 4. **The hand-labelled checks stay as they are:** not reduced in size.
 
 **Phase 6 accepted** (owner, 12 Nov 2026): "okay continue", after the report and a green CI. Merged in PR #20 once CI is green on its last commit.
+
+## 12 Nov 2026: phase 7, the flow builder and inspector
+
+**Owner decisions:**
+1. **Opening a flow:** "Show flow" in the Code view's right-click menu, an action on functions in ⌘K, and a link on the Calls tab's function.
+2. **Flow size:** breadth-first from the function, up to 60 nodes; beyond that, an honest "N more calls not shown" stub where the flow was cut. Expanding and collapsing arrive in phase 12.
+3. **Unknown calls:** one grouped open-stub edge per node ("4 unknown calls"), each listed in the inspector. Per-call stubs and filters arrive in phase 12.
+4. **The 10 flows of the Done when:** Claude picks 10 functions in Documenso and labels each flow by reading the code.
+
+**Defaults stated in the plan, not changed by the owner:** one flow on the canvas at a time (opening another replaces it); a single click selects a node and fills the inspector; "Open code" (the inspector's button, or a double-click) opens the Code view at its line.
+
+**Settled by the documents** (applied):
+- **Layout:** top to bottom, as Figma 06 draws flows (corrected 13 Nov 2026: this said "left to right", from the design brief; Figma's screens rank above the brief in CLAUDE.md's order, and the phase 2 canvas already joins nodes top to bottom), with Figma 06's node anatomy (about 200 × 56 px: type icon, name, file and line). ELK (`elkjs`) runs in a Web Worker, off the page's main thread (CLAUDE.md section 7).
+- **Decisions:** small diamonds with condition labels on their outgoing edges; failure paths (a `catch`) as thin red edges (design brief, "Flow graph view").
+- **Built-ins** stay out of flows, as out of the graph (owner, 12 Nov 2026).
+- **The completeness pill** at the flow's top left counts its edges by provenance (design brief).
+
+## 13 Nov 2026: compute once, store, reuse
+
+**Owner direction:** "we want to make the project feel faster and snappier for everything the user does, so we will rely on caching and storing data for further use so that we don't have to compute again and again." Asked to check where this is needed, plan it into the phases, handle anything already left, then continue with phase 7.
+
+**Applied as a rule for every feature** (ADR 0029): what a person would wait for is worked out ahead (in the graph pass, in the background) and stored, keyed so it's never stale (a version, or the hash of the file it came from). Live work only for what changed since. Nothing stale is ever shown as current.
+
+**Done now** (phase 7): each file's code units and the inspector's details are stored by the graph pass (`facts.db`); flows from inside a function and details answer from them. **Planned in phase 7, milestone B:** the Calls tab answered from stored data (Go to definition goes with Find references in phase 42: both work on any name, not only calls); the page keeps flows, details, calls and layouts per graph version. **Planned later:** see ADR 0029's table (references in phase 42; each later analysis stores its results in the graph as it's built).
+
+## 13 Nov 2026: the living docs held to the code
+
+**Owner:** "there could be a lot more docs and maybe other files that are stale like this, how do we fix this so that such never happens again" (after RUN-AND-FEATURES still said "last updated 8 Nov").
+
+**Applied:** `pnpm docs:check`, on CI with the unit tests (no new required check), fails when a living doc (README, RUN-AND-FEATURES, STATUS, ARCHITECTURE) or a comment in the code disagrees with the repository: the release against `package.json` and the CHANGELOG; the accepted phases against STATUS.md; "Last updated" naming the phase in progress and at most 2 days behind the latest commit; accepted phases never under "Coming next", and each with its own section; build-steps' step tables never "next" or "planned" in an accepted phase; accepted phases never "still to come"; every path a doc names existing; every package in ARCHITECTURE. Counts are written by `pnpm docs:update`, never by hand. Historical records (build-steps entries, reports, this log, ADRs) are true about their own dates and are left as written.
+
+**Open, for the owner:** the start screen (design brief, "Start screens") has no phase in the build plan; the projects list at `/` stands in until it does (decisions log, 7 Nov 2026). Phase 44 (production readiness, its onboarding tour) is the nearest. *Settled below, same day: phase 44.*
+
+## 13 Nov 2026: the start screen's phase, CI deploys, and the Docker shards
+
+**Owner**, answering the phase 7 milestone report's four questions: "1 - okay accepted 2 - okay accepted 3 - accepted if it won't affect anything 4 - okay accepted if it won't affect anything".
+
+1. **The start screen is built in phase 44** (production readiness, with its onboarding tour). Until then the projects list at `/` stands in, and the site says so, naming phase 44.
+2. **CI deploys staging from `main`**, as it already deploys pull-request previews: the app (`wrangler deploy`, then the walkthroughs wait for it to serve that commit, 3 minutes at most) and the component catalogue (after its visual checks pass). One script, `e2e/scripts/deploy.ts`, for both Workers and both targets. Main's CI runs already queue one at a time, so two deploys never cross.
+3. **The Docker job runs as four parallel shards**: Twenty, Medusa and LibreChat each on their own runner; `rest` runs every other Docker test and every other project (`CORPUS_EXCEPT`), so a project added later is tested without touching the workflow. A name the manifest lacks, both variables at once, or a shard of nothing fails the run (`corpus/src/select.ts`, tested). Nothing is dropped; the job isn't a required check, so no summary job is needed. Public repository: runner minutes are free.
+4. **Cloudflare's own Git builds are switched off** (owner's dashboard step) for both Workers, once CI has deployed both from this branch's pull request. CI then deploys everything. The one thing it changes: a pull request from a **fork** (no secrets) gets no preview, and its walkthroughs wait 3 minutes and fail with a sentence saying why. No fork pull requests exist today (solo project); if outside contributors come, upgrade-later item 10 says what to add.
+
+## 13 Nov 2026: two upgrade-later triggers that had been reached
+
+**Owner**, on upgrade-later items 20 and 24 (found by the new trigger check): "1 - set a new trigger 2 - phase 44 is fine".
+
+1. **Labs choices per account (item 20)** stay per browser. New trigger: the first user other than the owner, at the latest the external design partners of phase 45.
+2. **Profile pictures (item 24)** come with the account menu, built with the start screen in phase 44.
+
+**Also (working pace):** "when step 7 is waiting for something, you should continue ahead as well": while a step waits (CI, an owner's dashboard task, a long run), work moves on to the next step instead of stopping.
+
+## 14 Nov 2026: phase 7 accepted, and the answers to its report's questions
+
+**Owner:** "1 - accept phase 7, 2 - do it, 3 - done for both flowcanvas and flowcanvas-catalouge"; on the questions: "1- open at 100% and F to fit is fine 2 - okay we will run it ourself and switch before any outside user's data is stored, but this needs to be remembered to do 3 - okay".
+
+1. **Phase 7 accepted.** PR #21 marked ready for review (CI then runs the milestone gate) and merged once every check is green.
+2. **Cloudflare's own preview builds are off** for `flowcanvas` and `flowcanvas-catalogue`; CI deploys every preview. `main`'s builds stay on until CI's first staging deploy works after the merge.
+3. **A flow opens at 100% on the function it's from,** centred across and near the top; **F** fits the whole flow (as Figma 06 shows a flow).
+4. **Staging's database is migrated by hand** until before any outside user's data is stored. To be sure it's remembered, upgrade-later 23 names phase 45 (the first outside users) and `pnpm docs:check` now counts a trigger as reached when its phase **starts**, so CI fails at the start of phase 45 until it's done or decided again.
+5. **CI's report step: nothing to change.** The "3 minutes per push" in the report was one run: in that run GitHub's download action finished in 5 s and then took 3 minutes to exit; in the runs before and after it took 3 and 7 s. A push takes about 5 minutes in all. Corrected in the report and upgrade-later 7.
+6. **Graph stats' Labs switch: "Finished in phase 12"** (Claude's choice, under the owner's 12 Nov delegation for this switch): it said phase 7, which is now accepted. Flows show one function's part of the graph; the whole graph as something to browse (grouped, expanded, collapsed) is phase 12's. Found by the site's own text test when phase 7 was accepted. The owner can have it leave Labs instead.
+
