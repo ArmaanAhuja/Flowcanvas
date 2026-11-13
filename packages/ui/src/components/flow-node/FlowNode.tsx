@@ -1,4 +1,4 @@
-import type { ComponentPropsWithRef } from 'react';
+import { Fragment, type ComponentPropsWithRef } from 'react';
 import {
   AppWindow,
   BrainCircuit,
@@ -17,6 +17,7 @@ import {
 import { classNames } from '../../class-names';
 import { Tag, type TagTone } from '../tag/Tag';
 import styles from './FlowNode.module.css';
+import { wrapSegments } from './wrap';
 
 /** The twelve node types in Graphite, one icon each. */
 export type FlowNodeKind =
@@ -95,6 +96,17 @@ function StateTag({ label }: { readonly label: Label }) {
   );
 }
 
+/** Text that wraps at its word boundaries (`canAccess·Team·Document`, `folder/·delete-·folder.·ts`), not anywhere. */
+function Wrapping({ text }: { readonly text: string }) {
+  return wrapSegments(text).map((piece, index) => (
+    // Pieces repeat ("a/a/"): their index is their identity.
+    <Fragment key={index}>
+      {index > 0 && <wbr />}
+      {piece}
+    </Fragment>
+  ));
+}
+
 /**
  * One step of a flow on the canvas. Presentational only: selection, focus and keyboard handling
  * belong to the canvas that renders it. A change is shown by hue *and* by shape (state bar, dashed
@@ -123,7 +135,9 @@ export function FlowNode({
       <Icon className={styles.icon} role="img" aria-label={kindLabel} />
       <div className={styles.text}>
         <div className={styles.titleRow}>
-          <span className={styles.title}>{title}</span>
+          <span className={styles.title}>
+            <Wrapping text={title} />
+          </span>
           {(change !== undefined || status !== undefined) && (
             <span className={styles.tags}>
               {change !== undefined && <StateTag label={CHANGE_LABELS[change]} />}
@@ -131,7 +145,9 @@ export function FlowNode({
             </span>
           )}
         </div>
-        <span className={styles.location}>{location}</span>
+        <span className={styles.location}>
+          <Wrapping text={location} />
+        </span>
       </div>
     </div>
   );

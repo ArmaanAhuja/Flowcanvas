@@ -13,6 +13,7 @@ import {
 } from '@xyflow/react';
 import { memo } from 'react';
 import type { DecisionData, FlowEdgeData, StubData } from '../flow/layout';
+import { CORNER, pointAlong, routePath } from '../flow/route';
 import styles from './FlowCanvas.module.css';
 
 export type DecisionCanvasNode = Node<DecisionData, 'decision'>;
@@ -78,15 +79,21 @@ export const FlowEdge = memo(function FlowEdge({
   markerEnd,
   selected,
 }: EdgeProps<FlowCanvasEdge>) {
-  const [path, labelX, labelY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    sourcePosition,
-    targetPosition,
-    borderRadius: 8,
-  });
+  // ELK's route around the nodes when there is one (always, once laid out); a step between the handles otherwise.
+  const route = data?.route;
+  const routed = route !== undefined && route.length >= 2;
+  const along = routed ? pointAlong(route) : null;
+  const [path, labelX, labelY] = routed
+    ? [routePath(route), along?.x ?? 0, along?.y ?? 0]
+    : getSmoothStepPath({
+        sourceX,
+        sourceY,
+        targetX,
+        targetY,
+        sourcePosition,
+        targetPosition,
+        borderRadius: CORNER,
+      });
   const form = data?.failure === true ? 'failure' : (data?.provenance ?? 'resolved');
   return (
     <>

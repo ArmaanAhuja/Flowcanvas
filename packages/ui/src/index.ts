@@ -50,6 +50,7 @@ export {
   type FlowNodeProps,
   type FlowNodeStatus,
 } from './components/flow-node/FlowNode';
+export { NODE_TEXT, linesFor, nodeHeight, wrapSegments } from './components/flow-node/wrap';
 export {
   Popover,
   PopoverButton,

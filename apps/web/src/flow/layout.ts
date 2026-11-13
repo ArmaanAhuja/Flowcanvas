@@ -3,7 +3,7 @@
 // stubs. Pure: the ELK it's given runs in a Web Worker in the page (never the UI thread) and in-thread in tests.
 import type { FlowResult } from '@flowcanvas/engine/protocol';
 import type { ElkNode } from 'elkjs/lib/elk-api';
-import type { FlowNodeKind } from '@flowcanvas/ui';
+import { nodeHeight, type FlowNodeKind } from '@flowcanvas/ui';
 
 type Flow = NonNullable<FlowResult['flow']>;
 type Provenance = Flow['edges'][number]['provenance'];
@@ -41,6 +41,8 @@ export interface FlowEdgeData extends Record<string, unknown> {
   readonly failure: boolean;
   /** The edge to a stub: no arrow, as Graphite's open stub. */
   readonly stub: boolean;
+  /** ELK's route around the nodes, start to end; drawn as it is (route.ts). Absent before layout. */
+  readonly route?: readonly Point[];
 }
 
 export type LaidOutNode =
@@ -48,18 +50,24 @@ export type LaidOutNode =
       readonly id: string;
       readonly type: 'flow';
       readonly position: Point;
+      /** Its size as ELK placed it (as it renders, at most). */
+      readonly size: Size;
       readonly data: UnitData;
     }
   | {
       readonly id: string;
       readonly type: 'decision';
       readonly position: Point;
+      /** Its size as ELK placed it (as it renders, at most). */
+      readonly size: Size;
       readonly data: DecisionData;
     }
   | {
       readonly id: string;
       readonly type: 'stub';
       readonly position: Point;
+      /** Its size as ELK placed it (as it renders, at most). */
+      readonly size: Size;
       readonly data: StubData;
     };
 export interface LaidOutEdge {
@@ -72,6 +80,10 @@ export interface LaidOutEdge {
 interface Point {
   readonly x: number;
   readonly y: number;
+}
+interface Size {
+  readonly width: number;
+  readonly height: number;
 }
 
 /** Sizes ELK places by (px): a flow node (Graphite, 216 × 56), and estimates for a decision's and a stub's text. */
@@ -94,6 +106,13 @@ export const ELK_OPTIONS: Readonly<Record<string, string>> = {
   'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
 };
 
+/**
+ * Where a node is, as Figma's nodes write it: its folder and file, and the line (`team/get-team.ts:38`). The full path
+ * is in the inspector; on the node it would wrap over three lines.
+ */
+export const shortPlace = (path: string, line: number) =>
+  `${path.split('/').slice(-2).join('/')}:${String(line)}`;
+
 const unitKind = (unit: Flow['nodes'][number]['unit']): FlowNodeKind =>
   unit === 'component' ? 'ui' : unit === 'module' ? 'file' : 'function';
 
@@ -107,7 +126,7 @@ export async function layoutFlow(
   elk: ElkLike,
 ): Promise<{ readonly nodes: LaidOutNode[]; readonly edges: LaidOutEdge[] }> {
   const children: ElkNode[] = [];
-  const nodes: Omit<LaidOutNode, 'position'>[] = [];
+  const nodes: Omit<LaidOutNode, 'position' | 'size'>[] = [];
   for (const node of flow.nodes) {
     if (node.kind === 'decision') {
       const textWidth = node.name.length * SIZES.char;
@@ -124,13 +143,19 @@ export async function layoutFlow(
         data: { condition: node.name, id: node.id, place: node.place },
       });
     } else {
-      children.push({ id: node.id, ...SIZES.node });
+      const location = node.place === null ? '' : shortPlace(node.place.path, node.place.line);
+      // Its height as it renders, wrapped (a long name takes two lines): ELK routes edges around what it's told.
+      children.push({
+        id: node.id,
+        width: SIZES.node.width,
+        height: nodeHeight(node.name, location),
+      });
       nodes.push({
         id: node.id,
         type: 'flow',
         data: {
           title: node.name,
-          location: node.place === null ? '' : `${node.place.path}:${String(node.place.line)}`,
+          location,
           kind: unitKind(node.unit),
           place: node.place,
           id: node.id,
@@ -187,11 +212,30 @@ export async function layoutFlow(
     edges: edges.map((edge) => ({ id: edge.id, sources: [edge.source], targets: [edge.target] })),
   });
   const placed = new Map((laid.children ?? []).map((child) => [child.id, child]));
+  // Each edge's route, in the same coordinates as the nodes (the flow's own: no offset).
+  const routes = new Map(
+    (laid.edges ?? []).map((edge) => {
+      const section = edge.sections?.[0];
+      return [
+        edge.id,
+        section === undefined
+          ? undefined
+          : [section.startPoint, ...(section.bendPoints ?? []), section.endPoint],
+      ] as const;
+    }),
+  );
   return {
     nodes: nodes.map((node) => {
       const at = placed.get(node.id);
-      return { ...node, position: { x: at?.x ?? 0, y: at?.y ?? 0 } } as LaidOutNode;
+      return {
+        ...node,
+        position: { x: at?.x ?? 0, y: at?.y ?? 0 },
+        size: { width: at?.width ?? 0, height: at?.height ?? 0 },
+      } as LaidOutNode;
     }),
-    edges,
+    edges: edges.map((edge) => {
+      const route = routes.get(edge.id);
+      return route === undefined ? edge : { ...edge, data: { ...edge.data, route } };
+    }),
   };
 }
