@@ -7,6 +7,7 @@ import { LabsProvider } from '../labs/LabsProvider';
 import { LABS_STORAGE_KEY } from '../labs/storage';
 import { EMPTY, ProjectPage } from '../project/ProjectPage';
 import type { Project } from '../projects/api';
+import { INDEX_READY, fakeApi } from '../test/fake-api';
 import { GRAPH_POLL } from './useGraphStats';
 
 // The whole project page renders here (React Flow, the editor, the dialogs): about 1 s a test alone, past 5 s when
@@ -57,37 +58,14 @@ const READY: GraphStatus = {
 let answers: GraphStatus[];
 let asked: number;
 
-function fakeApi(state: 'running' | 'sleeping' = 'running'): typeof fetch {
-  return (input) => {
-    const url = new URL(
-      input instanceof Request ? input.url : input.toString(),
-      'https://flowcanvas.example',
-    );
-    const json = (body: unknown, code = 200) =>
-      Promise.resolve(Response.json(body, { status: code }));
-    if (url.pathname === '/api/projects')
-      return json({ projects: [project(state)], workspacesAvailable: true });
-    if (url.pathname.endsWith('/workspace/index/graph')) {
+const fakeGraphApi = (state: 'running' | 'sleeping' = 'running') =>
+  fakeApi(project(state), {
+    '/workspace/index/graph': () => {
       asked += 1;
-      return json(answers.length > 1 ? answers.shift() : answers[0]);
-    }
-    if (url.pathname.endsWith('/workspace/index/status')) {
-      return json({
-        state: 'ready',
-        done: 1,
-        total: 1,
-        files: 1,
-        byStatus: { parsed: 1, 'no-grammar': 0, 'too-large': 0, binary: 0, unreadable: 0 },
-        symbols: 1,
-        withSyntaxErrors: 0,
-        partlyRead: 0,
-        lastFullMs: 10,
-        message: null,
-      });
-    }
-    return json({});
-  };
-}
+      return answers.length > 1 ? answers.shift() : answers[0];
+    },
+    '/workspace/index/status': () => INDEX_READY,
+  });
 
 const renderPage = (fetcher: typeof fetch) =>
   render(
@@ -113,7 +91,7 @@ afterEach(() => {
 describe('Labs → Graph stats', () => {
   it('isn’t asked for while its switch is off: the Details tab keeps its empty state', async () => {
     labs(false);
-    renderPage(fakeApi());
+    renderPage(fakeGraphApi());
     await screen.findByText('Rallly');
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(asked).toBe(0);
@@ -124,7 +102,7 @@ describe('Labs → Graph stats', () => {
   it('shows the graph in the Details tab: building first, then its counts', async () => {
     labs(true);
     answers = [{ state: 'building', message: null, snapshot: null }, READY];
-    renderPage(fakeApi());
+    renderPage(fakeGraphApi());
     await waitFor(() => {
       expect(within(details()).getByRole('status').textContent).toBe('Building the graph…');
     });
@@ -149,7 +127,7 @@ describe('Labs → Graph stats', () => {
 
   it('says to open the workspace when it isn’t running, and asks nothing', async () => {
     labs(true);
-    renderPage(fakeApi('sleeping'));
+    renderPage(fakeGraphApi('sleeping'));
     await screen.findByText('Rallly');
     expect(within(details()).getByRole('status').textContent).toBe(
       'Open the workspace to see its graph.',

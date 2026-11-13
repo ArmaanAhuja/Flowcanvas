@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CanvasNode } from '../canvas/FlowCanvas';
 import { LabsProvider } from '../labs/LabsProvider';
 import { ProjectPage } from '../project/ProjectPage';
+import { INDEX_READY, fakeApi, jsdomLayout } from '../test/fake-api';
 import type { Project } from '../projects/api';
 import { FlowInspector } from './FlowInspector';
 
@@ -112,47 +113,22 @@ const project: Project = {
 let flowAnswer: FlowResult;
 let flowsAsked: string[];
 
-function fakeApi(): typeof fetch {
-  return (input) => {
-    const url = new URL(
-      input instanceof Request ? input.url : input.toString(),
-      'https://flowcanvas.example',
-    );
-    const json = (body: unknown, code = 200) =>
-      Promise.resolve(Response.json(body, { status: code }));
-    if (url.pathname === '/api/projects')
-      return json({ projects: [project], workspacesAvailable: true });
-    if (url.pathname.endsWith('/workspace/index/status')) {
-      return json({
-        state: 'ready',
-        done: 1,
-        total: 1,
-        files: 1,
-        byStatus: { parsed: 1, 'no-grammar': 0, 'too-large': 0, binary: 0, unreadable: 0 },
-        symbols: 1,
-        withSyntaxErrors: 0,
-        partlyRead: 0,
-        lastFullMs: 10,
-        message: null,
-      });
-    }
-    if (url.pathname.endsWith('/workspace/index/search')) return json({ symbols: [SEND], ms: 1 });
-    if (url.pathname.endsWith('/workspace/index/flow')) {
+const fakeFlowApi = () =>
+  fakeApi(project, {
+    '/workspace/index/status': () => INDEX_READY,
+    '/workspace/index/search': () => ({ symbols: [SEND], ms: 1 }),
+    '/workspace/index/flow': (url) => {
       flowsAsked.push(
         `${url.searchParams.get('path') ?? ''}:${url.searchParams.get('line') ?? ''}`,
       );
-      return json(flowAnswer);
-    }
-    return json({});
-  };
-}
+      return flowAnswer;
+    },
+  });
 
 beforeEach(() => {
   flowAnswer = ANSWER;
   flowsAsked = [];
-  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(248);
-  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
-  Element.prototype.scrollIntoView = () => undefined;
+  jsdomLayout();
 });
 afterEach(() => {
   cleanup();
@@ -164,7 +140,7 @@ const showFlowFromPalette = async () => {
   const user = userEvent.setup();
   render(
     <LabsProvider>
-      <ProjectPage projectId="p-1" fetcher={fakeApi()} />
+      <ProjectPage projectId="p-1" fetcher={fakeFlowApi()} />
     </LabsProvider>,
   );
   await screen.findByText('Rallly');
