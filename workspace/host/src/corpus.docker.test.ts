@@ -190,25 +190,30 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
           if (!answer.ok || !('entries' in answer.result)) throw new Error(`no ${op}`);
           return { result: answer.result, ms: performance.now() - asked };
         };
+        // Each labelled function's callers and callees, compared exactly with its labels.
+        const checkCalls = async (differing: string[], ms: number[]) => {
+          for (const label of callLabels[repo.id] ?? []) {
+            const callers: { result: CallsResult; ms: number } = await calls('callers', label);
+            const callees = await calls('callees', label);
+            ms.push(callers.ms, callees.ms);
+            const found = compareCalls(label, callers.result.entries, callees.result.entries);
+            const problems = [
+              callers.result.target?.name === label.name
+                ? []
+                : [`target ${String(callers.result.target?.name)}`],
+              callers.result.complete && callees.result.complete ? [] : ['incomplete answer'],
+              found.callers.missing.map((line) => `missing caller: ${line}`),
+              found.callers.extra.map((line) => `extra caller: ${line}`),
+              found.callees.missing.map((line) => `missing callee: ${line}`),
+              found.callees.extra.map((line) => `extra callee: ${line}`),
+            ].flat();
+            if (problems.length > 0) differing.push(`${label.name}: ${problems.join('; ')}`);
+          }
+        };
+        // Phase 5: asked as soon as the index is ready, so TypeScript answers (the graph is still being built).
         const callsDiffering: string[] = [];
         const callsMs: number[] = [];
-        for (const label of callLabels[repo.id] ?? []) {
-          const callers: { result: CallsResult; ms: number } = await calls('callers', label);
-          const callees = await calls('callees', label);
-          callsMs.push(callers.ms, callees.ms);
-          const found = compareCalls(label, callers.result.entries, callees.result.entries);
-          const problems = [
-            callers.result.target?.name === label.name
-              ? []
-              : [`target ${String(callers.result.target?.name)}`],
-            callers.result.complete && callees.result.complete ? [] : ['incomplete answer'],
-            found.callers.missing.map((line) => `missing caller: ${line}`),
-            found.callers.extra.map((line) => `extra caller: ${line}`),
-            found.callees.missing.map((line) => `missing callee: ${line}`),
-            found.callees.extra.map((line) => `extra callee: ${line}`),
-          ].flat();
-          if (problems.length > 0) callsDiffering.push(`${label.name}: ${problems.join('; ')}`);
-        }
+        await checkCalls(callsDiffering, callsMs);
         const labelledCalls = callLabels[repo.id]?.length ?? 0;
 
         // Phase 6: the flow graph, built in the workspace after the index.
@@ -300,6 +305,12 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
           if (named !== id) flowsDiffering.push(`${label.name} details: ${String(named)}`);
         }
 
+        // Phase 7 (ADR 0029): asked again now the graph is built, so from what the pass stored: the same labels,
+        // without waiting on TypeScript.
+        const storedDiffering: string[] = [];
+        const storedMs: number[] = [];
+        if (graph.state === 'ready') await checkCalls(storedDiffering, storedMs);
+
         const row = {
           repo: repo.id,
           files: current.files,
@@ -341,12 +352,20 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
                 detailsMaxMs: Math.round(Math.max(...detailsMs)),
               }
             : {}),
+          ...(storedMs.length > 0
+            ? {
+                storedCalls: `${String(storedMs.length / 2 - storedDiffering.length)} of ${String(storedMs.length / 2)}`,
+                storedCallsMaxMs: Math.round(Math.max(...storedMs)),
+              }
+            : {}),
         };
         report.push(row);
         console.log(JSON.stringify(row));
 
         expect(missing).toEqual([]);
         expect(callsDiffering).toEqual([]);
+        expect(storedDiffering).toEqual([]);
+        if (storedMs.length > 0) expect(Math.max(...storedMs)).toBeLessThan(ANSWER_MS);
         if (GRAPH_HELD.has(repo.id)) {
           expect(graph.state, graph.message ?? '').toBe('ready');
           expect(graph.snapshot?.complete).toBe(true);

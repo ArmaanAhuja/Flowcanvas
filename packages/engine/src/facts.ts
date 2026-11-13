@@ -13,11 +13,25 @@ import type { NodeDetails } from './protocol.js';
 import type { UnitFacts } from './semantics/details.js';
 
 /** Raise when a row's shape changes: rows in another format are dropped, and the next pass writes them again. */
-export const FACTS_FORMAT = 1;
+/** 2: each unit's calls, and which files call a place (the Calls tab, phase 7 step 4). */
+export const FACTS_FORMAT = 2;
 /** Files kept decoded in memory: the ones being looked at. */
 const DECODED_KEPT = 64;
 
-const SCHEMA = 'CREATE TABLE files (path TEXT PRIMARY KEY, hash TEXT NOT NULL, data BLOB NOT NULL)';
+// `calls_into`: which files have a unit calling a place (a callee's `path:line:column`), from TypeScript's call
+// hierarchy, so a function's callers are its callers' own stored calls, as TypeScript's incoming calls are.
+const SCHEMA = `
+  CREATE TABLE files (path TEXT PRIMARY KEY, hash TEXT NOT NULL, data BLOB NOT NULL);
+  CREATE TABLE calls_into (target TEXT NOT NULL, path TEXT NOT NULL, PRIMARY KEY (target, path));
+  CREATE INDEX calls_into_path ON calls_into (path);
+`;
+
+/** The key a callee's place is stored by. */
+const placeKey = (place: {
+  readonly path: string;
+  readonly line: number;
+  readonly column: number;
+}) => `${place.path}:${String(place.line)}:${String(place.column)}`;
 
 /** A file's units, and the hash of the text they were worked out from. */
 export interface FileFacts {
@@ -49,7 +63,7 @@ export class FactsStore {
     );
     const current = this.#db.prepare('PRAGMA user_version').get()?.user_version;
     if (current !== FACTS_FORMAT) {
-      this.#db.exec('DROP TABLE IF EXISTS files');
+      this.#db.exec('DROP TABLE IF EXISTS files; DROP TABLE IF EXISTS calls_into;');
       this.#db.exec(SCHEMA);
       this.#db.exec(`PRAGMA user_version = ${String(FACTS_FORMAT)}`);
     }
@@ -70,11 +84,22 @@ export class FactsStore {
        ON CONFLICT (path) DO UPDATE SET hash = excluded.hash, data = excluded.data`,
     );
     const remove = this.#db.prepare('DELETE FROM files WHERE path = ?');
+    const unlink = this.#db.prepare('DELETE FROM calls_into WHERE path = ?');
+    const link = this.#db.prepare('INSERT OR IGNORE INTO calls_into (target, path) VALUES (?, ?)');
     this.#db.exec('BEGIN');
     try {
       for (const [path, facts] of pending) {
-        if (facts === null) remove.run(path);
-        else upsert.run(path, facts.hash, zstdCompressSync(JSON.stringify(facts.units)));
+        unlink.run(path);
+        if (facts === null) {
+          remove.run(path);
+        } else {
+          upsert.run(path, facts.hash, zstdCompressSync(JSON.stringify(facts.units)));
+          for (const unit of facts.units) {
+            for (const callee of unit.calls?.callees ?? []) {
+              if (callee.hierarchy && callee.place !== null) link.run(placeKey(callee.place), path);
+            }
+          }
+        }
         this.#decoded.delete(path);
       }
       this.#db.exec('COMMIT');
@@ -152,6 +177,18 @@ export class FactsStore {
       }
     }
     return found ?? units[0];
+  }
+
+  /** The files with a unit calling the function at `place` (by TypeScript's call hierarchy). */
+  callerFiles(place: {
+    readonly path: string;
+    readonly line: number;
+    readonly column: number;
+  }): readonly string[] {
+    return this.#db
+      .prepare('SELECT path FROM calls_into WHERE target = ? ORDER BY path')
+      .all(placeKey(place))
+      .map((row) => String(row.path));
   }
 
   /** Drops the decoded copies: after a pass, which may have rewritten any file's rows from another connection. */

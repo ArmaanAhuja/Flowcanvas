@@ -5,6 +5,7 @@ import { heap } from './v8.js';
 import { basename, dirname, join, relative, sep } from 'node:path';
 import type * as TS from 'typescript';
 import {
+  PARTLY,
   SEMANTIC_LIMITS,
   type CallEntry,
   type CallsResult,
@@ -14,7 +15,6 @@ import {
   type DetailsResult,
   type ReferencesResult,
   type Relation,
-  type SymbolKindName,
 } from '../protocol.js';
 import { assemble, GRAPH_FILES_BETWEEN_PAUSES, GRAPH_HEAP_SHARE, type GraphPass } from './graph.js';
 import { contentHash, type FileFacts } from '../facts.js';
@@ -35,6 +35,7 @@ import {
   isFixedCallee,
   isNamedCallable,
   kindOfDeclaration,
+  kindOf,
 } from './callables.js';
 import { findPackages, ProjectModel, type ProjectConfig, type TypeScript } from './projects.js';
 
@@ -58,10 +59,7 @@ export interface FactsSink {
 }
 
 /** Said when part of the project couldn't be looked at. */
-export const PARTLY = {
-  memory: 'Part of this project is too large to look at here, so some callers may be missing.',
-  limit: 'Showing the first results only.',
-} as const;
+export { PARTLY } from '../protocol.js';
 
 const SOURCE = /\.(?:ts|tsx|js|jsx|mts|cts|mjs|cjs)$/;
 const DECLARATION = /\.d\.[cm]?ts$/;
@@ -210,11 +208,17 @@ export class SemanticService {
         seen.add(file);
         if (source === undefined) continue;
         const part = walkFile(context, program, source);
-        files.set(file, part);
+        // The graph's part is held for the next pass; the calls go to the store with the rest of the facts.
+        files.set(file, {
+          nodes: part.nodes,
+          targets: part.targets,
+          edges: part.edges,
+          builtInCalls: part.builtInCalls,
+        });
         // Worked out now, while the program is here, and stored rather than held (owner, 13 Nov 2026).
         this.#facts?.put(projectPath(context, file), {
           hash: contentHash(source.text),
-          units: fileFacts(context, program, source, part.edges),
+          units: fileFacts(context, program, source, part),
         });
         walked += 1;
         if (walked % filesBetweenPauses === 0) {
@@ -544,7 +548,7 @@ export class SemanticService {
     const entries = new Map<string, CallEntry & { sites: CodePosition[] }>();
     const starts = new Map<string, Set<number>>();
     // Where TypeScript's hierarchy already put a call (its spans start where the callee expression starts).
-    const covered = new Set<number>();
+    const covered = new Set<string>();
     let complete = true;
     const add = (
       key: string,
@@ -580,7 +584,7 @@ export class SemanticService {
     )) {
       const to = this.#item(program, call.to);
       for (const span of call.fromSpans) {
-        covered.add(span.start);
+        covered.add(`${String(span.start)}:${String(span.start + span.length)}`);
         const relation = this.#relation(source, span.start);
         add(
           keyOf(to, call.to.file, call.to.selectionSpan.start, relation),
@@ -595,7 +599,10 @@ export class SemanticService {
     // those it resolves to something its hierarchy doesn't model, such as a constant holding a function (`nanoid`)
     // or a built-in declared as a variable (`Boolean`, `new Error`).
     for (const site of this.#callSites(program, source, item)) {
-      if (covered.has(site.start)) continue;
+      // A call is the hierarchy's when its callee covers the same text, not only the same start:
+      // `getStripe().subscriptions.update()` starts where `getStripe()` does, and was dropped (found by comparing
+      // with the answers the pass stores, phase 7).
+      if (covered.has(`${String(site.start)}:${String(site.end)}`)) continue;
       const declared = site.declaration;
       if (declared === null) {
         add(
@@ -694,6 +701,7 @@ export class SemanticService {
         if (!skip) {
           found.push({
             start: callee.getStart(source),
+            end: callee.getEnd(),
             text: calleeText(ts, callee, source),
             relation: 'calls',
             declaration: declarationOf(name),
@@ -706,6 +714,7 @@ export class SemanticService {
         if (!intrinsic) {
           found.push({
             start: tag.getStart(source),
+            end: tag.getEnd(),
             text: calleeText(ts, tag, source),
             relation: 'renders',
             declaration: declarationOf(name),
@@ -727,6 +736,8 @@ export class SemanticService {
 /** A call in a function's body, and the declaration the compiler resolves its callee to (null: it can't). */
 interface CallSite {
   readonly start: number;
+  /** Where its callee ends: with `start`, the text TypeScript's hierarchy covers. */
+  readonly end: number;
   readonly text: string;
   readonly relation: Relation;
   readonly declaration: {
@@ -757,33 +768,3 @@ const containerOf = (name: string | undefined): string | null =>
     : cut(name);
 
 /** TypeScript's element kinds, in the index's words; components are PascalCase functions (as in ADR 0024). */
-function kindOf(ts: TypeScript, kind: TS.ScriptElementKind, name: string): SymbolKindName | null {
-  const K = ts.ScriptElementKind;
-  switch (kind) {
-    case K.functionElement:
-    case K.localFunctionElement:
-    case K.constElement:
-    case K.letElement:
-    case K.variableElement:
-    case K.localVariableElement:
-      return /^[A-Z]/.test(name) ? 'component' : 'function';
-    case K.memberFunctionElement:
-    case K.constructorImplementationElement:
-    case K.memberGetAccessorElement:
-    case K.memberSetAccessorElement:
-      return 'method';
-    case K.classElement:
-    case K.localClassElement:
-      return 'class';
-    case K.interfaceElement:
-      return 'interface';
-    case K.typeElement:
-      return 'type';
-    case K.enumElement:
-      return 'enum';
-    case K.moduleElement:
-      return null;
-    default:
-      return null;
-  }
-}

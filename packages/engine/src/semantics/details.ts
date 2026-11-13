@@ -7,13 +7,17 @@ import { FLOW_LIMITS, type GraphEdge } from '@flowcanvas/graph-model';
 import type * as TS from 'typescript';
 import {
   DETAIL_LIMITS,
+  type CallEntry,
+  type CodeItem,
+  type CodePosition,
   type DetailDecision,
   type DetailLine,
   type DetailList,
   type DetailParam,
   type NodeDetails,
+  type SymbolKindName,
 } from '../protocol.js';
-import { calleeText } from './callables.js';
+import { calleeText, kindOf, kindOfDeclaration } from './callables.js';
 import {
   nameOf,
   placeOf,
@@ -23,6 +27,8 @@ import {
   unitsOf,
   walkFile,
   type GraphContext,
+  containerOf,
+  type WalkedFile,
 } from './graph-pass.js';
 
 /** Flattened and cut: the inspector's texts are one line each, and bounded (the full text is in the code). */
@@ -57,9 +63,28 @@ export function detailsAt(
   return unitDetails(ctx, checker, source, node, id, edges, fileContext(ctx, checker, source));
 }
 
+/** A callee as the pass stores it: with whether TypeScript's call hierarchy gave it (only those have callers). */
+export interface StoredCallee extends CallEntry {
+  readonly hierarchy: boolean;
+  /**
+   * The same calls as TypeScript's incoming calls place them, for the callee's callers: at the name called
+   * (`poll.create()`: `create`), where outgoing calls place them at the callee expression's start (`poll`).
+   */
+  readonly incoming?: readonly CodePosition[];
+}
+
+/** A unit's Calls-tab answer, as the pass stores it: its own item, and its callees. */
+export interface StoredCalls {
+  readonly item: CodeItem;
+  readonly callees: readonly StoredCallee[];
+  readonly complete: boolean;
+}
+
 /** One code unit of a file, as the pass stores it: its id, the range it covers (1-based), and its details. */
 export interface UnitFacts {
   readonly id: string;
+  /** Its Calls-tab answer (callees, and its side of its callees' callers); none where TypeScript gave none. */
+  readonly calls?: StoredCalls | undefined;
   /** From its start (a constant's: the declaration's, name included) to its end, as [line, column]. */
   readonly start: readonly [number, number];
   readonly end: readonly [number, number];
@@ -75,7 +100,7 @@ export function fileFacts(
   ctx: GraphContext,
   program: TS.Program,
   source: TS.SourceFile,
-  edges: readonly GraphEdge[],
+  walked: WalkedFile,
 ): UnitFacts[] {
   const { ts } = ctx;
   const checker = program.getTypeChecker();
@@ -84,26 +109,62 @@ export function fileFacts(
     return [line + 1, character + 1];
   };
   const file = fileContext(ctx, checker, source);
-  const facts: UnitFacts[] = [];
+  // Its Calls-tab answer: its own item, and the callees the walk recorded for it.
+  const withCalls = (
+    id: string,
+    start: [number, number],
+    end: [number, number],
+    details: NodeDetails,
+    kind: SymbolKindName | null,
+    container: string | null,
+  ): UnitFacts => {
+    const recorded = walked.calls.get(id);
+    return {
+      id,
+      start,
+      end,
+      details,
+      calls: {
+        item: {
+          name: details.name,
+          kind,
+          container,
+          place: details.place,
+          builtIn: false,
+        },
+        callees: recorded?.callees ?? [],
+        complete: recorded?.complete ?? true,
+      },
+    };
+  };
   const top = unitNodeAt(ctx, source, -1).id;
-  facts.push({
-    id: top,
-    start: [1, 1],
-    end: at(source.getEnd()),
-    details: unitDetails(ctx, checker, source, null, top, edges, file),
-  });
+  const facts: UnitFacts[] = [
+    withCalls(
+      top,
+      [1, 1],
+      at(source.getEnd()),
+      unitDetails(ctx, checker, source, null, top, walked.edges, file),
+      null,
+      null,
+    ),
+  ];
   for (const { node, id } of unitsOf(ctx, source)) {
     const holder =
       (ts.isVariableDeclaration(node.parent) || ts.isPropertyDeclaration(node.parent)) &&
       node.parent.initializer === node
         ? node.parent
         : node;
-    facts.push({
-      id,
-      start: at(holder.getStart(source)),
-      end: at(holder.getEnd()),
-      details: unitDetails(ctx, checker, source, node, id, edges, file),
-    });
+    facts.push(
+      withCalls(
+        id,
+        at(holder.getStart(source)),
+        at(holder.getEnd()),
+        unitDetails(ctx, checker, source, node, id, walked.edges, file),
+        // As the Calls tab names its kind: from the declaration (a property holding an arrow is a function).
+        kindOf(ts, kindOfDeclaration(ts, node as TS.Declaration), nameOf(ts, node)),
+        containerOf(ts, node),
+      ),
+    );
   }
   return facts;
 }

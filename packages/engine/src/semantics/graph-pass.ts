@@ -3,7 +3,22 @@
 import { basename, relative, sep } from 'node:path';
 import type { GraphEdge, GraphNode, Relation } from '@flowcanvas/graph-model';
 import type * as TS from 'typescript';
-import { calleeText, cut, findNode, isFixedCallee, isNamedCallable } from './callables.js';
+import {
+  calleeText,
+  cut,
+  findNode,
+  isFixedCallee,
+  isNamedCallable,
+  kindOf,
+  kindOfDeclaration,
+} from './callables.js';
+import {
+  SEMANTIC_LIMITS,
+  type CodeItem,
+  type CodePosition,
+  type Relation as CallRelation,
+} from '../protocol.js';
+import type { StoredCallee } from './details.js';
 import type { TypeScript } from './projects.js';
 
 export interface FileGraph {
@@ -16,6 +31,15 @@ export interface FileGraph {
   readonly targets: readonly GraphNode[];
   readonly edges: readonly GraphEdge[];
   readonly builtInCalls: number;
+}
+
+/** A file's walk, with each unit's calls in the Calls tab's shape (phase 7, ADR 0029): stored, never held. */
+export interface WalkedFile extends FileGraph {
+  /** By the calling unit's id: its callees, and whether they were all kept (SEMANTIC_LIMITS). */
+  readonly calls: ReadonlyMap<
+    string,
+    { readonly callees: readonly StoredCallee[]; readonly complete: boolean }
+  >;
 }
 
 export interface GraphContext {
@@ -168,8 +192,16 @@ export function unitsOf(
 }
 
 export function placeOf(ctx: GraphContext, node: TS.Node): GraphNode['place'] {
+  const { ts } = ctx;
   const source = node.getSourceFile();
-  const name = ctx.ts.getNameOfDeclaration(node as TS.Declaration) ?? node;
+  // A function held by a constant or a class property is placed at the holder's name, as TypeScript places it (a
+  // property's was the arrow's start, found in phase 7).
+  const holder =
+    (ts.isVariableDeclaration(node.parent) || ts.isPropertyDeclaration(node.parent)) &&
+    node.parent.initializer === node
+      ? node.parent
+      : node;
+  const name = ts.getNameOfDeclaration(holder as TS.Declaration) ?? node;
   const { line, character } = source.getLineAndCharacterOfPosition(name.getStart(source));
   return { path: projectPath(ctx, source.fileName), line: line + 1, column: character + 1 };
 }
@@ -272,7 +304,61 @@ function guardsOf(ts: TypeScript, source: TS.SourceFile, call: TS.Node, owner: T
 }
 
 /** One file's code units and calls. */
-export function walkFile(ctx: GraphContext, program: TS.Program, source: TS.SourceFile): FileGraph {
+/**
+ * The Calls tab's container for a code unit, as TypeScript's call hierarchy names it: the class, namespace or
+ * object literal (by the name it's held by) it's declared in; an interface for a property, none for its methods; none in
+ * a function or at a top level.
+ */
+export function containerOf(ts: TypeScript, node: TS.Node): string | null {
+  const holder =
+    (ts.isVariableDeclaration(node.parent) || ts.isPropertyDeclaration(node.parent)) &&
+    node.parent.initializer === node
+      ? node.parent
+      : node;
+  for (let scope = holder.parent; !ts.isSourceFile(scope); scope = scope.parent) {
+    // In an interface, a method signature is the call hierarchy's and has none (`Cache.get`); a property holding a
+    // function is named by its interface (`HeadlessDatePickerOptions.onNavigationChange`).
+    if (ts.isInterfaceDeclaration(scope))
+      return ts.isMethodSignature(holder) ? null : scope.name.text;
+    if (ts.isClassLike(scope) || ts.isModuleDeclaration(scope)) {
+      return scope.name !== undefined && ts.isIdentifier(scope.name) ? scope.name.text : null;
+    }
+    if (ts.isObjectLiteralExpression(scope)) {
+      const named = scope.parent;
+      return (ts.isVariableDeclaration(named) || ts.isPropertyAssignment(named)) &&
+        ts.isIdentifier(named.name)
+        ? named.name.text
+        : null;
+    }
+    if (ts.isFunctionLike(scope) || ts.isBlock(scope)) return null;
+  }
+  return null;
+}
+
+/**
+ * Where TypeScript's incoming calls place a call that starts at `start`: at the name called, the last of a chain of
+ * property accesses starting there (`a.b.create()`: `create`), where outgoing calls place it at the start (`a`).
+ */
+function calledName(ts: TypeScript, source: TS.SourceFile, start: number): number {
+  let node = findNode(ts, source, start);
+  for (
+    let parent = node?.parent;
+    parent?.getStart(source) === start &&
+    (ts.isPropertyAccessExpression(parent) || ts.isNonNullExpression(parent));
+    parent = parent.parent
+  ) {
+    node = parent;
+  }
+  return node !== undefined && ts.isPropertyAccessExpression(node)
+    ? node.name.getStart(source)
+    : start;
+}
+
+export function walkFile(
+  ctx: GraphContext,
+  program: TS.Program,
+  source: TS.SourceFile,
+): WalkedFile {
   const { ts } = ctx;
   const checker = program.getTypeChecker();
   const path = projectPath(ctx, source.fileName);
@@ -319,6 +405,53 @@ export function walkFile(ctx: GraphContext, program: TS.Program, source: TS.Sour
   };
   const lineOf = (node: TS.Node) =>
     source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+  const positionOf = (offset: number): CodePosition => {
+    const { line, character } = source.getLineAndCharacterOfPosition(offset);
+    return { path, line: line + 1, column: character + 1 };
+  };
+
+  // Each unit's calls as the Calls tab lists them: one entry per callee and relation, each call once.
+  type Draft = StoredCallee & { sites: CodePosition[]; incoming: CodePosition[] };
+  const calls = new Map<
+    string,
+    { entries: Map<string, Draft>; starts: Set<string>; complete: boolean }
+  >();
+  const record = (
+    owner: string,
+    key: string,
+    base: CodeItem,
+    relation: CallRelation,
+    resolved: boolean,
+    start: number,
+  ) => {
+    let mine = calls.get(owner);
+    if (mine === undefined) {
+      mine = { entries: new Map(), starts: new Set(), complete: true };
+      calls.set(owner, mine);
+    }
+    let entry = mine.entries.get(key);
+    if (entry === undefined) {
+      if (mine.entries.size >= SEMANTIC_LIMITS.entries) {
+        mine.complete = false;
+        return;
+      }
+      entry = {
+        ...base,
+        relation,
+        provenance: resolved ? 'resolved' : 'unresolved',
+        hierarchy: base.place !== null,
+        sites: [],
+        incoming: [],
+      };
+      mine.entries.set(key, entry);
+    }
+    if (mine.starts.has(`${key}@${String(start)}`)) return;
+    mine.starts.add(`${key}@${String(start)}`);
+    if (entry.sites.length < SEMANTIC_LIMITS.sites) {
+      entry.sites.push(positionOf(start));
+      entry.incoming.push(positionOf(calledName(ts, source, start)));
+    }
+  };
 
   const visit = (node: TS.Node, owner: string, ownerNode: TS.Node): void => {
     let current = owner;
@@ -352,8 +485,29 @@ export function walkFile(ctx: GraphContext, program: TS.Program, source: TS.Sour
         const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
         const line = source.getLineAndCharacterOfPosition(callee.getStart(source)).line + 1;
         const declaredIn = declaration?.getSourceFile().fileName;
+        const start = callee.getStart(source);
         if (declaredIn !== undefined && ctx.builtIn(declaredIn)) {
           builtInCalls += 1;
+          // Built-ins: named as the compiler names them (`split`, `Promise`), one row per name.
+          const named = cut(symbol?.getName() ?? calleeText(ts, callee, source));
+          record(
+            current,
+            `builtin:${named}:${relation}`,
+            {
+              name: named,
+              kind:
+                declaration === undefined
+                  ? null
+                  : kindOf(ts, kindOfDeclaration(ts, declaration), named),
+              // TypeScript's call hierarchy gives a built-in no container (`Math.max`: none).
+              container: null,
+              place: null,
+              builtIn: true,
+            },
+            relation,
+            true,
+            start,
+          );
         } else {
           const target =
             declaration !== undefined && declaredIn !== undefined && ctx.inProject(declaredIn)
@@ -385,6 +539,61 @@ export function walkFile(ctx: GraphContext, program: TS.Program, source: TS.Sour
           }
           // The call itself, as it always was: callers and callees don't change (ADR 0028 §1).
           add({ from: current, kind: 'call', relation, label: null, ...reaches }, line);
+          if (target !== undefined && targetId !== undefined) {
+            const reached = nodeOf(ctx, target, targetId);
+            record(
+              current,
+              `${targetId}:${relation}`,
+              {
+                name: reached.name,
+                kind: kindOf(ts, kindOfDeclaration(ts, target as TS.Declaration), reached.name),
+                container: containerOf(ts, target),
+                place: reached.place,
+                builtIn: false,
+              },
+              relation,
+              true,
+              start,
+            );
+          } else if (
+            declaration !== undefined &&
+            declaredIn !== undefined &&
+            !ctx.inProject(declaredIn) &&
+            isFixedCallee(ts, declaration)
+          ) {
+            // An installed package's function: resolved, with no place in the project (the Calls tab's way; the
+            // graph keeps it unknown, as it's not the project's code).
+            const named = cut(symbol?.getName() ?? calleeText(ts, callee, source));
+            const owner = declaration.parent;
+            record(
+              current,
+              `package:${declaredIn}:${String(declaration.getStart())}:${relation}`,
+              {
+                name: named,
+                kind: kindOf(ts, kindOfDeclaration(ts, declaration), named),
+                container:
+                  (ts.isInterfaceDeclaration(owner) || ts.isClassLike(owner)) &&
+                  owner.name !== undefined
+                    ? owner.name.text
+                    : null,
+                place: null,
+                builtIn: false,
+              },
+              relation,
+              true,
+              start,
+            );
+          } else {
+            const written = cut(calleeText(ts, callee, source));
+            record(
+              current,
+              `unresolved:${written}:${relation}`,
+              { name: written, kind: null, container: null, place: null, builtIn: false },
+              relation,
+              false,
+              start,
+            );
+          }
           // And through the decisions it sits under: into the first, from each to the next, out to the call.
           const guards = guardsOf(ts, source, node, currentNode);
           let from = current;
@@ -419,6 +628,17 @@ export function walkFile(ctx: GraphContext, program: TS.Program, source: TS.Sour
   visit(source, top, source);
 
   return {
+    calls: new Map(
+      [...calls].map(([owner, mine]) => [
+        owner,
+        {
+          callees: [...mine.entries.values()].map(({ incoming, ...entry }) =>
+            entry.hierarchy ? { ...entry, incoming } : entry,
+          ),
+          complete: mine.complete,
+        },
+      ]),
+    ),
     nodes: [...nodes.values()],
     targets: [...targets.values()],
     edges: [...edges.values()].map(({ edge, lines }) => ({

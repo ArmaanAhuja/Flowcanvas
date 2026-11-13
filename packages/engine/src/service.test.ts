@@ -599,10 +599,13 @@ describe('flows (phase 7)', () => {
       unresolved: none,
       writes: none,
     };
+    const load = { id: 'a.ts#load', start: [5, 1], end: [8, 2], details: stored } as const;
     const factsReader = () => ({
-      unitAt: vi.fn((_path: string, line: number) => (line >= 5 ? { id: 'a.ts#load' } : undefined)),
+      unitAt: vi.fn((_path: string, line: number) => (line >= 5 ? load : undefined)),
       details: vi.fn((id: string) => (id === 'a.ts#load' ? stored : undefined)),
       forget: vi.fn(),
+      units: vi.fn(() => [load]),
+      callerFiles: vi.fn(() => []),
     });
 
     it('opens flows and details from inside a function without asking TypeScript', async () => {
@@ -631,6 +634,8 @@ describe('flows (phase 7)', () => {
         unitAt: vi.fn(() => undefined),
         details: vi.fn(() => undefined),
         forget: vi.fn(),
+        units: vi.fn(() => undefined),
+        callerFiles: vi.fn(() => []),
       };
       const unit = vi.fn(() => Promise.resolve('a.ts#show'));
       const ask = vi.fn(() => Promise.resolve({ details: null, message: 'live' }));

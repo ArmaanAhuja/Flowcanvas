@@ -117,6 +117,45 @@ describe('FactsStore', () => {
     store.close();
   });
 
+  it('knows which files call a place, by their stored calls, and forgets a caller that’s rewritten or gone', () => {
+    const store = new FactsStore(':memory:');
+    const callee = (line: number, hierarchy: boolean) => ({
+      name: 'save',
+      kind: 'function' as const,
+      container: null,
+      place: { path: 'db.ts', line, column: 17 },
+      builtIn: false,
+      relation: 'calls' as const,
+      provenance: 'resolved' as const,
+      sites: [{ path: 'b.ts', line: 3, column: 5 }],
+      hierarchy,
+    });
+    const calling = (path: string, callees: ReturnType<typeof callee>[]) => ({
+      hash: 'h',
+      units: [
+        {
+          ...unit(`${path}#(top level)`, [1, 1], [9, 1]),
+          calls: {
+            item: { name: path, kind: null, container: null, place: null, builtIn: false },
+            callees,
+            complete: true,
+          },
+        },
+      ],
+    });
+    store.put('b.ts', calling('b.ts', [callee(1, true)]));
+    store.put('c.ts', calling('c.ts', [callee(1, true), callee(5, false)]));
+    store.flush();
+    expect(store.callerFiles({ path: 'db.ts', line: 1, column: 17 })).toEqual(['b.ts', 'c.ts']);
+    // Only what TypeScript's call hierarchy gave has callers.
+    expect(store.callerFiles({ path: 'db.ts', line: 5, column: 17 })).toEqual([]);
+    store.put('b.ts', calling('b.ts', []));
+    store.put('c.ts', null);
+    store.flush();
+    expect(store.callerFiles({ path: 'db.ts', line: 1, column: 17 })).toEqual([]);
+    store.close();
+  });
+
   it('drops rows in an older format', () => {
     dir = mkdtempSync(join(tmpdir(), 'fc-facts-'));
     const file = join(dir, 'facts.db');

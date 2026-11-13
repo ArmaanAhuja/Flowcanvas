@@ -1,6 +1,7 @@
 // The rules for what a callable is and what a call site reaches (phase 5, ADR 0026 addendum), shared by the Calls tab's
 // answers and the graph pass (phase 6, ADR 0027) so both see the same code the same way.
 import type * as TS from 'typescript';
+import type { SymbolKindName } from '../protocol.js';
 import type { TypeScript } from './projects.js';
 
 const MAX_NAME = 120;
@@ -143,4 +144,40 @@ export function findNode(
   };
   ts.forEachChild(source, visit);
   return found;
+}
+
+/** The Calls tab's kind for a declaration's kind (a constant holding a function is one: a component by its name). */
+export function kindOf(
+  ts: TypeScript,
+  kind: TS.ScriptElementKind,
+  name: string,
+): SymbolKindName | null {
+  const K = ts.ScriptElementKind;
+  switch (kind) {
+    case K.functionElement:
+    case K.localFunctionElement:
+    case K.constElement:
+    case K.letElement:
+    case K.variableElement:
+    case K.localVariableElement:
+      return /^[A-Z]/.test(name) ? 'component' : 'function';
+    case K.memberFunctionElement:
+    case K.constructorImplementationElement:
+    case K.memberGetAccessorElement:
+    case K.memberSetAccessorElement:
+      return 'method';
+    case K.classElement:
+    case K.localClassElement:
+      return 'class';
+    case K.interfaceElement:
+      return 'interface';
+    case K.typeElement:
+      return 'type';
+    case K.enumElement:
+      return 'enum';
+    case K.moduleElement:
+      return null;
+    default:
+      return null;
+  }
 }

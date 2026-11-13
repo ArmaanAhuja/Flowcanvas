@@ -119,6 +119,24 @@ export interface CallsResult {
   readonly message: string | null;
 }
 
+/** Said when part of the project couldn't be looked at. */
+export const PARTLY = {
+  memory: 'Part of this project is too large to look at here, so some callers may be missing.',
+  limit: 'Showing the first results only.',
+} as const;
+
+/** An entry as the protocol sends it. */
+export const plainEntry = (entry: CallEntry): CallEntry => ({
+  name: entry.name,
+  kind: entry.kind,
+  container: entry.container,
+  place: entry.place,
+  builtIn: entry.builtIn,
+  relation: entry.relation,
+  provenance: entry.provenance,
+  sites: entry.sites,
+});
+
 export interface DefinitionResult {
   readonly definitions: readonly CodeItem[];
   readonly message: string | null;
