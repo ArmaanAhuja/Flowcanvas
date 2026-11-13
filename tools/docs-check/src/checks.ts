@@ -430,13 +430,15 @@ export function undocumentedCommits(
 }
 
 /**
- * upgrade-later: a trigger naming a phase that's accepted has been reached, so the row says what happened
- * (`**Checked <date>**`, `**Reached <date>**` or `**Moved …**`), or it's stale.
+ * upgrade-later: a trigger naming a phase that's accepted, or that the work is at, has been reached, so the row says
+ * what happened (`**Checked <date>**`, `**Reached <date>**` or `**Moved …**`), or it's stale. Reached when the
+ * phase starts, not when it ends: "before phase 45" must be acted on during it (owner, 14 Nov 2026, upgrade-later 23).
  */
 export function upgradeTriggers(
   doc: string,
   accepted: ReadonlySet<string>,
   file = 'docs/upgrade-later.md',
+  current: readonly string[] = [],
 ): Finding[] {
   const found: Finding[] = [];
   for (const [index, line] of doc.split('\n').entries()) {
@@ -444,11 +446,13 @@ export function upgradeTriggers(
     const item = cells[1] ?? '';
     if (!/^\d+$/.test(item)) continue;
     const trigger = cells[5] ?? '';
-    const reached = phasesNamed(trigger).filter((phase) => accepted.has(phase));
+    const reached = phasesNamed(trigger).filter(
+      (phase) => accepted.has(phase) || current.includes(phase),
+    );
     if (reached.length > 0 && !/\*\*(Checked|Reached|Moved)\b/.test(trigger)) {
       found.push({
         where: `${file}:${String(index + 1)}`,
-        problem: `item ${item}'s trigger names phase ${reached.join(', ')}, which is accepted: say what happened (**Checked <date>:** or **Reached <date>:**)`,
+        problem: `item ${item}'s trigger names phase ${reached.join(', ')}, which has started: act on it, then say what happened (**Checked <date>:** or **Reached <date>:**)`,
       });
     }
   }

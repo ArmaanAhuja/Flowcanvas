@@ -272,7 +272,7 @@ for (const file of tracked) {
 
 // upgrade-later is living: a trigger naming an accepted phase says what happened. References anywhere resolve.
 const upgrade = read('docs/upgrade-later.md');
-findings.push(...upgradeTriggers(upgrade, acceptedSet));
+findings.push(...upgradeTriggers(upgrade, acceptedSet, 'docs/upgrade-later.md', current));
 const known = {
   items: new Set([
     ...[...upgrade.matchAll(/^\| (\d+) \|/gm)].map((m) => m[1] ?? ''),

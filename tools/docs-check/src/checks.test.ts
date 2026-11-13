@@ -335,6 +335,12 @@ describe('upgrade-later and references', () => {
     expect(upgradeTriggers(doc, new Set(['2', '5'])).map((f) => f.where)).toEqual([
       'docs/upgrade-later.md:1',
     ]);
+    // "Before phase 45" is reached when phase 45 starts, not when it's accepted.
+    expect(
+      upgradeTriggers(doc, new Set(['2', '5']), 'docs/upgrade-later.md', ['45']).map(
+        (f) => f.where,
+      ),
+    ).toEqual(['docs/upgrade-later.md:1', 'docs/upgrade-later.md:3']);
   });
 
   it('finds an upgrade-later item or an ADR that doesn’t exist', () => {
