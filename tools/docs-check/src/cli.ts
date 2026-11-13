@@ -11,6 +11,7 @@ import {
   reviewed,
   stepEntries,
   undocumentedCommits,
+  unreleasedVersion,
   upgradeTriggers,
   architectureParts,
   buildSteps,
@@ -144,14 +145,21 @@ function counts(packages: readonly string[]): Map<string, number> {
 }
 
 const findings: Finding[] = [];
-const { accepted, inProgress } = phasesFromStatus(read('docs/STATUS.md'));
+const { accepted, inProgress, current } = phasesFromStatus(read('docs/STATUS.md'));
 const acceptedSet = new Set(accepted);
 const version = (JSON.parse(read('package.json')) as { version: string }).version;
 const packages = workspacePackages();
 
 // RUN-AND-FEATURES: the release, the progress, where the work is, the phase sections, and the counts.
 findings.push(
-  ...runAndFeatures(read(RUN), { version, changelog: read('CHANGELOG.md'), accepted, inProgress }),
+  ...runAndFeatures(read(RUN), {
+    version,
+    changelog: read('CHANGELOG.md'),
+    accepted,
+    inProgress,
+    current,
+    unreleased: unreleasedVersion(read('docs/STATUS.md'), version),
+  }),
 );
 const latestCommit = new Date(
   execFileSync('git', ['log', '-1', '--format=%cI'], { cwd: repo, encoding: 'utf8' }).trim(),
@@ -250,7 +258,6 @@ findings.push(
 const HISTORICAL =
   /^(docs\/(reference|reports|adr)\/|docs\/build-steps\.md$|docs\/decisions-log\.md$|CHANGELOG\.md$|CLAUDE\.md$|corpus\/labels\/|tools\/docs-check\/src\/checks\.test\.ts$)/;
 const TEXT = /\.(md|ts|tsx|mts|js|mjs|css|json|jsonc|ya?ml|html|sh|txt)$/;
-const current = inProgress.length > 0 ? inProgress : accepted.slice(-1);
 const tracked = execFileSync('git', ['ls-files'], {
   cwd: repo,
   encoding: 'utf8',

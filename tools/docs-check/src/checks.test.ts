@@ -17,6 +17,7 @@ import {
   stepEntries,
   stillToCome,
   undocumentedCommits,
+  unreleasedVersion,
   updatedDate,
   upgradeTriggers,
   withCounts,
@@ -33,7 +34,13 @@ const STATUS = [
 
 describe('phases', () => {
   it('reads accepted and in-progress phases from STATUS.md', () => {
-    expect(phasesFromStatus(STATUS)).toEqual({ accepted: ['1', '6'], inProgress: ['7'] });
+    expect(phasesFromStatus(STATUS)).toEqual({
+      accepted: ['1', '6'],
+      inProgress: ['7'],
+      current: ['7'],
+    });
+    // In review, the phase is still where the work is; 1d, in review earlier in the table, isn't.
+    expect(phasesFromStatus(STATUS.replace('in progress', 'in review')).current).toEqual(['7']);
   });
 
   it('finds every phase a text names, lists included', () => {
@@ -337,5 +344,15 @@ describe('upgrade-later and references', () => {
       "names upgrade-later 99, which isn't an item or in its removed list",
       "names ADR 0031, which doesn't exist",
     ]);
+  });
+});
+
+describe('unreleasedVersion', () => {
+  it('lets package.json run ahead of staging only for a phase still in review or in progress', () => {
+    const status = (state: string) =>
+      `| 7 | Flow builder | ${state} | \`0.11.0\` | PR #21 |\n| 6 | Graph model | accepted | \`0.10.0\` | |`;
+    expect(unreleasedVersion(status('in review'), '0.11.0')).toBe(true);
+    expect(unreleasedVersion(status('accepted'), '0.11.0')).toBe(false);
+    expect(unreleasedVersion(status('in review'), '0.12.0')).toBe(false);
   });
 });

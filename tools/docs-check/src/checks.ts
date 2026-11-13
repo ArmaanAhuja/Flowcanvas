@@ -9,21 +9,29 @@ export interface Finding {
   readonly problem: string;
 }
 
-/** STATUS.md's phases: accepted, and the one in progress (if any), in table order. */
+/**
+ * STATUS.md's phases, in table order: accepted, in progress, and the one the work is at (`current`): the last row
+ * that isn't planned, so a phase in review is still current (1d, in review for a cloud provider, is earlier in the
+ * table and isn't).
+ */
 export function phasesFromStatus(status: string): {
   readonly accepted: readonly string[];
   readonly inProgress: readonly string[];
+  readonly current: readonly string[];
 } {
   const accepted: string[] = [];
   const inProgress: string[] = [];
+  let current: string | null = null;
   for (const line of status.split('\n')) {
     const cells = line.split('|').map((cell) => cell.trim());
     const phase = cells[1] ?? '';
     if (!/^\d+[a-z]?$/.test(phase)) continue;
     if (cells[3] === 'accepted') accepted.push(phase);
     else if (cells[3] === 'in progress') inProgress.push(phase);
+    if (cells[3] === 'accepted' || cells[3] === 'in review' || cells[3] === 'in progress')
+      current = phase;
   }
-  return { accepted, inProgress };
+  return { accepted, inProgress, current: current === null ? [] : [current] };
 }
 
 const PHASE = /\bphases?\s+((?:\d+[a-z]?)(?:\s*(?:,|and|to)\s*\d+[a-z]?)*)/gi;
@@ -77,6 +85,21 @@ export function commentsOf(source: string): { readonly text: string; readonly li
   return found;
 }
 
+/**
+ * A version in package.json that isn't released yet: a phase in review or in progress whose build is that version
+ * (`| 7 | … | in review | \`0.11.0\` | …`). Staging keeps the last release until its merge.
+ */
+export function unreleasedVersion(status: string, version: string): boolean {
+  return status.split('\n').some((line) => {
+    const cells = line.split('|').map((cell) => cell.trim());
+    return (
+      /^\d+[a-z]?$/.test(cells[1] ?? '') &&
+      (cells[3] === 'in review' || cells[3] === 'in progress') &&
+      (cells[4] ?? '').includes(version)
+    );
+  });
+}
+
 /** RUN-AND-FEATURES's claims about where the project stands. */
 export function runAndFeatures(
   doc: string,
@@ -85,6 +108,10 @@ export function runAndFeatures(
     readonly changelog: string;
     readonly accepted: readonly string[];
     readonly inProgress: readonly string[];
+    /** The phase the work is at (phasesFromStatus). */
+    readonly current?: readonly string[];
+    /** package.json's version is a phase's build still in review, not on staging yet. */
+    readonly unreleased?: boolean;
   },
   file = 'docs/RUN-AND-FEATURES.md',
 ): Finding[] {
@@ -94,7 +121,7 @@ export function runAndFeatures(
     return `${file}:${String(index + 1)}`;
   };
   const released = /\*\*Released \(on staging\):\*\*\s*`([^`]+)`/.exec(doc)?.[1];
-  if (released !== facts.version) {
+  if (released !== facts.version && facts.unreleased !== true) {
     found.push({
       where: at(/\*\*Released/),
       problem: `says ${String(released)} is released; package.json says ${facts.version}`,
@@ -116,7 +143,8 @@ export function runAndFeatures(
     });
   }
   const updated = /\*\*Last updated:\*\*([^\n]*)/.exec(doc)?.[1] ?? '';
-  const current = facts.inProgress.length > 0 ? facts.inProgress : facts.accepted.slice(-1);
+  const current =
+    facts.current ?? (facts.inProgress.length > 0 ? facts.inProgress : facts.accepted.slice(-1));
   if (!current.some((phase) => phasesNamed(updated).includes(phase))) {
     found.push({
       where: at(/\*\*Last updated/),

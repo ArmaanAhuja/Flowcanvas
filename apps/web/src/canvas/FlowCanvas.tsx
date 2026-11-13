@@ -167,7 +167,9 @@ function Canvas({
   const container = useRef<HTMLDivElement>(null);
   // No useViewport here: only ZoomControls follows the zoom, so panning doesn't re-render the canvas.
   const flow = useReactFlow<CanvasNode, CanvasEdge>();
-  const isEmpty = nodes.length === 0;
+  // Empty by what it's given, not by React Flow's copy: the copy catches up in an effect, one render late, and in
+  // that render a flow just laid out showed "Choose a function…" under its own counts (phase 7's screens, on CI).
+  const isEmpty = given.length === 0;
   // React Flow gets handlers that never change, calling the latest ones: a new handler on every render made it
   // report the selection again, and the page render again (a loop found by the page tests).
   const handlers = useRef({ onSelectNode, onOpenNode });
