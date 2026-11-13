@@ -640,5 +640,9 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 3. **A screen is named by its route path,** with its page component muted beside it (the code has no names like Figma's "Item editor").
 4. **⌘K gets an Entry points section and `/` for routes** (Figma 16), from the same data.
 
-**Open, for the owner:** the Done when's bar. The plan says 90%; the owner asked whether 95, 99 or 100% is better. Claude's recommendation: 100% recall for convention-based kinds (file and config routes, decorators, scripts), at least 95% per fork for routes registered in code and event handlers, 100% precision, and every miss explained in the report.
+**Open, for the owner:** the Done when's bar. The plan says 90%; the owner asked whether 95, 99 or 100% is better. Claude's recommendation: 100% recall for convention-based kinds (file and config routes, decorators, scripts), at least 95% per fork for routes registered in code and event handlers, 100% precision, and every miss explained in the report. *Settled below, same day.*
+
+**Owner, 14 Nov 2026,** on phase 8's bar and labels: "go with your recommendations".
+- **The bar, stricter than the plan's 90%:** 100% recall for convention-based kinds (file- and config-based routes and pages, decorators, package.json scripts); at least 95% recall per fork (not only overall) for routes registered in code (Express, Hono, tRPC) and event handlers; 100% precision (every false find fixed, or shown to be a labelling mistake); every miss explained in the report and shown on the page as not fully detected, never guessed.
+- **The labels, option B** (the first counts were about 2,500 to 3,000 entry points across the 4 forks, more than estimated): every entry point in Rallly and Documenso; in LibreChat and Twenty, every entry point in a fixed set of modules covering each framework they use; the event handlers in 5 chosen screens per fork. Written by reading the code.
 

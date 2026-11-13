@@ -13607,10 +13607,10 @@ pnpm test:visual
 
 **From the build plan:**
 - **Build:** detect React event props, pages and routes, Next.js server actions and API routes, Express routes, package.json scripts; entry-points panel.
-- **Done when:** at least 90% of hand-listed entry points found across the 4 forks (the bar is the owner's open question: see the decisions log, 14 Nov 2026).
+- **Done when:** at least 90% of hand-listed entry points found across the 4 forks. **Raised by the owner (14 Nov 2026):** 100% recall for convention-based kinds, at least 95% per fork for routes registered in code and event handlers, 100% precision, every miss explained.
 - **Try it:** left panel lists screens, routes, jobs and events (Figma 06); click each to open its flow.
 
-**Decisions** (decisions log, 14 Nov 2026): every framework the 4 forks use (Next.js, React Router, Express, Hono, tRPC, NestJS controllers and GraphQL resolvers, React event props, package.json scripts); hand labels for every page, route, endpoint and script, and the handlers in 5 screens per fork; screens named by their path, the component muted; ⌘K's Entry points and `/` for routes.
+**Decisions** (decisions log, 14 Nov 2026): every framework the 4 forks use (Next.js, React Router, Express, Hono, tRPC, NestJS controllers and GraphQL resolvers, React event props, package.json scripts); hand labels for everything in Rallly and Documenso, a fixed set of modules in LibreChat and Twenty, and the handlers in 5 screens per fork; screens named by their path, the component muted; ⌘K's Entry points and `/` for routes.
 
 **Expected outcome:** with a fork's workspace running, the left panel lists its entry points in the design brief's groups (Screens and elements, API routes, Jobs and cron, Events, CLI commands) with counts and a filter; a screen expands to its elements; clicking any entry point opens its flow. Jobs and events show 0 with the phase they arrive in (11).
 
@@ -13638,7 +13638,7 @@ pnpm test:visual
 
 | Item | Test |
 | --- | --- |
-| Hand-listed entry points found (the bar: owner's question) | Docker corpus test: recall per fork, per group and overall, and precision, against `corpus/labels/entry-points.json` |
+| Hand-listed entry points found: 100% for convention-based kinds, ≥ 95% per fork for code-registered ones, 100% precision | Docker corpus test: recall per fork, per group and overall, and precision, against `corpus/labels/entry-points.json` |
 | Each opens its flow | Every labelled entry point's flow opens at its handler, in real workspaces |
 | The Try it | Walkthrough `try-it/phase-8.spec.ts` |
 
