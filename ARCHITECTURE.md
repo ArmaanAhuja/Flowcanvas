@@ -91,12 +91,14 @@ If no commit is known, every surface shows "unknown commit". A commit is never i
 ## From commit to URL
 
 ```
-push to a PR branch ──► Cloudflare Workers Builds ──► build web ──► wrangler versions upload ──► preview URLs
+push to a PR branch ──► GitHub Actions CI ──► build web ──► e2e/scripts/deploy.ts (wrangler versions upload) ──► preview URLs
                                                                        • <version-id-8>-flowcanvas.<subdomain>.workers.dev
                                                                        • <branch>-flowcanvas.<subdomain>.workers.dev (branch alias)
-merge to main       ──► Cloudflare Workers Builds ──► build web ──► wrangler deploy ──► staging: flowcanvas.<subdomain>.workers.dev
-push / merge        ──► Cloudflare Workers Builds (project flowcanvas-catalogue) ──► turbo run build-storybook ──► previews per branch,
-                        catalogue from main: flowcanvas-catalogue.<subdomain>.workers.dev (packages/ui/wrangler.jsonc)
+merge to main       ──► GitHub Actions CI ──► build web ──► deploy.ts (wrangler deploy) ──► staging: flowcanvas.<subdomain>.workers.dev
+push / merge        ──► CI's visual job, once the catalogue passes ──► deploy.ts (packages/ui/wrangler.jsonc) ──► previews per
+                        branch, catalogue from main: flowcanvas-catalogue.<subdomain>.workers.dev
+                        (CI deploys since 13 Nov 2026, owner; it was Cloudflare Workers Builds, which dropped pushes.
+                        A fork's PR has no secrets, so no preview: upgrade-later 10)
 push / PR           ──► GitHub Actions CI (.github/workflows/ci.yml): checks · visual in the Playwright image ·
                         walkthroughs against the PR preview (or staging on main) once it serves the commit ·
                         publish to flowcanvas-reports + one PR comment. Runs on GitHub since 31 Oct 2026 (repository

@@ -1,4 +1,4 @@
-// The address of a branch's preview: shared by the deploy (deploy-preview.ts) and the check that waits for it
+// The address of a branch's preview: shared by the deploy (deploy.ts) and the check that waits for it
 // (wait-for-deploy.ts), so the two can never disagree.
 
 export const WORKER = 'flowcanvas';

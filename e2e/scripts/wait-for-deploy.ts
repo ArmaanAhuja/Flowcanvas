@@ -82,7 +82,7 @@ async function main(): Promise<void> {
     }
     if (Date.now() > deadline) {
       fail(
-        `${base} still doesn't serve ${shortCommit} steadily after ${values.timeout} s. Check the Cloudflare build.`,
+        `${base} still doesn't serve ${shortCommit} steadily after ${values.timeout} s. Check CI's deploy step (deploy.ts) above.`,
       );
     }
     await sleep(served ? STABLE_GAP_MS : 10_000);

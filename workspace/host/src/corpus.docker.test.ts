@@ -28,6 +28,7 @@ import { findObjects, remove } from './clean.js';
 import { dockerCli } from './docker-cli.js';
 import { WorkspaceHost } from './workspaces.js';
 import { checkGraph, compareCalls, type CallsLabel } from '../../../corpus/src/calls.js';
+import { selectRepos } from '../../../corpus/src/select.js';
 
 interface Repo {
   readonly id: string;
@@ -46,7 +47,11 @@ interface Label {
 
 const corpus = (file: string): unknown =>
   JSON.parse(readFileSync(new URL(`../../../corpus/${file}`, import.meta.url), 'utf8'));
-const repos = (corpus('manifest.json') as { repos: Repo[] }).repos;
+// CI runs the projects in parallel shards (CORPUS_ONLY / CORPUS_EXCEPT); on a laptop, all of them.
+const repos = selectRepos((corpus('manifest.json') as { repos: Repo[] }).repos, {
+  only: process.env.CORPUS_ONLY,
+  except: process.env.CORPUS_EXCEPT,
+});
 const labels = corpus('labels/symbols.json') as Record<string, Label[] | undefined>;
 const callLabels = corpus('labels/calls.json') as Record<string, CallsLabel[] | undefined>;
 const graphLabels = corpus('labels/graph.json') as Record<string, CallsLabel[] | undefined>;
