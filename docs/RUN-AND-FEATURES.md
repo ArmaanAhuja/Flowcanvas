@@ -2,10 +2,10 @@
 
 The one place to see how to run Flowcanvas, how to test it, and which features exist so far. It's updated at every build step. Details for each step live in `docs/build-steps.md`; phase status in `docs/STATUS.md`; how it's put together in `ARCHITECTURE.md`.
 
-- **Last updated:** 14 Nov 2026: phase 7 accepted, 0.11.0 (flows on the canvas, proven on 10 hand-labelled Documenso flows), branch `phase/7-flow-builder`, PR #21
+- **Last updated:** 14 Nov 2026: phase 7 merged and on staging (0.11.0); phase 8 started, branch `phase/8-entry-points`
 - **Reviewed:** phase 7, milestone B (14 Nov 2026): re-read in full against the code. At every milestone this doc is re-read in full, and this line names the milestone (`pnpm docs:milestone` checks it).
-- **Released (on staging):** `0.11.0`, phase 7, deployed to staging by CI when PR #21 merges (to be checked: staging's `/api/health` reporting 0.11.0). Before it, `0.10.0`, phase 6.
-- **Progress:** phases 1, 1a, 1b, 1c, 2, 3, 4, 5, 6 and 7 are accepted; 1d is in review (until a cloud provider). That's 10 of the build plan's 96 phases accepted. Stage 1's goal: see a project's real flows, from code, honestly.
+- **Released (on staging):** `0.11.0`, phase 7 (checked: staging's `/api/health` reports 0.11.0, deployed by CI from `36076f4`)
+- **Progress:** phases 1, 1a, 1b, 1c, 2, 3, 4, 5, 6 and 7 are accepted; 1d is in review (until a cloud provider). That's 10 of the build plan's 96 phases accepted; 8 is in progress. Stage 1's goal: see a project's real flows, from code, honestly.
 
 ## Where it runs
 
@@ -60,7 +60,7 @@ If the host can't start, its log line says why: the token, Docker, or another `p
 | `pnpm docs:milestone` | Before every milestone report, and on CI once a pull request is ready for review: `docs:check`, plus every living doc re-read at this milestone (its **Reviewed** line), every step written up in full, and every commit of the phase named in `docs/build-steps.md` | about 20 s |
 | `pnpm workspace:clean` | Removes test leftovers and old workspace images; `--all --yes` removes everything of Flowcanvas's | — |
 
-CI runs the checks (with the bundle budget), Docker (four parallel jobs), visual, canvas performance (headless) and walkthrough jobs on every pull request and every merge to `main`. It deploys each pull request's preview (the app and the catalogue) itself, and staging from `main` (from phase 7's merge on; until then Cloudflare's own build deploys `main`).
+CI runs the checks (with the bundle budget), Docker (four parallel jobs), visual, canvas performance (headless) and walkthrough jobs on every pull request and every merge to `main`. It deploys each pull request's preview (the app and the catalogue) and staging from `main` itself (since phase 7's merge).
 
 ## Features, and how far each is built
 
