@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.setConfig({ testTimeout: 20_000 });
 import { validateGraph } from '@flowcanvas/graph-model';
 import type { GraphPass } from './graph.js';
+import { FactsStore } from '../facts.js';
 import { NO_DETAILS, PARTLY, SemanticService } from './semantic-service.js';
 
 const FILES: Record<string, string> = {
@@ -676,7 +677,7 @@ describe('details (phase 7, ADR 0028 §3)', () => {
       returns: 'Promise<number>',
     });
     expect(details?.signature).toBe(
-      '(kind: "a" | "b", draft: boolean, name?: string): Promise<number>',
+      "(kind: 'a' | 'b', draft: boolean, name?: string): Promise<number>",
     );
     expect(details?.params.items.map((p) => [p.name, p.optional])).toEqual([
       ['kind', false],
@@ -754,5 +755,98 @@ describe('details (phase 7, ADR 0028 §3)', () => {
       details: null,
       message: NO_DETAILS,
     });
+  });
+});
+
+describe('facts stored by the pass (phase 7; owner, 13 Nov 2026)', () => {
+  it('give, at every place in a file, the same unit and details as asking TypeScript now', async () => {
+    const file = 'apps/web/src/stored.ts';
+    const text = [
+      'let count = 0;',
+      'export const config = { made: outer() };',
+      'export async function outer(kind?: string): Promise<number> {',
+      '  const inner = () => {',
+      '    if (kind) throw new Error(kind);',
+      '  };',
+      '  try {',
+      '    await later();',
+      '  } catch {',
+      '    count += 1;',
+      '  }',
+      '  inner();',
+      '  return kind === undefined ? 0 : 1;',
+      '}',
+      'class Store {',
+      '  save = async (id: string) => outer(id);',
+      '  load(): void {',
+      '    missing.call();',
+      '  }',
+      '}',
+      'async function later() {}',
+      'declare const missing: any;',
+      'export default Store;',
+      '',
+    ].join('\n');
+    write(file, text);
+    const facts = new FactsStore(':memory:');
+    const stored = new SemanticService({ ts, root, files: [...Object.keys(FILES), file], facts });
+    try {
+      const pass = await stored.graph(() => Promise.resolve());
+      if (pass === null) throw new Error('no pass');
+      const lines = text.split('\n');
+      let compared = 0;
+      for (const [index, content] of lines.entries()) {
+        for (let column = 1; column <= content.length + 1; column += 1) {
+          const line = index + 1;
+          const id = facts.unitAt(file, line, column)?.id;
+          expect(id, `${String(line)}:${String(column)}`).toBe(stored.unitAt(file, line, column));
+          expect(facts.details(id ?? ''), `${String(line)}:${String(column)}`).toEqual(
+            stored.details(file, line, column).details,
+          );
+          compared += 1;
+        }
+      }
+      expect(compared).toBeGreaterThan(400);
+      // Every unit of the file is stored, and each one is a node in the graph.
+      const ids = new Set(pass.graph.nodes.map((n) => n.id));
+      const units = facts.units(file) ?? [];
+      // A constant that's only called isn't a unit (`config`); a property holding a function is that function.
+      expect(units.map((u) => u.id.slice(file.length))).toEqual([
+        '#(top level)',
+        '#outer',
+        '#outer.inner',
+        '#Store',
+        '#Store.save',
+        '#Store.load',
+        '#later',
+      ]);
+      for (const unit of units)
+        expect(ids.has(unit.id) || unit.id.endsWith('#(top level)')).toBe(true);
+    } finally {
+      stored.dispose();
+      facts.close();
+    }
+  });
+
+  it('are removed with their file, and only the walked files keep theirs after a whole pass', async () => {
+    const file = 'apps/web/src/gone.ts';
+    write(file, 'export function gone() { return 1; }\n');
+    const facts = new FactsStore(':memory:');
+    facts.put('apps/web/src/never.ts', { hash: 'h', units: [] });
+    facts.flush();
+    const stored = new SemanticService({ ts, root, files: [...Object.keys(FILES), file], facts });
+    try {
+      await stored.graph(() => Promise.resolve());
+      expect(facts.units(file)).toBeDefined();
+      expect(facts.units('apps/web/src/never.ts')).toBeUndefined();
+      rmSync(join(root, file));
+      stored.changed([file], Object.keys(FILES));
+      await stored.graph(() => Promise.resolve());
+      facts.forget();
+      expect(facts.units(file)).toBeUndefined();
+    } finally {
+      stored.dispose();
+      facts.close();
+    }
   });
 });

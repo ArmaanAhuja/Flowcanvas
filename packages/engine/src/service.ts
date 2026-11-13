@@ -23,6 +23,7 @@ import type {
   GraphState,
   GraphStatus,
   FlowResult,
+  NodeDetails,
   SearchResult,
   SemanticOp,
 } from './protocol.js';
@@ -47,6 +48,18 @@ export interface EngineServiceOptions {
   readonly snapshots?: SnapshotStore;
   /** After changes are indexed, the graph waits this long for more before it's brought up to date. */
   readonly graphDelayMs?: number;
+  /**
+   * Each file's units and details, stored by the pass (phase 7, `FactsStore`): flows from inside a function and the
+   * inspector answer from it, for a file still the text they came from (the store checks).
+   */
+  readonly facts?: FactsReader;
+}
+
+/** What the engine reads from the facts the pass stored. */
+export interface FactsReader {
+  unitAt(path: string, line: number, column: number): { readonly id: string } | undefined;
+  details(id: string): NodeDetails | undefined;
+  forget(): void;
 }
 
 /** What the engine needs from the semantic worker's client (semantics/client.ts). */
@@ -178,7 +191,7 @@ export function startEngineService(options: EngineServiceOptions): EngineService
       if ('failed' in result) {
         graphState = 'failed';
         graphMessage = result.failed;
-        return;
+        throw new Error('pass failed');
       }
       const saved = snapshots.save(result.encoded, {
         complete: result.complete,
@@ -199,10 +212,12 @@ export function startEngineService(options: EngineServiceOptions): EngineService
       };
       graphState = 'ready';
       graphMessage = null;
+      options.facts?.forget();
     })()
       .catch(() => {
+        if (graphState !== 'failed' || graphMessage === null) graphMessage = GRAPH_FAILED.failed;
         graphState = 'failed';
-        graphMessage = GRAPH_FAILED.failed;
+        options.facts?.forget();
       })
       .finally(() => {
         graphRunning = undefined;
@@ -327,9 +342,12 @@ export function startEngineService(options: EngineServiceOptions): EngineService
         graphState === 'failed' ? (graphMessage ?? FLOW_MESSAGES.noGraph) : FLOW_MESSAGES.noGraph,
       );
     }
-    // A function's name (from search or the Calls tab) is found in the graph itself; anywhere else, TypeScript
-    // says which function the place is in.
-    let root = graphIndex.byPlace.get(placeKey(position.path, position.line, position.column));
+    // A function's name (from search or the Calls tab) is found in the graph itself; anywhere else, the facts the
+    // pass stored say which function the place is in, if the file is still the text they came from (owner, 13 Nov
+    // 2026); failing both, TypeScript does, now.
+    let root =
+      graphIndex.byPlace.get(placeKey(position.path, position.line, position.column)) ??
+      options.facts?.unitAt(position.path, position.line, position.column)?.id;
     if (root === undefined) {
       const unit = await semantics.unit(position);
       if (unit === null) return none(FLOW_MESSAGES.notCode);
@@ -379,12 +397,21 @@ export function startEngineService(options: EngineServiceOptions): EngineService
         case 'definition':
         case 'references':
         case 'callers':
-        case 'callees':
-        case 'details': {
+        case 'callees': {
           const { path, line, column } = request;
           return options.semantics === undefined
             ? Promise.resolve(emptyAnswer(request.op, NO_SEMANTICS) as EngineResults[SemanticOp])
             : options.semantics.ask(request.op, { path, line, column });
+        }
+        case 'details': {
+          // From the stored facts if the file is still the text they came from; else TypeScript, now.
+          const { path, line, column } = request;
+          const unit = options.facts?.unitAt(path, line, column);
+          const stored = unit === undefined ? undefined : options.facts?.details(unit.id);
+          if (stored !== undefined) return Promise.resolve({ details: stored, message: null });
+          return options.semantics === undefined
+            ? Promise.resolve(emptyAnswer('details', NO_SEMANTICS) as EngineResults['details'])
+            : options.semantics.ask('details', { path, line, column });
         }
         case 'flow': {
           const { path, line, column } = request;

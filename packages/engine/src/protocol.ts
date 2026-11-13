@@ -24,6 +24,8 @@ export const ENGINE_HOME = '/tmp/flowcanvas-engine';
 export const INDEX_FILE = '/workspace/.flowcanvas/index.db';
 /** The flow graph's versions (phase 6, ADR 0027): beside the index, in a file of its own so a rebuilt index keeps them. */
 export const GRAPH_FILE = '/workspace/.flowcanvas/graph.db';
+/** Each file's code units and their details, from the graph pass (phase 7): read instead of asking TypeScript. */
+export const FACTS_FILE = '/workspace/.flowcanvas/facts.db';
 
 export const ENGINE_LIMITS = {
   /** Longest search, in characters. */

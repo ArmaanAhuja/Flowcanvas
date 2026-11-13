@@ -17,8 +17,15 @@ import {
   type SymbolKindName,
 } from '../protocol.js';
 import { assemble, GRAPH_FILES_BETWEEN_PAUSES, GRAPH_HEAP_SHARE, type GraphPass } from './graph.js';
-import { detailsAt } from './details.js';
-import { unitNodeAt, walkFile, type FileGraph, type GraphContext } from './graph-pass.js';
+import { contentHash, type FileFacts } from '../facts.js';
+import { detailsAt, fileFacts } from './details.js';
+import {
+  projectPath,
+  unitNodeAt,
+  walkFile,
+  type FileGraph,
+  type GraphContext,
+} from './graph-pass.js';
 import { createProjectHost, type ProjectHost } from './host.js';
 import {
   callableAt,
@@ -39,6 +46,15 @@ export interface SemanticOptions {
   readonly files: readonly string[];
   /** Release language services when the heap passes this share of its limit (ADR 0026 §2). */
   readonly memoryShare?: number;
+  /** Where the pass stores each file's units and details as it walks it (phase 7): `FactsStore`. */
+  readonly facts?: FactsSink;
+}
+
+/** What the pass writes each file's facts to. */
+export interface FactsSink {
+  put(path: string, facts: FileFacts | null): void;
+  flush(): void;
+  keepOnly(paths: ReadonlySet<string>): void;
 }
 
 /** Said when part of the project couldn't be looked at. */
@@ -69,6 +85,7 @@ export class SemanticService {
   readonly #versions = new Map<string, number>();
   #clock = 0;
   /** Set when a service was released, or couldn't be built, for memory: answers say they may be partial. */
+  readonly #facts: FactsSink | undefined;
   #squeezed = false;
   /** The flow graph, by walked file (ADR 0027 §1): a file's code units and the calls they make. */
   #graphFiles = new Map<string, FileGraph>();
@@ -85,6 +102,7 @@ export class SemanticService {
       options.ts.getDefaultLibFilePath({ target: options.ts.ScriptTarget.ESNext }),
     );
     this.#memoryShare = options.memoryShare ?? 0.7;
+    this.#facts = options.facts;
     this.#files = options.files;
     this.#registry = options.ts.createDocumentRegistry(true, options.root);
     ({ host: this.#host, model: this.#model } = this.#build(options.files));
@@ -191,9 +209,16 @@ export class SemanticService {
         const source = program.getSourceFile(file);
         seen.add(file);
         if (source === undefined) continue;
-        files.set(file, walkFile(context, program, source));
+        const part = walkFile(context, program, source);
+        files.set(file, part);
+        // Worked out now, while the program is here, and stored rather than held (owner, 13 Nov 2026).
+        this.#facts?.put(projectPath(context, file), {
+          hash: contentHash(source.text),
+          units: fileFacts(context, program, source, part.edges),
+        });
         walked += 1;
         if (walked % filesBetweenPauses === 0) {
+          this.#facts?.flush();
           await pause();
           if (this.#generation !== generation) {
             // The structure changed: start again from everything.
@@ -205,6 +230,16 @@ export class SemanticService {
       }
       if (!warm) this.#release(config);
     }
+    // Files changed but not walked again are gone (deleted, or in no program): so are their facts. After a
+    // whole-project pass, only the files it walked keep theirs.
+    if (full) {
+      this.#facts?.keepOnly(new Set([...files.keys()].map((file) => projectPath(context, file))));
+    } else {
+      for (const file of changed) {
+        if (!files.has(file)) this.#facts?.put(projectPath(context, file), null);
+      }
+    }
+    this.#facts?.flush();
     this.#graphFiles = files;
     this.#graphBuilt = true;
     return assemble(files, complete);

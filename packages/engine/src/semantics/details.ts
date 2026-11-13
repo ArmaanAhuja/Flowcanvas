@@ -3,7 +3,7 @@
 // whose target wasn't found; and its writes to module state. The unit is the one the graph gives the place to, by the
 // pass's own rules, so the inspector and the flow always describe the same node.
 import { basename } from 'node:path';
-import { FLOW_LIMITS } from '@flowcanvas/graph-model';
+import { FLOW_LIMITS, type GraphEdge } from '@flowcanvas/graph-model';
 import type * as TS from 'typescript';
 import {
   DETAIL_LIMITS,
@@ -16,11 +16,11 @@ import {
 import { calleeText } from './callables.js';
 import {
   nameOf,
-  ownsItsCode,
   placeOf,
   projectPath,
   unitNodeAt,
   unitOf,
+  unitsOf,
   walkFile,
   type GraphContext,
 } from './graph-pass.js';
@@ -44,15 +44,117 @@ function gather<T>(most: number) {
   };
 }
 
+/** The details of the code unit at a place, asked of TypeScript now (a file changed since the last pass). */
 export function detailsAt(
   ctx: GraphContext,
   program: TS.Program,
   source: TS.SourceFile,
   offset: number,
 ): NodeDetails {
+  const { node, id } = unitNodeAt(ctx, source, offset);
+  const checker = program.getTypeChecker();
+  const edges = walkFile(ctx, program, source).edges;
+  return unitDetails(ctx, checker, source, node, id, edges, fileContext(ctx, checker, source));
+}
+
+/** One code unit of a file, as the pass stores it: its id, the range it covers (1-based), and its details. */
+export interface UnitFacts {
+  readonly id: string;
+  /** From its start (a constant's: the declaration's, name included) to its end, as [line, column]. */
+  readonly start: readonly [number, number];
+  readonly end: readonly [number, number];
+  readonly details: NodeDetails;
+}
+
+/**
+ * Every code unit of a file with its details, worked out in the graph pass while TypeScript has the file's program
+ * (owner, 13 Nov 2026: compute once, store, reuse). The innermost range holding a place is the unit there, as
+ * `unitNodeAt` finds it; the top level covers the whole file.
+ */
+export function fileFacts(
+  ctx: GraphContext,
+  program: TS.Program,
+  source: TS.SourceFile,
+  edges: readonly GraphEdge[],
+): UnitFacts[] {
   const { ts } = ctx;
   const checker = program.getTypeChecker();
-  const { node, id } = unitNodeAt(ctx, source, offset);
+  const at = (position: number): [number, number] => {
+    const { line, character } = source.getLineAndCharacterOfPosition(position);
+    return [line + 1, character + 1];
+  };
+  const file = fileContext(ctx, checker, source);
+  const facts: UnitFacts[] = [];
+  const top = unitNodeAt(ctx, source, -1).id;
+  facts.push({
+    id: top,
+    start: [1, 1],
+    end: at(source.getEnd()),
+    details: unitDetails(ctx, checker, source, null, top, edges, file),
+  });
+  for (const { node, id } of unitsOf(ctx, source)) {
+    const holder =
+      (ts.isVariableDeclaration(node.parent) || ts.isPropertyDeclaration(node.parent)) &&
+      node.parent.initializer === node
+        ? node.parent
+        : node;
+    facts.push({
+      id,
+      start: at(holder.getStart(source)),
+      end: at(holder.getEnd()),
+      details: unitDetails(ctx, checker, source, node, id, edges, file),
+    });
+  }
+  return facts;
+}
+
+/**
+ * What a file's module exports (`export function`, `export const`, `export { name }`, a default), as declarations:
+ * read once per file.
+ */
+function exportsOf(
+  ctx: GraphContext,
+  checker: TS.TypeChecker,
+  source: TS.SourceFile,
+): Set<TS.Node> {
+  const { ts } = ctx;
+  const found = new Set<TS.Node>();
+  const moduleSymbol = checker.getSymbolAtLocation(source);
+  if (moduleSymbol === undefined) return found;
+  for (const symbol of checker.getExportsOfModule(moduleSymbol)) {
+    const target = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+    for (const declaration of target.declarations ?? []) found.add(declaration);
+  }
+  return found;
+}
+
+/** What every unit of a file shares, read once per file: what it exports, and its units (whose code is their own). */
+interface FileContext {
+  readonly exports: ReadonlySet<TS.Node>;
+  readonly units: ReadonlySet<TS.Node>;
+}
+
+function fileContext(
+  ctx: GraphContext,
+  checker: TS.TypeChecker,
+  source: TS.SourceFile,
+): FileContext {
+  return {
+    exports: exportsOf(ctx, checker, source),
+    units: new Set(unitsOf(ctx, source).map(({ node }) => node)),
+  };
+}
+
+function unitDetails(
+  ctx: GraphContext,
+  checker: TS.TypeChecker,
+  source: TS.SourceFile,
+  node: TS.Node | null,
+  id: string,
+  edges: readonly GraphEdge[],
+  file: FileContext,
+): NodeDetails {
+  const { ts } = ctx;
   const path = projectPath(ctx, source.fileName);
   const lineOf = (n: TS.Node) => source.getLineAndCharacterOfPosition(n.getStart(source)).line + 1;
   const text = (n: TS.Node) => cutDetail(n.getText(source)) || '…';
@@ -61,47 +163,46 @@ export function detailsAt(
   const unit = node === null ? 'module' : (unitOf(ts, node, name) ?? 'function');
   const place = (node === null ? null : placeOf(ctx, node)) ?? { path, line: 1, column: 1 };
 
-  // The signature, as the compiler sees it; a class's inputs are its constructor's.
+  // The signature: each type as written where it's written (cheap, and what the person reads in the code), else as
+  // the compiler infers it. A class's inputs are its constructor's. Printing whole signatures with the checker took
+  // half of the details' time in the pass (Documenso, 13 Nov 2026).
+  const typeOf = (written: TS.TypeNode | undefined, infer: () => TS.Type, at: TS.Node) =>
+    (written === undefined ? '' : cutDetail(written.getText(source))) ||
+    cutDetail(checker.typeToString(infer(), at)) ||
+    'unknown';
   let signature: string | null = null;
   let returns: string | null = null;
   const params = gather<DetailParam>(DETAIL_LIMITS.params);
   let declared: readonly TS.ParameterDeclaration[] = [];
   if (node !== null && ts.isFunctionLike(node)) {
     declared = node.parameters;
-    const found = checker.getSignatureFromDeclaration(node);
-    if (found !== undefined) {
-      signature = cutDetail(checker.signatureToString(found, node));
-      returns = cutDetail(checker.typeToString(found.getReturnType(), node));
-    }
   } else if (node !== null && ts.isClassLike(node)) {
     declared = node.members.find(ts.isConstructorDeclaration)?.parameters ?? [];
   }
+  const written: string[] = [];
   for (const param of declared) {
-    params.add({
-      name: text(param.name),
-      type: cutDetail(checker.typeToString(checker.getTypeAtLocation(param), param)) || 'unknown',
-      optional:
-        param.questionToken !== undefined ||
-        param.initializer !== undefined ||
-        param.dotDotDotToken !== undefined,
-    });
+    const type = typeOf(param.type, () => checker.getTypeAtLocation(param), param);
+    const optional =
+      param.questionToken !== undefined ||
+      param.initializer !== undefined ||
+      param.dotDotDotToken !== undefined;
+    params.add({ name: text(param.name), type, optional });
+    written.push(
+      `${param.dotDotDotToken === undefined ? '' : '...'}${text(param.name)}${param.questionToken === undefined ? '' : '?'}: ${type}`,
+    );
+  }
+  if (node !== null && ts.isFunctionLike(node)) {
+    const found = checker.getSignatureFromDeclaration(node);
+    returns = typeOf(node.type, () => found?.getReturnType() ?? checker.getAnyType(), node);
+    signature = cutDetail(`(${written.join(', ')}): ${returns}`);
   }
   const async =
     node !== null &&
     ts.isFunctionLike(node) &&
     (ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Async) !== 0;
 
-  // Exported: among what its module exports (`export function`, `export const`, `export { name }`, a default).
   const declaration = node !== null && ts.isVariableDeclaration(node.parent) ? node.parent : node;
-  const moduleSymbol = checker.getSymbolAtLocation(source);
-  const exported =
-    declaration !== null &&
-    moduleSymbol !== undefined &&
-    checker.getExportsOfModule(moduleSymbol).some((symbol) => {
-      const target =
-        symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
-      return target.declarations?.includes(declaration as TS.Declaration) === true;
-    });
+  const exported = declaration !== null && file.exports.has(declaration);
 
   /** A variable declared at a file's top level, in the project: module state. */
   const isModuleState = (identifier: TS.Identifier) => {
@@ -132,7 +233,7 @@ export function detailsAt(
   const writes = gather<DetailLine>(DETAIL_LIMITS.items);
   // Its own code only: a nested function, method or class is a unit of its own, as in the graph.
   const visit = (n: TS.Node): void => {
-    if (n !== node && ownsItsCode(ctx, n)) return;
+    if (n !== node && file.units.has(n)) return;
     if (ts.isIfStatement(n)) {
       decisions.add({
         kind: 'if',
@@ -207,7 +308,7 @@ export function detailsAt(
   const unresolved = gather<{ readonly text: string; readonly lines: readonly number[] }>(
     DETAIL_LIMITS.items,
   );
-  for (const edge of walkFile(ctx, program, source).edges) {
+  for (const edge of edges) {
     if (edge.kind === 'call' && edge.from === id && edge.to === null && edge.target !== null) {
       unresolved.add({
         text: cutDetail(edge.target) || '…',

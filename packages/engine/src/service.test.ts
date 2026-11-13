@@ -15,7 +15,7 @@ import { serveEngine } from './serve.js';
 import { FLOW_LIMITS, encodeGraph, indexGraph, type Graph } from '@flowcanvas/graph-model';
 import { GRAPH_FAILED } from './semantics/client.js';
 import { SnapshotStore } from './snapshots.js';
-import type { GraphStatus } from './protocol.js';
+import type { GraphStatus, NodeDetails } from './protocol.js';
 import {
   FLOW_MESSAGES,
   fittingFlow,
@@ -579,6 +579,76 @@ describe('flows (phase 7)', () => {
     expect((await flowAt(2, 1)).message).toBe('TypeScript took too long to answer.');
     expect((await flowAt(2, 1)).message).toBe(FLOW_MESSAGES.notYet);
     expect((await flowAt(2, 1)).message).toBe(FLOW_MESSAGES.noCalls);
+  });
+
+  describe('from the facts the pass stored (owner, 13 Nov 2026)', () => {
+    const none = { items: [], total: 0 };
+    const stored: NodeDetails = {
+      id: 'a.ts#load',
+      name: 'load',
+      unit: 'function',
+      place: { path: 'a.ts', line: 5, column: 17 },
+      signature: '(): void',
+      params: none,
+      returns: 'void',
+      async: false,
+      exported: false,
+      decisions: none,
+      throws: none,
+      awaits: none,
+      unresolved: none,
+      writes: none,
+    };
+    const factsReader = () => ({
+      unitAt: vi.fn((_path: string, line: number) => (line >= 5 ? { id: 'a.ts#load' } : undefined)),
+      details: vi.fn((id: string) => (id === 'a.ts#load' ? stored : undefined)),
+      forget: vi.fn(),
+    });
+
+    it('opens flows and details from inside a function without asking TypeScript', async () => {
+      const facts = factsReader();
+      const unit = vi.fn(() => Promise.resolve('a.ts#show'));
+      const ask = vi.fn();
+      const semantics = { ...semanticsWith(() => Promise.resolve(wire), unit), ask } as Semantics;
+      write('a.ts', 'export function show() {}');
+      files = ['a.ts'];
+      start({ semantics, snapshots: new SnapshotStore(':memory:'), facts });
+      await service.settled();
+      await service.graphSettled();
+      expect((await flowAt(6, 3)).flow?.root).toBe('a.ts#load');
+      expect(await service.handle({ op: 'details', path: 'a.ts', line: 6, column: 3 })).toEqual({
+        details: stored,
+        message: null,
+      });
+      expect(unit).not.toHaveBeenCalled();
+      expect(ask).not.toHaveBeenCalled();
+      // A pass that finished: the engine forgets its decoded copies (the worker may have rewritten any file).
+      expect(facts.forget).toHaveBeenCalled();
+    });
+
+    it('asks TypeScript where the facts have no answer (a file changed since, or not stored yet)', async () => {
+      const facts = {
+        unitAt: vi.fn(() => undefined),
+        details: vi.fn(() => undefined),
+        forget: vi.fn(),
+      };
+      const unit = vi.fn(() => Promise.resolve('a.ts#show'));
+      const ask = vi.fn(() => Promise.resolve({ details: null, message: 'live' }));
+      const semantics = { ...semanticsWith(() => Promise.resolve(wire), unit), ask } as Semantics;
+      write('a.ts', 'export function show() {}');
+      files = ['a.ts'];
+      start({ semantics, snapshots: new SnapshotStore(':memory:'), facts });
+      await service.settled();
+      await service.graphSettled();
+      expect((await flowAt(6, 3)).flow?.root).toBe('a.ts#show');
+      expect(await service.handle({ op: 'details', path: 'a.ts', line: 6, column: 3 })).toEqual({
+        details: null,
+        message: 'live',
+      });
+      expect(facts.unitAt).toHaveBeenCalledWith('a.ts', 6, 3);
+      expect(unit).toHaveBeenCalledTimes(1);
+      expect(ask).toHaveBeenCalledWith('details', { path: 'a.ts', line: 6, column: 3 });
+    });
   });
 
   it('shows the last version while the graph catches up, and says so', async () => {

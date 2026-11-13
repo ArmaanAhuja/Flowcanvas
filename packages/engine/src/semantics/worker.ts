@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { parentPort, workerData } from 'node:worker_threads';
 import { encodeGraph, validateGraph } from '@flowcanvas/graph-model';
 import type { CodePosition, SemanticOp } from '../protocol.js';
+import { FactsStore } from '../facts.js';
 import { SemanticService } from './semantic-service.js';
 import type { TypeScript } from './projects.js';
 
@@ -12,6 +13,8 @@ export interface WorkerStart {
   readonly files: readonly string[];
   /** Where typescript.js is: beside the bundle in a workspace, the package elsewhere. */
   readonly typescriptPath: string;
+  /** Where the pass stores each file's units and details (phase 7); none, nothing is stored. */
+  readonly factsFile?: string;
 }
 
 export type ToWorker =
@@ -50,7 +53,13 @@ const port = parentPort;
 if (port !== null) {
   const start = workerData as WorkerStart;
   const ts = createRequire(import.meta.url)(start.typescriptPath) as TypeScript;
-  const service = new SemanticService({ ts, root: start.root, files: start.files });
+  const facts = start.factsFile === undefined ? undefined : new FactsStore(start.factsFile);
+  const service = new SemanticService({
+    ts,
+    root: start.root,
+    files: start.files,
+    ...(facts === undefined ? {} : { facts }),
+  });
   port.on('message', (message: ToWorker) => {
     if (message.type === 'changed') {
       service.changed(message.paths, message.files);

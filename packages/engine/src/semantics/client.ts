@@ -73,6 +73,8 @@ interface Pending {
 export interface SemanticClientOptions {
   readonly root: string;
   readonly typescriptPath: string;
+  /** Where the pass stores each file's units and details (phase 7, `FactsStore`). */
+  readonly factsFile?: string;
   readonly start: StartWorker;
   /** The project's files at the moment the worker starts (the agent's list). */
   readonly listFiles: () => Promise<readonly string[]>;
@@ -162,6 +164,7 @@ export class SemanticClient {
         root: this.#options.root,
         files,
         typescriptPath: this.#options.typescriptPath,
+        ...(this.#options.factsFile === undefined ? {} : { factsFile: this.#options.factsFile }),
       });
       this.#ended = undefined;
       worker.on('message', (message) => {

@@ -54,6 +54,11 @@ const graphLabels = corpus('labels/graph.json') as Record<string, CallsLabel[] |
 const GRAPH_HELD = new Set(['rallly', 'documenso', 'librechat', 'twenty']);
 /** The Done when: a snapshot saved and loaded in under 1 s each. */
 const SNAPSHOT_MS = 1000;
+/**
+ * A flow or a node's details, asked through a real workspace once its graph is built: from the facts the pass stored,
+ * never waiting on TypeScript (owner, 13 Nov 2026: everything snappy). Held to under a second, round trip.
+ */
+const ANSWER_MS = 1000;
 /** A whole-project graph on CI's two CPUs: minutes for the largest; a pass that never ends is still a failure. */
 const GRAPH_GIVE_UP_MS = 420_000;
 
@@ -259,6 +264,7 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
         // details, from its name, are about the same node.
         const flowsDiffering: string[] = [];
         const flowMs: number[] = [];
+        const detailsMs: number[] = [];
         for (const { label, id } of roots) {
           const inside = label.callees.flatMap((c) => c.lines).find((line) => line !== label.line);
           const places = [
@@ -278,6 +284,7 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
               flowsDiffering.push(`${label.name} from line ${String(place.line)}: ${String(said)}`);
           }
           // The inspector's details, from its name: about the same node.
+          const asked = performance.now();
           const details = await host.index(ref, {
             op: 'details',
             path: label.path,
@@ -289,6 +296,7 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
             : 'details' in details.result
               ? (details.result.details?.id ?? details.result.message)
               : 'not details';
+          detailsMs.push(performance.now() - asked);
           if (named !== id) flowsDiffering.push(`${label.name} details: ${String(named)}`);
         }
 
@@ -330,6 +338,7 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
             ? {
                 flows: `${String(flowMs.length - flowsDiffering.length)} of ${String(flowMs.length)}`,
                 flowMaxMs: Math.round(Math.max(...flowMs)),
+                detailsMaxMs: Math.round(Math.max(...detailsMs)),
               }
             : {}),
         };
@@ -345,6 +354,7 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
           expect(graph.snapshot?.loadMs).toBeLessThan(SNAPSHOT_MS);
           expect(graphDiffering).toEqual([]);
           expect(flowsDiffering).toEqual([]);
+          expect(Math.max(...flowMs, ...detailsMs)).toBeLessThan(ANSWER_MS);
         }
         expect(current.byStatus.parsed).toBeGreaterThan(0);
         if (held) {

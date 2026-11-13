@@ -10,7 +10,8 @@ import { startWatcher } from '@flowcanvas/workspace-agent/watch';
 import { ENGINE_SEMANTICS_WORKER } from './bundle-files.js';
 import { useGrammarDirectory } from './grammars.js';
 import { Indexer } from './indexer.js';
-import { GRAPH_FILE, INDEX_FILE } from './protocol.js';
+import { FactsStore } from './facts.js';
+import { FACTS_FILE, GRAPH_FILE, INDEX_FILE } from './protocol.js';
 import { SnapshotStore } from './snapshots.js';
 import { SemanticClient, threadWorker } from './semantics/client.js';
 import { serveEngine } from './serve.js';
@@ -25,6 +26,8 @@ await mkdir(dirname(INDEX_FILE), { recursive: true, mode: 0o700 });
 const agent = createAgent({ root: PROJECT_ROOT });
 const store = new IndexStore(INDEX_FILE);
 const snapshots = new SnapshotStore(GRAPH_FILE);
+// Opened here first (it sets the table up); the worker writes it during passes, the engine reads it.
+const facts = new FactsStore(FACTS_FILE, { root: PROJECT_ROOT });
 const indexer = new Indexer({ root: PROJECT_ROOT, store });
 const listFiles = async () => {
   const result = await agent.handle({ op: 'files' });
@@ -37,6 +40,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const semantics = new SemanticClient({
   root: PROJECT_ROOT,
   typescriptPath: join(here, 'typescript', 'typescript.js'),
+  factsFile: FACTS_FILE,
   start: threadWorker(new URL(`./${ENGINE_SEMANTICS_WORKER}`, import.meta.url)),
   listFiles,
 });
@@ -47,6 +51,7 @@ const service = startEngineService({
   watch: (emit) => startWatcher({ root: PROJECT_ROOT, emit }),
   semantics,
   snapshots,
+  facts,
 });
 
 await serveEngine(service, process.stdin, process.stdout);
@@ -54,4 +59,5 @@ service.close();
 await indexer.close();
 store.close();
 snapshots.close();
+facts.close();
 process.exit(0);

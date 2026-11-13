@@ -56,9 +56,10 @@ export function nameOf(ts: TypeScript, node: TS.Node): string {
 /** Whether a declaration is a code unit or a constant or member something can call (ADR 0027 §3). */
 function isUnit(ts: TypeScript, node: TS.Node): boolean {
   if (isNamedCallable(ts, node)) return true;
-  // A constant assigned a function is the function's node, not one of its own.
+  // A constant or a class property assigned a function is the function's node, not one of its own (a property's
+  // was `Store.save.save`, found in phase 7).
   if (
-    ts.isVariableDeclaration(node) &&
+    (ts.isVariableDeclaration(node) || ts.isPropertyDeclaration(node)) &&
     node.initializer !== undefined &&
     isNamedCallable(ts, node.initializer)
   ) {
@@ -156,9 +157,14 @@ export function unitNodeAt(
   return { node: null, id: `${projectPath(ctx, source.fileName)}#(top level)` };
 }
 
-/** Whether `node` is a code unit of its own within `owner`'s code: the pass's rule (`walkFile`). */
-export function ownsItsCode(ctx: GraphContext, node: TS.Node): boolean {
-  return idsOf(ctx, node.getSourceFile()).has(node) && isNamedCallable(ctx.ts, node);
+/** Every code unit of a file, with its id, in source order (the pass's rule: named callables). */
+export function unitsOf(
+  ctx: GraphContext,
+  source: TS.SourceFile,
+): { readonly node: TS.Node; readonly id: string }[] {
+  return [...idsOf(ctx, source)]
+    .filter(([node]) => isNamedCallable(ctx.ts, node))
+    .map(([node, id]) => ({ node, id }));
 }
 
 export function placeOf(ctx: GraphContext, node: TS.Node): GraphNode['place'] {
