@@ -43,4 +43,6 @@ export interface FoundEntry {
   readonly why?: string;
   /** The function or method that handles it, when the code names or holds one. */
   readonly handler?: Span;
+  /** A script's project file (`scripts/seed.ts`, from the package's folder), when its command runs one. */
+  readonly runs?: string;
 }
