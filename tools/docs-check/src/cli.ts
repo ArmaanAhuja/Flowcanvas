@@ -78,12 +78,31 @@ function vitestCount(dir: string, script: string | undefined): number {
 }
 
 function playwrightCount(config: string): number {
-  const output = execFileSync('npx', ['playwright', 'test', '--list', '--config', config], {
-    cwd: join(repo, 'e2e'),
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'ignore'],
+  try {
+    const output = execFileSync('npx', ['playwright', 'test', '--list', '--config', config], {
+      cwd: join(repo, 'e2e'),
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return Number(/Total: (\d+) tests?/.exec(output)?.[1] ?? Number.NaN);
+  } catch (error) {
+    const said = (error as { stderr?: string }).stderr ?? String(error);
+    throw new Error(`couldn't list the tests of e2e/${config}:\n${said.slice(0, 2000)}`, {
+      cause: error,
+    });
+  }
+}
+
+/**
+ * The catalogue's screenshots are one per story and theme, read from the built catalogue (its index.json): built
+ * first, so the count never depends on what happens to be on the machine (found on CI, 13 Nov 2026). Turborepo
+ * replays it from its cache when nothing changed.
+ */
+function buildCatalogue(): void {
+  execFileSync('pnpm', ['-s', 'turbo', 'run', 'build-storybook', '--filter=@flowcanvas/ui'], {
+    cwd: repo,
+    stdio: ['ignore', 'ignore', 'inherit'],
   });
-  return Number(/Total: (\d+) tests?/.exec(output)?.[1] ?? Number.NaN);
 }
 
 /**
@@ -121,7 +140,7 @@ function counts(packages: readonly string[]): Map<string, number> {
     ['unit', unit],
     ['docker', docker],
     ['walkthroughs', playwrightCount('playwright.config.ts')],
-    ['screenshots', playwrightCount('playwright.visual.config.ts')],
+    ['screenshots', (buildCatalogue(), playwrightCount('playwright.visual.config.ts'))],
   ]);
 }
 
