@@ -10,10 +10,10 @@
   },
   "scripts": {
     "dev": "turbo run dev",
-    "build": "FLOWCANVAS_COMMIT=$(git rev-parse HEAD) turbo run build",
+    "build": "FLOWCANVAS_COMMIT=${FLOWCANVAS_COMMIT:-$(git rev-parse HEAD)} turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "test:e2e": "FLOWCANVAS_COMMIT=$(git rev-parse HEAD) turbo run test:e2e",
+    "test:e2e": "FLOWCANVAS_COMMIT=${FLOWCANVAS_COMMIT:-$(git rev-parse HEAD)} turbo run test:e2e",
     "test:perf": "turbo run build --filter=@flowcanvas/web && pnpm --filter @flowcanvas/e2e --fail-if-no-match test:perf && pnpm --filter @flowcanvas/engine --fail-if-no-match test:perf && pnpm --filter @flowcanvas/web --fail-if-no-match test:perf",
     "lint": "turbo run lint",
     "format": "prettier --write .",

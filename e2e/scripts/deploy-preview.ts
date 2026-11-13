@@ -10,6 +10,8 @@
  * the preview serves this commit, as before.
  */
 import { execFileSync } from 'node:child_process';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { branchAlias } from './preview-alias.ts';
@@ -28,6 +30,18 @@ if (
 const short = values.commit.slice(0, 7);
 const alias = branchAlias(values.branch);
 const repo = fileURLToPath(new URL('../../', import.meta.url));
+// The built app must carry this commit, or wait-for-deploy can never see it (found on CI, 13 Nov 2026: the root build
+// script replaced the commit CI passed with git's answer, empty inside CI's container).
+const assets = join(repo, 'apps/web/dist/assets');
+const stamped = readdirSync(assets).some(
+  (name) => name.endsWith('.js') && readFileSync(join(assets, name), 'utf8').includes(short),
+);
+if (!stamped) {
+  console.error(
+    `deploy-preview: the built app doesn't carry commit ${short}; build it with FLOWCANVAS_COMMIT set.`,
+  );
+  process.exit(1);
+}
 console.log(`Uploading ${short} as the preview "${alias}"…`);
 execFileSync(
   'pnpm',
