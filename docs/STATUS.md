@@ -2,6 +2,10 @@
 
 One row per phase of the build plan (`docs/reference/build-plan.md`). Status: planned / in progress / in review / accepted.
 
+**Current milestone:** phase 7, milestone B
+
+**Reviewed:** not yet re-read in full under the milestone rule (added 13 Nov 2026); due before phase 7's milestone B report. At every milestone this doc is re-read in full against the code, and this line names the milestone (`pnpm docs:milestone` checks it).
+
 | Phase | Name | Status | Build | Notes |
 | --- | --- | --- | --- | --- |
 | 1 | Project skeleton | accepted | `0.1.0` · staging `https://flowcanvas.ahujaarmaan7777.workers.dev` | Accepted on 31 Oct 2026, when CI first ran green on GitHub after the repository moved to `ArmaanAhuja/Flowcanvas` (upgrade-later 8 closed; PR #7, run https://github.com/ArmaanAhuja/Flowcanvas/actions/runs/41183657084). PR #1 had been merged under a recorded exception. Report: `docs/reports/phase-1.md` |

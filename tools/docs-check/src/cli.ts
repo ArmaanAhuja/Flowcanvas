@@ -6,6 +6,12 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   architectureDependencies,
+  currentMilestone,
+  danglingReferences,
+  reviewed,
+  stepEntries,
+  undocumentedCommits,
+  upgradeTriggers,
   architectureParts,
   buildSteps,
   countsIn,
@@ -20,8 +26,12 @@ import {
 } from './checks.js';
 
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
+const git = (args: readonly string[]) =>
+  execFileSync('git', [...args], { cwd: repo, encoding: 'utf8', maxBuffer: 1 << 26 });
 const read = (path: string) => readFileSync(join(repo, path), 'utf8');
 const update = process.argv.includes('--update');
+/** The milestone gate: before every milestone report, and on CI once a pull request is ready for review. */
+const milestoneGate = process.argv.includes('--milestone');
 
 /** Docs that describe the project as it is now (the historical records are left as written). */
 const LIVING = ['README.md', 'docs/RUN-AND-FEATURES.md', 'docs/STATUS.md', 'ARCHITECTURE.md'];
@@ -251,6 +261,56 @@ const tracked = execFileSync('git', ['ls-files'], {
 for (const file of tracked) {
   const text = read(file);
   findings.push(...stillToCome(text, acceptedSet, file), ...stamps(text, current, file));
+}
+
+// upgrade-later is living: a trigger naming an accepted phase says what happened. References anywhere resolve.
+const upgrade = read('docs/upgrade-later.md');
+findings.push(...upgradeTriggers(upgrade, acceptedSet));
+const known = {
+  items: new Set([
+    ...[...upgrade.matchAll(/^\| (\d+) \|/gm)].map((m) => m[1] ?? ''),
+    ...[...upgrade.matchAll(/^- \*\*(\d+):\*\*/gm)].map((m) => m[1] ?? ''),
+  ]),
+  adrs: new Set(
+    readdirSync(join(repo, 'docs/adr'))
+      .map((name) => /^(\d{4})-/.exec(name)?.[1])
+      .filter((id): id is string => id !== undefined),
+  ),
+};
+for (const file of git(['ls-files']).split('\n')) {
+  if (
+    TEXT.test(file) &&
+    existsSync(join(repo, file)) &&
+    !file.startsWith('docs/reference/') &&
+    // Its examples name items and ADRs that don't exist, on purpose.
+    file !== 'tools/docs-check/src/checks.test.ts'
+  ) {
+    findings.push(...danglingReferences(read(file), known, file));
+  }
+}
+
+// The milestone gate: every living doc re-read at this milestone, every step written up in full, every commit named.
+if (milestoneGate) {
+  const milestone = currentMilestone(read('docs/STATUS.md'));
+  if (milestone === null) {
+    findings.push({ where: 'docs/STATUS.md', problem: 'has no **Current milestone:** line' });
+  } else {
+    for (const file of [...LIVING, 'docs/upgrade-later.md']) {
+      findings.push(...reviewed(read(file), milestone, file));
+    }
+  }
+  const steps = read('docs/build-steps.md');
+  for (const phase of current) findings.push(...stepEntries(steps, phase));
+  const base = git(['merge-base', 'HEAD', 'origin/main']).trim();
+  const commits = git(['log', '--format=%H%x09%s', `${base}..HEAD`])
+    .split('\n')
+    .filter((line) => line !== '')
+    .map((line) => {
+      const [sha = '', subject = ''] = line.split('\t');
+      const files = git(['show', '--name-only', '--format=', sha]).split('\n').filter(Boolean);
+      return { sha, subject, docsOnly: files.every((f) => f.endsWith('.md')) };
+    });
+  findings.push(...undocumentedCommits(steps, commits));
 }
 
 if (findings.length > 0) {

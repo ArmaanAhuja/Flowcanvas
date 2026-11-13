@@ -31,7 +31,8 @@
     "workspace:resources": "pnpm --filter @flowcanvas/workspace-host --fail-if-no-match run resources",
     "test:docker": "turbo run test:docker",
     "docs:check": "pnpm --filter @flowcanvas/docs-check exec tsx src/cli.ts",
-    "docs:update": "pnpm --filter @flowcanvas/docs-check exec tsx src/cli.ts --update"
+    "docs:update": "pnpm --filter @flowcanvas/docs-check exec tsx src/cli.ts --update",
+    "docs:milestone": "pnpm --filter @flowcanvas/docs-check exec tsx src/cli.ts --milestone"
   },
   "devDependencies": {
     "@eslint/js": "catalog:",

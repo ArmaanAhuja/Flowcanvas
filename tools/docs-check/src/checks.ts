@@ -318,3 +318,139 @@ export function architectureDependencies(
   }
   return found;
 }
+
+// ---- Records and the milestone gate (owner, 13 Nov 2026: "what about decisions log, build steps, upgrade later").
+// Records (build-steps entries, the decisions log, ADRs, reports) are true about their own dates: they're checked for
+// what's missing, never rewritten. upgrade-later describes today, so it's a living doc too.
+
+/** STATUS.md's `**Current milestone:** phase 7, milestone B`. */
+export function currentMilestone(status: string): string | null {
+  return /\*\*Current milestone:\*\*\s*([^\n]+?)\s*$/m.exec(status)?.[1] ?? null;
+}
+
+/** A living doc's `**Reviewed:** phase 7, milestone B (…)`: re-read in full at this milestone. */
+export function reviewed(doc: string, milestone: string, file: string): Finding[] {
+  const said = /\*\*Reviewed:\*\*\s*([^\n]+)/.exec(doc)?.[1]?.trim();
+  if (said === undefined) return [{ where: file, problem: 'has no **Reviewed:** line' }];
+  return said.startsWith(milestone)
+    ? []
+    : [
+        {
+          where: file,
+          problem: `was last re-read at "${said}"; the current milestone is "${milestone}": re-read it in full, fix what's no longer true, then update the line`,
+        },
+      ];
+}
+
+/**
+ * The fields every step's entry has (CLAUDE.md, working pace 3: goal; what a person can do now; files; concepts; what
+ * was found and fixed; tests; run and check it; risks and laptop; commit), as the entries write them: "Found and fixed"
+ * or "Found on the way", "Commit" or "Commits", and the laptop either in "Risks and laptop" or a field of its own.
+ */
+export const STEP_FIELDS = [
+  'Goal',
+  'What a person can do now',
+  'Files',
+  'Concepts',
+  'Found',
+  'Tests',
+  'Run and check it',
+  'Risks',
+  'Commit',
+] as const;
+
+const saysLaptop = (body: string) => /\*\*(Risks and laptop|Laptop)\b/.test(body);
+
+/** Each `### Step <phase>.<n>` entry of the phase has every field. */
+export function stepEntries(doc: string, phase: string, file = 'docs/build-steps.md'): Finding[] {
+  const found: Finding[] = [];
+  const lines = doc.split('\n');
+  const heading = new RegExp(`^### Step ${phase.replace(/[.]/g, '\\.')}\\.(\\w+)\\b`);
+  for (const [index, line] of lines.entries()) {
+    const step = heading.exec(line)?.[1];
+    if (step === undefined) continue;
+    const end = lines.findIndex((l, i) => i > index && /^#{2,3} /.test(l));
+    const body = lines.slice(index + 1, end === -1 ? undefined : end).join('\n');
+    const missing: string[] = STEP_FIELDS.filter((field) => !body.includes(`**${field}`));
+    if (!saysLaptop(body)) missing.push('Laptop');
+    if (missing.length > 0) {
+      found.push({
+        where: `${file}:${String(index + 1)}`,
+        problem: `step ${phase}.${step}'s entry has no ${missing.join(', ')}`,
+      });
+    }
+  }
+  return found;
+}
+
+/** Every commit of the phase is written up in build-steps; a commit changing only docs writes the others up. */
+export function undocumentedCommits(
+  doc: string,
+  commits: readonly {
+    readonly sha: string;
+    readonly subject: string;
+    readonly docsOnly: boolean;
+  }[],
+  file = 'docs/build-steps.md',
+): Finding[] {
+  return commits
+    .filter((commit) => !commit.docsOnly && !doc.includes(commit.sha.slice(0, 7)))
+    .map((commit) => ({
+      where: file,
+      problem: `doesn't name commit ${commit.sha.slice(0, 7)} (${commit.subject})`,
+    }));
+}
+
+/**
+ * upgrade-later: a trigger naming a phase that's accepted has been reached, so the row says what happened
+ * (`**Checked <date>**`, `**Reached <date>**` or `**Moved …**`), or it's stale.
+ */
+export function upgradeTriggers(
+  doc: string,
+  accepted: ReadonlySet<string>,
+  file = 'docs/upgrade-later.md',
+): Finding[] {
+  const found: Finding[] = [];
+  for (const [index, line] of doc.split('\n').entries()) {
+    const cells = line.split('|').map((cell) => cell.trim());
+    const item = cells[1] ?? '';
+    if (!/^\d+$/.test(item)) continue;
+    const trigger = cells[5] ?? '';
+    const reached = phasesNamed(trigger).filter((phase) => accepted.has(phase));
+    if (reached.length > 0 && !/\*\*(Checked|Reached|Moved)\b/.test(trigger)) {
+      found.push({
+        where: `${file}:${String(index + 1)}`,
+        problem: `item ${item}'s trigger names phase ${reached.join(', ')}, which is accepted: say what happened (**Checked <date>:** or **Reached <date>:**)`,
+      });
+    }
+  }
+  return found;
+}
+
+/** References to upgrade-later items and ADRs that don't exist. */
+export function danglingReferences(
+  text: string,
+  known: { readonly items: ReadonlySet<string>; readonly adrs: ReadonlySet<string> },
+  file: string,
+): Finding[] {
+  const found: Finding[] = [];
+  for (const [index, line] of text.split('\n').entries()) {
+    for (const match of line.matchAll(/upgrade-later(?:\.md)?(?: items?)? (\d+)/gi)) {
+      if (!known.items.has(match[1] ?? '')) {
+        found.push({
+          where: `${file}:${String(index + 1)}`,
+          problem: `names upgrade-later ${match[1] ?? ''}, which isn't an item or in its removed list`,
+        });
+      }
+    }
+    for (const match of line.matchAll(/\bADRs? (\d{4})\b/g)) {
+      if (!known.adrs.has(match[1] ?? '')) {
+        found.push({
+          where: `${file}:${String(index + 1)}`,
+          problem: `names ADR ${match[1] ?? ''}, which doesn't exist`,
+        });
+      }
+    }
+  }
+  return found;
+}

@@ -13201,7 +13201,9 @@ pnpm test:visual
 | 4 | The Calls tab from stored data (each unit's calls as TypeScript gives them, kept by the pass), TypeScript only where the store can't be sure (ADR 0029) | B | done (Claude, 13 Nov): `7aba981` |
 | 5 | UI: the decision node, the flow's layout, the pill, the inspector's body, in the design system | B | done (Claude, 13 Nov): `dc91add` |
 | 6 | The page: opening flows from three places; selecting nodes; Open code; answers and layouts kept per graph version, so going back is instant (ADR 0029) | B | done (Claude, 13 Nov): `58a4c50` |
-| 7 | Proof: 10 hand-labelled Documenso flows in real workspaces, every node at its line; the walkthrough; screens; the shared fake workspace for page tests (owner, 12 Nov) | B | *next* |
+| 6a | The living docs held to the code (owner, 13 Nov) | B | done (Claude, 13 Nov): `6e418b5`, `77324e4`, `5f6fdd6` |
+| 6b | CI deploys every target; the Docker job in shards; the docs gate (owner, 13 Nov) | B | done (Claude, 13 Nov): `a473e20`, `b31c774`, `cfddb64`, `f8b0221`, `ee7a59b`, `fff9bd0` |
+| 7 | Proof: 10 hand-labelled Documenso flows in real workspaces, every node at its line; the walkthrough; screens; the shared fake workspace for page tests (owner, 12 Nov) | B | in progress (Claude): `c59edae` |
 | 8 | Close: report, 0.11.0 | B | *planned* |
 
 ### How each Done-when item is proven
@@ -13229,7 +13231,13 @@ pnpm test:visual
 
 **Goal:** the phase's plan, the owner's four answers, and a branch from `main` after phase 6's merge (`336208d`, CI green).
 
-**Files:** `docs/decisions-log.md` (phase 7 decisions), this section. **Commit:** `docs: phase 7 plan and the owner's decisions`.
+**What a person can do now:** read the plan above and the owner's phase 7 decisions in the decisions log. Nothing in the app changes.
+
+**Files:** `docs/decisions-log.md` (phase 7 decisions), this section.
+
+**Concepts:** none new. **Found and fixed on the way:** none. **Tests:** none (a plan). **Run and check it:** nothing to run. **Risks and laptop:** R1 to R5 listed above; nothing runs.
+
+**Commit:** `docs: phase 7 plan and the owner's decisions`.
 
 ### Step 7.1 — Spike: ELK's layout time, and conditions per call (done by Claude; ADR 0028)
 
@@ -13390,7 +13398,7 @@ pnpm test:visual
 
 **Risks and laptop:** the store is bigger (Twenty 97.8 MB, from 29.6 MB), still a fraction of a workspace's 10 GiB. The measurements ran two or three at a time (owner, 13 Nov: allowed); the laptop stayed under 20 GiB used.
 
-**Commit:** `feat(engine): the Calls tab from what the pass stored` (`7aba981`).
+**Commits:** `feat(engine): the Calls tab from what the pass stored` (`7aba981`); `test(host): time members' callers apart from the store's answers; docs for step 7.4` (`ca9f122`).
 
 ### Step 7.5 — The flow's parts in the design system, and its layout (done by Claude)
 
@@ -13490,4 +13498,56 @@ pnpm test:visual
 
 **Risks and laptop:** a check too strict would block work; each rule is about the living docs only, with a 2-day allowance for the date. None for the laptop.
 
-**Commit:** `ci: hold the living docs to the code (pnpm docs:check)`.
+**Commits:** `ci: hold the living docs to the code (pnpm docs:check)` (`6e418b5`); two fixes found on CI, where the check first ran: `fix(docs-check): build the catalogue before counting its screenshots` (`77324e4`; CI had no built catalogue) and `fix(docs-check): read the unit tests' totals the same way on CI` (`5f6fdd6`; GitHub Actions drops Turborepo's prefixes unless `--log-prefix=task`).
+
+### Step 7.6b — CI deploys every target; the Docker job in shards; the docs gate (done by Claude; owner, 13 Nov)
+
+**Goal:** faster, more reliable CI, and docs that can't drift. Cloudflare's GitHub app dropped two pushes (`9a07d81`, `dc91add`) and the walkthroughs waited 10 minutes for builds that never came; the Docker job took 9 minutes; the owner found ARCHITECTURE dated "end of phase 1b" in phase 7 and asked how every doc stays true.
+
+**What a person can do now:** every pull request's preview (app and catalogue) is deployed by CI within seconds of its build, and staging will be on the next merge to `main`; CI's Docker work finishes in about 4 minutes instead of 9; `pnpm docs:check` also holds ARCHITECTURE to the code and finds dated stamps, stale upgrade-later triggers and references to items or ADRs that don't exist; `pnpm docs:milestone` is the gate before every milestone report (and on CI once a pull request is ready for review).
+
+**Files:**
+- `e2e/scripts/deploy.ts` (new; replaces `deploy-preview.ts`): `--worker app|catalogue --to preview|staging`; refuses an app build that doesn't carry its commit. `e2e/scripts/wait-for-deploy.ts` (3-minute wait once CI deployed). `.github/workflows/ci.yml`: deploy steps in the walkthroughs and visual jobs; the Docker job as a matrix of four shards; the gate on ready-for-review pull requests. Root `package.json`: `FLOWCANVAS_COMMIT` kept when CI sets it; `docs:milestone`.
+- `corpus/src/select.ts` (new, with tests): which projects a shard opens (`CORPUS_ONLY`, `CORPUS_EXCEPT`); `workspace/host/src/corpus.docker.test.ts` reads it; `turbo.json` passes both through. `corpus/src/check.ts`: two retries on GitHub's own 5xx errors.
+- `tools/docs-check/src/checks.ts`, `cli.ts`, `checks.test.ts`: stamps, ARCHITECTURE's parts and dependencies, "still to come" in every tracked file, upgrade-later triggers, dangling references, and the milestone gate (Reviewed lines, step entries, commits named).
+- `ARCHITECTURE.md` brought up to date; `**Reviewed:**` lines in the living docs; `docs/STATUS.md`'s current milestone; ADR 0005's addendum; decisions log; upgrade-later 9, 10, 17, 20 and 24.
+
+**Concepts:**
+- **Deploying from CI:** `wrangler versions upload --preview-alias` makes a branch's preview without making it live; `wrangler deploy` makes it live. https://developers.cloudflare.com/workers/configuration/previews/
+- **A job matrix:** one job definition, several runners in parallel. https://docs.github.com/en/actions/using-jobs/using-a-matrix-for-your-jobs
+- **A sample big enough for its statistic:** a p95 over 19 values is the second largest; over 109 it means what it says. https://en.wikipedia.org/wiki/Percentile
+
+**Found and fixed on the way:**
+- **The built app carried an empty commit** on CI: the root build replaced CI's `FLOWCANVAS_COMMIT` with `git rev-parse`, which fails in CI's container (`b31c774`, with a guard in the deploy script). A GitHub 502 failed `corpus:check` once: two retries for 5xx only (`b31c774`).
+- **ARCHITECTURE** said "end of phase 1b"; its parts table stopped at phase 3 for the web app and phase 4 for the engine; four package dependencies were missing (`ee7a59b`).
+- **11 commits weren't written up** in this file, and step 7.0 lacked most fields: found by the new gate the first time it ran.
+- **Rallly's search p95 failed once on CI (228 ms)** with a sample of 19 searches, in a run whose corpus test measured 5 ms over 312: the sample is now 109 searches; locally 23 and 27 ms (`fff9bd0`).
+- **upgrade-later items 20 and 24** had reached triggers nobody acted on; both are questions for the owner.
+
+**Tests:** corpus 3 new (`select.test.ts`); docs-check 23 (11 new: stamps, parts, dependencies, the gate, triggers, references). On CI: the four Docker shards each opened exactly their projects (Twenty, Medusa, LibreChat; Rallly, Documenso and Excalidraw in `rest`), the slowest in 3 min 53 s; the CI-deployed preview passed the walkthroughs; the catalogue deployed after its visual checks.
+
+**Run and check it:** `pnpm docs:check`; `pnpm docs:milestone` (fails until each living doc is re-read at this milestone); `CORPUS_ONLY=excalidraw pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts`.
+
+**Risks and laptop:** staging deploys from CI only after the next merge, so Cloudflare's own build for `main` stays on until then (two deploys of the same commit are harmless). A fork's pull request gets no preview (upgrade-later 10). Laptop: one Excalidraw shard and the host Docker file, a minute each.
+
+**Commits:** `ci: deploy each pull request's preview from CI` (`a473e20`); `fix(ci): stamp the preview with CI's commit; retry GitHub's own errors` (`b31c774`); `ci: wait 3 minutes for a preview CI deployed itself, not 10` (`cfddb64`); `ci: deploy staging and the catalogue from CI; run the Docker job as shards` (`f8b0221`); `fix(docs): bring ARCHITECTURE up to date and hold it to the code` (`ee7a59b`); `test(host): measure Rallly's search p95 over 109 searches, not 19` (`fff9bd0`); `docs: the milestone gate, and the records checked for what's missing`.
+
+### Step 7.7 — Proof: 10 hand-labelled flows, the walkthrough, the screens (in progress, Claude)
+
+**Goal:** the Done when: flows for 10 Documenso functions render correctly and every node opens the right line.
+
+**What a person can do now:** nothing new yet on the page; the engine draws a call that always happens beside a guarded one on its line.
+
+**Files so far:** `corpus/src/flows.ts` (flows as lines, compared exactly with the labels); `packages/graph-model/src/` (`GraphEdge.guarded`, graph format 3) and `packages/engine/src/semantics/graph-pass.ts`, `snapshots.ts` (store format 3).
+
+**Concepts:** **labels written by reading the code**, compared with the engine's answers as sorted lines, so a difference reads as one line.
+
+**Found and fixed so far:** in `hasPersistedId(a) && hasPersistedId(b)` the first call always runs, but the flow hid it: guarded calls were subtracted by line, and the second, guarded call shares the line. The pass now says which lines of a call are fully guarded. On the 10 chosen functions the engine then matched the labels for 9 at once; the tenth's difference was the bug.
+
+**Tests so far:** graph model 29 (2 new), engine 199 (2 new: the pass's guarded lines, and a flow through the same-line case).
+
+**Run and check it:** `pnpm --filter @flowcanvas/graph-model test`; `pnpm --filter @flowcanvas/engine test`.
+
+**Risks and laptop:** the format change drops stored snapshots once; the next pass rebuilds them. Laptop: Documenso's graph built in process, about 20 s.
+
+**Commits so far:** `fix(engine): draw a call that always happens beside a guarded one on its line` (`c59edae`).

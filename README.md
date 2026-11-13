@@ -2,6 +2,8 @@
 
 A canvas-first, AI-native development environment (working name). You see your app running as live frames on an infinite canvas, follow the real flow behind any element through code, data and services, and ask coding agents for changes you can review as behavioural diffs.
 
+**Reviewed:** not yet re-read in full under the milestone rule (added 13 Nov 2026); due before phase 7's milestone B report. At every milestone this doc is re-read in full against the code, and this line names the milestone (`pnpm docs:milestone` checks it).
+
 - **Run it, test it, and see what's built:** [`docs/RUN-AND-FEATURES.md`](docs/RUN-AND-FEATURES.md)
 - **Phase status:** [`docs/STATUS.md`](docs/STATUS.md)
 - **How it's put together:** [`ARCHITECTURE.md`](ARCHITECTURE.md)

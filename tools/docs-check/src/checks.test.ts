@@ -1,17 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
+  STEP_FIELDS,
   architectureDependencies,
   architectureParts,
   buildSteps,
   commentsOf,
   countsIn,
+  currentMilestone,
+  danglingReferences,
   pathsNamed,
   phasesFromStatus,
   phasesNamed,
+  reviewed,
   runAndFeatures,
   stamps,
+  stepEntries,
   stillToCome,
+  undocumentedCommits,
   updatedDate,
+  upgradeTriggers,
   withCounts,
 } from './checks.js';
 
@@ -260,6 +267,75 @@ describe('architectureDependencies', () => {
       'lists web → graph-model, ui; its package.json says engine, graph-model, ui',
       'lists ui → tokens; its package.json says nothing',
       'lists engine → nothing; its package.json says graph-model',
+    ]);
+  });
+});
+
+describe('the milestone gate', () => {
+  it('reads the current milestone and holds each living doc’s Reviewed line to it', () => {
+    const milestone = currentMilestone('# Status\n\n**Current milestone:** phase 7, milestone B\n');
+    expect(milestone).toBe('phase 7, milestone B');
+    expect(
+      reviewed('**Reviewed:** phase 7, milestone B (13 Nov 2026)', 'phase 7, milestone B', 'a.md'),
+    ).toEqual([]);
+    expect(
+      reviewed('**Reviewed:** phase 7, milestone A', 'phase 7, milestone B', 'a.md'),
+    ).toHaveLength(1);
+    expect(reviewed('No line.', 'phase 7, milestone B', 'a.md')[0]?.problem).toBe(
+      'has no **Reviewed:** line',
+    );
+  });
+
+  it('finds a step entry missing a field of the template, in the phase asked about only', () => {
+    const full = STEP_FIELDS.map((field) =>
+      field === 'Risks' ? '**Risks and laptop:** x' : `**${field}:** x`,
+    ).join('\n');
+    const doc = [
+      '### Step 7.1 — Done properly',
+      full,
+      '### Step 7.2 — No tests written up',
+      full.replace('**Tests:** x', ''),
+      '### Step 7.3 — Its laptop not said',
+      full.replace('**Risks and laptop:** x', '**Risks:** x'),
+      '### Step 6.9 — Another phase',
+      'nothing',
+    ].join('\n');
+    expect(stepEntries(doc, '7').map((f) => f.problem)).toEqual([
+      "step 7.2's entry has no Tests",
+      "step 7.3's entry has no Laptop",
+    ]);
+  });
+
+  it('finds a commit no step names, and lets the commits that only write docs off', () => {
+    const doc = 'Commits: `c59edae` the fix.';
+    expect(
+      undocumentedCommits(doc, [
+        { sha: 'c59edae1234', subject: 'fix(engine): …', docsOnly: false },
+        { sha: 'f8b0221abcd', subject: 'ci: deploy …', docsOnly: false },
+        { sha: 'ee7a59b0000', subject: 'docs: step 7.7', docsOnly: true },
+      ]).map((f) => f.problem),
+    ).toEqual(["doesn't name commit f8b0221 (ci: deploy …)"]);
+  });
+});
+
+describe('upgrade-later and references', () => {
+  it('finds a trigger naming an accepted phase that doesn’t say what happened', () => {
+    const doc = [
+      '| 24 | **Profile pictures** | Names only. | Avatars. | The phase 2 app shell’s avatar menu. | 31 Oct |',
+      '| 3 | **TS 7** | 6.0. | 7. | Stable API. **Checked 12 Nov 2026 (before phase 5):** not yet. | 26 Oct |',
+      '| 9 | **Visibility** | Public. | Private. | Before design partners (phase 45). | 26 Oct |',
+    ].join('\n');
+    expect(upgradeTriggers(doc, new Set(['2', '5'])).map((f) => f.where)).toEqual([
+      'docs/upgrade-later.md:1',
+    ]);
+  });
+
+  it('finds an upgrade-later item or an ADR that doesn’t exist', () => {
+    const known = { items: new Set(['10', '33']), adrs: new Set(['0028']) };
+    const text = 'See upgrade-later 33 and upgrade-later item 99; ADR 0028 and ADR 0031.';
+    expect(danglingReferences(text, known, 'a.md').map((f) => f.problem)).toEqual([
+      "names upgrade-later 99, which isn't an item or in its removed list",
+      "names ADR 0031, which doesn't exist",
     ]);
   });
 });

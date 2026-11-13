@@ -2,6 +2,8 @@
 
 The system as it is **today** (phase 7, in progress). Kept current with every milestone, and held to the code by `pnpm docs:check`: the parts table names every package and every source folder, the dependencies match each `package.json`, and this line names the phase the work is at. Why things are this way is in `docs/adr/`; what's deferred is in `docs/upgrade-later.md`.
 
+**Reviewed:** not yet re-read in full under the milestone rule (added 13 Nov 2026); due before phase 7's milestone B report. At every milestone this doc is re-read in full against the code, and this line names the milestone (`pnpm docs:milestone` checks it).
+
 ## Parts
 
 | Package | Folder | Runs in | Today |

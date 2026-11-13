@@ -5,6 +5,8 @@ name: CI
 
 on:
   pull_request:
+    # ready_for_review too: marking a phase's pull request ready runs the milestone gate (docs:check --milestone).
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
@@ -57,7 +59,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
       # The living docs held to the code: release, progress, counts, phases still to come, paths, packages (phase 7).
-      - run: pnpm docs:check
+      # A pull request ready for review (a phase closing) also passes the milestone gate: every living doc re-read at
+      # this milestone, every step written up in full, every commit named in build-steps (owner, 13 Nov 2026).
+      - name: Docs held to the code (and the milestone gate, once ready for review)
+        env:
+          READY: ${{ github.event_name == 'pull_request' && !github.event.pull_request.draft }}
+        run: |
+          if [ "$READY" = true ]; then
+            # The checkout is one commit deep: the gate needs the branch's history back to main.
+            git fetch --quiet --unshallow origin +refs/heads/main:refs/remotes/origin/main
+            pnpm docs:milestone
+          else
+            pnpm docs:check
+          fi
 
   docker:
     # Not a required check. Split into parallel shards (owner, 13 Nov 2026): the corpus test was 8½ of the job's 9
