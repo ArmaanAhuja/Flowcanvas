@@ -584,3 +584,11 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 - **Decisions:** small diamonds with condition labels on their outgoing edges; failure paths (a `catch`) as thin red edges (design brief, "Flow graph view").
 - **Built-ins** stay out of flows, as out of the graph (owner, 12 Nov 2026).
 - **The completeness pill** at the flow's top left counts its edges by provenance (design brief).
+
+## 13 Nov 2026: compute once, store, reuse
+
+**Owner direction:** "we want to make the project feel faster and snappier for everything the user does, so we will rely on caching and storing data for further use so that we don't have to compute again and again." Asked to check where this is needed, plan it into the phases, handle anything already left, then continue with phase 7.
+
+**Applied as a rule for every feature** (ADR 0029): what a person would wait for is worked out ahead (in the graph pass, in the background) and stored, keyed so it's never stale (a version, or the hash of the file it came from). Live work only for what changed since. Nothing stale is ever shown as current.
+
+**Done now** (phase 7): each file's code units and the inspector's details are stored by the graph pass (`facts.db`); flows from inside a function and details answer from them. **Planned in phase 7, milestone B:** the Calls tab and Go to definition answered from stored data; the page keeps flows, details, calls and layouts per graph version. **Planned later:** see ADR 0029's table (references in phase 42; each later analysis stores its results in the graph as it's built).

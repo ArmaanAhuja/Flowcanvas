@@ -13197,10 +13197,12 @@ pnpm test:visual
 | 1 | Spike: ELK layout time; conditions per call site. ADR 0028 | A | done (Claude, 12 Nov) |
 | 2 | The engine: `flow` (downstream from a function, with decisions and stubs) and `details` (what the inspector shows) | A | done (Claude, 13 Nov): `6114a7e`, `f4a47a9`, `016d253`; tests `3112fed`, `15d3264` |
 | 3 | The API through the host and control plane | A | done (Claude, 13 Nov): `c5d3a73`, `016d253` |
-| 4 | UI: the decision node, the flow's layout, the pill, the inspector's body, in the design system | B | *next* |
-| 5 | The page: opening flows from three places; selecting nodes; Open code | B | *planned* |
-| 6 | Proof: 10 hand-labelled Documenso flows in real workspaces, every node at its line; the walkthrough; screens | B | *planned* |
-| 7 | Close: report, 0.11.0 | B | *planned* |
+| 3a | Compute once, store, reuse (owner, 13 Nov): each file's units and details stored by the pass; flows from inside a function and details answer from them. ADR 0029 | A | done (Claude, 13 Nov): `1da5575` |
+| 4 | The Calls tab and Go to definition from stored data (each call's exact place kept with its unit), TypeScript only for a changed file (ADR 0029) | B | *next* |
+| 5 | UI: the decision node, the flow's layout, the pill, the inspector's body, in the design system | B | *planned* |
+| 6 | The page: opening flows from three places; selecting nodes; Open code; answers and layouts kept per graph version, so going back is instant (ADR 0029) | B | *planned* |
+| 7 | Proof: 10 hand-labelled Documenso flows in real workspaces, every node at its line; the walkthrough; screens | B | *planned* |
+| 8 | Close: report, 0.11.0 | B | *planned* |
 
 ### How each Done-when item is proven
 
@@ -13218,7 +13220,9 @@ pnpm test:visual
 | R2 | Conditions unreadable (long expressions) | Cut at 60 characters, the full text in the inspector | **checked:** Documenso's `sendDocument`, every condition read correctly; some long ones need cutting |
 | R3 | Flows built from a stale graph after edits | Built from the latest snapshot; the page says when the graph is being brought up to date | **built:** each flow says whether it's current (`current`), and which version it's from |
 | R5 | Snapshots too slow to load with decisions | Measured on Twenty | **fixed:** 1,718 ms → 724 ms on the laptop, 225 ms on CI (checked once before saving, SHA-256 on load, a path table, zstd) |
-| R6 | Opening a flow from inside a function on a large project | The first TypeScript question about a package builds its programs | **measured:** 7.9 s on Twenty (CI), 1.2 s on LibreChat; from a function's name, milliseconds. The page says it's working (step 5) |
+| R6 | Opening a flow from inside a function on a large project | The first TypeScript question about a package builds its programs | **fixed (step 3a):** answered from the facts the pass stored (0.04 ms a lookup); TypeScript only for a file changed since. Held under 1 s round trip on CI |
+| R7 | Storing details makes the pass slower or run out of memory | Measured on Twenty | **measured:** 86.9 s against 91.8 s before (noise), heap peak 2.03 GB of the worker's 2.5 GB; first version was 146 s and 2.25 GB, fixed (exports once per file, signatures from written types, rows written as the pass goes) |
+| R8 | React wrappers: `const X = forwardRef(…)` | Its callback's calls belong to the file's top level, so a flow from `X` shows little | **known:** React's wrappers are the React connector's (phase 10) |
 | R4 | **Laptop:** none new | — | *in check* |
 
 ### Step 7.0 — The plan and the owner's decisions (done by Claude)
@@ -13309,3 +13313,41 @@ pnpm test:visual
 **Risks and laptop:** none new.
 
 **Commits:** `feat(control-plane): GET /index/flow, the flow from the function at a place` (`c5d3a73`); the details route came with `016d253`.
+
+### Step 7.3a — Compute once, store, reuse (done by Claude; ADR 0029)
+
+**Goal:** the owner's direction (13 Nov): nothing a person does should wait on work that was already done. A flow opened from inside a function, and a node's details, no longer wait on TypeScript loading a package (7.9 s on Twenty).
+
+**What a person can do now:** through the API, `…/index/flow` from anywhere in a function and `…/index/details` answer in milliseconds once the project's first pass is done, and after restarts. On the page in step 6.
+
+**Files:**
+- `packages/engine/src/facts.ts` (new): `FactsStore` (one row per file, compressed, with the hash of its text; checked on every read), `contentHash`.
+- `packages/engine/src/semantics/details.ts`: `fileFacts` (every unit of a file, its range and details); a file's exports read once; signatures from types as written.
+- `packages/engine/src/semantics/graph-pass.ts`: `unitsOf`; a class property holding a function is that function (was `Store.save.save`).
+- `packages/engine/src/semantics/semantic-service.ts`, `worker.ts`, `client.ts`, `main.ts`, `protocol.ts` (`FACTS_FILE`): the pass writes the store; the engine reads it.
+- `packages/engine/src/service.ts`: flows and details from the store, TypeScript where it has no answer; it forgets its decoded copies after each pass.
+- Tests: `facts.test.ts` (new), `semantic-service.test.ts`, `service.test.ts`; `workspace/host/src/corpus.docker.test.ts` holds flows and details under 1 s.
+- Docs: ADR 0029, the decisions log (13 Nov).
+
+**Concepts:**
+- **Precomputing in the background:** do the work where it's already being done (the pass has every program) instead of when someone waits for it.
+- **Content hashes as cache keys:** a stored answer carries the hash of what it came from; comparing it with the file now proves it isn't stale, however the file changed. https://nodejs.org/api/crypto.html#cryptocreatehashalgorithm-options
+- **SQLite's write-ahead log:** one connection writes (the worker) while another reads (the engine). https://www.sqlite.org/wal.html
+- **CPU profiles:** `node --cpu-prof` writes where time went, by function, to find what to make cheaper. https://nodejs.org/api/cli.html#--cpu-prof
+
+**Found and fixed:**
+- **The first version cost too much:** Twenty's pass went from about 92 s to 146 s, and the worker's heap reached 2.25 GB of 2.5 GB (it held every file's details until the pass ended). A CPU profile showed why: the module's exports read once per unit (quadratic), and whole signatures printed by the checker (half the details' time on Documenso), plus a check walking up to the source file for every syntax node. Now exports are read once per file, signatures are built from types as written, units come from a set made once per file, and rows are written as the pass goes. Twenty: 86.9 s, 2.03 GB.
+- **Past a file's last character** the store had no unit, where TypeScript says the top level: now the top level, as the test comparing every place found.
+- **A class property holding a function had the id `Store.save.save`** (phase 6's rule counted the property and its function): now `Store.save`, like a constant's.
+- **Change tracking replaced by a hash check:** tracking edits missed changes made while the engine was stopped; the hash check costs one small file read per answer and covers every way a file can change.
+- **Known, for phase 10:** `const X = React.forwardRef(…)` has no code of its own in the graph (its callback's calls are the top level's), so its flow shows little (R8).
+
+**Tests:** 195 engine tests pass. New: 5 for the store (round trip, innermost unit, removed files, two connections, the hash check with a byte-order mark, the format reset); 2 comparing the store with TypeScript at every place of a file (over 400 places, units and details) and removal; 2 for the service (from the store without asking TypeScript; TypeScript where the store has no answer). Mutation checks: 3 of 3 on ranges and ids, 2 of 2 on the hash check, 5 of 5 on the service (before the tracking was replaced). In-process, each sampled graph node looked up at its own place: Documenso 463 of 485 found themselves, and the 22 that didn't were all nodes with no code of their own (constants that are only called, like `const AlertTitle = forwardRef(…)`, and interface members), where TypeScript gives the same answer; Twenty 438 of 500, its 62 not listed one by one.
+
+**Run and check it:** `pnpm --filter @flowcanvas/engine test`. With Docker: `pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts` (each held fork's row has `flowMaxMs` and `detailsMaxMs`, held under 1,000).
+
+**Risks and laptop:** R6 to R8 above. Measurements ran one at a time on the laptop; the stores they wrote were in the scratch folder, now removed.
+
+**On CI** (run 43372184116, green): every held fork's flows and details answered from the store, the slowest round trip 32 ms (Twenty's slowest flow was 11,274 ms in the run before, LibreChat's 1,480 ms).
+
+**Commit:** `feat(engine): store each file's units and details in the pass, answer from them` (`1da5575`).
