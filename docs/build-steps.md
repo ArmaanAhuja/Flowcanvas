@@ -13175,7 +13175,7 @@ pnpm test:visual
 **Decisions** (decisions log, 12 Nov 2026): opened from the right-click menu, ⌘K and the Calls tab; up to 60 nodes, then a stub; one grouped stub per node for unknown calls; 10 functions in Documenso, labelled by Claude.
 
 **Expected outcome:**
-- Choose a function (right-click → Show flow, ⌘K, or the Calls tab): its downstream flow appears on the canvas, left to right. Every function it reaches is a node with its file and line; calls made under an `if`, `switch` or `catch` hang off small decision diamonds labelled with their conditions; a node's unknown calls are one open stub ("4 unknown calls").
+- Choose a function (right-click → Show flow, ⌘K, or the Calls tab): its downstream flow appears on the canvas, top to bottom (as Figma 06). Every function it reaches is a node with its file and line; calls made under an `if`, `switch` or `catch` hang off small decision diamonds labelled with their conditions; a node's unknown calls are one open stub ("4 unknown calls").
 - Click a node: the inspector's Details tab shows its signature and typed inputs and outputs, its branches and their conditions, what it throws and awaits, the calls it makes that can't be resolved, and its callers. "Open code" (or a double-click) opens the Code view at its line.
 - A completeness pill at the flow's top left says how many of its edges are proven.
 

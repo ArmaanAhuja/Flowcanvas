@@ -93,3 +93,48 @@
   line-height: var(--text-small-line-height);
   color: var(--color-text-secondary);
 }
+
+/*
+ * A flow's edges (phase 7), by Graphite's provenance forms (shape, never hue): resolved solid in edge/default,
+ * observed in edge/observed, suggested dotted. A failure path (a catch's outcome) is the one edge with a hue: thin,
+ * in the removed state's solid (design brief, "Flow graph view"). The arrowhead follows the stroke.
+ */
+.edge {
+  stroke: var(--color-edge-default);
+  stroke-width: var(--border-width-edge);
+}
+
+.edge[data-form='observed'] {
+  stroke: var(--color-edge-observed);
+}
+
+.edge[data-form='suggested'] {
+  stroke-dasharray: var(--border-width-edge) var(--space-4);
+  stroke-linecap: round;
+}
+
+.edge[data-form='failure'] {
+  stroke: var(--color-state-removed-solid);
+}
+
+.edge[data-selected] {
+  stroke: var(--color-accent-solid);
+}
+
+/* An outcome on its edge: Caption on the canvas colour, so it reads over the line. */
+.edgeLabel {
+  position: absolute;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-canvas);
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  font-weight: var(--text-caption-font-weight);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.edgeLabel[data-form='failure'] {
+  color: var(--color-state-removed-text);
+}

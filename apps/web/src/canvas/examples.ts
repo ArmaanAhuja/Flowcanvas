@@ -1,5 +1,5 @@
 import type { FlowNodeChange, FlowNodeKind } from '@flowcanvas/ui';
-import type { CanvasEdge, CanvasNode } from './FlowCanvas';
+import type { CanvasEdge, UnitCanvasNode } from './FlowCanvas';
 
 /**
  * Example nodes for the canvas stress test (Labs) and the performance test: never a project's real flows, and
@@ -30,8 +30,8 @@ export const EXAMPLE_BANNER =
 export function exampleGraph(
   count = 500,
   columns = 25,
-): { nodes: CanvasNode[]; edges: CanvasEdge[] } {
-  const nodes: CanvasNode[] = Array.from({ length: count }, (_, i) => {
+): { nodes: UnitCanvasNode[]; edges: CanvasEdge[] } {
+  const nodes: UnitCanvasNode[] = Array.from({ length: count }, (_, i) => {
     const change = CHANGES[i % CHANGES.length];
     return {
       id: `example-${String(i)}`,

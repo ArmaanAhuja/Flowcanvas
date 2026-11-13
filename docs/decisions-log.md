@@ -580,7 +580,7 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 **Defaults stated in the plan, not changed by the owner:** one flow on the canvas at a time (opening another replaces it); a single click selects a node and fills the inspector; "Open code" (the inspector's button, or a double-click) opens the Code view at its line.
 
 **Settled by the documents** (applied):
-- **Layout:** left to right, with Figma 06's node anatomy (about 200 × 56 px: type icon, name, file and line). ELK (`elkjs`) runs in a Web Worker, off the page's main thread (CLAUDE.md section 7).
+- **Layout:** top to bottom, as Figma 06 draws flows (corrected 13 Nov 2026: this said "left to right", from the design brief; Figma's screens rank above the brief in CLAUDE.md's order, and the phase 2 canvas already joins nodes top to bottom), with Figma 06's node anatomy (about 200 × 56 px: type icon, name, file and line). ELK (`elkjs`) runs in a Web Worker, off the page's main thread (CLAUDE.md section 7).
 - **Decisions:** small diamonds with condition labels on their outgoing edges; failure paths (a `catch`) as thin red edges (design brief, "Flow graph view").
 - **Built-ins** stay out of flows, as out of the graph (owner, 12 Nov 2026).
 - **The completeness pill** at the flow's top left counts its edges by provenance (design brief).

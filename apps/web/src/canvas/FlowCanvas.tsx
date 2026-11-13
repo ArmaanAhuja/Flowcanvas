@@ -13,6 +13,7 @@ import {
   Background,
   BackgroundVariant,
   Handle,
+  MarkerType,
   MiniMap,
   Position,
   ReactFlow,
@@ -29,6 +30,14 @@ import {
 import { Hand, Maximize, Minus, MousePointer2, Plus } from 'lucide-react';
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import styles from './FlowCanvas.module.css';
+import {
+  DecisionCard,
+  FlowEdge,
+  StubCard,
+  type DecisionCanvasNode,
+  type FlowCanvasEdge,
+  type StubCanvasNode,
+} from './flow-parts';
 
 export interface FlowNodeData extends Record<string, unknown> {
   readonly title: string;
@@ -37,11 +46,16 @@ export interface FlowNodeData extends Record<string, unknown> {
   readonly change?: FlowNodeChange;
 }
 
-export type CanvasNode = Node<FlowNodeData, 'flow'>;
-export type CanvasEdge = Edge;
+/** A code unit (and the phase 2 examples); and, in a flow (phase 7), its decisions and open ends. */
+export type UnitCanvasNode = Node<FlowNodeData, 'flow'>;
+export type CanvasNode = UnitCanvasNode | DecisionCanvasNode | StubCanvasNode;
+export type CanvasEdge = Edge | FlowCanvasEdge;
 
 /** Our FlowNode as React Flow's node type; the handles only anchor edges (nodes aren't connected by hand). */
-const FlowNodeCard = memo(function FlowNodeCard({ data, selected }: NodeProps<CanvasNode>) {
+const FlowNodeCard = memo(function FlowNodeCard({
+  data,
+  selected,
+}: NodeProps<Node<FlowNodeData, 'flow'>>) {
   return (
     <>
       <Handle
@@ -67,7 +81,8 @@ const FlowNodeCard = memo(function FlowNodeCard({ data, selected }: NodeProps<Ca
   );
 });
 
-const NODE_TYPES = { flow: FlowNodeCard };
+const NODE_TYPES = { flow: FlowNodeCard, decision: DecisionCard, stub: StubCard };
+const EDGE_TYPES = { flow: FlowEdge };
 const px = (token: keyof typeof baseValues) => Number.parseFloat(baseValues[token]);
 const MINIMAP = { width: px('--size-minimap-width'), height: px('--size-minimap-height') };
 
@@ -75,7 +90,16 @@ export const ZOOM = { min: 0.05, max: 2, step: 1.2 } as const;
 
 // React Flow's options, made once: a fresh object or array on every render makes it redo work, which showed up
 // as stutter while panning 500 nodes (phase 2 step 7).
-const EDGE_OPTIONS = { type: 'smoothstep' } as const;
+// Arrowheads in the edge's own stroke colour (a CSS variable, so they follow the theme and the form).
+const EDGE_OPTIONS = {
+  type: 'smoothstep',
+  markerEnd: {
+    type: MarkerType.ArrowClosed,
+    width: 14,
+    height: 14,
+    color: 'var(--color-edge-default)',
+  },
+} as const;
 const FIT_OPTIONS = { padding: 0.15 } as const;
 const ZOOM_KEYS = ['Control', 'Meta'];
 /** In Select, the middle and right buttons pan; the left one draws a selection box. */
@@ -95,8 +119,12 @@ export interface FlowCanvasProps {
   readonly empty: ReactNode;
   /** Shown above the canvas, e.g. that these are example nodes. */
   readonly banner?: ReactNode;
-  /** Top left over the canvas, e.g. the index's progress chip (phase 4). */
+  /** Top left over the canvas, e.g. the index's progress chip (phase 4), or a flow's name and counts (phase 7). */
   readonly status?: ReactNode;
+  /** A node chosen (a click, or the keyboard): the inspector shows it. Null when nothing is selected. */
+  readonly onSelectNode?: (node: CanvasNode | null) => void;
+  /** A node opened (a double-click): its code. */
+  readonly onOpenNode?: (node: CanvasNode) => void;
 }
 
 /**
@@ -114,7 +142,15 @@ export function FlowCanvas(props: FlowCanvasProps) {
   );
 }
 
-function Canvas({ nodes: given, edges: givenEdges, empty, banner, status }: FlowCanvasProps) {
+function Canvas({
+  nodes: given,
+  edges: givenEdges,
+  empty,
+  banner,
+  status,
+  onSelectNode,
+  onOpenNode,
+}: FlowCanvasProps) {
   const [tool, setTool] = useState<CanvasTool>('select');
   // React Flow keeps selection in the nodes themselves, so it holds them; a new set replaces them.
   const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>([...given]);
@@ -175,7 +211,22 @@ function Canvas({ nodes: given, edges: givenEdges, empty, banner, status }: Flow
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={NODE_TYPES}
+        edgeTypes={EDGE_TYPES}
         defaultEdgeOptions={EDGE_OPTIONS}
+        {...(onSelectNode === undefined
+          ? {}
+          : {
+              onSelectionChange: ({ nodes: chosen }: { nodes: CanvasNode[] }) => {
+                onSelectNode(chosen.length === 1 ? (chosen[0] ?? null) : null);
+              },
+            })}
+        {...(onOpenNode === undefined
+          ? {}
+          : {
+              onNodeDoubleClick: (_event: React.MouseEvent, node: CanvasNode) => {
+                onOpenNode(node);
+              },
+            })}
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable

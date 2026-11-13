@@ -8,7 +8,7 @@
 
 Phase 7 builds *a downstream flow from any function; ELK layout; click a node to open its code; conditions on branches; node inspector showing every detail the code reveals*. *Done when:* flows for 10 functions render correctly and every node opens the right line.
 
-The owner's decisions (decisions log, 12 Nov 2026): flows open from the right-click menu, ⌘K and the Calls tab; up to 60 nodes, then an honest stub; one grouped stub per node for unknown calls; 10 Documenso functions labelled by Claude. The design brief ("Flow graph view"): left to right; decisions as small diamonds with condition labels on their outgoing edges; failure paths as thin red edges; a completeness pill.
+The owner's decisions (decisions log, 12 Nov 2026): flows open from the right-click menu, ⌘K and the Calls tab; up to 60 nodes, then an honest stub; one grouped stub per node for unknown calls; 10 Documenso functions labelled by Claude. The design brief ("Flow graph view"): left to right (Figma 06, which ranks above the brief, draws flows top to bottom: used, corrected 13 Nov 2026); decisions as small diamonds with condition labels on their outgoing edges; failure paths as thin red edges; a completeness pill.
 
 Phase 6's graph (ADR 0027) holds code units and call edges; its vocabulary reserved decision nodes and branch edges for this phase.
 

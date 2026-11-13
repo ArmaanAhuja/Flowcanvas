@@ -30,6 +30,7 @@
     "@xterm/addon-fit": "catalog:",
     "@xterm/xterm": "catalog:",
     "@xyflow/react": "catalog:",
+    "elkjs": "catalog:",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",

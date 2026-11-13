@@ -1,0 +1,46 @@
+/*
+ * A flow's open ends (phase 7). Unknown: Graphite's unknown edge, a short stub ending in a hollow circle, in the edge
+ * colour, with the count in Mono small. More: a dashed outline (shape, not hue) around "N more calls not shown".
+ * Text in text/muted: text/tertiary is for marks only (Graphite), though the Figma generator used it for text.
+ */
+.stub {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  box-sizing: border-box;
+  padding: var(--space-2) var(--space-8);
+  border: var(--border-width-default) solid transparent;
+  border-radius: var(--radius-control);
+}
+
+.stub[data-variant='more'] {
+  border: var(--border-width-default) dashed var(--color-border-strong);
+  background: var(--color-surface-canvas);
+}
+
+.stub[data-selected] {
+  border-color: var(--color-accent-solid);
+}
+
+.glyph {
+  flex: none;
+  width: var(--size-icon-sm);
+  height: var(--size-icon-sm);
+  fill: none;
+  stroke: var(--color-edge-default);
+  stroke-width: var(--border-width-edge);
+}
+
+.text {
+  white-space: nowrap;
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  line-height: var(--text-mono-small-line-height);
+  color: var(--color-text-muted);
+}
+
+.stub[data-variant='more'] .text {
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  line-height: var(--text-small-line-height);
+}

@@ -108,3 +108,16 @@ export {
   type CallsView,
   type ReferenceRow,
 } from './components/calls-panel/CallsPanel';
+export {
+  CONDITION_SHOWN,
+  DecisionNode,
+  type DecisionNodeProps,
+} from './components/decision-node/DecisionNode';
+export { FlowStub, type FlowStubProps } from './components/flow-stub/FlowStub';
+export {
+  NodeDetails,
+  completenessText,
+  type DetailListData,
+  type NodeDetailsData,
+  type NodeDetailsProps,
+} from './components/node-details/NodeDetails';
