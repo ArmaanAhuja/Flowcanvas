@@ -56,6 +56,8 @@ jobs:
       - run: pnpm corpus:check
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      # The living docs held to the code: release, progress, counts, phases still to come, paths, packages (phase 7).
+      - run: pnpm docs:check
 
   docker:
     name: Workspaces against real Docker

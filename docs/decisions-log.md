@@ -592,3 +592,11 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 **Applied as a rule for every feature** (ADR 0029): what a person would wait for is worked out ahead (in the graph pass, in the background) and stored, keyed so it's never stale (a version, or the hash of the file it came from). Live work only for what changed since. Nothing stale is ever shown as current.
 
 **Done now** (phase 7): each file's code units and the inspector's details are stored by the graph pass (`facts.db`); flows from inside a function and details answer from them. **Planned in phase 7, milestone B:** the Calls tab answered from stored data (Go to definition goes with Find references in phase 42: both work on any name, not only calls); the page keeps flows, details, calls and layouts per graph version. **Planned later:** see ADR 0029's table (references in phase 42; each later analysis stores its results in the graph as it's built).
+
+## 13 Nov 2026: the living docs held to the code
+
+**Owner:** "there could be a lot more docs and maybe other files that are stale like this, how do we fix this so that such never happens again" (after RUN-AND-FEATURES still said "last updated 8 Nov").
+
+**Applied:** `pnpm docs:check`, on CI with the unit tests (no new required check), fails when a living doc (README, RUN-AND-FEATURES, STATUS, ARCHITECTURE) or a comment in the code disagrees with the repository: the release against `package.json` and the CHANGELOG; the accepted phases against STATUS.md; "Last updated" naming the phase in progress and at most 2 days behind the latest commit; accepted phases never under "Coming next", and each with its own section; build-steps' step tables never "next" or "planned" in an accepted phase; accepted phases never "still to come"; every path a doc names existing; every package in ARCHITECTURE. Counts are written by `pnpm docs:update`, never by hand. Historical records (build-steps entries, reports, this log, ADRs) are true about their own dates and are left as written.
+
+**Open, for the owner:** the start screen (design brief, "Start screens") has no phase in the build plan; the projects list at `/` stands in until it does (decisions log, 7 Nov 2026). Phase 44 (production readiness, its onboarding tour) is the nearest.

@@ -13465,3 +13465,29 @@ pnpm test:visual
 **Docs:** RUN-AND-FEATURES re-read in full (the owner found its "Last updated" five days old): release, progress, counts and phase sections corrected.
 
 **Commit:** `feat(web): open a flow from the right-click menu, ⌘K or the Calls tab` (`58a4c50`).
+
+### Step 7.6a — The living docs held to the code (done by Claude; owner's request, 13 Nov)
+
+**Goal:** stale docs caught by CI, not by the owner. RUN-AND-FEATURES said "last updated 8 Nov" five days and three phases late, with an old release, old counts and accepted phases under "Coming next".
+
+**What a person can do now:** `pnpm docs:check` says what in the docs disagrees with the code, with the file and line; `pnpm docs:update` rewrites the test counts. CI runs the check after the unit tests.
+
+**Files:** `tools/docs-check/` (new: `checks.ts`, the checks; `cli.ts`, the command; `checks.test.ts`); `package.json` (`docs:check`, `docs:update`); `.github/workflows/ci.yml` (one step in the unit-test job, whose name is unchanged); `docs/RUN-AND-FEATURES.md` (counts between markers, phase 4's section); `ARCHITECTURE.md`; `apps/web/src/projects/` and `e2e/try-it/phase-1d.spec.ts` (comments corrected).
+
+**Concepts:**
+- **Docs as tested claims:** a doc's facts (versions, counts, paths, what's done) are checked against the repository like code, so they can't drift silently. https://www.writethedocs.org/guide/docs-as-code/
+- **Generated over hand-written:** numbers a tool can count are written by the tool. https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions
+
+**Found and fixed (the first sweep):**
+- **Four comments called the projects pages a stand-in "until the phase 2 start screen" or "top bar"**; phase 2 built the project page, not a start screen, which has no phase yet (decisions log, 7 Nov). Corrected; the start screen's phase is a question for the owner.
+- **An e2e comment** described a width "until the phase 2 app shell", which didn't change it. Corrected.
+- **Phase 4's section** didn't say it was accepted; **ARCHITECTURE** lacked the new tool.
+- **The tool's own first mistakes:** it read a Rallly path in a Try-it line as ours, and "search (phase 4)" beside "arrives in phase 13" as said to arrive; both fixed, with tests. And `vitest list` doesn't expand `it.each` (it found 3 of the tokens' 49 tests): the unit count comes from `pnpm test`'s own totals instead (replayed from Turborepo's cache), while Docker tests, none of them table-driven, are listed.
+
+**Tests:** 12 for the checks (each check's finding, and the cases it must leave alone). End to end: a planted old release, a 5-day-old date and a renamed path each fail `pnpm docs:check`. The check takes about 20 s.
+
+**Run and check it:** `pnpm docs:check`; `pnpm --filter @flowcanvas/docs-check test`.
+
+**Risks and laptop:** a check too strict would block work; each rule is about the living docs only, with a 2-day allowance for the date. None for the laptop.
+
+**Commit:** `ci: hold the living docs to the code (pnpm docs:check)`.

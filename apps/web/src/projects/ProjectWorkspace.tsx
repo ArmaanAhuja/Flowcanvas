@@ -86,7 +86,8 @@ export function shownState(
 }
 
 /**
- * A project's workspace on the version page (design brief, "29. Workspace status", until the phase 2 top bar):
+ * A project's workspace on the projects list (design brief, "29. Workspace status"; the project page shows it in its
+ * top bar, phase 2):
  * the status chip, what can be done from here, and the starting and asleep cards. Only what's true is shown:
  * no backups or checkpoints until they exist (18a), no progress figure the host doesn't report.
  */

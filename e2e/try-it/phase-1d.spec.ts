@@ -139,7 +139,7 @@ test('phase 1d: a terminal in the workspace, under the deployed CSP', async ({ p
   });
 
   await test.step('A size change is sent as a resize message', async () => {
-    // Narrower than the version page's column (about 400 px until the phase 2 app shell), so the
+    // Narrower than the projects list's column (about 400 px), so the
     // terminal itself gets narrower.
     await page.setViewportSize({ width: 360, height: 720 });
     await expect.poll(() => controls.length).toBeGreaterThan(0);

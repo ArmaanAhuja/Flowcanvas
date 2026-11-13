@@ -29,7 +29,9 @@
     "workspace:image": "pnpm --filter @flowcanvas/workspace-image --fail-if-no-match run image",
     "workspace:clean": "pnpm --filter @flowcanvas/workspace-host --fail-if-no-match run docker-clean",
     "workspace:resources": "pnpm --filter @flowcanvas/workspace-host --fail-if-no-match run resources",
-    "test:docker": "turbo run test:docker"
+    "test:docker": "turbo run test:docker",
+    "docs:check": "pnpm --filter @flowcanvas/docs-check exec tsx src/cli.ts",
+    "docs:update": "pnpm --filter @flowcanvas/docs-check exec tsx src/cli.ts --update"
   },
   "devDependencies": {
     "@eslint/js": "catalog:",
