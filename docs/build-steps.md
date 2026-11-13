@@ -13198,8 +13198,8 @@ pnpm test:visual
 | 2 | The engine: `flow` (downstream from a function, with decisions and stubs) and `details` (what the inspector shows) | A | done (Claude, 13 Nov): `6114a7e`, `f4a47a9`, `016d253`; tests `3112fed`, `15d3264` |
 | 3 | The API through the host and control plane | A | done (Claude, 13 Nov): `c5d3a73`, `016d253` |
 | 3a | Compute once, store, reuse (owner, 13 Nov): each file's units and details stored by the pass; flows from inside a function and details answer from them. ADR 0029 | A | done (Claude, 13 Nov): `1da5575` |
-| 4 | The Calls tab and Go to definition from stored data (each call's exact place kept with its unit), TypeScript only for a changed file (ADR 0029) | B | *next* |
-| 5 | UI: the decision node, the flow's layout, the pill, the inspector's body, in the design system | B | *planned* |
+| 4 | The Calls tab from stored data (each unit's calls as TypeScript gives them, kept by the pass), TypeScript only where the store can't be sure (ADR 0029) | B | done (Claude, 13 Nov): `7aba981` |
+| 5 | UI: the decision node, the flow's layout, the pill, the inspector's body, in the design system | B | *next* |
 | 6 | The page: opening flows from three places; selecting nodes; Open code; answers and layouts kept per graph version, so going back is instant (ADR 0029) | B | *planned* |
 | 7 | Proof: 10 hand-labelled Documenso flows in real workspaces, every node at its line; the walkthrough; screens | B | *planned* |
 | 8 | Close: report, 0.11.0 | B | *planned* |
@@ -13351,3 +13351,43 @@ pnpm test:visual
 **On CI** (run 43372184116, green): every held fork's flows and details answered from the store, the slowest round trip 32 ms (Twenty's slowest flow was 11,274 ms in the run before, LibreChat's 1,480 ms).
 
 **Commit:** `feat(engine): store each file's units and details in the pass, answer from them` (`1da5575`).
+
+### Step 7.4 — The Calls tab from what the pass stored (done by Claude; ADR 0029 addendum)
+
+**Goal:** the Calls tab (phase 5) answers without waiting on TypeScript: before this step, the first question about a package took seconds (5.9 s on Documenso on CI in phase 5), and every question was asked again.
+
+**What a person can do now:** in the Code view, right-click a function's name → Callers or Callees: once the project's graph is built and nothing is being edited, the answer comes from the store (2.9 ms on average on Rallly, against 7.8 ms from TypeScript; 48 ms against 556 ms on Documenso). It's the same answer: 705 of 710 compared were identical, and the 5 left are TypeScript's own quirks (below).
+
+**Files:**
+- `packages/engine/src/semantics/graph-pass.ts`: `walkFile` records each unit's calls in the Calls tab's shape (`WalkedFile.calls`); `containerOf` (TypeScript's rule); `calledName` (where incoming calls place a call); `placeOf` places a property's function at its name.
+- `packages/engine/src/semantics/details.ts`: `fileFacts` attaches each unit's calls and its own item; `StoredCallee`, `StoredCalls`.
+- `packages/engine/src/semantics/callables.ts`: `kindOf` (moved here, shared by the live answers and the walk).
+- `packages/engine/src/facts.ts`: `calls_into` (which files call each place), `callerFiles`; format 2.
+- `packages/engine/src/service.ts`: `storedCalls` (callees, and callers of non-members, from the store when it can be sure; else TypeScript).
+- `packages/engine/src/semantics/semantic-service.ts`: the live Calls tab matches calls by their whole callee (a fix).
+- `packages/engine/src/protocol.ts`: `PARTLY`, `plainEntry` (shared).
+- `packages/engine/src/semantics/in-process.ts` (new): the semantic service behind the engine in one thread, for tests and measurements.
+- Tests: `stored-calls.test.ts` (new), `facts.test.ts`, `service.test.ts`; `workspace/host/src/corpus.docker.test.ts` asks the labelled functions' calls again once the graph is built.
+
+**Concepts:**
+- **Answering from an index, with a proof it's current:** the store answers only when it can show nothing it depends on changed (the graph's state, and each file's hash); otherwise the live path does. https://martinfowler.com/bliki/TwoHardThings.html
+- **Inverting a relation:** a function's callers are exactly the calls other functions make to it, so storing every function's outgoing calls, indexed by target, answers "who calls this" without searching the project.
+- **Equivalence testing:** running the new path and the old one on the same inputs and comparing every answer finds differences no hand-written case would. https://en.wikipedia.org/wiki/Differential_testing
+
+**Found and fixed:**
+- **Asking TypeScript's call hierarchy for every unit in the pass** made the stored answers TypeScript's by construction, but Twenty's pass went past 10 minutes (from 87 s). Measured, then replaced by recording calls in the walk the pass already does: 93.6 s.
+- **Callers through the graph's edges missed some:** methods called through an interface or a type (TypeScript's incoming calls follow implementations), and calls the graph resolves differently. Callers now come from the stored calls themselves, indexed by target; members' callers stay with TypeScript.
+- **The live Calls tab dropped an unresolved call starting where a resolved one does** (`getStripe().subscriptions.update()`): it matched calls by start only. Now by the whole callee. A first fix (never skipping an unresolved call) duplicated calls to functions declared inside components; the comparison caught it.
+- **Containers and kinds** were taken from the graph's ids and unit kinds; TypeScript's differ (none for a function inside a function, a method signature in an interface, or a built-in method; "function" for a property holding an arrow). Now by TypeScript's rules, from the declaration.
+- **A class property holding a function was placed at the arrow's start**, not its name.
+- **The comparison itself took an hour on Documenso** (TypeScript answering callers live, its memory releasing and rebuilding programs): stopped, and rerun on 40 sampled functions plus the labelled ones. Its scratch files were removed.
+- **The first CI run failed the corpus test's 1 s limit at 1,008 ms** on Documenso, with every stored answer matching its labels (10 of 10 in both forks; Rallly's slowest 24 ms). Two of Documenso's labelled functions are class methods (`distanceTo`, `addPoint`), whose callers are TypeScript's by design: the test held TypeScript's answer to the store's limit. It now times members' callers apart (`membersCallersMaxMs`, reported) and holds only the store's answers under 1 s.
+- **Known, not imitated:** TypeScript lists some built-in property reads (`el.style`) as calls and names some built-ins' containers inconsistently; and it lists a function passed as a value (`dynamic(… m.RichTextEditor)`, `{ setView: instance.api.setView }`) as a call. The store doesn't.
+
+**Tests:** 198 engine tests pass. New: the stored-calls test (at every function name of a small project, both ends of the name, callers and callees equal TypeScript's; members' callers asked of TypeScript; TypeScript again after an edit until the next pass); the store's caller index (which files call a place, updated when a caller's file is rewritten or removed, only the hierarchy's calls counted). The comparison on Rallly and Documenso (705 of 710). On CI: the labelled functions' callers and callees asked again once the graph is built, held to the labels and under 1 s.
+
+**Run and check it:** `pnpm --filter @flowcanvas/engine exec vitest run src/stored-calls.test.ts`. With Docker: the corpus test's rows show `storedCalls` (labelled functions matched from the store) and `storedCallsMaxMs`.
+
+**Risks and laptop:** the store is bigger (Twenty 97.8 MB, from 29.6 MB), still a fraction of a workspace's 10 GiB. The measurements ran two or three at a time (owner, 13 Nov: allowed); the laptop stayed under 20 GiB used.
+
+**Commit:** `feat(engine): the Calls tab from what the pass stored` (`7aba981`).

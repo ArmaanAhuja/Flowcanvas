@@ -34,7 +34,8 @@ To afford it, two changes from milestone A: a file's exports are read once per f
 | The graph, Graph stats | stored versions, updated per changed file, loaded at start | already so (phase 6) |
 | A flow from a function's name | the latest graph, in memory | already so (phase 7, milestone A) |
 | A flow from inside a function; a node's details | TypeScript, seconds the first time per package | **the facts store** (this ADR) |
-| The Calls tab; Go to definition | TypeScript every time, seconds the first time per package | **phase 7, milestone B:** from the graph and the facts store (each call's exact place stored with its unit), TypeScript for a changed file only |
+| The Calls tab | TypeScript every time, seconds the first time per package | **phase 7, step 4:** callees, and the callers of functions, components and classes, from what the pass stored (see the addendum); members' callers, and anything while files are changing, from TypeScript |
+| Go to definition | TypeScript | **phase 42 (performance), with Find references:** both work on any name, not only calls |
 | Opening the same flow, node or calls again | asked again | **phase 7, milestone B:** the page keeps answers and ELK layouts per graph version, so going back is instant |
 | Find references | TypeScript | **phase 42 (performance):** an index of every use is larger than calls; measured then |
 | Entry points, UI → API links, connectors, background work (phases 8–11) | — | worked out in the graph pass and stored in the graph, like calls |
@@ -55,3 +56,18 @@ To afford it, two changes from milestone A: a file's exports are read once per f
 - Flows from anywhere and node details answer in milliseconds once a project's first pass is done, and after restarts.
 - The pass does a little more work and writes a second file; the engine reads a file per answer to check its hash.
 - Types shown in details come from the pass that stored them: a file whose types depend on another changed file, without calling into it, keeps its stored types until the next whole-project pass. Calls into changed files are walked again, as for the graph.
+
+## Addendum: the Calls tab (phase 7, step 4, 13 Nov 2026)
+
+**How.** The pass's walk already resolves every call. It now also records each unit's calls in the Calls tab's shape: one entry per callee and relation, each call once, with its site (line and column). Names, kinds and containers follow TypeScript's rules: a built-in is named as the compiler names its symbol (`split`, `Promise`); a call into an installed package is resolved with no place; a call it can't resolve is listed by its text. The store also keeps which files call each place (`calls_into`), so a function's callers are its callers' own stored calls, as TypeScript's incoming calls are.
+
+**When the store answers:** on a function's name (where the Calls tab asks), with the graph up to date with every change (no edit since the last pass began), and every file involved still the text its facts came from. **TypeScript answers:** a member's callers (methods, and properties holding functions, are reached through types and interfaces, which TypeScript follows by implementation), and everything else.
+
+**Measured.** Compared with TypeScript at 710 function names (300 sampled in Rallly, 40 in Documenso, every labelled function in both, callers and callees each): 705 identical. The 5 left are TypeScript's own: 3 built-in rows (its call hierarchy names `Math.max` with no container but `window.matchMedia` with one, and lists some property reads, `el.style`, as calls), and 2 functions passed as values that it lists as calls (`dynamic(() => import(…).then((m) => m.RichTextEditor))`, `{ setView: instance.api.setView }`). The store's answer in those 2 is the more accurate one. Answers took 2.9 ms on average from the store and 7.8 ms from TypeScript on Rallly; 48 ms and 556 ms on Documenso (where members' callers still go to TypeScript). Twenty's pass: 93.6 s (87 to 92 s before), heap 2.09 GB, 97.8 MB stored (29.6 MB before).
+
+**Tried first, and dropped:** asking TypeScript's call hierarchy for every unit during the pass, so the stored answers would be TypeScript's by construction. Twenty's pass went past 10 minutes (from 87 s); Documenso's past 10 minutes too.
+
+**Found on the way:**
+- **The live Calls tab dropped calls it couldn't resolve that start where a resolved one does** (`getStripe().subscriptions.update()` starts where `getStripe()` does). It matched calls by where they start; now by the whole callee. Found because the stored answer listed the call and the live one didn't.
+- **A class property holding a function was placed at the arrow's start**, not its name, so its stored answers didn't line up with TypeScript's; now at its name, like a constant's.
+- **Containers follow TypeScript:** a class, namespace or object literal; an interface for a property holding a function, but none for a method signature; none inside a function.

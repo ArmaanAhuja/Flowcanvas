@@ -191,11 +191,13 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
           return { result: answer.result, ms: performance.now() - asked };
         };
         // Each labelled function's callers and callees, compared exactly with its labels.
-        const checkCalls = async (differing: string[], ms: number[]) => {
+        // `membersMs`: a member's callers, which are TypeScript's even once the graph is built (ADR 0029 addendum).
+        const checkCalls = async (differing: string[], ms: number[], membersMs: number[] = ms) => {
           for (const label of callLabels[repo.id] ?? []) {
             const callers: { result: CallsResult; ms: number } = await calls('callers', label);
             const callees = await calls('callees', label);
-            ms.push(callers.ms, callees.ms);
+            (callers.result.target?.container == null ? ms : membersMs).push(callers.ms);
+            ms.push(callees.ms);
             const found = compareCalls(label, callers.result.entries, callees.result.entries);
             const problems = [
               callers.result.target?.name === label.name
@@ -309,7 +311,8 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
         // without waiting on TypeScript.
         const storedDiffering: string[] = [];
         const storedMs: number[] = [];
-        if (graph.state === 'ready') await checkCalls(storedDiffering, storedMs);
+        const membersCallersMs: number[] = [];
+        if (graph.state === 'ready') await checkCalls(storedDiffering, storedMs, membersCallersMs);
 
         const row = {
           repo: repo.id,
@@ -354,8 +357,10 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
             : {}),
           ...(storedMs.length > 0
             ? {
-                storedCalls: `${String(storedMs.length / 2 - storedDiffering.length)} of ${String(storedMs.length / 2)}`,
+                storedCalls: `${String(labelledCalls - storedDiffering.length)} of ${String(labelledCalls)}`,
                 storedCallsMaxMs: Math.round(Math.max(...storedMs)),
+                membersCallersMaxMs:
+                  membersCallersMs.length > 0 ? Math.round(Math.max(...membersCallersMs)) : null,
               }
             : {}),
         };
