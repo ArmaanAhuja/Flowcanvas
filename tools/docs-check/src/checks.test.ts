@@ -44,6 +44,10 @@ describe('stillToCome', () => {
     expect(
       stillToCome('A stand-in until the phase 2 start screen.', accepted, 'a.md'),
     ).toHaveLength(1);
+    // Found by hand in ARCHITECTURE.md after the first sweep.
+    expect(
+      stillToCome('the projects list (a stand-in for the phase 2 start screen)', accepted, 'a.md'),
+    ).toHaveLength(1);
     expect(
       stillToCome('Sequence and graph arrive in phases 13 and 4', accepted, 'a.md'),
     ).toHaveLength(1);

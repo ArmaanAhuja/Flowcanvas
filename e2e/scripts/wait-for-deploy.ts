@@ -10,8 +10,8 @@
 import { appendFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
+import { WORKER, branchAlias } from './preview-alias.ts';
 
-const WORKER = 'flowcanvas';
 /**
  * A new deployment reaches Cloudflare's servers over a short while: one request can get it while the next still gets
  * the old one. Found on 12 Nov 2026 (run 43271058049): the check saw the new commit once, then phase 1's walkthrough
@@ -24,19 +24,6 @@ const STABLE_GAP_MS = 5_000;
 function fail(message: string): never {
   console.error(`wait-for-deploy: ${message}`);
   process.exit(1);
-}
-
-/**
- * Cloudflare's branch alias for a Workers Builds preview: lowercase, every run of other characters becomes a
- * dash, trimmed, and short enough that `<alias>-flowcanvas` fits a 63-character DNS label.
- */
-function branchAlias(branch: string): string {
-  return branch
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 62 - WORKER.length)
-    .replace(/-+$/, '');
 }
 
 /** The commit the deployment was built from, read from its JavaScript bundle (the version line embeds it). */

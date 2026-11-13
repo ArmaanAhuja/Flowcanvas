@@ -157,6 +157,9 @@ jobs:
     name: Walkthroughs (try-it) on the deployed app
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    env:
+      # Whether CI can deploy the preview (a fork's pull request has no secrets); the token itself stays in its step.
+      CAN_DEPLOY: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
     container:
       image: mcr.microsoft.com/playwright:v1.64.1-noble
       options: --ipc=host --init
@@ -172,7 +175,20 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Cloudflare builds the preview (PRs) or staging (main) at the same time; wait for this exact commit.
+      # A pull request's preview is deployed here, by CI, for this exact commit (owner, 13 Nov 2026): Cloudflare's
+      # GitHub app dropped some pushes, and the walkthroughs waited for builds that never came. A fork's pull request
+      # has no secrets and keeps relying on Cloudflare's build. Staging (main) is still built by Cloudflare.
+      - name: Deploy this commit's preview
+        if: ${{ github.event_name == 'pull_request' && env.CAN_DEPLOY == 'true' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FLOWCANVAS_COMMIT: ${{ env.COMMIT }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          pnpm build --filter=@flowcanvas/web
+          node e2e/scripts/deploy-preview.ts --branch "$HEAD_REF" --commit "$COMMIT"
+      # Then wait until the preview (PRs) or staging (main, built by Cloudflare) serves this exact commit.
       - name: Wait for the deployment of this commit
         id: deploy
         working-directory: e2e

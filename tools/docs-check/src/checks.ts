@@ -39,7 +39,7 @@ export function phasesNamed(text: string): string[] {
  */
 const PHASES = String.raw`phases?\s+\d+[a-z]?(?:\s*(?:,|and)\s*\d+[a-z]?)*`;
 const STILL_TO_COME = new RegExp(
-  String.raw`\b(?:arriv(?:e|es|ing)\b[^.;()]*?\b${PHASES}|until\s+(?:the\s+)?${PHASES}|planned\s+(?:for|in)\s+${PHASES}|coming\s+in\s+${PHASES}|${PHASES}\s+(?:will|adds|brings)\b)`,
+  String.raw`\b(?:arriv(?:e|es|ing)\b[^.;()]*?\b${PHASES}|until\s+(?:the\s+)?${PHASES}|stand-in\s+(?:for|until)\s+(?:the\s+)?${PHASES}|planned\s+(?:for|in)\s+${PHASES}|coming\s+in\s+${PHASES}|${PHASES}\s+(?:will|adds|brings)\b)`,
   'gi',
 );
 

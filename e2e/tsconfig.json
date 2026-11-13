@@ -3,6 +3,8 @@
   "compilerOptions": {
     "types": ["node"],
     "noEmit": true,
+    // Scripts run with Node directly (`node scripts/x.ts`), which needs the extension in their imports.
+    "allowImportingTsExtensions": true,
     "lib": ["es2024", "dom"]
   },
   "include": [
