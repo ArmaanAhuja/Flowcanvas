@@ -79,7 +79,7 @@ test('phase 6: Labs → Graph stats shows the graph’s node and edge counts', a
     const labs = page.getByRole('dialog', { name: 'Labs' });
     const graphStats = labs.getByRole('switch', { name: /Graph stats/ });
     await expect(graphStats).not.toBeChecked();
-    await expect(labs).toContainText('Finished in phase 7.');
+    await expect(labs).toContainText('Finished in phase 12.');
     await graphStats.click();
     await expect(graphStats).toBeChecked();
     await page.keyboard.press('Escape');
