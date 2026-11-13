@@ -610,3 +610,12 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 3. **The Docker job runs as four parallel shards**: Twenty, Medusa and LibreChat each on their own runner; `rest` runs every other Docker test and every other project (`CORPUS_EXCEPT`), so a project added later is tested without touching the workflow. A name the manifest lacks, both variables at once, or a shard of nothing fails the run (`corpus/src/select.ts`, tested). Nothing is dropped; the job isn't a required check, so no summary job is needed. Public repository: runner minutes are free.
 4. **Cloudflare's own Git builds are switched off** (owner's dashboard step) for both Workers, once CI has deployed both from this branch's pull request. CI then deploys everything. The one thing it changes: a pull request from a **fork** (no secrets) gets no preview, and its walkthroughs wait 3 minutes and fail with a sentence saying why. No fork pull requests exist today (solo project); if outside contributors come, upgrade-later item 10 says what to add.
 
+## 13 Nov 2026: two upgrade-later triggers that had been reached
+
+**Owner**, on upgrade-later items 20 and 24 (found by the new trigger check): "1 - set a new trigger 2 - phase 44 is fine".
+
+1. **Labs choices per account (item 20)** stay per browser. New trigger: the first user other than the owner, at the latest the external design partners of phase 45.
+2. **Profile pictures (item 24)** come with the account menu, built with the start screen in phase 44.
+
+**Also (working pace):** "when step 7 is waiting for something, you should continue ahead as well": while a step waits (CI, an owner's dashboard task, a long run), work moves on to the next step instead of stopping.
+
