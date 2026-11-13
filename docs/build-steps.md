@@ -13205,6 +13205,7 @@ pnpm test:visual
 | 6b | CI deploys every target; the Docker job in shards; the docs gate (owner, 13 Nov) | B | done (Claude, 13 Nov): `a473e20`, `b31c774`, `cfddb64`, `f8b0221`, `ee7a59b`, `fff9bd0`, `bedd815` |
 | 7 | Proof: 10 hand-labelled Documenso flows in real workspaces, every node at its line; the walkthrough; screens; the shared fake workspace for page tests (owner, 12 Nov) | B | done (Claude, 14 Nov): `c59edae`, `ab81e33`, `f8fdf7c`, `113ffbc`, `78cff55` |
 | 8 | Close: report, 0.11.0 | B | done (Claude, 14 Nov): `181d09d`, `b355e54`, `docs: phase 7 close` |
+| 9 | After acceptance: open at 100%; triggers reached when their phase starts (owner, 14 Nov) | B | done (Claude, 14 Nov): `7727c97`, `1a32ef0`, `7d8ea46`, `1c57abe` |
 
 ### How each Done-when item is proven
 
@@ -13572,7 +13573,7 @@ pnpm test:visual
 
 **Files:** `docs/reports/phase-7.md`, `phase-7-figma-differences.md`, `phase-7/` (the built screens); `CHANGELOG.md` and `package.json` (0.11.0); `docs/STATUS.md`; the living docs re-read in full, each with its **Reviewed** line: README (still true), ARCHITECTURE (Node 26, the version's path, usage recorded since 1d, graph format 3, edges along ELK's routes, the labelled flows, the Docker jobs), RUN-AND-FEATURES (the editor no longer "API only", phase 7's section, the Docker and docs rows, CI's deploys, Coming next), STATUS (phase 7 in review), upgrade-later (items 7, 10 and 23); `tools/docs-check` (`unreleasedVersion`: package.json may run ahead of staging only for a phase in review).
 
-**Concepts:** none new. **Found and fixed on the way:** CI's screen test found the canvas saying "Choose a function to see its flow" for one render under a flow just laid out: it judged emptiness by React Flow's copy of the nodes, which catches up an effect late; it now goes by the nodes it's given (`181d09d`). The milestone gate's first run found it treated phase 6 as current once phase 7 was in review (the current phase is now the last in STATUS that isn't planned), and that `bedd815` was named only by its message. `docs:check` would have refused 0.11.0 before the merge, since staging still serves 0.10.0: it now allows that for a phase in review, with a test. The re-read found the stale passages listed above. Measuring CI for upgrade-later 7 found that its slowest step is the report job's 3-minute download of the walkthroughs' recordings (a question in the report).
+**Concepts:** none new. **Found and fixed on the way:** CI's screen test found the canvas saying "Choose a function to see its flow" for one render under a flow just laid out: it judged emptiness by React Flow's copy of the nodes, which catches up an effect late; it now goes by the nodes it's given (`181d09d`). The milestone gate's first run found it treated phase 6 as current once phase 7 was in review (the current phase is now the last in STATUS that isn't planned), and that `bedd815` was named only by its message. `docs:check` would have refused 0.11.0 before the merge, since staging still serves 0.10.0: it now allows that for a phase in review, with a test. The re-read found the stale passages listed above.Measuring CI for upgrade-later 7 found that its slowest step is the report job's 3-minute download of the walkthroughs' recordings (a question in the report).
 
 **Tests:** docs-check 24 (1 new for the current phase, 1 for an unreleased version); CI on the closing commit, every job green; `pnpm docs:milestone` passing; three mutation checks run for the report (the pass's guarded lines, the flow's use of them, the facts' hash check).
 
@@ -13581,3 +13582,23 @@ pnpm test:visual
 **Risks and laptop:** none new. Laptop: one web build and the bundle check.
 
 **Commits:** `fix(canvas): never say "Choose a function" under a flow just laid out` (`181d09d`); `chore: release 0.11.0 (phase 7)` (`b355e54`); `docs: phase 7 close: report, 0.11.0, the living docs re-read`.
+
+### Step 7.9 — After acceptance: the owner's answers (done by Claude, 14 Nov)
+
+**Goal:** the owner's answers to the report's questions, before the merge.
+
+**What a person can do now:** a flow opens at 100% on the function it's from, near the top, and **F** fits the whole flow.
+
+**Files:** `apps/web/src/canvas/FlowCanvas.tsx` (`focus`: a node to open on), `project/ProjectPage.tsx` (a flow's root); `e2e/try-it/phase-7.spec.ts` (100%, then F); `e2e/visual/screens.spec.ts` and the two flow screens; `tools/docs-check/src/checks.ts` (a trigger reached when its phase starts); the decisions log, upgrade-later 7 and 23, STATUS, RUN-AND-FEATURES and the report.
+
+**Concepts:** **the viewport:** the canvas's pan and zoom, set once when a flow arrives, the person's after that. https://reactflow.dev/api-reference/types/viewport
+
+**Found and fixed on the way:** accepting phase 7 made `docs:check` find a test's sample and a comment still saying decisions and branches arrive in phase 7, and the site's text test find Graph stats' switch saying "Finished in phase 7" (now phase 12; decisions log). At 100% only the nodes on screen are drawn, so the walkthrough checks the names after F fits. The report's "3 minutes a push" for the report step was one run: GitHub's download action finished in 5 s and then hung for 3 minutes; other runs took 3 and 7 s. Nothing to change; the report and upgrade-later 7 are corrected.
+
+**Tests:** docs-check 24 (one case added: a trigger reached when its phase starts); the phase 7 walkthrough; the four flow screenshots regenerated and stable on a second run.
+
+**Run and check it:** `pnpm dev`, ⌘K → a function → Show the flow: 100%, then F.
+
+**Risks and laptop:** none new. Laptop: the walkthrough and the flow screens in Playwright's container.
+
+**Commits:** `feat(canvas): open a flow at 100% on its function; F fits it` (`7727c97`); `fix(docs-check): an upgrade-later trigger is reached when its phase starts` (`1a32ef0`); `test: nothing says phase 7 is still to come, now it's accepted` (`7d8ea46`); `fix(web): Graph stats is finished in phase 12, not 7` (`1c57abe`).

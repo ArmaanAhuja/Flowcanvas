@@ -619,3 +619,14 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 
 **Also (working pace):** "when step 7 is waiting for something, you should continue ahead as well": while a step waits (CI, an owner's dashboard task, a long run), work moves on to the next step instead of stopping.
 
+## 14 Nov 2026: phase 7 accepted, and the answers to its report's questions
+
+**Owner:** "1 - accept phase 7, 2 - do it, 3 - done for both flowcanvas and flowcanvas-catalouge"; on the questions: "1- open at 100% and F to fit is fine 2 - okay we will run it ourself and switch before any outside user's data is stored, but this needs to be remembered to do 3 - okay".
+
+1. **Phase 7 accepted.** PR #21 marked ready for review (CI then runs the milestone gate) and merged once every check is green.
+2. **Cloudflare's own preview builds are off** for `flowcanvas` and `flowcanvas-catalogue`; CI deploys every preview. `main`'s builds stay on until CI's first staging deploy works after the merge.
+3. **A flow opens at 100% on the function it's from,** centred across and near the top; **F** fits the whole flow (as Figma 06 shows a flow).
+4. **Staging's database is migrated by hand** until before any outside user's data is stored. To be sure it's remembered, upgrade-later 23 names phase 45 (the first outside users) and `pnpm docs:check` now counts a trigger as reached when its phase **starts**, so CI fails at the start of phase 45 until it's done or decided again.
+5. **CI's report step: nothing to change.** The "3 minutes per push" in the report was one run: in that run GitHub's download action finished in 5 s and then took 3 minutes to exit; in the runs before and after it took 3 and 7 s. A push takes about 5 minutes in all. Corrected in the report and upgrade-later 7.
+6. **Graph stats' Labs switch: "Finished in phase 12"** (Claude's choice, under the owner's 12 Nov delegation for this switch): it said phase 7, which is now accepted. Flows show one function's part of the graph; the whole graph as something to browse (grouped, expanded, collapsed) is phase 12's. Found by the site's own text test when phase 7 was accepted. The owner can have it leave Labs instead.
+

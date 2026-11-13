@@ -3,7 +3,7 @@
 - Version: `0.11.0`
 - Branch: `phase/7-flow-builder`; PR #21
 - Dates: 12 to 14 Nov 2026
-- Status: **in review**, waiting for the owner's acceptance.
+- Status: **accepted** by the owner on 14 Nov 2026. Merged in PR #21.
 
 ## From the build plan
 
@@ -103,11 +103,11 @@ Like phases 1d to 6, **workspaces run only on the owner's computer** until a clo
 
 **Upgrade-later review at phase end:** 7 checked (a shared CI cache would save seconds; new trigger); 10 rewritten (fork previews); 17 checked; 20 and 24 given new triggers by the owner; 23's trigger was reached on 31 Oct and is a question below; 46 added (a CPU share of its own for analysis).
 
-## Questions for the owner
+## The owner's answers (14 Nov 2026)
 
-1. **Opening a flow:** fit the whole flow to the canvas (now: 53% for `deleteFolder`, text small), or open at 100% on the function you chose, with **F** to fit? Figma 06 shows 100%. Recommendation: 100% on the chosen function, since it's what you asked to see, and F is one key away.
-2. **Migrate staging's database from CI** (upgrade-later 23): it needs the production database's address as a GitHub Actions secret. Recommendation: not yet, while migrations are rare and you run them; do it before any external user's data is stored.
-3. **CI's report step** downloads the walkthroughs' 59 MB of recordings from GitHub (3 minutes, after every test has finished). Recommendation: let the walkthroughs job publish its own recordings to the reports Worker, saving about 3 minutes a push.
+1. **Opening a flow:** at 100% on the function it's from, near the top; **F** fits. Done after acceptance (`7727c97`): the walkthrough checks both, and the flow screen shows the opening.
+2. **Staging's database migrations:** by hand until before any outside user's data is stored. Remembered by the check: upgrade-later 23 names phase 45, and `docs:check` counts a trigger as reached when its phase starts (`1a32ef0`).
+3. **CI's report step:** nothing to change. **Correction:** the "3 minutes a push" above was one run, in which GitHub's download action finished in 5 s and then took 3 minutes to exit; the runs before and after took 3 and 7 s. A push takes about 5 minutes in all.
 
 ## CI
 

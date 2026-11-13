@@ -2,17 +2,17 @@
 
 The one place to see how to run Flowcanvas, how to test it, and which features exist so far. It's updated at every build step. Details for each step live in `docs/build-steps.md`; phase status in `docs/STATUS.md`; how it's put together in `ARCHITECTURE.md`.
 
-- **Last updated:** 14 Nov 2026: phase 7 closed for review, 0.11.0 (flows on the canvas, proven on 10 hand-labelled Documenso flows), branch `phase/7-flow-builder`, PR #21
+- **Last updated:** 14 Nov 2026: phase 7 accepted, 0.11.0 (flows on the canvas, proven on 10 hand-labelled Documenso flows), branch `phase/7-flow-builder`, PR #21
 - **Reviewed:** phase 7, milestone B (14 Nov 2026): re-read in full against the code. At every milestone this doc is re-read in full, and this line names the milestone (`pnpm docs:milestone` checks it).
-- **Released (on staging):** `0.10.0`, phase 6 (checked: staging's `/api/health` reports 0.10.0). `0.11.0`, phase 7, is in review and reaches staging when it merges.
-- **Progress:** phases 1, 1a, 1b, 1c, 2, 3, 4, 5 and 6 are accepted; 1d is in review (until a cloud provider); 7 is in review. That's 9 of the build plan's 96 phases accepted. Stage 1's goal: see a project's real flows, from code, honestly.
+- **Released (on staging):** `0.11.0`, phase 7, deployed to staging by CI when PR #21 merges (to be checked: staging's `/api/health` reporting 0.11.0). Before it, `0.10.0`, phase 6.
+- **Progress:** phases 1, 1a, 1b, 1c, 2, 3, 4, 5, 6 and 7 are accepted; 1d is in review (until a cloud provider). That's 10 of the build plan's 96 phases accepted. Stage 1's goal: see a project's real flows, from code, honestly.
 
 ## Where it runs
 
 | Where | What works there | What it's for |
 | --- | --- | --- |
 | **Staging**, https://flowcanvas.ahujaarmaan7777.workers.dev | Sign-in (allowlist), projects, secrets, usage, admin, What's new, Labs. Projects say "Workspaces run locally for now" | The hosted app, built from `main` |
-| **Your own computer**, `pnpm dev` | Everything on staging, **plus workspaces**: Docker containers on your laptop, with a terminal, sleep and resume, and the resource guard. In a project with its workspace running: the Code view and editor (phase 3), search and ⌘K (phase 4), Callers, Callees and references (phase 5), the graph (phase 6), and flows on the canvas with the node inspector (phase 7, in review) | Development, and running workspaces until a cloud provider is connected |
+| **Your own computer**, `pnpm dev` | Everything on staging, **plus workspaces**: Docker containers on your laptop, with a terminal, sleep and resume, and the resource guard. In a project with its workspace running: the Code view and editor (phase 3), search and ⌘K (phase 4), Callers, Callees and references (phase 5), the graph (phase 6), and flows on the canvas with the node inspector (phase 7) | Development, and running workspaces until a cloud provider is connected |
 | **Pull-request previews** | Like staging; sign-in says to use staging | Checking a change before it merges |
 | **Component catalogue**, https://flowcanvas-catalogue.ahujaarmaan7777.workers.dev | Every design-system component in both themes | Design review |
 | **Test reports**, https://flowcanvas-reports.ahujaarmaan7777.workers.dev | Walkthrough videos and traces for each pull request and merge | Seeing what was tested |
@@ -158,9 +158,9 @@ CI runs the checks (with the bundle budget), Docker (four parallel jobs), visual
   - ✅ **Proof:** `pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts` (the four forks' graphs, save and load under 1 s, 26 labelled functions); walkthrough `pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-6.spec.ts`.
   - **Try it:** `pnpm dev`, Labs → Graph stats on, open Rallly with its workspace running, read the Details tab.
 
-### Flows and the inspector (phase 7, in review, 0.11.0)
+### Flows and the inspector (phase 7, accepted, 0.11.0)
 - **What it does:**
-  - 🟡 **A function's flow on the canvas** (workspaces locally): right-click its name in the Code view → Show flow, ⌘K → Flows, or Show flow on the Calls tab. Top to bottom, as Figma 06: each function with its folder, file and line; decisions as diamonds with their conditions (`if`, ternaries, `&&`/`||`/`??`, `switch`, `catch`), outcomes on the edges, a `catch` as a thin red path; unknown calls as one open stub per function; "N more calls not shown" past 60 functions; the name and counts top left. Laid out by ELK in a Web Worker, each edge drawn along the route ELK chose around the nodes.
+  - 🟡 **A function's flow on the canvas** (workspaces locally): right-click its name in the Code view → Show flow, ⌘K → Flows, or Show flow on the Calls tab. Opened at 100% on the function, near the top; **F** fits the whole flow. Top to bottom, as Figma 06: each function with its folder, file and line; decisions as diamonds with their conditions (`if`, ternaries, `&&`/`||`/`??`, `switch`, `catch`), outcomes on the edges, a `catch` as a thin red path; unknown calls as one open stub per function; "N more calls not shown" past 60 functions; the name and counts top left. Laid out by ELK in a Web Worker, each edge drawn along the route ELK chose around the nodes.
   - 🟡 **The node inspector:** click a function for its signature, inputs and output, decisions, throws and awaits, and unresolved calls; a decision for its condition and where each outcome leads. Open code (or a double-click) opens its line.
   - ✅ **Worked out once, stored, reused** (ADR 0029): the graph pass stores each file's functions, details and calls in `/workspace/.flowcanvas/facts.db`, so flows and details answer in milliseconds, even after a restart; the Calls tab answers from it too (2.9 ms against 7.8 ms on Rallly; 48 ms against 556 ms on Documenso), with TypeScript for members' callers and for files being edited. The page keeps answers and layouts per graph version, so going back is instant.
   - ✅ **Proof:** 10 Documenso flows, labelled by reading the code, drawn exactly as labelled in real workspaces (`pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts`, row `labelledFlows`: 10 of 10 on CI); walkthrough `pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-7.spec.ts`; screens of a flow and a function's details in both themes.
