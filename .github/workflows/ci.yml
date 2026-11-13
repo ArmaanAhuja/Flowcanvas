@@ -197,7 +197,10 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            node scripts/wait-for-deploy.ts --branch "$HEAD_REF" --commit "$COMMIT"
+            # Deployed by the step above, it serves within seconds: fail in 3 minutes, not 10, if it doesn't (a fork's
+            # pull request, built by Cloudflare, keeps the 10).
+            if [ "$CAN_DEPLOY" = true ]; then wait=180; else wait=600; fi
+            node scripts/wait-for-deploy.ts --branch "$HEAD_REF" --commit "$COMMIT" --timeout "$wait"
           else
             node scripts/wait-for-deploy.ts --url "https://flowcanvas.${CLOUDFLARE_WORKERS_SUBDOMAIN}.workers.dev/" --commit "$COMMIT"
           fi
