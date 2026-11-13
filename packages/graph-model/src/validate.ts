@@ -90,6 +90,18 @@ export function validateGraph(graph: Graph, limit = 50): string[] {
     ) {
       say(`${name}: its lines must be 1-based, ascending, each once`);
     }
+    if (edge.guarded !== undefined) {
+      if (edge.kind !== 'call') say(`${name}: only a call has guarded lines`);
+      const lines = new Set(edge.lines);
+      if (
+        edge.guarded.length === 0 ||
+        !edge.guarded.every(
+          (line, i) => lines.has(line) && (i === 0 || line > (edge.guarded?.[i - 1] ?? 0)),
+        )
+      ) {
+        say(`${name}: its guarded lines must be some of its lines, ascending, each once`);
+      }
+    }
     const key = edgeKey(edge);
     if (keys.has(key)) say(`${name}: appears twice`);
     keys.add(key);

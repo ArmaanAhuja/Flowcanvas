@@ -464,6 +464,8 @@ describe('flows (phase 7)', () => {
         label: null,
         provenance: 'resolved',
         lines: [3],
+        // `if (ok) save()`: the pass says every call on line 3 is guarded.
+        guarded: [3],
       },
       {
         from: 'a.ts#show',

@@ -102,37 +102,21 @@ export interface Flow {
   readonly byProvenance: Readonly<Record<Provenance, number>>;
 }
 
-/** Where an edge goes: its node, or its text when unknown. */
-const reachOf = (edge: GraphEdge) => edge.to ?? `?${edge.target ?? ''}`;
-
 /**
  * What a flow follows out of a node. Out of a code unit: its branches into decisions, and its calls, less the
- * lines where a decision guards them (those are drawn through the decision). Out of a decision: its branches.
+ * lines where a decision guards every call (those are drawn through the decision). Out of a decision: its branches.
  */
 function outgoing(index: GraphIndex, id: string): GraphEdge[] {
   const node = index.nodes.get(id);
   const edges = index.out.get(id) ?? [];
   if (node?.kind === 'decision') return edges.filter((edge) => edge.kind === 'branch');
-  // Every (target, line) a decision of this unit guards: its decisions are `id?n`, outcomes into calls.
-  const guarded = new Set<string>();
-  const decisions = edges.filter(
+  const result: GraphEdge[] = edges.filter(
     (edge) => edge.kind === 'branch' && edge.to !== null && isDecision(index, edge.to),
   );
-  const seen = new Set<string>();
-  const stack = decisions.map(reachOf);
-  for (let decision = stack.pop(); decision !== undefined; decision = stack.pop()) {
-    if (seen.has(decision)) continue;
-    seen.add(decision);
-    for (const edge of index.out.get(decision) ?? []) {
-      if (edge.kind !== 'branch') continue;
-      if (edge.to !== null && isDecision(index, edge.to)) stack.push(edge.to);
-      else for (const line of edge.lines) guarded.add(`${reachOf(edge)}@${String(line)}`);
-    }
-  }
-  const result: GraphEdge[] = [...decisions];
   for (const edge of edges) {
     if (edge.kind !== 'call') continue;
-    const lines = edge.lines.filter((line) => !guarded.has(`${reachOf(edge)}@${String(line)}`));
+    const guarded = new Set(edge.guarded ?? []);
+    const lines = edge.lines.filter((line) => !guarded.has(line));
     if (lines.length > 0)
       result.push(lines.length === edge.lines.length ? edge : { ...edge, lines });
   }

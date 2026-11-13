@@ -20,7 +20,8 @@ const decision = (owner: string, n: number, condition: string, line: number): Gr
   change: 'unchanged',
 });
 const id = (name: string) => `src/a.ts#${name}`;
-const call = (from: string, to: string, lines: number[]): GraphEdge => ({
+/** A call; `guarded`: the lines where a decision guards every call (the pass says so). */
+const call = (from: string, to: string, lines: number[], guarded: number[] = []): GraphEdge => ({
   from: id(from),
   to: id(to),
   target: null,
@@ -29,8 +30,14 @@ const call = (from: string, to: string, lines: number[]): GraphEdge => ({
   label: null,
   provenance: 'resolved',
   lines,
+  ...(guarded.length > 0 ? { guarded } : {}),
 });
-const unknownCall = (from: string, target: string, lines: number[]): GraphEdge => ({
+const unknownCall = (
+  from: string,
+  target: string,
+  lines: number[],
+  guarded: number[] = [],
+): GraphEdge => ({
   from: id(from),
   to: null,
   target,
@@ -39,6 +46,7 @@ const unknownCall = (from: string, target: string, lines: number[]): GraphEdge =
   label: null,
   provenance: 'unknown',
   lines,
+  ...(guarded.length > 0 ? { guarded } : {}),
 });
 /** A branch: into a decision (no label), or out of one (an outcome, to a node or, with `target`, unknown). */
 const branch = (
@@ -105,7 +113,7 @@ describe('buildFlow', () => {
     const graph = graphOf(
       [unit('root'), decision('root', 1, 'ok', 4), unit('a', 20)],
       [
-        call('root', 'a', [5, 9]),
+        call('root', 'a', [5, 9], [5]),
         branch('root', 'root?1', null, [4]),
         branch('root?1', 'a', 'yes', [5]),
       ],
@@ -121,12 +129,30 @@ describe('buildFlow', () => {
     expect(flow.byProvenance.resolved).toBe(2);
   });
 
+  it('draws a call that always happens even when a guarded one shares its line', () => {
+    // root: `return hasId(a) && hasId(b)` on line 4: the first call always happens, the second only on yes. Found
+    // by phase 7's labels (Documenso's `isRecipientBefore`): subtracting the guarded line dropped the first.
+    const graph = graphOf(
+      [unit('root'), decision('root', 1, 'hasId(a)', 4), unit('hasId', 20)],
+      [
+        call('root', 'hasId', [4]),
+        branch('root', 'root?1', null, [4]),
+        branch('root?1', 'hasId', 'yes', [4]),
+      ],
+    );
+    expect(flowOf(graph, 'root').edges.map((e) => [e.from, e.to, e.kind, e.label])).toEqual([
+      [id('root'), id('root?1'), 'branch', null],
+      [id('root'), id('hasId'), 'call', null],
+      [id('root?1'), id('hasId'), 'branch', 'yes'],
+    ]);
+  });
+
   it('follows nested decisions, and leaves out a call that is only ever guarded', () => {
     // root: `if (a) { switch (s) { case 'X': b(); } }`
     const graph = graphOf(
       [unit('root'), decision('root', 1, 'a', 3), decision('root', 2, 's', 4), unit('b', 30)],
       [
-        call('root', 'b', [5]),
+        call('root', 'b', [5], [5]),
         branch('root', 'root?1', null, [3]),
         branch('root?1', 'root?2', 'yes', [4]),
         branch('root?2', 'b', "case 'X'", [5]),
@@ -148,7 +174,7 @@ describe('buildFlow', () => {
       [
         unknownCall('root', 'prisma.poll.create', [2]),
         unknownCall('root', 'logger.info', [3, 4]),
-        unknownCall('root', 'notify', [7]),
+        unknownCall('root', 'notify', [7], [7]),
         branch('root', 'root?1', null, [6]),
         branch('root?1', null, 'error', [7], 'notify'),
       ],

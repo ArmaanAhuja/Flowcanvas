@@ -143,8 +143,27 @@ describe('encodeGraph and decodeGraph', () => {
     expect((JSON.parse(encodeGraph(graph)) as { texts: string[] }).texts).toEqual(['useState()']);
   });
 
+  it("keeps a call's guarded lines, and checks they are some of its lines", () => {
+    const guarded: Graph = {
+      nodes: [unit('a.ts#f'), unit('a.ts#g')],
+      edges: [{ ...call('a.ts#f', 'a.ts#g', [2, 4]), guarded: [4] }],
+    };
+    expect(decodeGraph(encodeGraph(guarded))).toEqual(guarded);
+    // An edge with none encodes as before: no ninth field.
+    const plain = JSON.parse(encodeGraph(POLL)) as { edges: unknown[][] };
+    expect(plain.edges.every((edge) => edge.length === 8)).toBe(true);
+    expect(
+      validateGraph({
+        nodes: guarded.nodes,
+        edges: [{ ...call('a.ts#f', 'a.ts#g', [2, 4]), guarded: [3] }],
+      }),
+    ).toEqual([
+      'edge a.ts#f → a.ts#g: its guarded lines must be some of its lines, ascending, each once',
+    ]);
+  });
+
   it('refuses another format, a bad index, and an invalid graph', () => {
-    expect(() => decodeGraph('{"format":3}')).toThrow('Unsupported graph format 3');
+    expect(() => decodeGraph('{"format":2}')).toThrow('Unsupported graph format 2');
     const text = JSON.parse(encodeGraph(POLL)) as { edges: number[][] };
     const [first] = text.edges;
     if (first === undefined) throw new Error('no edge');

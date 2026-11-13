@@ -365,11 +365,15 @@ export function walkFile(
   const own = idsOf(ctx, source);
   const nodes = new Map<string, GraphNode>();
   const targets = new Map<string, GraphNode>();
-  const edges = new Map<string, { edge: Omit<GraphEdge, 'lines'>; lines: Set<number> }>();
+  // `direct`: the lines with a call no decision guards; a call's other lines are its guarded ones.
+  const edges = new Map<
+    string,
+    { edge: Omit<GraphEdge, 'lines'>; lines: Set<number>; direct: Set<number> }
+  >();
   let builtInCalls = 0;
   const top = `${path}#(top level)`;
 
-  const add = (edge: Omit<GraphEdge, 'lines'>, line: number) => {
+  const add = (edge: Omit<GraphEdge, 'lines'>, line: number, guarded = false) => {
     const key = [
       edge.from,
       edge.to ?? `?${edge.target ?? ''}`,
@@ -377,9 +381,13 @@ export function walkFile(
       edge.relation ?? '',
       edge.label ?? '',
     ].join('\u0000');
-    const known = edges.get(key);
-    if (known === undefined) edges.set(key, { edge, lines: new Set([line]) });
-    else known.lines.add(line);
+    let known = edges.get(key);
+    if (known === undefined) {
+      known = { edge, lines: new Set(), direct: new Set() };
+      edges.set(key, known);
+    }
+    known.lines.add(line);
+    if (!guarded) known.direct.add(line);
   };
 
   // Decisions (ADR 0028 §1): one node per construct that guards a call, numbered within its function.
@@ -537,8 +545,14 @@ export function walkFile(
             // Every target's node, so an edge never reaches a node the graph lacks (its own file's wins).
             targets.set(targetId, nodeOf(ctx, target, targetId));
           }
-          // The call itself, as it always was: callers and callees don't change (ADR 0028 §1).
-          add({ from: current, kind: 'call', relation, label: null, ...reaches }, line);
+          // The call itself, as it always was: callers and callees don't change (ADR 0028 §1). Whether a decision
+          // guards it is said per line, for the flow.
+          const guards = guardsOf(ts, source, node, currentNode);
+          add(
+            { from: current, kind: 'call', relation, label: null, ...reaches },
+            line,
+            guards.length > 0,
+          );
           if (target !== undefined && targetId !== undefined) {
             const reached = nodeOf(ctx, target, targetId);
             record(
@@ -595,7 +609,6 @@ export function walkFile(
             );
           }
           // And through the decisions it sits under: into the first, from each to the next, out to the call.
-          const guards = guardsOf(ts, source, node, currentNode);
           let from = current;
           let outcome: string | null = null;
           for (const guard of guards) {
@@ -641,10 +654,13 @@ export function walkFile(
     ),
     nodes: [...nodes.values()],
     targets: [...targets.values()],
-    edges: [...edges.values()].map(({ edge, lines }) => ({
-      ...edge,
-      lines: [...lines].sort((a, b) => a - b),
-    })),
+    edges: [...edges.values()].map(({ edge, lines, direct }) => {
+      const sorted = [...lines].sort((a, b) => a - b);
+      const guarded = sorted.filter((line) => !direct.has(line));
+      return edge.kind === 'call' && guarded.length > 0
+        ? { ...edge, lines: sorted, guarded }
+        : { ...edge, lines: sorted };
+    }),
     builtInCalls,
   };
 }

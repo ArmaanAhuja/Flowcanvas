@@ -17,8 +17,9 @@ import { validateGraph } from './validate.js';
 /**
  * 2 (phase 7, ADR 0028): edges carry a label (decisions' outcomes), and file paths are stored once in a table
  * rather than in every node's id and place. A version 1 snapshot is replaced by the next pass.
+ * 3 (phase 7): a call edge says which of its lines are guarded (`GraphEdge.guarded`); a version 2 graph can't say.
  */
-export const GRAPH_FORMAT = 2;
+export const GRAPH_FORMAT = 3;
 
 type EncodedNode = [
   /** The id's file, as an index into `paths`; -1 when the id has no `#` (then `idRest` is the whole id). */
@@ -42,6 +43,8 @@ type EncodedEdge = [
   provenance: number,
   lines: number[],
   label: number,
+  /** Only when there are any. */
+  guarded?: number[],
 ];
 interface Encoded {
   readonly format: number;
@@ -96,7 +99,7 @@ export function encodeGraph(graph: Graph): string {
         return at;
       };
       const target = text(e.target);
-      return [
+      const encodedEdge: EncodedEdge = [
         index.get(e.from) ?? -1,
         e.to === null ? -1 : (index.get(e.to) ?? -1),
         target,
@@ -106,6 +109,8 @@ export function encodeGraph(graph: Graph): string {
         [...e.lines],
         text(e.label),
       ];
+      if (e.guarded !== undefined && e.guarded.length > 0) encodedEdge.push([...e.guarded]);
+      return encodedEdge;
     }),
   };
   return JSON.stringify(encoded);
@@ -139,7 +144,7 @@ export function decodeGraph(text: string, options: { readonly validate?: boolean
   );
   const texts = encoded.texts ?? [];
   const edges: GraphEdge[] = (encoded.edges ?? []).map(
-    ([from, to, target, kind, relation, provenance, lines, label]) => ({
+    ([from, to, target, kind, relation, provenance, lines, label, guarded]) => ({
       from: pick(nodes, from, 'node').id,
       to: to === -1 ? null : pick(nodes, to, 'node').id,
       target: target === -1 ? null : pick(texts, target, 'text'),
@@ -148,6 +153,7 @@ export function decodeGraph(text: string, options: { readonly validate?: boolean
       provenance: pick(PROVENANCES, provenance, 'provenance'),
       label: label === -1 ? null : pick(texts, label, 'text'),
       lines,
+      ...(guarded === undefined ? {} : { guarded }),
     }),
   );
   const graph = { nodes, edges };

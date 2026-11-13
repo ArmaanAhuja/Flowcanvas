@@ -84,6 +84,12 @@ export interface GraphEdge {
   readonly provenance: Provenance;
   /** Lines in the `from` node's file where it happens, ascending. */
   readonly lines: readonly number[];
+  /**
+   * On a call: those of its lines where every call sits under a decision of its unit (a flow draws them through the
+   * decision, not straight). Absent when there are none. Said per line by the pass, since `hasId(a) && hasId(b)` has
+   * one call that always happens and one that's guarded on the same line (phase 7's labels found it).
+   */
+  readonly guarded?: readonly number[];
 }
 
 export interface Graph {

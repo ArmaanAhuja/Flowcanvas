@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // runner, and past 5 s when every package's tests share its two cores (phase 6: the graph tests run two passes and a
 // question). The work is what's tested, so the limit is set for it rather than the work cut.
 vi.setConfig({ testTimeout: 20_000 });
-import { validateGraph } from '@flowcanvas/graph-model';
+import { buildFlow, indexGraph, validateGraph } from '@flowcanvas/graph-model';
 import type { GraphPass } from './graph.js';
 import { FactsStore } from '../facts.js';
 import { NO_DETAILS, PARTLY, SemanticService } from './semantic-service.js';
@@ -570,9 +570,36 @@ describe('decisions in the graph (phase 7, ADR 0028)', () => {
     // isn't conditional, so it has no branch).
     const calls = pass.graph.edges
       .filter((e) => e.kind === 'call' && e.from === `${send}#send`)
-      .map((e) => `${short(e.to)} @${e.lines.join(',')}`)
+      .map((e) => `${short(e.to)} @${e.lines.join(',')} guarded @${(e.guarded ?? []).join(',')}`)
       .sort();
-    expect(calls).toEqual(['format:formatTitle @4,7,9,22', 'later @5,10,11,14,20']);
+    // Each says where a decision guards every call: everywhere but the try block's line 20.
+    expect(calls).toEqual([
+      'format:formatTitle @4,7,9,22 guarded @4,7,9,22',
+      'later @5,10,11,14,20 guarded @5,10,11,14',
+    ]);
+  });
+
+  it('says a line isn’t guarded when one of its calls always happens', async () => {
+    // Found by phase 7's labels (Documenso's `isRecipientBefore`): the first `has` always runs, the second only on yes.
+    const both = 'apps/web/src/both.ts';
+    write(
+      both,
+      [
+        'const has = (n?: number) => typeof n === "number";',
+        'export const before = (a?: number, b?: number) => has(a) && has(b);',
+        '',
+      ].join('\n'),
+    );
+    service.changed([both], [...Object.keys(FILES), both]);
+    const pass = await service.graph(() => Promise.resolve());
+    if (pass === null) throw new Error('no pass');
+    const call = pass.graph.edges.find((e) => e.kind === 'call' && e.from === `${both}#before`);
+    expect(call?.lines).toEqual([2]);
+    expect(call?.guarded).toBeUndefined();
+    const flow = buildFlow(indexGraph(pass.graph), `${both}#before`);
+    expect(
+      flow?.edges.map((e) => `${e.kind} ${e.to.replace(`${both}#`, '')} ${e.label ?? ''}`),
+    ).toEqual(['branch before?1 ', 'call has ', 'branch has yes']);
   });
 });
 

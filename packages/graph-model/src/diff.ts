@@ -19,10 +19,13 @@ const sameNode = (a: GraphNode, b: GraphNode) =>
   a.place?.line === b.place?.line &&
   a.place?.column === b.place?.column;
 
+const sameLines = (a: readonly number[], b: readonly number[]) =>
+  a.length === b.length && a.every((line, i) => line === b[i]);
+
 const sameEdge = (a: GraphEdge, b: GraphEdge) =>
   a.provenance === b.provenance &&
-  a.lines.length === b.lines.length &&
-  a.lines.every((line, i) => line === b.lines[i]);
+  sameLines(a.lines, b.lines) &&
+  sameLines(a.guarded ?? [], b.guarded ?? []);
 
 export function diffGraphs(before: Graph, after: Graph): GraphDiff {
   const old = new Map(before.nodes.map((n) => [n.id, n]));
