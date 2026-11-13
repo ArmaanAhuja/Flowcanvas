@@ -104,6 +104,8 @@ const EDGE_OPTIONS = {
   },
 } as const;
 const FIT_OPTIONS = { padding: 0.15 } as const;
+/** Where a focused node's top sits (px from the canvas's top): below the flow's name and counts. */
+const FOCUS_TOP = 72;
 const ZOOM_KEYS = ['Control', 'Meta'];
 /** In Select, the middle and right buttons pan; the left one draws a selection box. */
 const PAN_BUTTONS_SELECT = [1, 2];
@@ -128,6 +130,11 @@ export interface FlowCanvasProps {
   readonly onSelectNode?: (node: CanvasNode | null) => void;
   /** A node opened (a double-click): its code. */
   readonly onOpenNode?: (node: CanvasNode) => void;
+  /**
+   * A node to open on (a flow's root): at 100%, centred across, near the top, as Figma 06 shows a flow (owner,
+   * 14 Nov 2026). Without one, everything is fitted (the stress test). F fits either way.
+   */
+  readonly focus?: string;
 }
 
 /**
@@ -153,6 +160,7 @@ function Canvas({
   status,
   onSelectNode,
   onOpenNode,
+  focus,
 }: FlowCanvasProps) {
   const [tool, setTool] = useState<CanvasTool>('select');
   // React Flow keeps selection in the nodes themselves, so it holds them; a new set replaces them.
@@ -180,6 +188,21 @@ function Canvas({
   const onNodeDoubleClick = useCallback((_event: React.MouseEvent, node: CanvasNode) => {
     handlers.current.onOpenNode?.(node);
   }, []);
+
+  // A new set of nodes with a node to open on: that node at 100%, near the top. Set before React Flow's first fit,
+  // which is off when there's a focus.
+  const focused = focus === undefined ? undefined : given.find((node) => node.id === focus);
+  useEffect(() => {
+    const box = container.current?.getBoundingClientRect();
+    if (focused === undefined || box === undefined) return;
+    const width = (focused as { readonly size?: { readonly width: number } }).size?.width ?? 0;
+    void flow.setViewport({
+      x: Math.round(box.width / 2 - (focused.position.x + width / 2)),
+      y: FOCUS_TOP - focused.position.y,
+      zoom: 1,
+    });
+    // Only when the nodes change: panning and zooming after that are the person's.
+  }, [given]);
 
   const fit = () => {
     if (flow.getNodes().length === 0) return;
@@ -235,7 +258,7 @@ function Canvas({
         elementsSelectable
         minZoom={ZOOM.min}
         maxZoom={ZOOM.max}
-        fitView
+        fitView={focus === undefined}
         fitViewOptions={FIT_OPTIONS}
         panOnScroll
         zoomOnScroll={false}

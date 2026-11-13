@@ -705,6 +705,9 @@ function ProjectCanvas({
       }
       onSelectNode={onSelectNode}
       onOpenNode={onOpenNode}
+      {...(laid !== null && flow.kind === 'ready' && flow.result.flow !== null
+        ? { focus: flow.result.flow.root }
+        : {})}
       {...(examples === undefined || laid !== null ? {} : { banner: EXAMPLE_BANNER })}
     />
   );

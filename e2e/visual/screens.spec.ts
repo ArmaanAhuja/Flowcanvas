@@ -387,6 +387,8 @@ const SCREENS: readonly Screen[] = [
     api: { running: true, documenso: true },
     arrange: async (page) => {
       await showDeleteFolder(page);
+      // Opened at 100% on deleteFolder; fitted, the whole flow shows beside the inspector.
+      await page.getByRole('button', { name: 'Fit (F)' }).click();
       await page
         .getByRole('main', { name: 'Canvas' })
         .getByText('getTeam', { exact: true })

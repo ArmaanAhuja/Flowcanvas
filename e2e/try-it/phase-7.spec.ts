@@ -119,6 +119,12 @@ test('phase 7 · Try it: open a Documenso function’s flow, click its nodes, re
     const canvas = page.getByRole('main', { name: 'Canvas' });
     // The engine's flow: 13 edges reaching calls, 10 resolved, 3 unknown (Prisma's client isn't installed).
     await expect(canvas.getByRole('status')).toContainText('13 edges · 10 resolved · 3 unknown');
+    // Opened at 100% on deleteFolder, near the top (owner, 14 Nov 2026); F fits the whole flow.
+    const zoom = page.getByLabel('Zoom level');
+    await expect(zoom).toHaveText('100%');
+    await expect(canvas.getByText('deleteFolder', { exact: true }).last()).toBeInViewport();
+    await page.keyboard.press('f');
+    await expect(zoom).not.toHaveText('100%');
     for (const name of [
       'getTeamById',
       'getTeam',
