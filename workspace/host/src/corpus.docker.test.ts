@@ -8,7 +8,8 @@
 // Phase 6's Done when: the flow graph built in each workspace; the plan's four forks (Rallly, Documenso, LibreChat,
 // Twenty) ready and complete, snapshots saved and loaded in under 1 s each, and every labelled function found in the
 // stored graph with exactly its labelled callers and callees (labels/calls.json and labels/graph.json). Phase 7: each
-// labelled function's flow opens through the engine, from its name and from inside it, at its own node.
+// labelled function's flow opens through the engine, from its name and from inside it, at its own node; and
+// the Done when itself: 10 Documenso flows (labels/flows.json, written by reading the code) drawn exactly as labelled.
 // Needs Docker 28+ and the internet. Run with `pnpm test:docker`. Everything it creates is removed.
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -28,6 +29,7 @@ import { findObjects, remove } from './clean.js';
 import { dockerCli } from './docker-cli.js';
 import { WorkspaceHost } from './workspaces.js';
 import { checkGraph, compareCalls, type CallsLabel } from '../../../corpus/src/calls.js';
+import { compareFlow, type FlowLabel } from '../../../corpus/src/flows.js';
 import { selectRepos } from '../../../corpus/src/select.js';
 
 interface Repo {
@@ -55,6 +57,8 @@ const repos = selectRepos((corpus('manifest.json') as { repos: Repo[] }).repos, 
 const labels = corpus('labels/symbols.json') as Record<string, Label[] | undefined>;
 const callLabels = corpus('labels/calls.json') as Record<string, CallsLabel[] | undefined>;
 const graphLabels = corpus('labels/graph.json') as Record<string, CallsLabel[] | undefined>;
+/** Phase 7's Done when: 10 Documenso flows, labelled by reading the code (labels/flows.json). */
+const flowLabels = corpus('labels/flows.json') as Record<string, FlowLabel[] | undefined>;
 /** Phase 6's four forks (owner, 12 Nov 2026): held to the Done when; Excalidraw and Medusa are reported. */
 const GRAPH_HELD = new Set(['rallly', 'documenso', 'librechat', 'twenty']);
 /** The Done when: a snapshot saved and loaded in under 1 s each. */
@@ -312,6 +316,32 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
           if (named !== id) flowsDiffering.push(`${label.name} details: ${String(named)}`);
         }
 
+        // Phase 7's Done when: each hand-labelled flow, exactly: every node at its file and line, every edge with its
+        // outcome, every unknown call and cut.
+        const labelledFlows = graph.state === 'ready' ? (flowLabels[repo.id] ?? []) : [];
+        const labelledDiffering: string[] = [];
+        for (const label of labelledFlows) {
+          const answer = await host.index(ref, {
+            op: 'flow',
+            path: label.path,
+            line: label.line,
+            column: label.column,
+          });
+          const flow = answer.ok && 'flow' in answer.result ? answer.result.flow : null;
+          if (flow === null) {
+            labelledDiffering.push(
+              `${label.name}: no flow (${JSON.stringify(answer).slice(0, 200)})`,
+            );
+            continue;
+          }
+          const { missing: lacking, extra } = compareFlow(label, flow);
+          if (lacking.length > 0 || extra.length > 0) {
+            labelledDiffering.push(
+              `${label.name}:\n  labelled, not drawn: ${lacking.join('\n    ')}\n  drawn, not labelled: ${extra.join('\n    ')}`,
+            );
+          }
+        }
+
         // Phase 7 (ADR 0029): asked again now the graph is built, so from what the pass stored: the same labels,
         // without waiting on TypeScript.
         const storedDiffering: string[] = [];
@@ -360,6 +390,11 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
                 detailsMaxMs: Math.round(Math.max(...detailsMs)),
               }
             : {}),
+          ...(labelledFlows.length > 0
+            ? {
+                labelledFlows: `${String(labelledFlows.length - labelledDiffering.length)} of ${String(labelledFlows.length)}`,
+              }
+            : {}),
           ...(storedMs.length > 0
             ? {
                 storedCalls: `${String(labelledCalls - storedDiffering.length)} of ${String(labelledCalls)}`,
@@ -383,6 +418,8 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
           expect(graph.snapshot?.loadMs).toBeLessThan(SNAPSHOT_MS);
           expect(graphDiffering).toEqual([]);
           expect(flowsDiffering).toEqual([]);
+          expect(labelledDiffering).toEqual([]);
+          if (repo.id === 'documenso') expect(labelledFlows).toHaveLength(10);
           expect(Math.max(...flowMs, ...detailsMs)).toBeLessThan(ANSWER_MS);
         }
         expect(current.byStatus.parsed).toBeGreaterThan(0);
