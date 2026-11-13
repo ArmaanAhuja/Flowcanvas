@@ -29,7 +29,8 @@ const snapshot: GraphStatsSnapshot = {
   saveMs: 20,
   loadMs: 1200,
 };
-const arrivesIn = { 'entry-point': 8, decision: 7, 'data-access': 10, branch: 7 };
+// Decisions and branches arrived in phase 7 (accepted): like any kind with no phase given, they show just their zero.
+const arrivesIn = { 'entry-point': 8, 'data-access': 10, data: 10 };
 
 /** A group's rows as "name: value". */
 const rows = (name: string) =>
@@ -44,14 +45,15 @@ describe('GraphStats', () => {
     expect(rows('Nodes')).toEqual([
       'Entry points arrives in phase 8: 0',
       'Code units: 3,327',
-      'Decisions arrives in phase 7: 0',
+      'Decisions: 0',
       'Data access arrives in phase 10: 0',
       // No phase given: just its zero.
       'Async hand-offs: 0',
       'External boundaries: 0',
     ]);
     expect(rows('Code units')).toContain('Top levels of files: 416');
-    expect(rows('Edges')).toContain('Branches arrives in phase 7: 0');
+    expect(rows('Edges')).toContain('Branches: 0');
+    expect(rows('Edges')).toContain('Data arrives in phase 10: 0');
   });
 
   it('says how edges are known, by form and in words', () => {

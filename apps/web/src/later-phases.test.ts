@@ -120,7 +120,7 @@ describe('texts about what arrives later', () => {
 
   it('show Graph stats in the catalogue with the graph’s own phases, not an old copy', () => {
     // The catalogue (packages/ui) doesn't depend on the graph model, so its example keeps a copy: found still saying
-    // decisions arrive in phase 7 once they had.
+    // decisions as still to come after they'd been built.
     const story = readFileSync(
       join(repo, 'packages/ui/src/components/graph-stats/GraphStats.stories.tsx'),
       'utf8',
