@@ -1,16 +1,18 @@
 // `pnpm docs:check` (CI, and before every milestone report) and `pnpm docs:update` (rewrites the counts): the living
 // docs held to the code. See checks.ts for what each check holds them to.
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  architectureDependencies,
+  architectureParts,
   buildSteps,
-  commentsOf,
   countsIn,
   pathsNamed,
   phasesFromStatus,
   runAndFeatures,
+  stamps,
   stillToCome,
   updatedDate,
   withCounts,
@@ -37,22 +39,6 @@ function workspacePackages(): string[] {
     return readdirSync(join(repo, parent))
       .map((name) => `${parent}/${name}`)
       .filter((dir) => existsSync(join(repo, dir, 'package.json')));
-  });
-}
-
-/** Source files whose comments are read: every package's own code, never dependencies or builds. */
-function sourceFiles(dir: string): string[] {
-  return readdirSync(join(repo, dir)).flatMap((name) => {
-    if (
-      ['node_modules', 'dist', 'storybook-static', 'test-results', 'playwright-report'].includes(
-        name,
-      )
-    ) {
-      return [];
-    }
-    const path = join(dir, name);
-    if (statSync(join(repo, path)).isDirectory()) return sourceFiles(path);
-    return /\.(ts|tsx|mts|css)$/.test(name) && !name.endsWith('.d.ts') ? [path] : [];
   });
 }
 
@@ -185,11 +171,9 @@ if (update) {
 // build-steps: no step left to do in an accepted phase.
 findings.push(...buildSteps(read('docs/build-steps.md'), acceptedSet));
 
-// Living docs: no accepted phase still to come, and every path they name exists.
+// Living docs: every path they name exists.
 for (const file of LIVING) {
-  const text = read(file);
-  findings.push(...stillToCome(text, acceptedSet, file));
-  for (const { path, line } of pathsNamed(text)) {
+  for (const { path, line } of pathsNamed(read(file))) {
     if (!existsSync(join(repo, path))) {
       findings.push({
         where: `${file}:${String(line)}`,
@@ -199,28 +183,74 @@ for (const file of LIVING) {
   }
 }
 
-// ARCHITECTURE: every package in its parts.
+// ARCHITECTURE: every package in its parts table, each row naming every source folder, and the dependencies as
+// package.json has them (owner, 13 Nov 2026: it still said "end of phase 1b" in phase 7, with parts missing).
 const architecture = read('ARCHITECTURE.md');
-for (const dir of packages) {
-  const name = (JSON.parse(read(join(dir, 'package.json'))) as { name: string }).name;
-  if (!architecture.includes(name) && !architecture.includes(`\`${dir}\``)) {
-    findings.push({ where: 'ARCHITECTURE.md', problem: `doesn't mention ${name} (${dir})` });
+const manifests = packages.map((dir) => ({
+  dir,
+  json: JSON.parse(read(join(dir, 'package.json'))) as {
+    name: string;
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  },
+}));
+for (const { dir, json } of manifests) {
+  if (!architecture.includes(json.name) && !architecture.includes(`\`${dir}\``)) {
+    findings.push({ where: 'ARCHITECTURE.md', problem: `doesn't mention ${json.name} (${dir})` });
   }
 }
+/** Folders that hold a package's test set-up, not a part of it. */
+const NOT_PARTS = new Set(['test', '__tests__', 'fixtures']);
+findings.push(
+  ...architectureParts(
+    architecture,
+    manifests.map(({ dir, json }) => ({
+      name: json.name,
+      folders: existsSync(join(repo, dir, 'src'))
+        ? readdirSync(join(repo, dir, 'src'), { withFileTypes: true })
+            .filter((entry) => entry.isDirectory() && !NOT_PARTS.has(entry.name))
+            .map((entry) => entry.name)
+        : [],
+    })),
+  ),
+);
+const SCOPE = '@flowcanvas/';
+findings.push(
+  ...architectureDependencies(
+    architecture,
+    new Map(
+      manifests
+        .map(
+          ({ json }) =>
+            [
+              json.name.slice(SCOPE.length),
+              Object.keys({ ...json.dependencies, ...json.devDependencies })
+                .filter((dep) => dep.startsWith(SCOPE))
+                .map((dep) => dep.slice(SCOPE.length)),
+            ] as const,
+        )
+        .filter(([, deps]) => deps.length > 0),
+    ),
+  ),
+);
 
-// Comments in the code: no accepted phase still to come.
-for (const dir of packages) {
-  for (const file of sourceFiles(dir)) {
-    for (const comment of commentsOf(read(file))) {
-      for (const finding of stillToCome(comment.text, acceptedSet, file)) {
-        const line = Number(finding.where.split(':').at(-1)) + comment.line - 1;
-        findings.push({
-          where: `${relative(repo, join(repo, file))}:${String(line)}`,
-          problem: finding.problem,
-        });
-      }
-    }
-  }
+// Every tracked text file outside the historical records, code and site text included (not only comments, and not
+// only docs): no accepted phase still to come, and no stamp dating it to a phase the work has moved past. CLAUDE.md is
+// the owner's brief, with its own dated history ("Your first response", kept for reference): left as written.
+const HISTORICAL =
+  /^(docs\/(reference|reports|adr)\/|docs\/build-steps\.md$|docs\/decisions-log\.md$|CHANGELOG\.md$|CLAUDE\.md$|corpus\/labels\/|tools\/docs-check\/src\/checks\.test\.ts$)/;
+const TEXT = /\.(md|ts|tsx|mts|js|mjs|css|json|jsonc|ya?ml|html|sh|txt)$/;
+const current = inProgress.length > 0 ? inProgress : accepted.slice(-1);
+const tracked = execFileSync('git', ['ls-files'], {
+  cwd: repo,
+  encoding: 'utf8',
+  maxBuffer: 1 << 26,
+})
+  .split('\n')
+  .filter((file) => TEXT.test(file) && !HISTORICAL.test(file) && existsSync(join(repo, file)));
+for (const file of tracked) {
+  const text = read(file);
+  findings.push(...stillToCome(text, acceptedSet, file), ...stamps(text, current, file));
 }
 
 if (findings.length > 0) {

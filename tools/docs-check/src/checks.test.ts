@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  architectureDependencies,
+  architectureParts,
   buildSteps,
   commentsOf,
   countsIn,
@@ -7,6 +9,7 @@ import {
   phasesFromStatus,
   phasesNamed,
   runAndFeatures,
+  stamps,
   stillToCome,
   updatedDate,
   withCounts,
@@ -186,5 +189,77 @@ describe('updatedDate', () => {
     );
     expect(updatedDate(doc, new Date('2026-11-10T21:00:00Z'))).toEqual([]);
     expect(updatedDate('- **Last updated:** recently', new Date())).toHaveLength(1);
+  });
+});
+
+describe('stamps', () => {
+  it('finds a text dated to a phase the work has moved past (ARCHITECTURE said phase 1b during phase 7)', () => {
+    const doc =
+      'The system as it is **today** (end of phase 1b). Kept current at the end of every phase.';
+    expect(stamps(doc, ['7'], 'ARCHITECTURE.md').map((f) => f.problem)).toEqual([
+      'is dated phase 1b; the work is at phase 7: today** (end of phase 1b)',
+    ]);
+    expect(stamps('Accurate as of phase 6.', ['7'], 'a.md')).toHaveLength(1);
+    expect(stamps('Built (end of phase 3) and kept.', ['7'], 'a.md')).toHaveLength(1);
+  });
+
+  it('accepts the current phase, and lines that date nothing', () => {
+    expect(stamps('As it is **today** (phase 7, in progress).', ['7'], 'a.md')).toEqual([]);
+    expect(stamps('Kept current at the end of every phase.', ['7'], 'a.md')).toEqual([]);
+    expect(stamps('Open today (13 Nov 2026).', ['7'], 'a.md')).toEqual([]);
+  });
+});
+
+describe('architectureParts', () => {
+  const doc = [
+    '| Package | Folder | Runs in | Today |',
+    '| `@flowcanvas/web` | `apps/web` | Browser | The canvas (`src/canvas/`) and the flows (`src/flow/`) |',
+  ].join('\n');
+
+  it('finds a source folder its package’s row doesn’t name, and a package with no row', () => {
+    expect(
+      architectureParts(doc, [
+        { name: '@flowcanvas/web', folders: ['canvas', 'flow', 'usage'] },
+        { name: '@flowcanvas/ui', folders: [] },
+      ]).map((f) => f.problem),
+    ).toEqual([
+      "@flowcanvas/web's row doesn't say what src/usage/ is",
+      'has no row for @flowcanvas/ui in its parts table',
+    ]);
+  });
+
+  it('agrees when every folder is named in its own row', () => {
+    expect(
+      architectureParts(doc, [{ name: '@flowcanvas/web', folders: ['canvas', 'flow'] }]),
+    ).toEqual([]);
+  });
+});
+
+describe('architectureDependencies', () => {
+  const doc = [
+    'Dependencies between packages:',
+    '- `web → ui, graph-model`',
+    '- `ui → tokens` (styles only)',
+    '',
+  ].join('\n');
+
+  it('agrees with the package.json files', () => {
+    const real = new Map([
+      ['web', ['graph-model', 'ui']],
+      ['ui', ['tokens']],
+    ]);
+    expect(architectureDependencies(doc, real)).toEqual([]);
+  });
+
+  it('finds a dependency missing from the list, one listed that isn’t there, and a package left out', () => {
+    const real = new Map([
+      ['web', ['graph-model', 'ui', 'engine']],
+      ['engine', ['graph-model']],
+    ]);
+    expect(architectureDependencies(doc, real).map((f) => f.problem)).toEqual([
+      'lists web → graph-model, ui; its package.json says engine, graph-model, ui',
+      'lists ui → tokens; its package.json says nothing',
+      'lists engine → nothing; its package.json says graph-model',
+    ]);
   });
 });

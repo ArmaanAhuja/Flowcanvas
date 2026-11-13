@@ -45,7 +45,7 @@ If the host can't start, its log line says why: the token, Docker, or another `p
 
 | Command | What it checks | Time |
 | --- | --- | --- |
-| `pnpm test` | <!-- count:unit -->1,105<!-- /count --> unit and component tests, with no Docker or network | about 30 s |
+| `pnpm test` | <!-- count:unit -->1,111<!-- /count --> unit and component tests, with no Docker or network | about 30 s |
 | `pnpm lint`, `pnpm typecheck`, `pnpm format:check` | Lint (with the design-token rules), strict TypeScript, formatting | — |
 | `pnpm test:docker` | <!-- count:docker -->49<!-- /count --> tests against real containers: isolation, the network allowlist, clone time, sleep and resume, the guard, no secret kept anywhere; (phase 3) the file list, a save refused after a terminal edit, the journal surviving a restart, a terminal edit reaching the page's events socket in about 160 ms; (phase 4) Rallly indexed in a real workspace with an edit searchable in about 300 ms, and the corpus: all six forks at their pins indexed in real workspaces, Rallly and Documenso held to under 30 s and 100 ms, 21 hand-labelled symbols checked; (phase 5) 20 labelled functions' callers and callees; (phase 6) four forks' graphs, saved and loaded under 1 s; (phase 7) each labelled function's flow and details, at its own node, each answered in under 1 s, and its callers and callees again from the store, held to the same labels. Needs Docker 28+ and the internet | about 6 min (CI) |
 | `pnpm test:e2e` | <!-- count:walkthroughs -->21<!-- /count --> recorded walkthroughs of each phase's *Try it*, under the production security policy (1 needs a real API: CI, or a running `pnpm dev`) | about 40 s |

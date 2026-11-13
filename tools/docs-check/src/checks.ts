@@ -230,3 +230,91 @@ export function updatedDate(
       ]
     : [];
 }
+
+/**
+ * A stamp that dates a whole text ("as it is today (end of phase N)", "as of phase N"): it must name the phase the work
+ * is at (owner, 13 Nov 2026: ARCHITECTURE was dated to phase 1b through phase 7). A stamp naming no phase isn't one.
+ */
+const STAMP =
+  /\btoday\*{0,2}\s*\(([^)]*\bphases?\s+\d[^)]*)\)|\bas of\s+(phases?\s+\d+[a-z]?)|\(end of\s+(phases?\s+\d+[a-z]?)\)/gi;
+
+export function stamps(text: string, current: readonly string[], file: string): Finding[] {
+  const found: Finding[] = [];
+  for (const [index, line] of text.split('\n').entries()) {
+    for (const match of line.matchAll(STAMP)) {
+      const named = phasesNamed(match[1] ?? match[2] ?? match[3] ?? '');
+      if (named.length > 0 && !named.some((phase) => current.includes(phase))) {
+        found.push({
+          where: `${file}:${String(index + 1)}`,
+          problem: `is dated phase ${named.join(', ')}; the work is at phase ${current.join(' or ')}: ${match[0]}`,
+        });
+      }
+    }
+  }
+  return found;
+}
+
+/** A package as ARCHITECTURE's parts table should describe it: its name and its source folders. */
+export interface PackageParts {
+  readonly name: string;
+  readonly folders: readonly string[];
+}
+
+/** Each package has a row in ARCHITECTURE's parts table, and its row names every source folder (`src/canvas/`). */
+export function architectureParts(
+  doc: string,
+  packages: readonly PackageParts[],
+  file = 'ARCHITECTURE.md',
+): Finding[] {
+  const rows = doc.split('\n').filter((line) => line.startsWith('| `@'));
+  const found: Finding[] = [];
+  for (const { name, folders } of packages) {
+    const row = rows.find((line) => line.startsWith(`| \`${name}\``));
+    if (row === undefined) {
+      found.push({ where: file, problem: `has no row for ${name} in its parts table` });
+      continue;
+    }
+    const missing = folders.filter((folder) => !row.includes(`src/${folder}/`));
+    if (missing.length > 0) {
+      found.push({
+        where: file,
+        problem: `${name}'s row doesn't say what ${missing.map((f) => `src/${f}/`).join(', ')} ${missing.length === 1 ? 'is' : 'are'}`,
+      });
+    }
+  }
+  return found;
+}
+
+/**
+ * ARCHITECTURE's "Dependencies between packages" list (`- \`web → ui, graph-model\``, names without the scope) against
+ * every package.json: the same pairs, no more, no fewer.
+ */
+export function architectureDependencies(
+  doc: string,
+  real: ReadonlyMap<string, readonly string[]>,
+  file = 'ARCHITECTURE.md',
+): Finding[] {
+  const section = /Dependencies between packages[^\n]*:\n((?:- [^\n]*\n?)*)/.exec(doc)?.[1];
+  if (section === undefined) {
+    return [{ where: file, problem: 'has no "Dependencies between packages:" list' }];
+  }
+  const said = new Map<string, string[]>();
+  for (const match of section.matchAll(/^- `([a-z0-9-]+) → ([a-z0-9-, ]+)`/gm)) {
+    said.set(
+      match[1] ?? '',
+      (match[2] ?? '').split(',').map((d) => d.trim()),
+    );
+  }
+  const found: Finding[] = [];
+  for (const name of new Set([...said.keys(), ...real.keys()])) {
+    const want = [...(real.get(name) ?? [])].sort();
+    const have = [...(said.get(name) ?? [])].sort();
+    if (want.join() !== have.join()) {
+      found.push({
+        where: file,
+        problem: `lists ${name} → ${have.join(', ') || 'nothing'}; its package.json says ${want.join(', ') || 'nothing'}`,
+      });
+    }
+  }
+  return found;
+}
