@@ -257,6 +257,7 @@ test('phase 5: right-click a function → Callers', async ({ page }) => {
       'Find referencesShift+F12',
       'Callers',
       'Callees',
+      'Show flow',
     ]);
     await expect(menu.getByRole('menuitem', { name: 'Go to definition' })).toBeFocused();
     // The cursor moved to where the pointer was.

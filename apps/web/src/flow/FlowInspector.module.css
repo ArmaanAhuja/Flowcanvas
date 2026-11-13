@@ -1,0 +1,99 @@
+/* The inspector's Details for a flow's selection (phase 7): Heading title, Mono code, Caption labels, 4 px grid. */
+.inspector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--text-heading-font-family);
+  font-size: var(--text-heading-font-size);
+  font-weight: var(--text-heading-font-weight);
+  line-height: var(--text-heading-line-height);
+  letter-spacing: var(--text-heading-letter-spacing);
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.caption,
+.outcome {
+  margin: 0;
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  font-weight: var(--text-caption-font-weight);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+}
+
+.outcome {
+  flex: none;
+}
+
+.note {
+  margin: 0;
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  line-height: var(--text-small-line-height);
+  color: var(--color-text-muted);
+}
+
+.code {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  line-height: var(--text-mono-small-line-height);
+  color: var(--color-text-secondary);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+  min-height: var(--size-row-compact);
+}
+
+.row .code {
+  flex: 1;
+}
+
+/* A place: a 24 px target at least (WCAG 2.2 target size). */
+.link {
+  display: inline-flex;
+  align-items: center;
+  min-width: var(--space-24);
+  min-height: var(--space-24);
+  padding: 0 var(--space-4);
+  border: 0;
+  background: none;
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  line-height: var(--text-mono-small-line-height);
+  color: var(--color-text-secondary);
+  text-decoration: underline;
+  text-decoration-color: var(--color-border-strong);
+  cursor: pointer;
+}
+
+.link:hover {
+  color: var(--color-text-primary);
+}

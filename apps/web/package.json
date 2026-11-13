@@ -9,8 +9,9 @@
     "preview": "vite preview",
     "size": "node scripts/bundle-size.ts",
     "typecheck": "tsc -b --noEmit",
-    "test": "vitest run",
-    "lint": "eslint . && stylelint \"src/**/*.css\""
+    "test": "vitest run --exclude '**/*.perf.test.ts'",
+    "lint": "eslint . && stylelint \"src/**/*.css\"",
+    "test:perf": "vitest run perf.test"
   },
   "dependencies": {
     "@codemirror/commands": "catalog:",

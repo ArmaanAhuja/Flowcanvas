@@ -48,6 +48,7 @@ function Harness(props: {
   readonly onOpenFile?: (path: string) => void;
   readonly onOpenSymbol?: (symbol: PaletteSymbol) => void;
   readonly onOpenChange?: (open: boolean) => void;
+  readonly onShowFlow?: (symbol: PaletteSymbol) => void;
 }) {
   const [query, setQuery] = useState('');
   const [symbols, setSymbols] = useState<PaletteSymbol[]>([]);
@@ -73,6 +74,7 @@ function Harness(props: {
       onQueryChange={setQuery}
       symbols={symbols}
       symbolsNote={props.note}
+      {...(props.onShowFlow === undefined ? {} : { onShowFlow: props.onShowFlow })}
       files={FILES}
       onOpenFile={props.onOpenFile ?? vi.fn()}
       onOpenSymbol={props.onOpenSymbol ?? vi.fn()}
@@ -128,6 +130,26 @@ describe('CommandPalette', () => {
         name: 'findPoll, method, PollService · apps/web/src/server/poll-service.ts:12',
       }),
     ).toBeTruthy();
+  });
+
+  it('offers the flows of the functions, methods and components that match (phase 7)', async () => {
+    const user = userEvent.setup();
+    const onShowFlow = vi.fn();
+    const onOpenSymbol = vi.fn();
+    render(<Harness onShowFlow={onShowFlow} onOpenSymbol={onOpenSymbol} />);
+    await user.keyboard('poll');
+    expect(groups().find((group) => group.name === 'Flows')?.rows).toEqual([
+      'Show the flow from createPoll, apps/web/src/features/poll/mutations.ts:98',
+      'Show the flow from CreatePoll, apps/web/src/features/poll/components/create-poll.tsx:115',
+      'Show the flow from findPoll, apps/web/src/server/poll-service.ts:12',
+    ]);
+    await user.click(
+      within(results()).getByRole('option', {
+        name: 'Show the flow from findPoll, apps/web/src/server/poll-service.ts:12',
+      }),
+    );
+    expect(onShowFlow).toHaveBeenCalledWith(expect.objectContaining({ name: 'findPoll' }));
+    expect(onOpenSymbol).not.toHaveBeenCalled();
   });
 
   it('opens the top symbol with Enter, even when symbols arrive after the typing', async () => {

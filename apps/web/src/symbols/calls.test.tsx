@@ -19,6 +19,11 @@ import { ProjectPage } from '../project/ProjectPage';
 import type { CallsAnswer, DefinitionAnswer, ReferencesAnswer } from './api';
 import { useCalls } from './useCalls';
 
+// The whole project page renders here (React Flow, the editor, the dialogs): about 1 s a test alone, past 5 s when
+// every package's tests share the laptop's cores in `pnpm test` (found in phase 7, once flows added ELK's tests to
+// the run). The work is what's tested, so the limit is set for it.
+vi.setConfig({ testTimeout: 15_000 });
+
 const V1 = '1'.repeat(64);
 const POLL_TS = 'import { save } from "./db";\n\nexport function createPoll() {\n  save();\n}\n';
 
@@ -188,7 +193,7 @@ describe('the Code view’s right-click menu', () => {
     expect(view?.state.selection.main.head).toBe(pointed);
     const menu = await screen.findByRole('menu', { name: 'Code' });
     expect([...menu.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent)).toEqual(
-      ['Go to definitionF12', 'Find referencesShift+F12', 'Callers', 'Callees'],
+      ['Go to definitionF12', 'Find referencesShift+F12', 'Callers', 'Callees', 'Show flow'],
     );
     await user.click(screen.getByRole('menuitem', { name: 'Callers' }));
 

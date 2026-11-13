@@ -24,6 +24,8 @@ export interface UnitData extends Record<string, unknown> {
 export interface DecisionData extends Record<string, unknown> {
   readonly condition: string;
   readonly id: string;
+  /** Where its condition is. */
+  readonly place: UnitData['place'];
 }
 export interface StubData extends Record<string, unknown> {
   readonly variant: 'unknown' | 'more';
@@ -116,7 +118,11 @@ export async function layoutFlow(
         width,
         height: SIZES.decisionChrome.height + lines * SIZES.decisionLine,
       });
-      nodes.push({ id: node.id, type: 'decision', data: { condition: node.name, id: node.id } });
+      nodes.push({
+        id: node.id,
+        type: 'decision',
+        data: { condition: node.name, id: node.id, place: node.place },
+      });
     } else {
       children.push({ id: node.id, ...SIZES.node });
       nodes.push({

@@ -6,6 +6,11 @@ import type { Project, Workspace, WorkspaceState } from '../projects/api';
 import { MACHINE } from '../projects/ProjectWorkspace';
 import { ProjectPage } from './ProjectPage';
 
+// The whole project page renders here (React Flow, the editor, the dialogs): about 1 s a test alone, past 5 s when
+// every package's tests share the laptop's cores in `pnpm test` (found in phase 7, once flows added ELK's tests to
+// the run). The work is what's tested, so the limit is set for it.
+vi.setConfig({ testTimeout: 15_000 });
+
 afterEach(cleanup);
 
 const workspace = (state: WorkspaceState, failure: string | null = null): Workspace => ({

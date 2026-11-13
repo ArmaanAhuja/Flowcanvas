@@ -28,6 +28,10 @@ export const BUDGETS: Readonly<Record<string, number>> = {
   // 8 Nov 2026 (phase 3 step 7): quick-open, fetched once the workspace runs (11.8 kB). 11 Nov 2026 (phase 4 step
   // 5): with the command palette, one chunk, since they share React Aria's search parts (13.7 kB together).
   SearchDialogs: 15,
+  // 13 Nov 2026 (phase 7 step 6): ELK, the flow layout the build plan names (ADR 0028), 445 kB: its worker, fetched
+  // the first time a flow is opened, run off the page's main thread, then cached by the browser. Never in the first
+  // load; dagre (smaller) is unmaintained and was considered in ADR 0028.
+  elk: 490,
   'Other lazy chunks': 20,
 };
 

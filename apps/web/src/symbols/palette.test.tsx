@@ -10,6 +10,11 @@ import { ProjectPage } from '../project/ProjectPage';
 import type { IndexStatus, SymbolResult } from './api';
 import { INDEX_TEXT } from './texts';
 
+// The whole project page renders here (React Flow, the editor, the dialogs): about 1 s a test alone, past 5 s when
+// every package's tests share the laptop's cores in `pnpm test` (found in phase 7, once flows added ELK's tests to
+// the run). The work is what's tested, so the limit is set for it.
+vi.setConfig({ testTimeout: 15_000 });
+
 const V1 = '1'.repeat(64);
 const POLL_TS = '// polls\n\nexport function createPoll() {}\n';
 const CREATE_POLL: SymbolResult = {

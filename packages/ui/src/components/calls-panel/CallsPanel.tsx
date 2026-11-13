@@ -53,6 +53,8 @@ export interface CallsPanelProps {
   readonly message?: string | null | undefined;
   /** Opens a place in the Code view. */
   readonly onOpen: (place: CallPlace) => void;
+  /** Opens the flow from what's being looked at (phase 7): a link beside its place. */
+  readonly onShowFlow?: ((place: CallPlace) => void) | undefined;
 }
 
 const VIEWS: readonly { id: CallsView; label: string }[] = [
@@ -78,6 +80,7 @@ export function CallsPanel({
   references,
   message,
   onOpen,
+  onShowFlow,
 }: CallsPanelProps) {
   const project = rows.filter((r) => r.provenance === 'resolved' && !r.builtIn);
   const unresolved = rows.filter((r) => r.provenance === 'unresolved');
@@ -114,11 +117,22 @@ export function CallsPanel({
               {where(target.place)}
             </button>
           )}
+          {target.place !== null && onShowFlow !== undefined && (
+            <button
+              type="button"
+              className={classNames(styles.action)}
+              onClick={() => {
+                if (target.place !== null) onShowFlow(target.place);
+              }}
+            >
+              Show flow
+            </button>
+          )}
         </header>
       )}
       {status === 'loading' && (
         <p className={classNames(styles.note)} role="status">
-          Asking TypeScript…
+          Finding calls…
         </p>
       )}
       {status === 'ready' && message !== null && message !== undefined && (

@@ -28,7 +28,7 @@ import {
   type NodeProps,
 } from '@xyflow/react';
 import { Hand, Maximize, Minus, MousePointer2, Plus } from 'lucide-react';
-import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import styles from './FlowCanvas.module.css';
 import {
   DecisionCard,
@@ -44,6 +44,9 @@ export interface FlowNodeData extends Record<string, unknown> {
   readonly location: string;
   readonly kind?: FlowNodeKind;
   readonly change?: FlowNodeChange;
+  /** In a flow (phase 7): its node in the graph, and where its name is (what "Open code" opens). */
+  readonly id?: string;
+  readonly place?: { readonly path: string; readonly line: number; readonly column: number } | null;
 }
 
 /** A code unit (and the phase 2 examples); and, in a flow (phase 7), its decisions and open ends. */
@@ -165,6 +168,16 @@ function Canvas({
   // No useViewport here: only ZoomControls follows the zoom, so panning doesn't re-render the canvas.
   const flow = useReactFlow<CanvasNode, CanvasEdge>();
   const isEmpty = nodes.length === 0;
+  // React Flow gets handlers that never change, calling the latest ones: a new handler on every render made it
+  // report the selection again, and the page render again (a loop found by the page tests).
+  const handlers = useRef({ onSelectNode, onOpenNode });
+  handlers.current = { onSelectNode, onOpenNode };
+  const onSelectionChange = useCallback(({ nodes: chosen }: { nodes: CanvasNode[] }) => {
+    handlers.current.onSelectNode?.(chosen.length === 1 ? (chosen[0] ?? null) : null);
+  }, []);
+  const onNodeDoubleClick = useCallback((_event: React.MouseEvent, node: CanvasNode) => {
+    handlers.current.onOpenNode?.(node);
+  }, []);
 
   const fit = () => {
     if (flow.getNodes().length === 0) return;
@@ -213,20 +226,8 @@ function Canvas({
         nodeTypes={NODE_TYPES}
         edgeTypes={EDGE_TYPES}
         defaultEdgeOptions={EDGE_OPTIONS}
-        {...(onSelectNode === undefined
-          ? {}
-          : {
-              onSelectionChange: ({ nodes: chosen }: { nodes: CanvasNode[] }) => {
-                onSelectNode(chosen.length === 1 ? (chosen[0] ?? null) : null);
-              },
-            })}
-        {...(onOpenNode === undefined
-          ? {}
-          : {
-              onNodeDoubleClick: (_event: React.MouseEvent, node: CanvasNode) => {
-                onOpenNode(node);
-              },
-            })}
+        onSelectionChange={onSelectionChange}
+        onNodeDoubleClick={onNodeDoubleClick}
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable

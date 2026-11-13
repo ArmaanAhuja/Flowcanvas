@@ -10,6 +10,7 @@ import {
   Search,
   SquareFunction,
   Type,
+  Workflow,
   type LucideIcon,
 } from 'lucide-react';
 import { useMemo, useState, type KeyboardEvent } from 'react';
@@ -85,13 +86,20 @@ export interface CommandPaletteProps {
   readonly files: readonly string[];
   readonly onOpenFile: (path: string) => void;
   readonly onOpenSymbol: (symbol: PaletteSymbol) => void;
+  /** Opens a function's flow (phase 7): offered for the matching functions, methods and components. */
+  readonly onShowFlow?: ((symbol: PaletteSymbol) => void) | undefined;
 }
+
+/** Flows offered at once: the best few matches that have one. */
+const MOST_FLOWS = 5;
+const HAS_FLOW: ReadonlySet<PaletteSymbolKind> = new Set(['function', 'method', 'component']);
 
 const MOST_FILES = 20;
 const TOP_HINT_ID = 'command-palette-top-hint';
 
 type Row =
   | { readonly id: string; readonly type: 'symbol'; readonly symbol: PaletteSymbol }
+  | { readonly id: string; readonly type: 'flow'; readonly symbol: PaletteSymbol }
   | { readonly id: string; readonly type: 'file'; readonly path: string };
 
 const symbolId = (s: PaletteSymbol) => `symbol:${s.path}:${String(s.line)}:${String(s.column)}`;
@@ -120,6 +128,7 @@ export function CommandPalette({
   files,
   onOpenFile,
   onOpenSymbol,
+  onShowFlow,
 }: CommandPaletteProps) {
   const filesOnly = query.startsWith(FILES_PREFIX);
   const fileQuery = (filesOnly ? query.slice(FILES_PREFIX.length) : query).trim();
@@ -146,9 +155,22 @@ export function CommandPalette({
     });
   }, [filesOnly, query, symbols]);
   const showSymbols = !filesOnly && query.trim() !== '';
+  const flowRows: Row[] = useMemo(
+    () =>
+      onShowFlow === undefined
+        ? []
+        : symbolRows
+            .filter(
+              (row): row is Extract<Row, { type: 'symbol' }> =>
+                row.type === 'symbol' && HAS_FLOW.has(row.symbol.kind),
+            )
+            .slice(0, MOST_FLOWS)
+            .map((row) => ({ id: `flow:${row.id}`, type: 'flow', symbol: row.symbol }) as const),
+    [onShowFlow, symbolRows],
+  );
   const byId = useMemo(
-    () => new Map([...symbolRows, ...fileRows].map((row) => [row.id, row])),
-    [symbolRows, fileRows],
+    () => new Map([...symbolRows, ...flowRows, ...fileRows].map((row) => [row.id, row])),
+    [symbolRows, flowRows, fileRows],
   );
   // Whether the person has moved through the results since they last typed.
   const [moved, setMoved] = useState(false);
@@ -160,6 +182,7 @@ export function CommandPalette({
   };
   const open = (row: Row) => {
     if (row.type === 'symbol') onOpenSymbol(row.symbol);
+    else if (row.type === 'flow') onShowFlow?.(row.symbol);
     else onOpenFile(row.path);
     close();
   };
@@ -245,6 +268,14 @@ export function CommandPalette({
                   </Collection>
                 </ListBoxSection>
               )}
+              {flowRows.length > 0 && (
+                <ListBoxSection id="flows" className={classNames(styles.section)}>
+                  <Header className={classNames(styles.header)}>Flows</Header>
+                  <Collection items={flowRows}>
+                    {(row) => (row.type === 'flow' ? <FlowRow symbol={row.symbol} /> : null)}
+                  </Collection>
+                </ListBoxSection>
+              )}
               {fileRows.length > 0 && (
                 <ListBoxSection id="files" className={classNames(styles.section)}>
                   <Header className={classNames(styles.header)}>Files</Header>
@@ -298,6 +329,23 @@ function SymbolRow({ symbol, isTop }: { readonly symbol: PaletteSymbol; readonly
       <span className={classNames(quickOpen.name)}>{symbol.name}</span>
       <span className={classNames(styles.kind)}>{label}</span>
       <span className={classNames(quickOpen.folder, styles.place)}>{detail}</span>
+    </ListBoxItem>
+  );
+}
+
+function FlowRow({ symbol }: { readonly symbol: PaletteSymbol }) {
+  const where = `${symbol.path}:${String(symbol.line)}`;
+  return (
+    <ListBoxItem
+      id={`flow:${symbolId(symbol)}`}
+      textValue={`Show flow ${symbol.name}`}
+      aria-label={`Show the flow from ${symbol.name}, ${where}`}
+      className={classNames(quickOpen.row)}
+    >
+      <Workflow size={14} className={classNames(quickOpen.icon)} aria-hidden="true" />
+      <span className={classNames(quickOpen.name)}>Show flow</span>
+      <span className={classNames(styles.kind)}>{symbol.name}</span>
+      <span className={classNames(quickOpen.folder, styles.place)}>{where}</span>
     </ListBoxItem>
   );
 }
