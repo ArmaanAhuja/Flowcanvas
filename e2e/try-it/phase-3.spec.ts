@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-import { expect, test, type Page, type Route, type WebSocketRoute } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { FakeWorkspace, runningProject, sha } from './fake-workspace.js';
 import { watchForPageProblems } from './support.js';
 
 // Phase 3 · Try it: edit a file in Rallly, close the tab, reopen it: the change is still there. Built up step by
@@ -7,189 +7,19 @@ import { watchForPageProblems } from './support.js';
 // shows a conflict. The workspace is a fake with real versions (SHA-256) and real conflict checks; the real one is
 // proven by the Docker tests (workspace/host/src/host.docker.test.ts).
 
-const PROJECT = {
-  id: '3f1c0d2e-0000-4000-8000-0000000000c3',
-  name: 'Rallly',
-  repoUrl: 'https://github.com/ArmaanAhuja-7777/rallly',
-  repoCommit: null,
-  createdAt: '2026-11-08T09:00:00.000Z',
-  workspace: {
-    id: 'w-3',
-    state: 'running',
-    stateChangedAt: '2026-11-08T09:00:00.000Z',
-    failure: null,
-  },
-};
+const PROJECT = runningProject('3f1c0d2e-0000-4000-8000-0000000000c3', '2026-11-08T09:00:00.000Z');
 
-const sha = (text: string) => createHash('sha256').update(text).digest('hex');
-
-/** The workspace's files, as the agent would keep them. */
-class FakeWorkspace {
-  readonly files = new Map<string, string>([
-    ['package.json', '{\n  "name": "rallly"\n}\n'],
-    ['apps/web/src/utils/greeting.ts', 'export const greeting = "Hello";\n'],
-    ['apps/web/public/logo.png', '\u0089PNG'],
-  ]);
-
-  /** The workspace's journal of unsaved changes, with the agent's rule: an older revision never replaces a newer. */
-  readonly journal = new Map<
-    string,
-    {
-      path: string;
-      content: string;
-      baseVersion: string | null;
-      revision: number;
-      updatedAt: number;
-    }
-  >();
-
-  constructor(page: Page) {
-    this.watch(page);
-  }
-
-  /** Serves a page from this workspace. Routed on the browser context, not the page: a request sent as a page
-   * closes (keepalive) outlives the page, and the page's own routes go with it. */
-  watch(page: Page): void {
-    void page.context().route('**/api/**', (route) => this.answer(route));
-    // The workspace's file watcher (step 3), as the control plane relays it: one checked event per message.
-    void page.context().routeWebSocket(/\/workspace\/events$/, (socket) => {
-      this.watchers.push(socket);
-    });
-  }
-
-  /** Pages listening to the file watcher. */
-  readonly watchers: WebSocketRoute[] = [];
-
-  /** An edit made in the workspace's terminal: the file changes, and the watcher says so. */
-  terminalWrites(path: string, content: string): void {
-    this.files.set(path, content);
-    for (const socket of this.watchers) {
-      socket.send(JSON.stringify({ type: 'changed', path, deleted: false, version: sha(content) }));
-    }
-  }
-
-  terminalDeletes(path: string): void {
-    this.files.delete(path);
-    for (const socket of this.watchers) {
-      socket.send(JSON.stringify({ type: 'changed', path, deleted: true, version: null }));
-    }
-  }
-
-  private reply(route: Route, body: unknown, status = 200) {
-    return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
-  }
-
-  private answer(route: Route) {
-    const url = new URL(route.request().url());
-    const path = url.searchParams.get('path') ?? '';
-    if (url.pathname === '/api/me') {
-      return this.reply(route, {
-        user: { id: 'u-1', email: 'ada@example.com', displayName: 'Ada', role: 'member' },
-        signIn: 'available',
-        providers: ['github'],
-      });
-    }
-    if (url.pathname === '/api/projects')
-      return this.reply(route, { projects: [PROJECT], workspacesAvailable: true });
-    if (url.pathname.endsWith('/workspace/tree')) {
-      return this.reply(route, {
-        files: [...this.files.keys(), '.env.example'].sort(),
-        truncated: false,
-        source: 'git',
-      });
-    }
-    if (url.pathname.endsWith('/workspace/journal')) {
-      return this.reply(route, {
-        entries: [...this.journal.values()].map((entry) => ({
-          path: entry.path,
-          revision: entry.revision,
-        })),
-      });
-    }
-    if (url.pathname.endsWith('/workspace/journal/entry')) {
-      const method = route.request().method();
-      if (method === 'PUT') {
-        const body = route.request().postDataJSON() as {
-          content: string;
-          baseVersion: string | null;
-          revision: number;
-        };
-        const existing = this.journal.get(path);
-        if (existing === undefined || existing.revision <= body.revision) {
-          this.journal.set(path, { path, ...body, updatedAt: Date.now() });
-        }
-        return this.reply(route, { path, revision: body.revision });
-      }
-      if (method === 'DELETE') {
-        const existing = this.journal.get(path);
-        if (
-          existing !== undefined &&
-          existing.revision <= Number(url.searchParams.get('revision'))
-        ) {
-          this.journal.delete(path);
-        }
-        return this.reply(route, { path, dropped: true });
-      }
-      const entry = this.journal.get(path);
-      return entry === undefined
-        ? this.reply(
-            route,
-            { error: 'There are no unsaved changes for that file.', code: 'not_found' },
-            404,
-          )
-        : this.reply(route, entry);
-    }
-    if (url.pathname.endsWith('/workspace/file')) {
-      if (path.split('/').pop() === '.env.example') {
-        return this.reply(
-          route,
-          { error: 'There’s nothing at that path.', code: 'not_found' },
-          404,
-        );
-      }
-      const content = this.files.get(path);
-      if (route.request().method() === 'PUT') {
-        const body = route.request().postDataJSON() as {
-          content: string;
-          baseVersion: string | null;
-        };
-        const current = content === undefined ? null : sha(content);
-        if (body.baseVersion !== current) {
-          return this.reply(
-            route,
-            { error: 'This file changed in the workspace since you opened it.', code: 'conflict' },
-            409,
-          );
-        }
-        this.files.set(path, body.content);
-        return this.reply(route, { path, size: body.content.length, version: sha(body.content) });
-      }
-      if (content === undefined)
-        return this.reply(
-          route,
-          { error: 'There’s nothing at that path.', code: 'not_found' },
-          404,
-        );
-      if (path.endsWith('.png')) {
-        return this.reply(route, {
-          path,
-          size: 4,
-          encoding: 'base64',
-          content: 'iVBORw==',
-          version: sha(content),
-        });
-      }
-      return this.reply(route, {
-        path,
-        size: content.length,
-        encoding: 'utf8',
-        content,
-        version: sha(content),
-      });
-    }
-    return this.reply(route, { error: 'not found' }, 404);
-  }
-}
+/** The workspace's files, as the agent would keep them; `.env.example` is listed but never read. */
+const fakeWorkspace = (page: Page) =>
+  new FakeWorkspace(page, {
+    project: PROJECT,
+    files: {
+      'package.json': '{\n  "name": "rallly"\n}\n',
+      'apps/web/src/utils/greeting.ts': 'export const greeting = "Hello";\n',
+    },
+    binary: { 'apps/web/public/logo.png': 'iVBORw==' },
+    unreadable: ['.env.example'],
+  });
 
 const row = (page: Page, name: string) =>
   page.getByRole('row', { name: new RegExp(`^${name.replace('.', '\\.')}($|,)`) });
@@ -198,7 +28,7 @@ test('phase 3: open a file in the Code view, edit it, save it, and see a conflic
   page,
 }) => {
   const watch = watchForPageProblems(page);
-  const workspace = new FakeWorkspace(page);
+  const workspace = fakeWorkspace(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/p/${PROJECT.id}`);
 
@@ -281,7 +111,7 @@ test('phase 3 · Try it: edit a file, close the tab, reopen it: the change is st
   page,
 }) => {
   const watch = watchForPageProblems(page);
-  const workspace = new FakeWorkspace(page);
+  const workspace = fakeWorkspace(page);
   const greeting = 'apps/web/src/utils/greeting.ts';
   // Test-only: records requests sent with keepalive (as the page closes) in the app's own storage, for the
   // reopened tab to read: Playwright's routing can't see them.
@@ -366,13 +196,13 @@ test('phase 3 · Try it: edit a file, close the tab, reopen it: the change is st
     workspace.journal.set('package.json', {
       path: 'package.json',
       content: '{\n  "name": "rallly",\n  "private": true\n}\n',
-      baseVersion: createHash('sha256').update('{\n  "name": "rallly"\n}\n').digest('hex'),
+      baseVersion: sha('{\n  "name": "rallly"\n}\n'),
       revision: Date.now(),
       updatedAt: Date.now(),
     });
     const other = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const elsewhere = await other.newPage();
-    workspace.watch(elsewhere);
+    await workspace.watch(elsewhere);
     await elsewhere.goto(`/p/${PROJECT.id}`);
     await elsewhere.getByRole('tab', { name: 'Code' }).click();
     await expect(
@@ -387,7 +217,7 @@ test('phase 3: an edit made in the terminal appears in the editor; quick-open; a
   page,
 }) => {
   const watch = watchForPageProblems(page);
-  const workspace = new FakeWorkspace(page);
+  const workspace = fakeWorkspace(page);
   const greeting = 'apps/web/src/utils/greeting.ts';
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/p/${PROJECT.id}`);

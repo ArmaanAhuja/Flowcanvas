@@ -1,8 +1,9 @@
 // Named import: the package's type entry is CommonJS, so its default export doesn't type-check under nodenext.
 import { AxeBuilder } from '@axe-core/playwright';
-import { createHash } from 'node:crypto';
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { expect, test, type Page } from '@playwright/test';
 import { THEMES, type Theme } from './storybook.js';
+import { FakeWorkspace, WithStatus, sha } from '../try-it/fake-workspace.js';
 import { clickWord } from '../try-it/support.js';
 
 // The app's implemented screens (phase 2 onwards), from the production build with a fake API, in both themes:
@@ -23,9 +24,6 @@ const PROJECT = {
   },
 };
 
-const reply = (route: Route, body: unknown, status = 200) =>
-  route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
-
 /** The Code view's files (phase 3): real content, real versions. */
 const FILES: Record<string, string> = {
   'apps/web/src/utils/greeting.ts':
@@ -34,7 +32,6 @@ const FILES: Record<string, string> = {
   'package.json': '{\n  "name": "rallly",\n  "private": true\n}\n',
   'README.md': '# Rallly\n\n## Greeting people\n',
 };
-const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 
 interface ApiOptions {
   readonly running?: boolean;
@@ -42,7 +39,26 @@ interface ApiOptions {
   readonly staleDraft?: string;
   /** The project index part way through its first pass (phase 4); otherwise it's ready. */
   readonly indexing?: boolean;
+  /** Documenso, with the engine's flow for deleteFolder and the details of its functions (phase 7). */
+  readonly documenso?: boolean;
 }
+
+/** The engine's own flow and details for Documenso's deleteFolder (the phase 7 walkthrough's fixture). */
+const DELETE_FOLDER = JSON.parse(
+  readFileSync(new URL('../try-it/fixtures/phase-7-delete-folder.json', import.meta.url), 'utf8'),
+) as {
+  flow: unknown;
+  details: Record<string, { details: { place: { path: string; line: number } } | null }>;
+};
+const DELETE_FOLDER_SYMBOL = {
+  name: 'deleteFolder',
+  kind: 'function',
+  path: 'packages/lib/server-only/folder/delete-folder.ts',
+  line: 14,
+  column: 14,
+  container: null,
+  exported: true,
+};
 
 /** What the project index finds (phase 4), as the engine would: a function, a constant and a heading. */
 const SYMBOLS = [
@@ -191,83 +207,61 @@ const GRAPH = {
 };
 
 async function fakeApi(page: Page, options: ApiOptions = {}): Promise<void> {
-  const project =
-    options.running === true
-      ? { ...PROJECT, workspace: { ...PROJECT.workspace, state: 'running' } }
-      : PROJECT;
-  // The file watcher's socket: open and quiet (page routes don't cover WebSockets, which would reach for the
-  // real API and retry).
-  await page.routeWebSocket(/\/workspace\/events$/, () => undefined);
-  await page.route('**/api/**', (route) => {
-    const url = new URL(route.request().url());
-    const path = url.pathname;
-    const file = url.searchParams.get('path') ?? '';
-    if (path.endsWith('/workspace/tree')) {
-      return reply(route, { files: Object.keys(FILES).sort(), truncated: false, source: 'git' });
-    }
-    if (path.endsWith('/workspace/file')) {
-      const content = FILES[file];
-      return content === undefined
-        ? reply(route, { error: 'There’s nothing at that path.', code: 'not_found' }, 404)
-        : reply(route, {
-            path: file,
-            size: content.length,
-            encoding: 'utf8',
-            content,
-            version: sha(content),
-          });
-    }
-    if (path.endsWith('/workspace/journal')) {
-      return reply(route, { entries: [] });
-    }
-    if (path.endsWith('/workspace/index/status')) {
-      return reply(route, indexStatus(options.indexing === true));
-    }
-    if (path.endsWith('/workspace/index/search')) {
-      const words = (url.searchParams.get('q') ?? '').toLowerCase().split(/\s+/).filter(Boolean);
-      return reply(route, {
-        symbols: SYMBOLS.filter((symbol) =>
-          words.every((word) => String(symbol.name).toLowerCase().includes(word)),
-        ),
-        ms: 1,
-      });
-    }
-    if (path.endsWith('/workspace/index/graph')) return reply(route, GRAPH);
-    const semantic = /\/workspace\/index\/(callers|callees)$/.exec(path)?.[1];
-    if (semantic !== undefined) return reply(route, CALLS[semantic]);
-    if (path.endsWith('/workspace/journal/entry')) {
-      return options.staleDraft === file
-        ? reply(route, {
-            path: file,
-            content: `${FILES[file] ?? ''}// my unsaved line\n`,
-            baseVersion: sha('an older version'),
-            revision: 1,
-            updatedAt: Date.UTC(2026, 10, 7, 9, 41),
-            size: 1,
-          })
-        : reply(route, { error: 'none', code: 'not_found' }, 404);
-    }
-    if (path === '/api/me') {
-      return reply(route, {
-        user: { id: 'u-1', email: 'ada@example.com', displayName: 'Ada', role: 'member' },
-        signIn: 'available',
-        providers: ['github'],
-      });
-    }
-    if (path === '/api/projects')
-      return reply(route, { projects: [project], workspacesAvailable: true });
-    if (path === '/api/usage') {
-      return reply(route, {
+  const project = {
+    ...PROJECT,
+    ...(options.documenso === true ? { name: 'Documenso' } : {}),
+    workspace: { ...PROJECT.workspace, ...(options.running === true ? { state: 'running' } : {}) },
+  };
+  const workspace = new FakeWorkspace(page, {
+    project,
+    files: FILES,
+    indexStatus: () => indexStatus(options.indexing === true),
+    answers: {
+      // The journal lists nothing, but a file can still have a draft: a restore whose file moved on (phase 3).
+      '/workspace/journal/entry': (url) => {
+        const file = url.searchParams.get('path') ?? '';
+        return options.staleDraft === file
+          ? {
+              path: file,
+              content: `${FILES[file] ?? ''}// my unsaved line\n`,
+              baseVersion: sha('an older version'),
+              revision: 1,
+              updatedAt: Date.UTC(2026, 10, 7, 9, 41),
+              size: 1,
+            }
+          : new WithStatus(404, { error: 'none', code: 'not_found' });
+      },
+      '/workspace/index/search': (url) => {
+        const words = (url.searchParams.get('q') ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+        const symbols = options.documenso === true ? [...SYMBOLS, DELETE_FOLDER_SYMBOL] : SYMBOLS;
+        return {
+          symbols: symbols.filter((symbol) =>
+            words.every((word) => String(symbol.name).toLowerCase().includes(word)),
+          ),
+          ms: 1,
+        };
+      },
+      '/workspace/index/graph': () => GRAPH,
+      '/workspace/index/callers': () => CALLS.callers,
+      '/workspace/index/callees': () => CALLS.callees,
+      '/workspace/index/flow': () => DELETE_FOLDER.flow,
+      '/workspace/index/details': (url) =>
+        Object.values(DELETE_FOLDER.details).find(
+          (answer) =>
+            answer.details?.place.path === url.searchParams.get('path') &&
+            answer.details.place.line === Number(url.searchParams.get('line')),
+        ) ?? { details: null, message: 'No function here.' },
+      '/api/usage': () => ({
         usage: {
           periodStart: '2026-11-01T00:00:00.000Z',
           resetsAt: '2026-12-01T00:00:00.000Z',
           workspaceSeconds: 5_400,
           storageByteHours: 0,
         },
-      });
-    }
-    return reply(route, { error: 'not found' }, 404);
+      }),
+    },
   });
+  await workspace.ready;
 }
 
 interface Screen {
@@ -381,7 +375,40 @@ const SCREENS: readonly Screen[] = [
       await expect(page.getByText('5,381 nodes · 22,574 edges')).toBeVisible();
     },
   },
+  // Phase 7: a function's flow on the canvas (Figma 06), opened from ⌘K; and a function selected in it, its details
+  // in the inspector (design brief, "Node inspector"). The engine's own answers for Documenso's deleteFolder.
+  {
+    name: 'project-flow',
+    api: { running: true, documenso: true },
+    arrange: showDeleteFolder,
+  },
+  {
+    name: 'project-flow-details',
+    api: { running: true, documenso: true },
+    arrange: async (page) => {
+      await showDeleteFolder(page);
+      await page
+        .getByRole('main', { name: 'Canvas' })
+        .getByText('getTeam', { exact: true })
+        .click();
+      await expect(page.getByRole('region', { name: 'getTeam' })).toContainText(
+        'prisma.team.findFirst',
+      );
+    },
+  },
 ];
+
+/** ⌘K → deleteFolder's flow, laid out on the canvas with its counts. */
+async function showDeleteFolder(page: Page): Promise<void> {
+  // The top bar's Search button rather than ⌘K: a key pressed before the page listens is lost (found in light theme).
+  await page.getByRole('button', { name: 'Search' }).click();
+  await expect(page.getByRole('searchbox', { name: 'Search symbols and files' })).toBeFocused();
+  await page.keyboard.type('deleteFolder');
+  await page.getByRole('option', { name: /^Show the flow from deleteFolder/ }).click();
+  await expect(page.getByRole('main', { name: 'Canvas' }).getByRole('status')).toContainText(
+    '13 edges · 10 resolved · 3 unknown',
+  );
+}
 
 /** A right-click on `greet` in the editor (CodeMirror is in an open shadow root, which locators pierce). */
 async function rightClickGreet(page: Page): Promise<void> {

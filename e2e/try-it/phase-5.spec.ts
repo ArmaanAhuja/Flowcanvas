@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { FakeWorkspace, runningProject } from './fake-workspace.js';
 import { clickWord, watchForPageProblems } from './support.js';
 
 // Phase 5 · Try it: right-click a function → Callers. In a real browser under the production CSP: Rallly's
@@ -8,25 +8,12 @@ import { clickWord, watchForPageProblems } from './support.js';
 // fake answering as the engine does for Rallly at its pin (corpus/labels/calls.json); the engine itself is checked
 // against those labels in real workspaces by the Docker corpus test (workspace/host/src/corpus.docker.test.ts).
 
-const PROJECT = {
-  id: '3f1c0d2e-0000-4000-8000-0000000000c5',
-  name: 'Rallly',
-  repoUrl: 'https://github.com/ArmaanAhuja-7777/rallly',
-  repoCommit: null,
-  createdAt: '2026-11-12T09:00:00.000Z',
-  workspace: {
-    id: 'w-5',
-    state: 'running',
-    stateChangedAt: '2026-11-12T09:00:00.000Z',
-    failure: null,
-  },
-};
+const PROJECT = runningProject('3f1c0d2e-0000-4000-8000-0000000000c5', '2026-11-12T09:00:00.000Z');
 
 const MUTATIONS_PATH = 'apps/web/src/features/poll/mutations.ts';
 const PRIVATE_ROUTE = 'apps/web/src/app/api/private/[...route]/route.ts';
 const V1_ROUTE = 'apps/web/src/app/api/v1/[...route]/route.ts';
 
-const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 /** A file with `lines` at their line numbers (1-based) and comments elsewhere. */
 const fileWith = (length: number, lines: Record<number, string>) =>
   Array.from({ length }, (_, i) => lines[i + 1] ?? `// line ${String(i + 1)}`).join('\n') + '\n';
@@ -133,109 +120,52 @@ const REFERENCES = {
   message: null,
 };
 
-class FakeWorkspace {
-  readonly files = new Map<string, string>([
-    [MUTATIONS_PATH, MUTATIONS],
-    [PRIVATE_ROUTE, ROUTE],
-    [V1_ROUTE, ROUTE],
-  ]);
-  /** Every question, as `op path:line:column`. */
-  readonly asked: string[] = [];
-
-  constructor(page: Page) {
-    void page.context().route('**/api/**', (route) => this.answer(route));
-    void page.context().routeWebSocket(/\/workspace\/events$/, () => undefined);
-  }
-
-  private reply(route: Route, body: unknown, status = 200) {
-    return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
-  }
-
-  private answer(route: Route) {
-    const url = new URL(route.request().url());
-    const path = url.searchParams.get('path') ?? '';
-    if (url.pathname === '/api/me') {
-      return this.reply(route, {
-        user: { id: 'u-1', email: 'ada@example.com', displayName: 'Ada', role: 'member' },
-        signIn: 'available',
-        providers: ['github'],
-      });
-    }
-    if (url.pathname === '/api/projects')
-      return this.reply(route, { projects: [PROJECT], workspacesAvailable: true });
-    const op = /\/workspace\/index\/(callers|callees|references|definition)$/.exec(
-      url.pathname,
-    )?.[1];
-    if (op !== undefined) {
-      this.asked.push(
-        `${op} ${path}:${url.searchParams.get('line') ?? ''}:${url.searchParams.get('column') ?? ''}`,
-      );
-      if (op === 'callers') return this.reply(route, CALLERS);
-      if (op === 'callees') return this.reply(route, CALLEES);
-      if (op === 'references') return this.reply(route, REFERENCES);
-      return this.reply(route, { definitions: [TARGET], message: null });
-    }
-    if (url.pathname.endsWith('/workspace/index/search')) {
-      const query = (url.searchParams.get('q') ?? '').trim().toLowerCase();
-      const symbols = 'createpoll'.startsWith(query)
-        ? [
-            {
-              name: 'createPoll',
-              kind: 'function',
-              container: null,
-              exported: true,
-              path: MUTATIONS_PATH,
-              line: 98,
-              column: 14,
-            },
-          ]
-        : [];
-      return this.reply(route, { symbols, ms: 1 });
-    }
-    if (url.pathname.endsWith('/workspace/index/status')) {
-      return this.reply(route, {
-        state: 'ready',
-        done: 1958,
-        total: 1958,
-        files: 1958,
-        byStatus: { parsed: 1958, 'no-grammar': 0, 'too-large': 0, binary: 0, unreadable: 0 },
-        symbols: 5874,
-        withSyntaxErrors: 0,
-        partlyRead: 0,
-        lastFullMs: 1015,
+/** A fake workspace answering the Calls tab as the engine does; `asked` keeps each question as `op path:line:column`. */
+function fakeWorkspace(page: Page) {
+  const asked: string[] = [];
+  const question = (op: string, body: unknown) => (url: URL) => {
+    const at = (name: string) => url.searchParams.get(name) ?? '';
+    asked.push(`${op} ${at('path')}:${at('line')}:${at('column')}`);
+    return body;
+  };
+  new FakeWorkspace(page, {
+    project: PROJECT,
+    files: { [MUTATIONS_PATH]: MUTATIONS, [PRIVATE_ROUTE]: ROUTE, [V1_ROUTE]: ROUTE },
+    answers: {
+      '/workspace/index/callers': question('callers', CALLERS),
+      '/workspace/index/callees': question('callees', CALLEES),
+      '/workspace/index/references': question('references', REFERENCES),
+      '/workspace/index/definition': question('definition', {
+        definitions: [TARGET],
         message: null,
-      });
-    }
-    if (url.pathname.endsWith('/workspace/tree'))
-      return this.reply(route, {
-        files: [...this.files.keys()].sort(),
-        truncated: false,
-        source: 'git',
-      });
-    if (url.pathname.endsWith('/workspace/journal')) return this.reply(route, { entries: [] });
-    if (url.pathname.endsWith('/workspace/journal/entry'))
-      return this.reply(route, { error: 'none', code: 'not_found' }, 404);
-    if (url.pathname.endsWith('/workspace/file')) {
-      const content = this.files.get(path);
-      return content === undefined
-        ? this.reply(route, { error: 'There’s nothing at that path.', code: 'not_found' }, 404)
-        : this.reply(route, {
-            path,
-            size: content.length,
-            encoding: 'utf8',
-            content,
-            version: sha(content),
-          });
-    }
-    return this.reply(route, { error: 'not found' }, 404);
-  }
+      }),
+      '/workspace/index/search': (url) => {
+        const query = (url.searchParams.get('q') ?? '').trim().toLowerCase();
+        const symbols = 'createpoll'.startsWith(query)
+          ? [
+              {
+                name: 'createPoll',
+                kind: 'function',
+                container: null,
+                exported: true,
+                path: MUTATIONS_PATH,
+                line: 98,
+                column: 14,
+              },
+            ]
+          : [];
+        return { symbols, ms: 1 };
+      },
+    },
+  });
+  return { asked };
 }
 
 const status = (page: Page) => page.getByRole('group', { name: 'Editor status' });
 
 test('phase 5: right-click a function → Callers', async ({ page }) => {
   const watch = watchForPageProblems(page);
-  const workspace = new FakeWorkspace(page);
+  const workspace = fakeWorkspace(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/p/${PROJECT.id}`);
   await expect(page.getByText('Rallly', { exact: true })).toBeVisible();
