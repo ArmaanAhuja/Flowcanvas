@@ -2,16 +2,16 @@
 
 The one place to see how to run Flowcanvas, how to test it, and which features exist so far. It's updated at every build step. Details for each step live in `docs/build-steps.md`; phase status in `docs/STATUS.md`; how it's put together in `ARCHITECTURE.md`.
 
-- **Last updated:** 8 Nov 2026: phase 3 accepted and merged (PR #16); Node 26 (branch `chore/node-26`)
-- **Released (on staging):** `0.7.0`, phase 3
-- **Progress:** phases 1, 1a, 1b, 1c, 2 and 3 are accepted; 1d is in review (until a cloud provider). That's 7 of the build plan's 96 phases. Stage 0's goal: open a repository in a workspace, see it on a canvas, edit it, and answer "what calls this?"
+- **Last updated:** 13 Nov 2026: phase 7, steps 0 to 6 (flows on the canvas; the Calls tab from stored data), branch `phase/7-flow-builder`, draft PR #21
+- **Released (on staging):** `0.10.0`, phase 6 (checked: staging's `/api/health` reports 0.10.0)
+- **Progress:** phases 1, 1a, 1b, 1c, 2, 3, 4, 5 and 6 are accepted; 1d is in review (until a cloud provider); 7 is in progress. That's 9 of the build plan's 96 phases accepted. Stage 1's goal: see a project's real flows, from code, honestly.
 
 ## Where it runs
 
 | Where | What works there | What it's for |
 | --- | --- | --- |
 | **Staging**, https://flowcanvas.ahujaarmaan7777.workers.dev | Sign-in (allowlist), projects, secrets, usage, admin, What's new, Labs. Projects say "Workspaces run locally for now" | The hosted app, built from `main` |
-| **Your own computer**, `pnpm dev` | Everything on staging, **plus workspaces**: Docker containers on your laptop, with a terminal, sleep and resume, and the resource guard. The project page with the app shell (phase 2) | Development, and running workspaces until a cloud provider is connected |
+| **Your own computer**, `pnpm dev` | Everything on staging, **plus workspaces**: Docker containers on your laptop, with a terminal, sleep and resume, and the resource guard. In a project with its workspace running: the Code view and editor (phase 3), search and ⌘K (phase 4), Callers, Callees and references (phase 5), the graph (phase 6), and flows on the canvas (phase 7, in progress) | Development, and running workspaces until a cloud provider is connected |
 | **Pull-request previews** | Like staging; sign-in says to use staging | Checking a change before it merges |
 | **Component catalogue**, https://flowcanvas-catalogue.ahujaarmaan7777.workers.dev | Every design-system component in both themes | Design review |
 | **Test reports**, https://flowcanvas-reports.ahujaarmaan7777.workers.dev | Walkthrough videos and traces for each pull request and merge | Seeing what was tested |
@@ -45,14 +45,14 @@ If the host can't start, its log line says why: the token, Docker, or another `p
 
 | Command | What it checks | Time |
 | --- | --- | --- |
-| `pnpm test` | 1,057 unit and component tests, with no Docker or network | about 30 s |
+| `pnpm test` | 1,084 unit and component tests, with no Docker or network | about 30 s |
 | `pnpm lint`, `pnpm typecheck`, `pnpm format:check` | Lint (with the design-token rules), strict TypeScript, formatting | — |
-| `pnpm test:docker` | 53 tests against real containers: isolation, the network allowlist, clone time, sleep and resume, the guard, no secret kept anywhere; (phase 3) the file list, a save refused after a terminal edit, the journal surviving a restart, a terminal edit reaching the page's events socket in about 160 ms; (phase 4) Rallly indexed in a real workspace with an edit searchable in about 300 ms, and the corpus: all six forks at their pins indexed in real workspaces, Rallly and Documenso held to under 30 s and 100 ms, 21 hand-labelled symbols checked; (phase 5) 20 labelled functions' callers and callees; (phase 6) four forks' graphs, saved and loaded under 1 s; (phase 7) each labelled function's flow and details, at its own node, each answered in under 1 s. Needs Docker 28+ and the internet | about 6 min (CI) |
-| `pnpm test:e2e` | 19 recorded walkthroughs of each phase's *Try it*, under the production security policy (1 needs a real API: CI, or a running `pnpm dev`) | about 40 s |
-| `pnpm test:perf` | The canvas with 500 nodes, panned and zoomed: frame times, long tasks, input to paint. Headless (as on CI) only catches large regressions; `PERF_REAL=1 pnpm test:perf` opens a real window on your GPU for about 30 s, which is what decides. Then (phase 4) symbol search on 100,000 names, run alone: p95 under 100 ms (13.6 ms) | about 45 s |
-| `pnpm test:visual` | 130 screenshots in both themes against approved baselines, plus accessibility checks (axe): every catalogue story, and the project page's screens (empty, 1280 × 800, 500 nodes, review open, full screen, workspace popover; the Code view, a conflict, quick-open; the index's progress, the command palette) | about 2 min |
+| `pnpm test:docker` | 49 tests against real containers: isolation, the network allowlist, clone time, sleep and resume, the guard, no secret kept anywhere; (phase 3) the file list, a save refused after a terminal edit, the journal surviving a restart, a terminal edit reaching the page's events socket in about 160 ms; (phase 4) Rallly indexed in a real workspace with an edit searchable in about 300 ms, and the corpus: all six forks at their pins indexed in real workspaces, Rallly and Documenso held to under 30 s and 100 ms, 21 hand-labelled symbols checked; (phase 5) 20 labelled functions' callers and callees; (phase 6) four forks' graphs, saved and loaded under 1 s; (phase 7) each labelled function's flow and details, at its own node, each answered in under 1 s, and its callers and callees again from the store, held to the same labels. Needs Docker 28+ and the internet | about 6 min (CI) |
+| `pnpm test:e2e` | 21 recorded walkthroughs of each phase's *Try it*, under the production security policy (1 needs a real API: CI, or a running `pnpm dev`) | about 40 s |
+| `pnpm test:perf` | The canvas with 500 nodes, panned and zoomed: frame times, long tasks, input to paint. Headless (as on CI) only catches large regressions; `PERF_REAL=1 pnpm test:perf` opens a real window on your GPU for about 30 s, which is what decides. Then (phase 4) symbol search on 100,000 names, run alone: p95 under 100 ms (13.6 ms); and (phase 7) a 60-node flow laid out by ELK, run alone: median under 1 s (56 ms) | about 50 s |
+| `pnpm test:visual` | 182 screenshots in both themes against approved baselines, plus accessibility checks (axe): every catalogue story, and the project page's screens (empty, 1280 × 800, 500 nodes, review open, full screen, workspace popover; the Code view, a conflict, quick-open; the index's progress, the command palette; the right-click menu, Callers, Callees; Graph stats) | about 4 min |
 | `pnpm --filter @flowcanvas/control-plane test:idle-real` | The 10-minute idle sleep in real time, nothing faked | about 12 min |
-| `pnpm size` | After `pnpm build`: the web bundle against its budgets (first load, the project page, the terminal, the editor, the dialogs) | instant |
+| `pnpm size` | After `pnpm build`: the web bundle against its budgets (first load, the project page, the terminal, the editor, the dialogs, ELK's flow layout) | instant |
 | `pnpm corpus:fetch` | The six corpus forks at their pins into `~/.cache/flowcanvas/corpus` (outside `/tmp`, kept across restarts), for working on the engine against real projects | about 1 min the first time |
 | `pnpm workspace:resources` | Your laptop against Flowcanvas's budget | instant |
 | `pnpm workspace:clean` | Removes test leftovers and old workspace images; `--all --yes` removes everything of Flowcanvas's | — |
@@ -102,11 +102,11 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
 - 🟡 **Panels:** they collapse and resize by mouse and keyboard. There's a full-screen canvas, and the review bar opens to 300 px. Your layout is remembered, in pixels.
 - 🟡 **Your theme** (dark, light or system) applies on the project page too.
 - 🟡 **Compared with Figma 06:** every difference, and why, in `docs/reports/phase-2-figma-06-differences.md`.
-- 🟡 **Honest empty states** wherever content doesn't exist yet. The view switch offers Graph; Sequence and Code show as coming later.
+- 🟡 **Honest empty states** wherever content doesn't exist yet, each naming the phase it arrives in. The view switch offers Graph and Code (phase 3); Sequence arrives in phase 13.
 - 🟡 **The canvas:**
   - scroll pans; Ctrl or ⌘ + scroll, or a pinch, zooms; **F** fits; **V** selects (click, or drag a box); **H** pans (as does Space + drag)
   - a minimap bottom-left and a toolbar bottom-centre, as on Figma 06
-  - honestly empty until the project is analysed (stage 1)
+  - empty until a flow is opened (phase 7), and it says how to open one
   - the Labs **Canvas stress test** shows 500 example nodes, labelled as examples
 - 🟡 **The workspace chip in the top bar** opens its facts (status, machine, since when, this month's usage, any reason) and actions (Open, Sleep now, Resume, Stop). The bottom dock's terminal follows the workspace's state.
 - 🟡 **500 nodes are smooth,** measured on real hardware: panning at 120 or 60 fps, with no long tasks. Zooming in close (100% to 200%) still drops occasional frames (the build plan's phase 42, the WebGL renderer, fixes it).
@@ -130,28 +130,40 @@ CI runs the checks (with the bundle budget), Docker, visual, canvas performance 
   - Panel, Popover, Flow node, Workspace status
   - Top bar, Rail, Review bar, Canvas toolbar
   - Editor tabs, File tree, Breadcrumb, Status bar (phase 3)
+  - Search trigger, Quick open, Command palette (phase 4)
+  - Context menu, Calls panel, Provenance glyph (phase 5)
+  - Graph stats (phase 6)
+  - Decision node, Flow stub, Node details (phase 7)
   - all in the catalogue
-- ✅ **What's new** (from the CHANGELOG), Labs switches (the first: Canvas stress test), and the build's version and commit on the page.
+- ✅ **What's new** (from the CHANGELOG), Labs switches (Canvas stress test; Graph stats, phase 6), and the build's version and commit on the page.
 - ✅ **A strict security policy:** no inline scripts or styles, previews per pull request, and telemetry off.
 
-### Coming next
-- **Phase 5 (accepted, 0.9.0):** TypeScript semantics.
+### TypeScript semantics (phase 5, accepted, 0.9.0)
+- **What it does:**
   - ✅ **Right-click a function's name** in the Code view: Go to definition (F12), Find references (Shift+F12), Callers, Callees.
   - ✅ **The inspector's Calls tab:** Callers (calls and renders), Callees (the project's, Unresolved with why, Built-in collapsed), References; each row says how it's known, and opens its place.
   - ✅ **Through path aliases, workspace packages and re-exports,** without installing anything; packages that aren't installed are shown as unresolved, never guessed.
   - ✅ **Proof:** `pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts` (20 hand-labelled functions, exact); walkthrough `pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-5.spec.ts`.
   - **Try it:** `pnpm dev`, open Rallly with its workspace running, Code view, open `apps/web/src/features/poll/mutations.ts`, right-click `createPoll` (line 98) → Callers: the two API route modules, each at its lines.
-- **Phase 6 (accepted, 0.10.0):** the graph model.
+
+### The graph model (phase 6, accepted, 0.10.0)
+- **What it does:**
   - ✅ **The flow graph** of each project, built in its workspace after indexing and kept up to date: code units and calls, each resolved or unknown, saved as versions in `/workspace/.flowcanvas/graph.db`.
   - ✅ **Labs → Graph stats** in the inspector's Details tab: nodes and edges by kind, how edges are known, built-ins counted apart, build, save and load times.
   - ✅ **Files no tsconfig includes** are understood (LibreChat's Express backend), for the Calls tab too.
   - ✅ **Every later feature names its phase** on the page.
   - ✅ **Proof:** `pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts` (the four forks' graphs, save and load under 1 s, 26 labelled functions); walkthrough `pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-6.spec.ts`.
   - **Try it:** `pnpm dev`, Labs → Graph stats on, open Rallly with its workspace running, read the Details tab.
-- **Phase 7 (in progress):** flows and the inspector.
+
+### Flows and the inspector (phase 7, in progress)
+- **What it does so far:**
   - ✅ **Decisions in the graph:** the conditions a function's calls sit under (`if`, ternaries, `&&`/`||`/`??`, `switch`, `catch`), with their outcomes on branch edges; Labs → Graph stats counts them.
   - 🟡 **Flows and node details from the engine,** through the API (`/index/flow`, `/index/details`): every labelled function's flow opens at its node in real workspaces.
+  - 🟡 **Flows on the canvas** (steps 5 and 6): right-click a function's name in the Code view → Show flow, or ⌘K → Flows, or Show flow on the Calls tab. Top to bottom, as Figma 06: functions with their file and line, decisions as diamonds with their conditions, outcomes on the edges, a `catch` as a thin red path, unknown calls as one open stub per node, "N more calls not shown" past 60 nodes; the name and counts top left. Click a node for its details in the inspector; Open code (or a double-click) opens its line. To be proven on 10 hand-labelled Documenso flows (step 7).
   - ✅ **Worked out once, stored, reused** (ADR 0029): the graph pass stores each file's functions and their details in `/workspace/.flowcanvas/facts.db`, so a flow from anywhere in a function and a node's details answer in milliseconds, even after a restart; a file changed since is answered by TypeScript.
   - ✅ **The Calls tab from stored data** (step 4): callers and callees come from what the pass stored once the graph is built and nothing is being edited (2.9 ms against 7.8 ms on Rallly; 48 ms against 556 ms on Documenso); TypeScript answers members' callers and anything while files change. Planned next in this phase: the page keeping answers per graph version. On the page with steps 4 and 5 of this phase: the flow on the canvas with ELK's layout, opening flows from the right-click menu, ⌘K and the Calls tab, and the inspector's Details.
   - **Proof so far:** `pnpm --filter @flowcanvas/engine test`, `pnpm --filter @flowcanvas/graph-model test`; `pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts` (each row's `flows`).
+
+### Coming next
+- **Phase 7, steps 7 and 8:** 10 hand-labelled Documenso flows checked in real workspaces, every node at its line; the walkthrough; then the phase report and 0.11.0.
 - **After that:** stage 1 goes on with entry points (phase 8), and stage 2 adds live frames of the running app.

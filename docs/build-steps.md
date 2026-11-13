@@ -13199,9 +13199,9 @@ pnpm test:visual
 | 3 | The API through the host and control plane | A | done (Claude, 13 Nov): `c5d3a73`, `016d253` |
 | 3a | Compute once, store, reuse (owner, 13 Nov): each file's units and details stored by the pass; flows from inside a function and details answer from them. ADR 0029 | A | done (Claude, 13 Nov): `1da5575` |
 | 4 | The Calls tab from stored data (each unit's calls as TypeScript gives them, kept by the pass), TypeScript only where the store can't be sure (ADR 0029) | B | done (Claude, 13 Nov): `7aba981` |
-| 5 | UI: the decision node, the flow's layout, the pill, the inspector's body, in the design system | B | *next* |
-| 6 | The page: opening flows from three places; selecting nodes; Open code; answers and layouts kept per graph version, so going back is instant (ADR 0029) | B | *planned* |
-| 7 | Proof: 10 hand-labelled Documenso flows in real workspaces, every node at its line; the walkthrough; screens | B | *planned* |
+| 5 | UI: the decision node, the flow's layout, the pill, the inspector's body, in the design system | B | done (Claude, 13 Nov): `dc91add` |
+| 6 | The page: opening flows from three places; selecting nodes; Open code; answers and layouts kept per graph version, so going back is instant (ADR 0029) | B | done (Claude, 13 Nov): `58a4c50` |
+| 7 | Proof: 10 hand-labelled Documenso flows in real workspaces, every node at its line; the walkthrough; screens; the shared fake workspace for page tests (owner, 12 Nov) | B | *next* |
 | 8 | Close: report, 0.11.0 | B | *planned* |
 
 ### How each Done-when item is proven
@@ -13391,3 +13391,77 @@ pnpm test:visual
 **Risks and laptop:** the store is bigger (Twenty 97.8 MB, from 29.6 MB), still a fraction of a workspace's 10 GiB. The measurements ran two or three at a time (owner, 13 Nov: allowed); the laptop stayed under 20 GiB used.
 
 **Commit:** `feat(engine): the Calls tab from what the pass stored` (`7aba981`).
+
+### Step 7.5 — The flow's parts in the design system, and its layout (done by Claude)
+
+**Goal:** everything a flow is drawn with, built and reviewed in the catalogue before it's used on the page (CLAUDE.md section 10: components first), and the layout that places it.
+
+**What a person can do now:** in the catalogue, see the decision node, the flow's stubs and the inspector's node details with real Documenso content, in both themes.
+
+**Files:**
+- `packages/ui/src/components/decision-node/` (new): `DecisionNode`, a 12 px diamond in the edge colour with its condition in Mono small, up to two lines, the whole of it on hover and for screen readers (`role="img"`).
+- `packages/ui/src/components/flow-stub/` (new): `FlowStub`, "N unknown calls" as Graphite's open stub (a hollow circle) and "N more calls not shown" in a dashed outline.
+- `packages/ui/src/components/node-details/` (new): `NodeDetails` (the inspector's body) and `completenessText` (the pill's words).
+- `apps/web/src/flow/layout.ts` (new): `layoutFlow`, ELK's layered layout, top to bottom; `apps/web/src/canvas/flow-parts.tsx` (new): the canvas's decision and stub nodes and its edge by provenance.
+- `apps/web/src/canvas/FlowCanvas.tsx`, `FlowCanvas.module.css`: the new node and edge types; arrowheads in the edge colour.
+- `pnpm-workspace.yaml`, `apps/web/package.json`: `elkjs` 0.13.0 (EPL-2.0 or GPL-3.0; used unchanged, ADR 0028).
+- 20 new catalogue baselines.
+
+**Concepts:**
+- **Layered (Sugiyama) layout:** nodes in layers by depth, crossings reduced, edges routed at right angles. https://eclipse.dev/elk/reference/algorithms/org-eclipse-elk-layered.html
+- **React Flow custom nodes and edges:** our components inside its nodes, our own SVG path and labels for edges. https://reactflow.dev/learn/customization/custom-edges
+- **ARIA roles for diagrams:** a figure read as one thing gets `role="img"` and a label. https://www.w3.org/WAI/ARIA/apg/practices/names-and-descriptions/
+
+**Found and fixed:**
+- **Figma 06 draws flows top to bottom**, the design brief left to right; the plan had followed the brief. Figma ranks above the brief (CLAUDE.md section 2), and the canvas already joins nodes top to bottom: corrected in the decisions log and ADR 0028.
+- **Axe found the decision's label ignored** (`aria-prohibited-attr`: a label on a `div` with no role): it's now a figure, `role="img"`.
+- **Long conditions were cut at about 25 characters**, by the node's width, before the intended 60: they now wrap to two lines.
+- **The Figma generator sets the stub's text in `text/tertiary`,** which Graphite keeps for marks only (it fails contrast for text): `text/muted`, as Graphite wins on visuals.
+
+**Tests:** 5 for the components (the cut condition and its label, the stubs' words, the details' groups and "and N more", empty groups left out, each line opening its place, the pill's order); 2 for the layout (top to bottom, each node below its caller, stubs below their node, a catch's outcome as a failure path; 60 nodes with no overlaps). Visual and accessibility: the new stories pass axe in both themes.
+
+**Run and check it:** `pnpm --filter @flowcanvas/ui exec vitest run src/components/node-details`, `pnpm --filter @flowcanvas/web exec vitest run src/flow`; the catalogue's Components → Decision node, Flow stub, and Shell → Node details.
+
+**Risks and laptop:** none new.
+
+**Commit:** `feat(ui): the flow's parts: decisions, stubs, node details, ELK layout` (`dc91add`).
+
+### Step 7.6 — The page: opening a flow, and what's selected in it (done by Claude)
+
+**Goal:** the owner's three ways to open a flow, the flow on the canvas, and its nodes in the inspector, with what took work kept for going back (ADR 0029).
+
+**What a person can do now:** with a workspace running and its graph built:
+- In the Code view, right-click a function's name → **Show flow**; or press ⌘K (Ctrl K), type part of its name, and choose it under **Flows**; or, on the Calls tab, choose **Show flow** beside the function.
+- The Graph view shows the flow top to bottom: functions as nodes with their file and line, decisions as diamonds with their conditions, outcome labels on the edges, a `catch`'s outcome as a thin red failure path, a node's unknown calls as one open stub, and "N more calls not shown" where the flow stopped. Top left: the function's name and the counts ("18 edges · 11 resolved · 1 unknown"), and a note when it's from the last version.
+- Click a node: the inspector's Details shows a function's signature, inputs, output, decisions, throws, awaits, unknown calls and writes; a decision's whole condition and where each outcome leads; a stub's calls. **Open code** (or a double-click) opens its line.
+
+**Files:**
+- `apps/web/src/flow/api.ts`, `elk.ts`, `useFlow.ts`, `FlowInspector.tsx`, `FlowStatus.tsx` (new), with styles; `fixtures.ts`, `flow.test.tsx`, `layout.perf.test.ts` (new).
+- `apps/web/src/project/ProjectPage.tsx`, `Inspector.tsx`: the three ways in, the canvas's flow, the Details tab; new empty texts.
+- `packages/ui/src/components/calls-panel/`: the Show flow link; "Finding calls…" (answers come from the store too). `packages/ui/src/components/command-palette/`: the Flows section.
+- `apps/web/scripts/bundle-size.ts`: ELK's own budget. `apps/web/package.json`, `package.json`: `test:perf` for the web app.
+- `e2e/try-it/phase-2.spec.ts`, `phase-5.spec.ts`: the new empty text and menu item; 38 updated baselines (the empty texts and the Calls tab's link).
+
+**Concepts:**
+- **Web Workers through Vite:** `import Worker from '…?worker'` builds the worker as its own file, which the security policy allows (`script-src 'self'`). https://vite.dev/guide/features#web-workers
+- **Stable callbacks:** a component given a new function every render may treat it as a change; holding the latest in a ref and passing one stable function stops that. https://react.dev/reference/react/useCallback
+- **Bundle budgets:** a large dependency loaded only when needed gets its own line and reason, rather than raising the total. https://web.dev/articles/performance-budgets-101
+
+**Found and fixed:**
+- **A render loop:** React Flow reported the empty selection as it started; the page updated its state; the new render gave React Flow a new handler; it reported again. Four page test files hung. Its handlers are now stable, and "nothing selected" when nothing was is a no-op.
+- **"⌘K" in the empty text** while the top bar shows "Ctrl K" on Linux: the text names Search instead.
+- **"Show flow" styled as a path** (Mono): an action, in Small.
+- **Three page tests timed out, and the layout's timing went over 1 s, only in the full `pnpm test`**, where every package's tests share the laptop's cores (load average 12.8 on 16 cores). Alone, the web suite passes in 12 s. The files that render the whole page now have 15 s per test, with the reason beside it (phase 6 did the same for TypeScript's tests); the layout's timing moved to `layout.perf.test.ts`, run alone with `pnpm test:perf`: median 56 ms, worst 70 ms for 60 nodes.
+- **ELK's worker is 444 kB gzipped:** its own budget line (490 kB), with the reason; never in the first load. The project page's own chunk is at 108.1 of 110 kB.
+
+**Tests:** 192 web tests pass. New: the page opens a flow from ⌘K and shows its name and counts once laid out; it says when the flow is from the last version and why there's no flow; the inspector shows a decision's outcomes and opens its line, lists a node's unknown calls and opens their lines, says what wasn't shown and when expanding arrives, and says it's reading a function's details while they load; the Calls tab's Show flow; ⌘K's Flows section (only functions, methods and components; choosing one opens its flow, not its code).
+
+**Run and check it:** `pnpm dev`, open Rallly with its workspace running, wait for the graph (Labs → Graph stats shows "ready"), then in the Code view open `apps/web/src/features/poll/mutations.ts`, right-click `createPoll` → Show flow. Tests: `pnpm --filter @flowcanvas/web test`; performance: `pnpm --filter @flowcanvas/web test:perf`.
+
+**Risks and laptop:** the project page's chunk is near its budget (108.1 of 110 kB). Laptop: the visual suite ran twice in Playwright's container, a few minutes each.
+
+**On CI** (run 43457304615, green): every job, the walkthroughs on the deployed preview included; in real workspaces every flow, details and stored Calls answer within 23 ms.
+
+**Docs:** RUN-AND-FEATURES re-read in full (the owner found its "Last updated" five days old): release, progress, counts and phase sections corrected.
+
+**Commit:** `feat(web): open a flow from the right-click menu, ⌘K or the Calls tab` (`58a4c50`).
