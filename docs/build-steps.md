@@ -13203,7 +13203,7 @@ pnpm test:visual
 | 6 | The page: opening flows from three places; selecting nodes; Open code; answers and layouts kept per graph version, so going back is instant (ADR 0029) | B | done (Claude, 13 Nov): `58a4c50` |
 | 6a | The living docs held to the code (owner, 13 Nov) | B | done (Claude, 13 Nov): `6e418b5`, `77324e4`, `5f6fdd6` |
 | 6b | CI deploys every target; the Docker job in shards; the docs gate (owner, 13 Nov) | B | done (Claude, 13 Nov): `a473e20`, `b31c774`, `cfddb64`, `f8b0221`, `ee7a59b`, `fff9bd0` |
-| 7 | Proof: 10 hand-labelled Documenso flows in real workspaces, every node at its line; the walkthrough; screens; the shared fake workspace for page tests (owner, 12 Nov) | B | in progress (Claude): `c59edae` |
+| 7 | Proof: 10 hand-labelled Documenso flows in real workspaces, every node at its line; the walkthrough; screens; the shared fake workspace for page tests (owner, 12 Nov) | B | done (Claude, 14 Nov): `c59edae`, `ab81e33`, `f8fdf7c`, `113ffbc`, `78cff55` |
 | 8 | Close: report, 0.11.0 | B | *planned* |
 
 ### How each Done-when item is proven
@@ -13532,22 +13532,34 @@ pnpm test:visual
 
 **Commits:** `ci: deploy each pull request's preview from CI` (`a473e20`); `fix(ci): stamp the preview with CI's commit; retry GitHub's own errors` (`b31c774`); `ci: wait 3 minutes for a preview CI deployed itself, not 10` (`cfddb64`); `ci: deploy staging and the catalogue from CI; run the Docker job as shards` (`f8b0221`); `fix(docs): bring ARCHITECTURE up to date and hold it to the code` (`ee7a59b`); `test(host): measure Rallly's search p95 over 109 searches, not 19` (`fff9bd0`); `docs: the milestone gate, and the records checked for what's missing`.
 
-### Step 7.7 — Proof: 10 hand-labelled flows, the walkthrough, the screens (in progress, Claude)
+### Step 7.7 — Proof: 10 hand-labelled flows, the walkthrough, the screens, one shared fake (done by Claude)
 
-**Goal:** the Done when: flows for 10 Documenso functions render correctly and every node opens the right line.
+**Goal:** the Done when: flows for 10 Documenso functions render correctly and every node opens the right line. And the owner's 12 Nov decision: one shared fake workspace for walkthroughs and page tests, changing nothing they prove.
 
-**What a person can do now:** nothing new yet on the page; the engine draws a call that always happens beside a guarded one on its line.
+**What a person can do now:** run phase 7's Try it as a walkthrough (`e2e/try-it/phase-7.spec.ts`): Documenso's `deleteFolder` found with ⌘K, its flow from the right-click menu, getTeam's details, Open code at `get-team.ts:38`, a decision's outcomes. On the canvas, edges now follow ELK's routes around the nodes, a node shows `folder/file:line` as Figma's do, and long names wrap at their words.
 
-**Files so far:** `corpus/src/flows.ts` (flows as lines, compared exactly with the labels); `packages/graph-model/src/` (`GraphEdge.guarded`, graph format 3) and `packages/engine/src/semantics/graph-pass.ts`, `snapshots.ts` (store format 3).
+**Files:**
+- **Labels:** `corpus/labels/flows.json` (10 flows, 261 lines, each written by reading the function and everything it reaches at the pin); `corpus/src/flows.ts` (a flow as sorted lines; compared exactly) with `flows.test.ts`; `workspace/host/src/corpus.docker.test.ts` asks each flow of the real workspace's engine and compares it.
+- **The engine:** `packages/graph-model/src/` (`GraphEdge.guarded`, graph format 3; `flow.ts` draws from it), `packages/engine/src/semantics/graph-pass.ts`, `snapshots.ts` (store format 3).
+- **Drawing:** `apps/web/src/flow/route.ts` (an edge along ELK's route, rounded corners, the outcome's place; tested), `layout.ts` (keeps each route and node size; `shortPlace`), `canvas/flow-parts.tsx`; `packages/ui/src/components/flow-node/wrap.ts` (where text wraps, and each node's height; tested) and `FlowNode.tsx`.
+- **Shared fakes:** `e2e/try-it/fake-workspace.ts` (the walkthroughs of phases 3 to 7 and the screens test); `apps/web/src/test/fake-api.ts` (the Code view, Calls, ⌘K, graph stats and flow page tests).
+- **Walkthrough and screens:** `e2e/try-it/phase-7.spec.ts` with `fixtures/phase-7-delete-folder.json` (the engine's own flow and details for `deleteFolder`, thrown expressions cut to their call: corpus code isn't copied here); two screens in `e2e/visual/screens.spec.ts`, both themes.
 
-**Concepts:** **labels written by reading the code**, compared with the engine's answers as sorted lines, so a difference reads as one line.
+**Concepts:**
+- **Labels written by reading the code**, compared with the engine's answers as sorted lines, so a difference reads as one line. https://en.wikipedia.org/wiki/Ground_truth
+- **Drawing a layout's own routes:** ELK returns each edge's sections (start, bend points, end); drawing those keeps edges where ELK made room for them. https://eclipse.dev/elk/documentation/tooldevelopers/graphdatastructure/coordinatesystems.html
+- **Word breaks in identifiers:** `<wbr>` marks where a line may break inside a word. https://developer.mozilla.org/en-US/docs/Web/HTML/Element/wbr
 
-**Found and fixed so far:** in `hasPersistedId(a) && hasPersistedId(b)` the first call always runs, but the flow hid it: guarded calls were subtracted by line, and the second, guarded call shares the line. The pass now says which lines of a call are fully guarded. On the 10 chosen functions the engine then matched the labels for 9 at once; the tenth's difference was the bug.
+**Found and fixed on the way:**
+- **The engine hid a call that always happens** (`hasPersistedId(a) && hasPersistedId(b)`): guarded calls were subtracted by line, and the second, guarded call shares the first's line. The pass now says which lines of a call are fully guarded (graph format 3). Found by the labels: the engine then matched all 10 (`c59edae`).
+- **Edges ran behind nodes:** the canvas drew its own step between the nodes' handles, ignoring ELK's routes. Now each edge is drawn along its route (`f8fdf7c`).
+- **Names and paths broke at any character** ("canAccessTeamDocumen" / "t"), making nodes taller than ELK had placed them: names now wrap at their words, paths after a folder or a dash (never inside `.ts`), nodes show `folder/file:line`, and ELK gets each node's real height (`f8fdf7c`). Six catalogue screenshots of the flow node changed for this, by the wrapping alone.
+- **A screen's ⌘K was pressed before the page listened**, in one theme: the screens open the palette from the Search button.
 
-**Tests so far:** graph model 29 (2 new), engine 199 (2 new: the pass's guarded lines, and a flow through the same-line case).
+**Tests:** corpus 32 (4 new: flows as lines, the comparison, the labels' shape); graph model 29 (2 new); engine 199 (2 new); ui 14 for the flow node (3 new: wrapping, lines, heights); web 199 before and after the shared fake (7 new for routes and layout: drawing a route, the label's place, real heights, every edge routed from its source to its target). In real workspaces on CI: Documenso's 10 labelled flows **10 of 10**, every labelled function's flow opening at its node **20 of 20**. Walkthroughs: phase 7's, and phases 3 to 6 unchanged on the shared fake. Visual: 186 of 186 (two new screens in both themes, six flow-node images updated). Mutation check: breaking the shared fake's flow route fails the two page tests that open flows.
 
-**Run and check it:** `pnpm --filter @flowcanvas/graph-model test`; `pnpm --filter @flowcanvas/engine test`.
+**Run and check it:** `pnpm --filter @flowcanvas/corpus test`; `CORPUS_ONLY=documenso pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts` (needs Docker; about a minute); `pnpm test:e2e` (the walkthroughs); `pnpm test:visual`.
 
-**Risks and laptop:** the format change drops stored snapshots once; the next pass rebuilds them. Laptop: Documenso's graph built in process, about 20 s.
+**Risks and laptop:** the format change drops stored snapshots once; the next pass rebuilds them. Node heights are estimated from character widths (erring tall), not measured: a font change would need the estimate checked. Laptop: Documenso in a real workspace (a minute), the visual suite in Playwright's container three times (4 minutes each), the walkthroughs headless.
 
-**Commits so far:** `fix(engine): draw a call that always happens beside a guarded one on its line` (`c59edae`).
+**Commits:** `fix(engine): draw a call that always happens beside a guarded one on its line` (`c59edae`); `test(corpus): 10 hand-labelled Documenso flows, compared exactly in real workspaces` (`ab81e33`); `fix(canvas): draw edges along ELK's routes; wrap node text at word boundaries` (`f8fdf7c`); `test(e2e): one shared fake workspace; phase 7's walkthrough and screens` (`113ffbc`); `test(web): one shared fake API for the page tests` (`78cff55`).

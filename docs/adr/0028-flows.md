@@ -89,3 +89,10 @@ Twenty now loads in 724 ms on the laptop and 225 ms on CI's runner; the four hel
 **The API (step 3).** `GET /api/projects/:id/workspace/index/flow` and `…/index/details`, with a place (`path`, `line`, `column`): the owner's only, while the workspace runs, and counted as activity. Both are checked in the control plane and the host with exact shapes and bounds, like every answer from inside a workspace.
 
 **Found on the way: search during a pass.** Two CI runs failed phase 4's Rallly check, one search under 100 ms, at 118 and 151 ms. Since phase 6 the graph pass starts as the index becomes ready, and a workspace's 2-CPU quota can pause every thread in it, the engine's main thread included. Measured in a 2-CPU container: with one busy worker, search's p95 is 9 to 14 ms and its worst 61 to 67 ms; with none, its worst is 27 ms. A lower priority for the worker's thread doesn't help (the quota is the container's, not the thread's). The decisions log (9 Nov) sets the engine's p95, so the test now takes the p95 of 19 searches: 21 ms on CI. Giving analysis a CPU share of its own is in `docs/upgrade-later.md`.
+
+## Addendum, 14 Nov 2026 (step 7): drawing what ELK laid out
+
+Phase 7's screens of a real flow (Documenso's `deleteFolder`) showed two faults, both fixed:
+- **Edges are drawn along ELK's routes.** The canvas had drawn its own step between each pair of nodes, ignoring the routes ELK computes around them, so lines ran behind nodes. `layoutFlow` now keeps each edge's route (start, bends, end) and the canvas draws it with Graphite's rounded corners; an outcome's label sits 20 px past its decision (`apps/web/src/flow/route.ts`).
+- **Nodes are as tall as ELK is told.** A node shows its folder and file with the line (`team/get-team.ts:38`), as Figma's nodes do; the full path is in the inspector. Names wrap at their words and paths after a folder or a dash, and ELK is given each node's height from the same rule (`packages/ui/src/components/flow-node/wrap.ts`), estimated from the fonts' character widths, erring tall. Measuring each node after it renders and laying out again was the alternative: exact, but two layouts per flow and a visible jump.
+
