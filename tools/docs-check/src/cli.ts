@@ -114,16 +114,19 @@ function buildCatalogue(): void {
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
 
 function unitCount(): number {
-  const output = execFileSync('pnpm', ['-s', 'test'], {
+  // `--log-prefix=task`: in GitHub Actions, Turborepo groups each package's output and drops the `package:test:`
+  // prefix read here (the count came out as 0 on CI, 13 Nov 2026).
+  const output = execFileSync('pnpm', ['-s', 'turbo', 'run', 'test', '--log-prefix=task'], {
     cwd: repo,
     encoding: 'utf8',
     maxBuffer: 1 << 28,
     stdio: ['ignore', 'pipe', 'ignore'],
   });
-  return [...output.replace(ANSI, '').matchAll(/:test:\s+Tests\s+[^\n]*\((\d+)\)/g)].reduce(
-    (sum, match) => sum + Number(match[1]),
-    0,
-  );
+  const totals = [...output.replace(ANSI, '').matchAll(/:test:\s+Tests\s+[^\n]*\((\d+)\)/g)];
+  // No totals read is a failure to count, never a count of 0.
+  if (totals.length === 0)
+    throw new Error('couldn’t read the unit tests’ totals from `turbo run test`');
+  return totals.reduce((sum, match) => sum + Number(match[1]), 0);
 }
 
 function counts(packages: readonly string[]): Map<string, number> {
