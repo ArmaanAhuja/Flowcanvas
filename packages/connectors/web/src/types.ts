@@ -24,6 +24,12 @@ export interface Position {
   readonly column: number;
 }
 
+/** A stretch of a file's text, by character offsets: what handles an entry point, for the engine to find its node. */
+export interface Span {
+  readonly start: number;
+  readonly end: number;
+}
+
 export interface FoundEntry {
   readonly kind: EntryKind;
   readonly framework: Framework;
@@ -35,4 +41,6 @@ export interface FoundEntry {
   readonly complete: boolean;
   /** Why it isn't complete. */
   readonly why?: string;
+  /** The function or method that handles it, when the code names or holds one. */
+  readonly handler?: Span;
 }
