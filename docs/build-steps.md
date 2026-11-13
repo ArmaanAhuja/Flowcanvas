@@ -13202,9 +13202,9 @@ pnpm test:visual
 | 5 | UI: the decision node, the flow's layout, the pill, the inspector's body, in the design system | B | done (Claude, 13 Nov): `dc91add` |
 | 6 | The page: opening flows from three places; selecting nodes; Open code; answers and layouts kept per graph version, so going back is instant (ADR 0029) | B | done (Claude, 13 Nov): `58a4c50` |
 | 6a | The living docs held to the code (owner, 13 Nov) | B | done (Claude, 13 Nov): `6e418b5`, `77324e4`, `5f6fdd6` |
-| 6b | CI deploys every target; the Docker job in shards; the docs gate (owner, 13 Nov) | B | done (Claude, 13 Nov): `a473e20`, `b31c774`, `cfddb64`, `f8b0221`, `ee7a59b`, `fff9bd0` |
+| 6b | CI deploys every target; the Docker job in shards; the docs gate (owner, 13 Nov) | B | done (Claude, 13 Nov): `a473e20`, `b31c774`, `cfddb64`, `f8b0221`, `ee7a59b`, `fff9bd0`, `bedd815` |
 | 7 | Proof: 10 hand-labelled Documenso flows in real workspaces, every node at its line; the walkthrough; screens; the shared fake workspace for page tests (owner, 12 Nov) | B | done (Claude, 14 Nov): `c59edae`, `ab81e33`, `f8fdf7c`, `113ffbc`, `78cff55` |
-| 8 | Close: report, 0.11.0 | B | *planned* |
+| 8 | Close: report, 0.11.0 | B | done (Claude, 14 Nov): `181d09d`, `b355e54`, `docs: phase 7 close` |
 
 ### How each Done-when item is proven
 
@@ -13530,7 +13530,7 @@ pnpm test:visual
 
 **Risks and laptop:** staging deploys from CI only after the next merge, so Cloudflare's own build for `main` stays on until then (two deploys of the same commit are harmless). A fork's pull request gets no preview (upgrade-later 10). Laptop: one Excalidraw shard and the host Docker file, a minute each.
 
-**Commits:** `ci: deploy each pull request's preview from CI` (`a473e20`); `fix(ci): stamp the preview with CI's commit; retry GitHub's own errors` (`b31c774`); `ci: wait 3 minutes for a preview CI deployed itself, not 10` (`cfddb64`); `ci: deploy staging and the catalogue from CI; run the Docker job as shards` (`f8b0221`); `fix(docs): bring ARCHITECTURE up to date and hold it to the code` (`ee7a59b`); `test(host): measure Rallly's search p95 over 109 searches, not 19` (`fff9bd0`); `docs: the milestone gate, and the records checked for what's missing`.
+**Commits:** `ci: deploy each pull request's preview from CI` (`a473e20`); `fix(ci): stamp the preview with CI's commit; retry GitHub's own errors` (`b31c774`); `ci: wait 3 minutes for a preview CI deployed itself, not 10` (`cfddb64`); `ci: deploy staging and the catalogue from CI; run the Docker job as shards` (`f8b0221`); `fix(docs): bring ARCHITECTURE up to date and hold it to the code` (`ee7a59b`); `test(host): measure Rallly's search p95 over 109 searches, not 19` (`fff9bd0`); `docs: the milestone gate, and the records checked for what's missing` (`bedd815`).
 
 ### Step 7.7 — Proof: 10 hand-labelled flows, the walkthrough, the screens, one shared fake (done by Claude)
 
@@ -13563,3 +13563,21 @@ pnpm test:visual
 **Risks and laptop:** the format change drops stored snapshots once; the next pass rebuilds them. Node heights are estimated from character widths (erring tall), not measured: a font change would need the estimate checked. Laptop: Documenso in a real workspace (a minute), the visual suite in Playwright's container three times (4 minutes each), the walkthroughs headless.
 
 **Commits:** `fix(engine): draw a call that always happens beside a guarded one on its line` (`c59edae`); `test(corpus): 10 hand-labelled Documenso flows, compared exactly in real workspaces` (`ab81e33`); `fix(canvas): draw edges along ELK's routes; wrap node text at word boundaries` (`f8fdf7c`); `test(e2e): one shared fake workspace; phase 7's walkthrough and screens` (`113ffbc`); `test(web): one shared fake API for the page tests` (`78cff55`).
+
+### Step 7.8 — Close: the report, 0.11.0, and the milestone gate (done by Claude)
+
+**Goal:** the phase written up for the owner's acceptance, every living doc re-read in full at this milestone, every check green.
+
+**What a person can do now:** read `docs/reports/phase-7.md` and `docs/reports/phase-7-figma-differences.md`; What's new shows 0.11.0.
+
+**Files:** `docs/reports/phase-7.md`, `phase-7-figma-differences.md`, `phase-7/` (the built screens); `CHANGELOG.md` and `package.json` (0.11.0); `docs/STATUS.md`; the living docs re-read in full, each with its **Reviewed** line: README (still true), ARCHITECTURE (Node 26, the version's path, usage recorded since 1d, graph format 3, edges along ELK's routes, the labelled flows, the Docker jobs), RUN-AND-FEATURES (the editor no longer "API only", phase 7's section, the Docker and docs rows, CI's deploys, Coming next), STATUS (phase 7 in review), upgrade-later (items 7, 10 and 23); `tools/docs-check` (`unreleasedVersion`: package.json may run ahead of staging only for a phase in review).
+
+**Concepts:** none new. **Found and fixed on the way:** CI's screen test found the canvas saying "Choose a function to see its flow" for one render under a flow just laid out: it judged emptiness by React Flow's copy of the nodes, which catches up an effect late; it now goes by the nodes it's given (`181d09d`). The milestone gate's first run found it treated phase 6 as current once phase 7 was in review (the current phase is now the last in STATUS that isn't planned), and that `bedd815` was named only by its message. `docs:check` would have refused 0.11.0 before the merge, since staging still serves 0.10.0: it now allows that for a phase in review, with a test. The re-read found the stale passages listed above. Measuring CI for upgrade-later 7 found that its slowest step is the report job's 3-minute download of the walkthroughs' recordings (a question in the report).
+
+**Tests:** docs-check 24 (1 new for the current phase, 1 for an unreleased version); CI on the closing commit, every job green; `pnpm docs:milestone` passing; three mutation checks run for the report (the pass's guarded lines, the flow's use of them, the facts' hash check).
+
+**Run and check it:** `pnpm docs:milestone`; `pnpm dev` and the report's "How to try it".
+
+**Risks and laptop:** none new. Laptop: one web build and the bundle check.
+
+**Commits:** `fix(canvas): never say "Choose a function" under a flow just laid out` (`181d09d`); `chore: release 0.11.0 (phase 7)` (`b355e54`); `docs: phase 7 close: report, 0.11.0, the living docs re-read`.

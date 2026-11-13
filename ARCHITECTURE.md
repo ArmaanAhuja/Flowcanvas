@@ -1,8 +1,8 @@
 # Architecture
 
-The system as it is **today** (phase 7, in progress). Kept current with every milestone, and held to the code by `pnpm docs:check`: the parts table names every package and every source folder, the dependencies match each `package.json`, and this line names the phase the work is at. Why things are this way is in `docs/adr/`; what's deferred is in `docs/upgrade-later.md`.
+The system as it is **today** (phase 7, in review). Kept current with every milestone, and held to the code by `pnpm docs:check`: the parts table names every package and every source folder, the dependencies match each `package.json`, and this line names the phase the work is at. Why things are this way is in `docs/adr/`; what's deferred is in `docs/upgrade-later.md`.
 
-**Reviewed:** not yet re-read in full under the milestone rule (added 13 Nov 2026); due before phase 7's milestone B report. At every milestone this doc is re-read in full against the code, and this line names the milestone (`pnpm docs:milestone` checks it).
+**Reviewed:** phase 7, milestone B (14 Nov 2026): re-read in full against the code. At every milestone this doc is re-read in full, and this line names the milestone (`pnpm docs:milestone` checks it).
 
 ## Parts
 
@@ -73,19 +73,19 @@ Defined by `services/control-plane/migrations/*.sql` (ADR 0014); applied with `p
 ## Tooling
 
 - **pnpm 12** workspaces with catalogs (one version per dependency).
-- **Turborepo 2**: task graph and cache for `build`, `typecheck`, `test`, `lint`, `dev`, `test:e2e` and `build-storybook`. Always build through Turbo, so dependencies build first.
+- **Turborepo 2**: task graph and cache for `build`, `typecheck`, `test`, `lint`, `dev`, `test:e2e`, `test:docker` and `build-storybook`. Always build through Turbo, so dependencies build first.
 - **TypeScript 6.0**, strict, shared `tsconfig.base.json`.
 - **ESLint 10** (type-aware typescript-eslint), **Stylelint 17** (tokens only) and **Prettier 3**.
 - **Storybook 10**: the component catalogue, with the accessibility and theme addons.
 - **Vitest 5** for unit and component tests; **Playwright** (Chromium) for end-to-end tests.
-- Node **24 LTS**.
+- Node **26** (`.nvmrc`; `package.json` requires 26.13 or newer).
 
 ## How the version and commit travel
 
 ```
-git commit ──► root package.json "version" (0.4.0; a Turbo input of the web build)
+git commit ──► root package.json "version" (0.11.0; a Turbo input of the web build)
            └─► commit SHA
-                 ├─ web build:     FLOWCANVAS_COMMIT (root `build` script, or Cloudflare's clone) → Vite `define` __FLOWCANVAS_BUILD__ → page text "0.4.0 · abc1234"
+                 ├─ web build:     FLOWCANVAS_COMMIT (CI's deploy sets it; the root `build` script asks git otherwise) → Vite `define` __FLOWCANVAS_BUILD__ → page text "0.11.0 · abc1234"
                  └─ control plane: GET /api/health reports the version (root package.json, bundled by Wrangler); the commit is on the page
 ```
 
@@ -170,7 +170,7 @@ recordUsage()      ──► usage_records (phase 1d's workspaces call it; refus
 GET  /api/usage    ──► this UTC month's sums for the signed-in person, and when they reset
 ```
 
-Nothing records usage until workspaces run (phase 1d), so the meter reads a real 0. The free allowance, limits and the graceful pause come with plans (phase 44a).
+Workspaces record their running time as they sleep or stop (phase 1d; see Workspace lifecycle below). The free allowance, limits and the graceful pause come with plans (phase 44a).
 
 ## Admin view (phase 1c)
 
@@ -266,7 +266,7 @@ inside the workspace: the agent's watcher (in process) ──► refresh ──�
 - **The flow graph** (phase 6, ADR 0027): `@flowcanvas/graph-model` holds the vocabulary (six node kinds, five edge kinds, five provenances, change states), the rules, a canonical compact encoding, the diff and stats; plain data, used by the engine, the protocol and the page.
   - **Built** in the TypeScript worker: one pass over every program (and inferred programs for files no tsconfig includes), one at a time and released after, yielding to questions; code units with their calls, resolved or unknown, built-ins counted apart; (phase 7, ADR 0028) the decisions guarding those calls (`if`, ternaries, `&&`/`||`/`??`, `switch`, `catch`), joined by branch edges labelled with their outcomes, while call edges stay as they were. Then incrementally: changed files and those with calls into them. Checked against the schema in the worker, once, before it's saved.
   - **When:** after the first index; 2 s after edits settle; one pass at a time.
-  - **Kept** in `/workspace/.flowcanvas/graph.db` (its own SQLite file): versions by SHA-256 of their encoding (graph format 2, with a table of paths), compressed with zstd, the last 20; loading checks the bytes against the SHA-256 rather than the schema again. Each version is loaded straight back to time it, and the latest is kept decoded and indexed in the engine (about 60 MB for Twenty).
+  - **Kept** in `/workspace/.flowcanvas/graph.db` (its own SQLite file): versions by SHA-256 of their encoding (graph format 3: a table of paths, and each call's fully guarded lines), compressed with zstd, the last 20; loading checks the bytes against the SHA-256 rather than the schema again. Each version is loaded straight back to time it, and the latest is kept decoded and indexed in the engine (about 60 MB for Twenty).
   - **Asked for** with the engine's `graph` request: the state, and the latest version's counts and timings; `GET …/index/graph` through the API (not activity).
   - **Shown** by Labs → Graph stats (`apps/web/src/graph/`, `packages/ui` `GraphStats`), in the inspector's Details tab, asked for only while its switch is on.
 - **Flows and node details** (phase 7, ADR 0028):
@@ -274,8 +274,8 @@ inside the workspace: the agent's watcher (in process) ──► refresh ──�
   - **Details** (`packages/engine/src/semantics/details.ts`): signature, typed inputs and output, decisions and their conditions, thrown errors, awaited calls, unknown calls, writes to module state.
   - **Stored by the pass** (ADR 0029, the owner's "compute once, store, reuse"): each file's code units (their ranges) and details, in `/workspace/.flowcanvas/facts.db` (`FactsStore`), one compressed row per file with the hash of its text. The worker writes rows as it walks; the engine reads one file's when asked and checks the hash against the file. Flows from inside a function and details answer from it; a file changed since is answered by TypeScript in the worker. Each unit's calls are stored too, in the Calls tab's shape, with an index of which files call each place (`calls_into`): the Calls tab's callees, and the callers of non-members, come from them when the graph is up to date and the files are unchanged (`storedCalls` in `service.ts`).
   - **Asked for** with the engine's `flow` and `details` requests; `GET …/index/flow` and `…/index/details` through the API (activity), with TypeScript's longer timeouts.
-  - **On the page** (`apps/web/src/flow/`): `useFlow` asks for a flow, lays it out with ELK (`layoutFlow`, layered, top to bottom) in a Web Worker loaded the first time a flow opens (`elk.ts`), and keeps layouts and details by graph version (ADR 0029). The canvas draws `DecisionNode` and `FlowStub` nodes and edges by provenance (`canvas/flow-parts.tsx`); the inspector's Details shows `FlowInspector` (`NodeDetails` for a function). Opened from the Code view's right-click menu, ⌘K's Flows section, and the Calls tab.
-- **Proof:** `workspace/host/src/corpus.docker.test.ts` indexes all six corpus forks in real workspaces, and checks the callers and callees of 20 hand-labelled functions in Rallly and Documenso exactly (`corpus/labels/calls.json`, `corpus/src/calls.ts`); (phase 6) the graphs of four forks and 26 labelled functions in them; (phase 7) each labelled function's flow and details, at its own node; `packages/engine/src/search.perf.test.ts` times search on 100,000 names, run alone in CI's performance job.
+  - **On the page** (`apps/web/src/flow/`): `useFlow` asks for a flow, lays it out with ELK (`layoutFlow`, layered, top to bottom) in a Web Worker loaded the first time a flow opens (`elk.ts`), and keeps layouts and details by graph version (ADR 0029). The canvas draws `DecisionNode` and `FlowStub` nodes, and each edge by its provenance along the route ELK chose (`flow/route.ts`, `canvas/flow-parts.tsx`); a node shows its folder, file and line, its text wraps at word boundaries, and ELK is given its height as it renders (`packages/ui` `nodeHeight`, ADR 0028 addendum); the inspector's Details shows `FlowInspector` (`NodeDetails` for a function). Opened from the Code view's right-click menu, ⌘K's Flows section, and the Calls tab.
+- **Proof:** `workspace/host/src/corpus.docker.test.ts` indexes all six corpus forks in real workspaces, and checks the callers and callees of 20 hand-labelled functions in Rallly and Documenso exactly (`corpus/labels/calls.json`, `corpus/src/calls.ts`); (phase 6) the graphs of four forks and 26 labelled functions in them; (phase 7) each labelled function's flow and details, at its own node, and 10 hand-labelled Documenso flows drawn exactly (`corpus/labels/flows.json`, `corpus/src/flows.ts`); `packages/engine/src/search.perf.test.ts` times search on 100,000 names, run alone in CI's performance job.
 
 ## Workspace lifecycle (phase 1d, step 3)
 
@@ -316,7 +316,7 @@ POST /api/projects/:id/workspace/{open,sleep,resume,stop}  (same origin) ──�
 - **Canaries, never kept:** `workspace/host/src/no-leaks.docker.test.ts` (host logs, other answers, Docker's logs, `docker inspect`, process environments in the workspace) and `services/control-plane/src/api/no-leaks.test.ts` (the API, including a host that echoes its token).
 - **Host sentences:** the adapter (`local-host.ts`) drops any host sentence containing the token.
 - **Isolation:** `workspace/host/src/host.docker.test.ts`: the other workspace, the proxy's other sides, this computer's addresses (ports 22, 5173, 8787, 8790), metadata, DNS, IPv6, directly and through the proxy.
-- **In CI:** job `docker` runs `pnpm test:docker` with `WORKSPACE_HOST_TEST_PRESSURE=none`, which only test hosts accept. The real 10-minute run is `test:idle-real`, run by hand.
+- **In CI:** job `docker` runs as four parallel jobs (Twenty, Medusa, LibreChat, and the rest with every other Docker test; `corpus/src/select.ts`) with `WORKSPACE_HOST_TEST_PRESSURE=none`, which only test hosts accept. The real 10-minute run is `test:idle-real`, run by hand.
 
 ## Local development
 
@@ -326,7 +326,7 @@ pnpm dev            # http://localhost:5173: Vite, with /api forwarded to the Wo
                     # and the workspace host on 127.0.0.1:8790 (needs WORKSPACE_HOST_TOKEN and Docker)
 pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e
 pnpm --filter @flowcanvas/ui storybook   # catalogue on http://localhost:6006
-pnpm test:visual                         # catalogue baselines in both themes, axe
+pnpm test:visual                         # the catalogue's and the project page's baselines, both themes, axe
 pnpm workspace:image                     # build the workspace image (phase 1d), skipped if up to date
 pnpm test:docker                         # tests against real containers; needs Docker 28+ and the internet
 pnpm workspace:resources                 # the laptop's figures and Flowcanvas's share, against the budget
