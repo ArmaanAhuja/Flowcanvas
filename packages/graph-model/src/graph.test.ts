@@ -254,14 +254,16 @@ describe('graphStats', () => {
       unknown: 1,
     });
     expect(stats.byEdgeKind.call).toBe(4);
-    // Every kind not filled yet names its phase (build plan, stage 1); code units and decisions are filled.
+    // Every kind not filled yet names its phase (build plan, stage 1); code units, decisions (phase 7) and entry
+    // points (phase 8) are filled.
     for (const [kind, count] of Object.entries(stats.byNodeKind)) {
       if (kind === 'code-unit') expect(count).toBe(4);
-      else if (kind !== 'decision') {
-        expect(ARRIVES_IN[kind as keyof typeof ARRIVES_IN], kind).toBeGreaterThan(7);
+      else if (kind !== 'decision' && kind !== 'entry-point') {
+        expect(ARRIVES_IN[kind as keyof typeof ARRIVES_IN], kind).toBeGreaterThan(8);
       }
     }
     expect(ARRIVES_IN).not.toHaveProperty('decision');
+    expect(ARRIVES_IN).not.toHaveProperty('entry-point');
     expect(ARRIVES_IN).not.toHaveProperty('branch');
   });
 });
