@@ -108,6 +108,7 @@ The draft PR (#22) ran CI on every push.
 - **Milestone A** (steps 0 to 3) was green on its last commit after fixes (a filtered lint run had missed workspace-host; the docs counts).
 - **Milestone B** (steps 4 to 6) was green on `507e10f` (run 43605623627).
 - **Milestone C:** `ff57c8e` was red on the bundle budget only; every other job green. Fixed in `9cd17fb`. The local fast suites now include the build and the budget.
+- **The close** (`51ab01b`) was red on one screen: `project-entry-flow` waited for a row the virtualized panel had left out of the page, once the panel loaded lazily. Fixed in the test (`9d00267`), which passed 20 of 20 runs locally.
 - **Closing commit:** see the PR's checks.
 
 ## Next phase preview

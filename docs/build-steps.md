@@ -13886,7 +13886,7 @@ pnpm test:visual
 
 **Concepts:** none new.
 
-**Found and fixed on the way:** CI's bundle budget went red on `ff57c8e`: the project page's chunk was 135.8 kB against its 110 kB budget, since the entry-points panel brought React Aria's tree and virtualizer into it (the file tree's chunk fell from 25.0 to 2.5 kB as they moved). The panel now loads on its own, as the file tree does (`apps/web/src/entry-points/EntryPointsLeft.tsx`, lazy in ProjectPage, "Finding entry points…" while it loads): the page is 110.6 kB, the panel 3.6 kB, and the virtualizer the two left panels share 22.8 kB. The page's budget went 110 → 115 for its 1.6 kB of entry-point wiring, every open project's default; FilesPanel's went 30 → 5, and the two new chunks have their own (`apps/web/scripts/bundle-size.ts`, each with why). The local fast suites didn't run the build, so they missed it; they do now.
+**Found and fixed on the way:** CI's bundle budget went red on `ff57c8e`: the project page's chunk was 135.8 kB against its 110 kB budget, since the entry-points panel brought React Aria's tree and virtualizer into it (the file tree's chunk fell from 25.0 to 2.5 kB as they moved). The panel now loads on its own, as the file tree does (`apps/web/src/entry-points/EntryPointsLeft.tsx`, lazy in ProjectPage, "Finding entry points…" while it loads): the page is 110.6 kB, the panel 3.6 kB, and the virtualizer the two left panels share 22.8 kB. The page's budget went 110 → 115 for its 1.6 kB of entry-point wiring, every open project's default; FilesPanel's went 30 → 5, and the two new chunks have their own (`apps/web/scripts/bundle-size.ts`, each with why). The local fast suites didn't run the build, so they missed it; they do now. The split then made one screen test flaky: `project-entry-flow` waited for the "API routes" row, which the virtualized panel leaves out of the page once the 65 screens are listed above it (the panel used to render before they arrived). It waits for the top row now (`9d00267`); both entry-point screens passed 20 of 20 runs locally.
 
 **Tests:** `pnpm docs:milestone`; CI green on the close.
 
@@ -13894,4 +13894,4 @@ pnpm test:visual
 
 **Risks and laptop:** none. Laptop: none.
 
-**Commits:** `a7cf9c0` the release; `9cd17fb` the panel's own chunk; this close.
+**Commits:** `a7cf9c0` the release; `9cd17fb` the panel's own chunk; `51ab01b` the close; `9d00267` the entry-flow screen's wait; this commit, the record of it.
