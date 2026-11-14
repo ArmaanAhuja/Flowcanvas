@@ -646,3 +646,12 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 - **The bar, stricter than the plan's 90%:** 100% recall for convention-based kinds (file- and config-based routes and pages, decorators, package.json scripts); at least 95% recall per fork (not only overall) for routes registered in code (Express, Hono, tRPC) and event handlers; 100% precision (every false find fixed, or shown to be a labelling mistake); every miss explained in the report and shown on the page as not fully detected, never guessed.
 - **The labels, option B** (the first counts were about 2,500 to 3,000 entry points across the 4 forks, more than estimated): every entry point in Rallly and Documenso; in LibreChat and Twenty, every entry point in a fixed set of modules covering each framework they use; the event handlers in 5 chosen screens per fork. Written by reading the code.
 
+
+## 14 Nov 2026: phase 8 milestone A's questions
+
+**Owner:** "1 - go with recommendation 2 - b (recommended 3 - recomennded 4 - recommended continue ahead".
+
+1. **Test and story files aren't entry points.** Routes, apps and elements in `*.test.*`, `*.spec.*`, `__tests__/` and Storybook story files (`*.stories.*`) aren't listed: they're how the code is tested, not how the product is entered (LibreChat's test apps, Twenty's test decorators: about 60). Their code stays in the graph as before.
+2. **A base path set by an environment variable is shown by its name and counts as found:** Documenso's `basePath(env('NEXT_PUBLIC_BASE_PATH') || '/')` makes `{NEXT_PUBLIC_BASE_PATH}/api/auth/session`, fully detected, since that's exactly what the code says. The variable's value is never read (it may be a secret).
+3. **A Hono app served through a function that rewrites the URL keeps the path it registers,** marked "served through a rewrite": Rallly's v1 API is listed as `POST /v1/polls`, with why, so it isn't taken for the public URL.
+4. **The engine reads `jsconfig.json` as it reads `tsconfig.json`** (a small engine step in milestone B): LibreChat's `~/` imports then resolve, so its routes reach their handlers and its call graph gains those calls; its phase 6 numbers are checked against its labels.

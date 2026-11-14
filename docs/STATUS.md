@@ -2,7 +2,7 @@
 
 One row per phase of the build plan (`docs/reference/build-plan.md`). Status: planned / in progress / in review / accepted.
 
-**Current milestone:** phase 8, milestone A
+**Current milestone:** phase 8, milestone B
 
 **Reviewed:** phase 8, milestone A (14 Nov 2026): re-read in full against the code; phase 8's row brought up to date. At every milestone this doc is re-read in full, and this line names the milestone (`pnpm docs:milestone` checks it).
 

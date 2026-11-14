@@ -13628,11 +13628,12 @@ pnpm test:visual
 | 1 | Spike: each fork's entry points by framework; the detection approach. ADR 0030 | A | done (Claude, 14 Nov): `docs: phase 8 spike` |
 | 2 | `@flowcanvas/connectors-web`: a detector per framework, with fixtures | A | done (Claude, 14 Nov): `c8a7f7b`, `40d2d8f`, `ecc5e17`, `1695283`, `b11facf`, `e9f77d2`, `e278edd`, `476cbdf`, `3753d4b` |
 | 3 | The engine: entry points in the pass; the protocol and the API | A | done (Claude, 14 Nov): `fe9154d`, `fb7ac57`, `0897727`, `0c00a3a`, `b634c41`, `2a952a4`, `480c36e`, `cad7ae0`, `c0b3c97`, `da6820b` |
-| 4 | Hand labels for the 4 forks; the corpus check | B | *planned* |
-| 5 | UI: the entry-points panel in the design system | B | *planned* |
-| 6 | The page: the left panel, Show flow, ⌘K's Entry points | B | *planned* |
-| 7 | Proof: real workspaces, the walkthrough, screens | B | *planned* |
-| 8 | Close: report, 0.12.0 | B | *planned* |
+| 4 | The owner's answers to milestone A (decisions log, 14 Nov): test and story files left out, a base path by its variable's name, a rewrite marked; the engine reads `jsconfig.json` | B | *next* |
+| 5 | Hand labels for the 4 forks; the corpus check | B | *planned* |
+| 6 | UI: the entry-points panel in the design system | B | *planned* |
+| 7 | The page: the left panel, Show flow, ⌘K's Entry points | C | *planned* |
+| 8 | Proof: real workspaces, the walkthrough, screens | C | *planned* |
+| 9 | Close: report, 0.12.0 | C | *planned* |
 
 ### How each Done-when item is proven
 
