@@ -56,3 +56,14 @@ Entry points are stored with the graph (its nodes and edges), so the panel reads
 - Phase 6's graph labels may change where a handler now owns calls a file's top level owned; each change is checked by reading the code.
 - New frameworks are new detectors in the same package (the plugin SDK, from stage 7, will take the same shape).
 - Run-time-only routes stay not fully detected until stage 2 observes them.
+
+## Addendum (14 Nov 2026, step 2): rules found while measuring the detectors on the forks
+
+Each rule below came from a miss on a fork, was fixed in the detector, and is covered by a fixture test. None widens what counts as found: a part the rules don't reach is still marked not fully detected.
+
+- **Constants are folded.** A path is a string the checker can settle: literals, templates, `+`, `.replace`/`replaceAll`/`toLowerCase`/`toUpperCase`/`trim`, enum members, single-literal types and `const` initializers, across files (Twenty's NestJS paths and settings routes).
+- **Duplicate routers.** Express and Hono routers are found by how they're made (`express()`, `express.Router()`, `Router()` in ES and CommonJS, `new Hono()`, `basePath`), then joined from the roots through `use`/`route` mounts, so a router mounted twice is listed under each mount.
+- **Route-file loaders and actions** are API routes named `loader /path` and `action /path`, beside the screen the same file renders.
+- **React Router routes are followed wherever the code builds them:** arrays, spreads, objects (with shorthand properties), `<Route>` elements and fragments, `?:`, `&&`/`||`/`??` (a route behind a flag is still a route), variables, `export default` objects, `filter`/`map`/`flatMap`/`concat`/`slice`, `createRoutesFromElements`, and functions, with each parameter bound to its caller's argument. A function whose result has the same type as its argument and isn't otherwise followed is read as passing its routes through (LibreChat's `stripIds`). Following stops after 12 steps; children don't count towards that.
+- **Lazy routes** (`lazy: …`) are screens at their path; their component is named when the engine resolves the import.
+- **Server actions** are named `server action <name>`: every function or call chain a `'use server'` file exports (an action client's chain, `authActionClient.metadata(…).action(async …)`, has the function given to its last call as its handler; a chain without one is marked not fully detected), and every function marked `'use server'` in its own body. Plain values exported from such a file aren't actions (Next.js refuses them). Rallly: 71 actions in 23 files, matching a text count of their exports.
