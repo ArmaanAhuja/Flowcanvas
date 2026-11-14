@@ -336,7 +336,12 @@ export function findPackages(
       const manifest = JSON.parse(read(join(root, file)) ?? '') as Record<string, unknown>;
       if (typeof manifest.name === 'string' && manifest.name !== '') {
         const dir = posix.dirname(file) === '.' ? '' : posix.dirname(file);
-        manifests.set(manifest.name, { dir, manifest });
+        // Two packages with one name (Twenty's two app templates): the first keeps the name for imports; the
+        // other is kept by its folder too, so its scripts aren't lost (phase 8).
+        manifests.set(manifests.has(manifest.name) ? `${manifest.name}@${dir}` : manifest.name, {
+          dir,
+          manifest,
+        });
       }
     } catch {
       // Not JSON: not a package we can use.
@@ -344,20 +349,25 @@ export function findPackages(
   }
   const known = new Set(files);
   const packages = new Map<string, WorkspacePackage>();
-  for (const [name, { dir, manifest }] of manifests) {
+  for (const [key, { dir, manifest }] of manifests) {
+    const name = manifest.name as string;
     const uses = ['dependencies', 'devDependencies', 'peerDependencies'].flatMap((field) => {
       const value = manifest[field];
       return typeof value === 'object' && value !== null ? Object.keys(value) : [];
     });
     const dependsOn = uses.filter((dep) => dep !== name && manifests.has(dep));
-    packages.set(name, {
+    packages.set(key, {
       name,
       dir,
       dependsOn: [...new Set(dependsOn)],
       uses: [...new Set(uses)],
-      paths: packagePaths(name, join(root, dir), manifest, (file) =>
-        known.has(dir === '' ? file : `${dir}/${file}`),
-      ),
+      // Only the package that holds the name resolves imports of it.
+      paths:
+        key === name
+          ? packagePaths(name, join(root, dir), manifest, (file) =>
+              known.has(dir === '' ? file : `${dir}/${file}`),
+            )
+          : {},
     });
   }
   return packages;

@@ -83,6 +83,39 @@ const FILES: Record<string, string> = {
     'export const POST = handler;',
     '',
   ].join('\n'),
+  // Rallly's integrations: the route file's handler is a factory's `handle(app)`, so it isn't listed; the factory's
+  // app has its base path from an argument, so its route is listed as not fully detected.
+  'apps/web/src/lib/integration.ts': [
+    "import { Hono } from 'hono';",
+    "import { handle } from 'hono/vercel';",
+    'export function makeIntegration({ basePath }: { basePath: string }) {',
+    '  const app = new Hono().basePath(basePath);',
+    "  app.get('/callback/:id', (c) => c.json({}));",
+    '  return { handler: handle(app) };',
+    '}',
+    '',
+  ].join('\n'),
+  'apps/web/src/app/api/integrations/[...connection]/route.ts': [
+    "import { makeIntegration } from '../../../../lib/integration';",
+    "const { handler } = makeIntegration({ basePath: '/api/integrations' });",
+    'export const GET = handler;',
+    '',
+  ].join('\n'),
+  // LibreChat's shape: a route whose component only redirects isn't a screen.
+  'apps/web/src/router.tsx': [
+    "import { createBrowserRouter, Navigate } from 'react-router-dom';",
+    'function PromptsRedirect() {',
+    "  return <Navigate to='/c/new' replace />;",
+    '}',
+    'function Chat() {',
+    '  return <main />;',
+    '}',
+    'export const router = createBrowserRouter([',
+    "  { path: 'c/:id', element: <Chat /> },",
+    "  { path: 'prompts/*', element: <PromptsRedirect /> },",
+    ']);',
+    '',
+  ].join('\n'),
   // A test file's app and elements aren't entry points (owner, 14 Nov 2026).
   'apps/web/src/server/polls.test.tsx': [
     "import { Hono } from 'hono';",
@@ -117,20 +150,38 @@ const FILES: Record<string, string> = {
     "const routes = require('./routes');",
     'const app = express();',
     "app.use('/api/auth', routes.auth);",
+    // A router made when the app starts (LibreChat's files): the router its function returns.
+    "(async () => { app.use('/api/files', await routes.files.initialize()); })();",
     '',
   ].join('\n'),
   'apps/api/jsconfig.json': JSON.stringify({
     compilerOptions: { baseUrl: './', paths: { '~/*': ['./*'] } },
   }),
-  'apps/api/routes/index.js': "const { auth } = require('./auth');\nmodule.exports = { auth };\n",
+  'apps/api/routes/index.js':
+    "const { auth } = require('./auth');\nconst files = require('./files');\nmodule.exports = { auth, files };\n",
+  'apps/api/routes/files.js': [
+    "const express = require('express');",
+    // Renamed out of `{ auth: router, avatar }` (LibreChat's agents avatar router).
+    "const { avatar: agentAvatar } = require('./auth');",
+    'const initialize = async () => {',
+    '  const router = express.Router();',
+    "  router.get('/config', (req, res) => res.end());",
+    "  router.use('/images/agents', agentAvatar);",
+    '  return router;',
+    '};',
+    'module.exports = { initialize };',
+    '',
+  ].join('\n'),
   'apps/api/routes/auth.js': [
     "const express = require('express');",
     // Through jsconfig.json's alias, which only it defines.
     "const { login } = require('~/controllers/login');",
     'const router = express.Router();',
     "router.post('/login', login);",
+    'const avatar = express.Router();',
+    "avatar.post('/:id/avatar', (req, res) => res.end());",
     // A property naming the router (LibreChat's `{ v1: router }`), which TypeScript doesn't follow by itself.
-    'module.exports = { auth: router };',
+    'module.exports = { auth: router, avatar };',
     '',
   ].join('\n'),
   'apps/api/controllers/login.js': [
@@ -182,7 +233,10 @@ describe('entry points in the graph pass', () => {
         .map((n) => [n.entry?.kind, n.entry?.framework, n.name])
         .sort(),
     ).toEqual([
+      ['api-route', 'express', 'GET /api/files/config'],
       ['api-route', 'express', 'POST /api/auth/login'],
+      ['api-route', 'express', 'POST /api/files/images/agents/:id/avatar'],
+      ['api-route', 'hono', 'GET /:unknown/callback/:id'],
       ['api-route', 'hono', 'GET /api/polls/:id'],
       ['api-route', 'hono', 'POST /v1/polls'],
       ['api-route', 'next', 'POST /api/v1/*'],
@@ -192,6 +246,7 @@ describe('entry points in the graph pass', () => {
       ['element', 'react', '<button> onClick'],
       ['element', 'react', '<form> onSubmit'],
       ['screen', 'next', '/polls/:id'],
+      ['screen', 'react-router', '/c/:id'],
     ]);
     // The route file hands every request to the Hono app: its own GET and POST aren't listed (ADR 0030 §1).
     expect(ENTRY_MESSAGES.delegated).toContain('Hono');
@@ -212,7 +267,11 @@ describe('entry points in the graph pass', () => {
     ).toBe('PollPage');
     // A script that runs no project file has nothing to reach, rather than a guess.
     expect(handledBy(graph, named(graph, '@fx/web: dev'))).toEqual([]);
-    expect(entries(graph).every((n) => n.entry?.complete)).toBe(true);
+    expect(
+      entries(graph)
+        .filter((n) => !n.entry?.complete)
+        .map((n) => n.name),
+    ).toEqual(['GET /:unknown/callback/:id']);
     // The path the app registers, marked as served through a rewrite; the route file's own entry reaches its handler.
     expect(named(graph, 'POST /v1/polls')?.entry?.why).toBe(ENTRY_MESSAGES.rewritten('route.ts'));
     expect(handledBy(graph, named(graph, 'POST /api/v1/*'))).toEqual([
@@ -283,7 +342,7 @@ describe('entry points in the graph pass', () => {
     const graph = await pass();
     expect(
       entries(graph)
-        .filter((n) => n.entry?.framework === 'hono')
+        .filter((n) => n.entry?.framework === 'hono' && n.entry.complete)
         .map((n) => n.name),
     ).toEqual(['POST /v1/polls', 'GET /v2/polls/:id']);
   });

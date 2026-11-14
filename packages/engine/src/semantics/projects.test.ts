@@ -1,7 +1,7 @@
 // How a package's imports reach its source files (ADR 0026 §3, phase 8 addendum).
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { packagePaths } from './projects.js';
+import { findPackages, packagePaths } from './projects.js';
 
 describe('packagePaths', () => {
   const folder = '/repo/packages/shared';
@@ -36,6 +36,37 @@ describe('packagePaths', () => {
   it('takes every target as written when it isn’t told which files exist', () => {
     expect(packagePaths('shared', folder, manifest)['shared/types']).toEqual([
       join(folder, './dist/types/index.d.ts'),
+    ]);
+  });
+});
+
+describe('findPackages', () => {
+  it('keeps two packages that share a name; the first resolves imports of it (Twenty’s two app templates)', () => {
+    const manifests: Record<string, string> = {
+      '/repo/packages/cli/app-template/package.json': JSON.stringify({
+        name: 'TO-BE-GENERATED',
+        scripts: { dev: 'x' },
+      }),
+      '/repo/packages/create/template/package.json': JSON.stringify({
+        name: 'TO-BE-GENERATED',
+        scripts: { lint: 'y' },
+      }),
+    };
+    const packages = findPackages(
+      '/repo',
+      ['packages/cli/app-template/package.json', 'packages/create/template/package.json'],
+      (path) => manifests[path],
+    );
+    expect(
+      [...packages].map(([key, p]) => [key, p.name, p.dir, Object.keys(p.paths).length > 0]),
+    ).toEqual([
+      ['TO-BE-GENERATED', 'TO-BE-GENERATED', 'packages/cli/app-template', true],
+      [
+        'TO-BE-GENERATED@packages/create/template',
+        'TO-BE-GENERATED',
+        'packages/create/template',
+        false,
+      ],
     ]);
   });
 });

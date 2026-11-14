@@ -10,7 +10,6 @@ import {
   exportsOf,
   flatRoute,
   flatRouteEntries,
-  importsOf,
   joinReactRouter,
   joinRouters,
   joinTrpc,
@@ -169,6 +168,12 @@ export function entriesOfFile(
     // or the router would be taken for a root and its paths listed without their mount.
     for (let step = 0; step < 4 && symbol !== undefined; step += 1) {
       const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
+      // `{ avatar }` reached through a renamed destructuring (`const { avatar: agentAvatar } = require(…)`,
+      // LibreChat's files router): TypeScript stops at the shorthand; its value is the variable.
+      if (declaration !== undefined && ts.isShorthandPropertyAssignment(declaration)) {
+        symbol = resolved(checker.getShorthandAssignmentValueSymbol(declaration));
+        continue;
+      }
       if (
         declaration === undefined ||
         !ts.isPropertyAssignment(declaration) ||
@@ -192,6 +197,71 @@ export function entriesOfFile(
     const file = projectPath(ctx, fileName);
     if (file !== path) dependsOn.add(file);
     return file;
+  };
+  /** Whether a value is Hono's `handle(…)`, as written or through constants and a function's returned object. */
+  const handsToHono = (value: TS.Expression, depth: number): boolean => {
+    if (depth > 4) return false;
+    if (ts.isCallExpression(value) && ts.isIdentifier(value.expression)) {
+      // The import of `handle` itself: hono isn't installed, so the import is as far as it goes.
+      const symbol = checker.getSymbolAtLocation(value.expression);
+      const imported = symbol?.declarations?.find((d) => ts.isImportSpecifier(d));
+      if (imported !== undefined) {
+        const declaration = imported.parent.parent.parent;
+        return (
+          ts.isImportDeclaration(declaration) &&
+          ts.isStringLiteral(declaration.moduleSpecifier) &&
+          /^hono(\/|$)/.test(declaration.moduleSpecifier.text)
+        );
+      }
+      return false;
+    }
+    if (!ts.isIdentifier(value)) return false;
+    const declaration = checker.getSymbolAtLocation(value)?.valueDeclaration;
+    if (declaration === undefined) return false;
+    if (ts.isVariableDeclaration(declaration) && declaration.initializer !== undefined) {
+      return handsToHono(declaration.initializer, depth + 1);
+    }
+    // `const { handler } = make(…)`: the property `make` returns.
+    if (
+      ts.isBindingElement(declaration) &&
+      ts.isObjectBindingPattern(declaration.parent) &&
+      ts.isVariableDeclaration(declaration.parent.parent) &&
+      declaration.parent.parent.initializer !== undefined &&
+      ts.isCallExpression(declaration.parent.parent.initializer)
+    ) {
+      const key = (declaration.propertyName ?? declaration.name).getText();
+      const made = checker.getSymbolAtLocation(declaration.parent.parent.initializer.expression);
+      const resolved =
+        made !== undefined && made.flags & ts.SymbolFlags.Alias
+          ? checker.getAliasedSymbol(made)
+          : made;
+      const fn = resolved?.valueDeclaration;
+      if (fn === undefined || !ts.isFunctionLike(fn)) return false;
+      let found = false;
+      const visit = (node: TS.Node): void => {
+        if (found) return;
+        if (node !== fn && ts.isFunctionLike(node)) return;
+        if (
+          ts.isReturnStatement(node) &&
+          node.expression !== undefined &&
+          ts.isObjectLiteralExpression(node.expression)
+        ) {
+          for (const property of node.expression.properties) {
+            if (property.name?.getText() !== key) continue;
+            const given = ts.isPropertyAssignment(property)
+              ? property.initializer
+              : ts.isShorthandPropertyAssignment(property)
+                ? property.name
+                : undefined;
+            if (given !== undefined && handsToHono(given, depth + 1)) found = true;
+          }
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(fn);
+      return found;
+    }
+    return false;
   };
   /** A name's code unit, or its text. */
   const named = (file: TS.SourceFile, span: Span): Reach => {
@@ -225,7 +295,41 @@ export function entriesOfFile(
   /** A name's declaration, as a key the join matches: its file and where its name starts. */
   const keyOf = (span: Span): string | null => {
     const node = nodeAt(source, span);
-    const declaration = node === undefined ? undefined : declarationOf(node);
+    return node === undefined ? null : keyOfNode(node, 0);
+  };
+  /** The function a call calls, when the checker knows it. */
+  const calledFunction = (call: TS.CallExpression): TS.SignatureDeclaration | undefined => {
+    let declaration = declarationOf(call.expression);
+    // `module.exports = { initialize }`: the property's value.
+    if (declaration !== undefined && ts.isShorthandPropertyAssignment(declaration)) {
+      declaration = checker.getShorthandAssignmentValueSymbol(declaration)?.valueDeclaration;
+    }
+    if (declaration === undefined) return undefined;
+    if (ts.isVariableDeclaration(declaration) && declaration.initializer !== undefined) {
+      const value = declaration.initializer;
+      return ts.isArrowFunction(value) || ts.isFunctionExpression(value) ? value : undefined;
+    }
+    return ts.isFunctionLike(declaration) ? declaration : undefined;
+  };
+  const keyOfNode = (given: TS.Node, depth: number): string | null => {
+    let node = given;
+    while (ts.isAwaitExpression(node) || ts.isParenthesizedExpression(node)) node = node.expression;
+    // A router a function makes and returns (`app.use('/api/files', await routes.files.initialize())`, LibreChat):
+    // the router its return statement names.
+    if (ts.isCallExpression(node)) {
+      const fn = depth < 3 ? calledFunction(node) : undefined;
+      let key: string | null = null;
+      const visit = (child: TS.Node): void => {
+        if (key !== null || (child !== fn && ts.isFunctionLike(child))) return;
+        if (ts.isReturnStatement(child) && child.expression !== undefined) {
+          key = keyOfNode(child.expression, depth + 1);
+        }
+        ts.forEachChild(child, visit);
+      };
+      if (fn !== undefined) visit(fn);
+      return key;
+    }
+    const declaration = declarationOf(node);
     if (declaration === undefined) return null;
     const file = projectFileOf(declaration);
     if (file === null) return null;
@@ -268,17 +372,11 @@ export function entriesOfFile(
   };
   if (routeFile?.kind === 'next') {
     const exports = exportsOf(context);
-    const imports = importsOf(ts, source);
-    // `export const GET = handle(app)`: the Hono app serves it, and its routes are the API (ADR 0030 §1).
+    // `export const GET = handle(app)`: the Hono app serves it, and its routes are the API (ADR 0030 §1). Followed
+    // through constants and a function's returned object (Rallly's `const { handler } = OAuthIntegration(…)`).
     const delegated = (name: string) => {
       const value = exports.get(name.split(' ')[0] ?? '')?.value;
-      return (
-        value !== null &&
-        value !== undefined &&
-        ts.isCallExpression(value) &&
-        ts.isIdentifier(value.expression) &&
-        (imports.get(value.expression.text)?.module.startsWith('hono') ?? false)
-      );
+      return value !== null && value !== undefined && handsToHono(value, 0);
     };
     for (const entry of nextRouteEntries(context, routeFile.route)) {
       if (entry.kind === 'api-route' && delegated(entry.name)) continue;
@@ -363,21 +461,76 @@ export function entriesOfFile(
   });
 
   // React Router trees, each route's component resolved to its unit, and the unit a <Routes> block is in.
+  /** React Router's `<Navigate>`: the tag's import is from react-router (or react-router-dom). */
+  const isNavigate = (expression: TS.Node): boolean => {
+    let node = expression;
+    while (ts.isParenthesizedExpression(node)) node = node.expression;
+    const tag = ts.isJsxSelfClosingElement(node)
+      ? node.tagName
+      : ts.isJsxElement(node)
+        ? node.openingElement.tagName
+        : undefined;
+    if (tag === undefined || !ts.isIdentifier(tag)) return false;
+    const imported = checker
+      .getSymbolAtLocation(tag)
+      ?.declarations?.find((d) => ts.isImportSpecifier(d));
+    const declaration = imported?.parent.parent.parent;
+    return (
+      declaration !== undefined &&
+      ts.isImportDeclaration(declaration) &&
+      ts.isStringLiteral(declaration.moduleSpecifier) &&
+      /^react-router(-dom)?$/.test(declaration.moduleSpecifier.text) &&
+      (imported?.propertyName ?? imported?.name)?.text === 'Navigate'
+    );
+  };
+  /**
+   * A component that only redirects: every value it returns is a `<Navigate>` (LibreChat's `PromptsRedirect`). Its
+   * route is a redirect, not a screen, as a route whose element is `<Navigate>` itself is.
+   */
+  const redirects = (routeSource: TS.SourceFile, element: Span): boolean => {
+    const tag = nodeAt(routeSource, element);
+    const declaration = tag === undefined ? undefined : declarationOf(tag);
+    const fn =
+      declaration !== undefined && ts.isVariableDeclaration(declaration)
+        ? declaration.initializer
+        : declaration;
+    if (
+      fn === undefined ||
+      !(ts.isFunctionDeclaration(fn) || ts.isArrowFunction(fn) || ts.isFunctionExpression(fn))
+    ) {
+      return false;
+    }
+    if (fn.body === undefined) return false;
+    if (!ts.isBlock(fn.body)) return isNavigate(fn.body);
+    // A bare `return` is null: rendering nothing isn't a redirect.
+    const returned: (TS.Expression | null)[] = [];
+    const visit = (node: TS.Node): void => {
+      if (node !== fn && ts.isFunctionLike(node)) return;
+      if (ts.isReturnStatement(node)) {
+        returned.push(node.expression ?? null);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(fn.body);
+    return returned.length > 0 && returned.every((value) => value !== null && isNavigate(value));
+  };
   const route = (node: RouteNode): JoinableRoute => {
     const file = projectPath(ctx, node.file);
     if (file !== path) dependsOn.add(file);
     const routeSource = sourceOf(node.file);
     let component: string | undefined;
+    let redirect = node.redirect;
     if (node.element !== undefined && routeSource !== undefined) {
       const reach = named(routeSource, node.element);
       reaches.set(spanKey(file, node.element), reach);
       if ('to' in reach) component = reach.to;
+      if (!redirect && redirects(routeSource, node.element)) redirect = true;
     }
     return {
       path: node.path,
       index: node.index,
       at: node.at,
-      redirect: node.redirect,
+      redirect,
       lazy: node.lazy,
       ...(node.unfollowed === undefined ? {} : { unfollowed: node.unfollowed }),
       ...(file === path ? {} : { file }),

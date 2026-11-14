@@ -118,7 +118,11 @@ export class SemanticService {
     const host = createProjectHost({
       root: this.#root,
       libDir: this.#libDir,
-      packages: new Map([...packages.values()].map((p) => [p.name, join(this.#root, p.dir)])),
+      packages: new Map(
+        [...packages]
+          .filter(([key, p]) => key === p.name)
+          .map(([, p]) => [p.name, join(this.#root, p.dir)]),
+      ),
     });
     return { host, model: new ProjectModel(this.#ts, this.#root, host, files, packages) };
   }
