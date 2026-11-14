@@ -99,10 +99,12 @@ export function indexRoutes(deps: WorkspaceDependencies) {
     );
   });
 
-  // A page of one kind of entry point (phase 8): the person browsing the project, so activity.
+  // A page of one kind of entry point (phase 8), or a screen's elements. Not activity: the page asks for it while
+  // the graph builds and to notice a new version, and that must never keep a workspace awake (as the graph's state).
   index.get('/index/entry-points', (c) => {
     const after = c.req.query('after');
     const limit = c.req.query('limit');
+    const screen = c.req.query('screen');
     return ask(
       c,
       {
@@ -110,8 +112,9 @@ export function indexRoutes(deps: WorkspaceDependencies) {
         kind: c.req.query('kind'),
         after: after === undefined ? 0 : Number(after),
         limit: limit === undefined ? ENGINE_LIMITS.entries : Number(limit),
+        ...(screen === undefined ? {} : { screen }),
       },
-      true,
+      false,
     );
   });
 

@@ -276,7 +276,7 @@ describe('entry points (phase 8)', () => {
     await call('POST', '/open');
   });
 
-  it('asks for a page of one kind, the first 200 unless told, and counts as activity', async () => {
+  it('asks for a page of one kind, the first 200 unless told, or a screen’s elements, never as activity', async () => {
     const answer = {
       counts: { screen: 1, element: 0, 'api-route': 0, 'cli-command': 0 },
       kind: 'screen' as const,
@@ -295,11 +295,20 @@ describe('entry points (phase 8)', () => {
       json: answer,
     });
     await call('GET', '/index/entry-points?kind=api-route&after=200&limit=50');
+    await call('GET', '/index/entry-points?kind=element&screen=app%2Fpage.tsx%23(entry%20%2F)');
     expect(provider.indexRequests.map(({ request }) => request)).toEqual([
       { op: 'entryPoints', kind: 'screen', after: 0, limit: 200 },
       { op: 'entryPoints', kind: 'api-route', after: 200, limit: 50 },
+      {
+        op: 'entryPoints',
+        kind: 'element',
+        after: 0,
+        limit: 200,
+        screen: 'app/page.tsx#(entry /)',
+      },
     ]);
-    expect(await lastActive()).toBe(now);
+    // Polled while the graph builds: never keeps the workspace awake.
+    expect(await lastActive()).not.toBe(now);
   });
 
   it('refuses a kind it doesn’t know, or too many, without asking the workspace', async () => {
