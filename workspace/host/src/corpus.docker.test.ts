@@ -196,7 +196,8 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
             line: label.line,
             column: label.column,
           });
-          if (!answer.ok || !('entries' in answer.result)) throw new Error(`no ${op}`);
+          if (!answer.ok || !('entries' in answer.result) || 'counts' in answer.result)
+            throw new Error(`no ${op}`);
           return { result: answer.result, ms: performance.now() - asked };
         };
         // Each labelled function's callers and callees, compared exactly with its labels.
