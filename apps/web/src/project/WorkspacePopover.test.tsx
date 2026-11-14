@@ -91,8 +91,12 @@ describe('the workspace chip and its popover', () => {
     );
     // The popover follows at once; outside it is hidden from screen readers while it's open (it's modal).
     const popover = screen.getByRole('dialog', { name: 'Workspace' });
-    expect(await within(popover).findByRole('button', { name: 'Resume' })).toBeTruthy();
+    const resume = await within(popover).findByRole('button', { name: 'Resume' });
+    // The button pressed became Resume: focus stayed on it, in the popover, so Escape closes the popover (it was
+    // lost to the page once, and the popover stayed open: phase 2's walkthrough on main, 15 Nov 2026).
+    expect(document.activeElement).toBe(resume);
     await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Workspace' })).toBeNull();
     expect(await screen.findByRole('button', { name: 'Workspace: Sleeping' })).toBeTruthy();
     // The dock following it needs real layout: checked in the browser (e2e/try-it/phase-2.spec.ts).
   });
