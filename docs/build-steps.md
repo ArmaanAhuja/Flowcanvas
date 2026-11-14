@@ -13631,9 +13631,9 @@ pnpm test:visual
 | 4 | The owner's answers to milestone A (decisions log, 14 Nov): test and story files left out, a base path by its variable's name, a rewrite marked; the engine reads `jsconfig.json` | B | done (Claude, 14 Nov): `5e74ca7`, `c71cc1a`, `d255cb5` |
 | 5 | Hand labels for the 4 forks; the corpus check | B | done (Claude, 14 Nov): `ea100e5`, `7e51f4b`, `e8868fd` |
 | 6 | UI: the entry-points panel in the design system | B | done (Claude, 14 Nov): `036605e` |
-| 7 | The page: the left panel, Show flow, ⌘K's Entry points | C | *next* |
-| 8 | Proof: real workspaces, the walkthrough, screens | C | *planned* |
-| 9 | Close: report, 0.12.0 | C | *planned* |
+| 7 | The page: the left panel, Show flow, ⌘K's Entry points | C | done (Claude, 15 Nov): `0032082`, `6534485`, `0e57d66`, `c718227`, `297524a` |
+| 8 | Proof: real workspaces, the walkthrough, screens | C | done (Claude, 15 Nov): `a53000a`, `8836eb3`, `ff57c8e` |
+| 9 | Close: report, 0.12.0 | C | done (Claude, 15 Nov): `a7cf9c0` and the close |
 
 ### How each Done-when item is proven
 
@@ -13650,7 +13650,7 @@ pnpm test:visual
 | R1 | Twenty: many event props and resolvers inside the pass's time | Detectors in the same walk; measured on Twenty (87 s today on CI) | *measured (step 3):* 7,331 entry points and 3,093 handler units; the graph has 10% more nodes and 2% more edges than phase 7's; the whole pass 104 s on the laptop. CI's Twenty shard times save and load |
 | R2 | Inline handlers (`onClick={() => …}`) have no node | An anonymous handler registered as an entry point becomes a code unit in the graph; the Calls tab keeps TypeScript's view (ADR 0030 §3) | *built (step 3):* three phase 6 labels gained the graph's own lists, each read at the pin |
 | R3 | Routes built at run time (loops, variables) | Shown as not fully detected, never guessed; each miss explained | *measured (step 3):* incomplete: Rallly 3, Documenso 64 (60 behind an environment variable's base path: a question for the owner), LibreChat 42 (routers made at run time), Twenty 3 (test decorators) |
-| R4 | A handler unit has no stored facts: the inspector shows the function around it | Step 5 or 6 gives it details when the panel opens one | *open* |
+| R4 | A handler unit has no stored facts: the inspector shows the function around it | Step 5 or 6 gives it details when the panel opens one | *closed (step 7):* its own facts stored by the pass, under its entry point's name |
 
 ### Step 8.0 — The plan and the owner's decisions (done by Claude)
 
@@ -13826,3 +13826,72 @@ pnpm test:visual
 **Risks and laptop:** R4 (a handler unit's details) is step 7's. Laptop: the catalogue's visual tests for this component, in Playwright's image.
 
 **Commits:** `036605e` the panel.
+
+### Step 8.7 — The page: the left panel, Show flow, ⌘K's Entry points (done by Claude)
+
+**Goal:** the panel on the project page with the engine's entry points, each opening its flow; ⌘K's section with `/` for routes.
+
+**What a person can do now:** with a workspace running, read the left panel's entry points with their counts; open a screen to its elements; press `/` to filter; Show flow (or Enter) opens the flow from an entry point's handler, or says why there's none; ⌘K, `/`, a route's name, Enter.
+
+**Files:** `apps/web/src/entry-points/` (`api.ts`, `useEntryPoints.ts`, the page's tests), `apps/web/src/project/ProjectPage.tsx` and its CSS, `apps/web/src/test/setup.ts`; `packages/ui/src/components/command-palette/` (Entry points, `ROUTES_PREFIX`); `packages/graph-model/src/entries.ts` (`elementsByScreen`); `packages/engine/src/protocol.ts`, `service.ts`, `semantics/details.ts` (a handler's facts); `services/control-plane/src/workspaces/index-routes.ts`; ARCHITECTURE.
+
+**Concepts:**
+- **A screen's elements:** the elements in every component the screen renders, through `renders` edges and decisions, worked out once per version.
+- **Never awake for a poll:** the page asks for entry points while the graph builds and every 20 s for a new version; the route doesn't count as activity, so it never keeps a workspace awake.
+
+**Found and fixed on the way:**
+- R4: an anonymous handler showed the details of the function around it. Its own facts are stored by the pass, and its details carry its entry point's name.
+- In jsdom every box is empty, so a click lands on the panels' resize handle: the page test types from the keyboard, and the walkthrough clicks the filter in a real browser.
+- The page's `/` shortcut judged by the event's target and swallowed `/` typed into ⌘K: it now looks at what has focus (through shadow roots), and leaves dialogs alone.
+- The panel's `<header>` was read as a second page banner; it's a plain element.
+- Five page tests timed out only when every package's tests ran at once (Testing Library's 1 s wait): the wait is 5 s for the web app, as its tests' own limits are.
+- A push went out with the docs check failing (`;` instead of `&&`); fixed in the next commit (memory).
+
+**Tests:** web 6 entry-point page tests (not running, building, listing and a screen's elements, Show flow and its reason, the filter and `/`, ⌘K); ui palette 13, panel 6; engine and graph-model tests for a screen's elements and a handler's facts; control plane 22.
+
+**Run and check it:** `pnpm dev`, open a project with its workspace running, the left panel; `pnpm --filter @flowcanvas/web test`.
+
+**Risks and laptop:** R4 closed. Laptop: the page's tests.
+
+**Commits:** `0032082` a screen's elements, a handler's details; `6534485` the API, never as activity; `0e57d66` ⌘K's entry points; `c718227` the page; `297524a` ARCHITECTURE and counts.
+
+### Step 8.8 — Proof: real workspaces, the walkthrough, the screens (done by Claude)
+
+**Goal:** the Done when proven end to end: each labelled entry point opens its flow in real workspaces; the Try it recorded in a real browser; the screens in both themes.
+
+**What a person can do now:** watch the walkthrough's recording on the PR's report; read each fork's `entryFlows` row in the Docker job.
+
+**Files:** `workspace/host/src/corpus.docker.test.ts`; `e2e/try-it/phase-8.spec.ts` and `fixtures/phase-8-rallly.json`, `fixtures/phase-8-documenso-entry-points.json` (the engine's own output, names and places only); `e2e/visual/screens.spec.ts` and baselines; the panel (`listed`).
+
+**Concepts:**
+- **Virtualized lists in a real browser:** only the rows in view are in the page, so the walkthrough closes a group (arrow left) to reach the next, as a person would scroll.
+
+**Found and fixed on the way:** before the entry points were listed, the panel said "None found in this project." and 0 under each group: neither was known. Until they're listed, an empty group says nothing and shows no count.
+
+**Tests:** Docker: every labelled entry point handled by the project's code opens a flow rooted at its handler (checked locally first: Rallly 267, Documenso 649, LibreChat 266); the walkthrough (1); screens 38 in both themes, with axe; the catalogue 194.
+
+**Run and check it:** `pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-8.spec.ts`; `pnpm test:visual`; `CORPUS_ONLY=twenty pnpm test:docker`.
+
+**Risks and laptop:** none open. Laptop: the screens and catalogue in Playwright's image, one run at a time.
+
+**Commits:** `a53000a` each labelled entry point opens its flow; `8836eb3` no untrue count before listing; `ff57c8e` the walkthrough and screens.
+
+### Step 8.9 — Close: report, 0.12.0 (done by Claude)
+
+**Goal:** the phase report with every Done-when item's evidence, the release, and the docs re-read.
+
+**What a person can do now:** read `docs/reports/phase-8.md` and `phase-8-figma-differences.md`; What's new shows 0.12.0.
+
+**Files:** `apps/web/src/entry-points/EntryPointsLeft.tsx`, `apps/web/src/project/ProjectPage.tsx`, `apps/web/scripts/bundle-size.ts`; `CHANGELOG.md`, `package.json` (0.12.0), `docs/reports/phase-8.md`, `docs/reports/phase-8-figma-differences.md`, `docs/reports/phase-8/*.png`; STATUS, RUN-AND-FEATURES, ARCHITECTURE, README, upgrade-later.
+
+**Concepts:** none new.
+
+**Found and fixed on the way:** CI's bundle budget went red on `ff57c8e`: the project page's chunk was 135.8 kB against its 110 kB budget, since the entry-points panel brought React Aria's tree and virtualizer into it (the file tree's chunk fell from 25.0 to 2.5 kB as they moved). The panel now loads on its own, as the file tree does (`apps/web/src/entry-points/EntryPointsLeft.tsx`, lazy in ProjectPage, "Finding entry points…" while it loads): the page is 110.6 kB, the panel 3.6 kB, and the virtualizer the two left panels share 22.8 kB. The page's budget went 110 → 115 for its 1.6 kB of entry-point wiring, every open project's default; FilesPanel's went 30 → 5, and the two new chunks have their own (`apps/web/scripts/bundle-size.ts`, each with why). The local fast suites didn't run the build, so they missed it; they do now.
+
+**Tests:** `pnpm docs:milestone`; CI green on the close.
+
+**Run and check it:** the report's "How to try it".
+
+**Risks and laptop:** none. Laptop: none.
+
+**Commits:** `a7cf9c0` the release; `9cd17fb` the panel's own chunk; this close.
