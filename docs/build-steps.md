@@ -13626,8 +13626,8 @@ pnpm test:visual
 | --- | --- | --- | --- |
 | 0 | The plan and decisions; branch; the post-merge docs (staging at 0.11.0) | A | done (Claude, 14 Nov): `docs: phase 8 plan` |
 | 1 | Spike: each fork's entry points by framework; the detection approach. ADR 0030 | A | done (Claude, 14 Nov): `docs: phase 8 spike` |
-| 2 | `@flowcanvas/connectors-web`: a detector per framework, with fixtures | A | *next* |
-| 3 | The engine: entry points in the pass and the facts; the protocol and the API | A | *planned* |
+| 2 | `@flowcanvas/connectors-web`: a detector per framework, with fixtures | A | done (Claude, 14 Nov): `c8a7f7b`, `40d2d8f`, `ecc5e17`, `1695283`, `b11facf`, `e9f77d2`, `e278edd`, `476cbdf`, `3753d4b` |
+| 3 | The engine: entry points in the pass; the protocol and the API | A | done (Claude, 14 Nov): `fe9154d`, `fb7ac57`, `0897727`, `0c00a3a`, `b634c41`, `2a952a4`, `480c36e`, `cad7ae0`, `c0b3c97` |
 | 4 | Hand labels for the 4 forks; the corpus check | B | *planned* |
 | 5 | UI: the entry-points panel in the design system | B | *planned* |
 | 6 | The page: the left panel, Show flow, ⌘K's Entry points | B | *planned* |
@@ -13646,9 +13646,10 @@ pnpm test:visual
 
 | # | Risk | How we keep it in check | Status |
 | --- | --- | --- | --- |
-| R1 | Twenty: many event props and resolvers inside the pass's time | Detectors in the same walk; measured on Twenty (87 s today on CI) | *to measure* |
-| R2 | Inline handlers (`onClick={() => …}`) have no node | An anonymous handler registered as an entry point becomes a code unit in the graph; the Calls tab keeps TypeScript's view (ADR 0030 §3) | *designed (step 1)* |
-| R3 | Routes built at run time (loops, variables) | Shown as not fully detected, never guessed; each miss explained | *to measure* |
+| R1 | Twenty: many event props and resolvers inside the pass's time | Detectors in the same walk; measured on Twenty (87 s today on CI) | *measured (step 3):* 7,331 entry points and 3,093 handler units; the graph has 10% more nodes and 2% more edges than phase 7's; the whole pass 104 s on the laptop. CI's Twenty shard times save and load |
+| R2 | Inline handlers (`onClick={() => …}`) have no node | An anonymous handler registered as an entry point becomes a code unit in the graph; the Calls tab keeps TypeScript's view (ADR 0030 §3) | *built (step 3):* three phase 6 labels gained the graph's own lists, each read at the pin |
+| R3 | Routes built at run time (loops, variables) | Shown as not fully detected, never guessed; each miss explained | *measured (step 3):* incomplete: Rallly 3, Documenso 64 (60 behind an environment variable's base path: a question for the owner), LibreChat 42 (routers made at run time), Twenty 3 (test decorators) |
+| R4 | A handler unit has no stored facts: the inspector shows the function around it | Step 5 or 6 gives it details when the panel opens one | *open* |
 
 ### Step 8.0 — The plan and the owner's decisions (done by Claude)
 
@@ -13682,4 +13683,70 @@ pnpm test:visual
 **Tests:** none (a spike). **Run and check it:** ADR 0030. **Risks and laptop:** R1 to R3 updated. **Laptop:** text searches over the corpus, seconds.
 
 **Commit:** `docs: phase 8 spike: entry points by framework (ADR 0030)`.
+
+### Step 8.2 — `@flowcanvas/connectors-web`: a detector per framework (done by Claude; ADR 0030 addendum)
+
+**Goal:** pure detectors, one per framework the forks use, each tested on fixtures and measured on the forks before the engine runs them.
+
+**What a person can do now:** nothing in the app yet: the detectors are a package the engine uses from step 3.
+
+**Files:** `packages/connectors/web/` (`types.ts`, `ast.ts` with `stringValue`, `file-routes.ts`, `route-files.ts`, `nestjs.ts`, `scripts.ts`, `routers.ts`, `trpc.ts`, `react-router.ts`, `react.ts`, `test-program.ts`, and a test file for each); `docs/adr/0030-entry-points.md` (addendum).
+
+**Concepts:**
+- **The TypeScript checker as a resolver:** a detector sees one file's syntax tree, and asks the checker what a name refers to (an enum member, an imported router, a constant's value). https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API
+- **Constant folding:** a path built from literals, templates, `+`, string methods and enum members is worked out to its text; anything else stays unknown. https://www.typescriptlang.org/docs/handbook/enums.html
+- **Joiners:** what one file can't settle (a router mounted elsewhere, a tRPC router nested from another file, a `<Routes>` block inside a component) is reported with keys and joined across files after.
+- **Server actions:** a `'use server'` file's exports, and functions marked in their own body. https://nextjs.org/docs/app/building-your-application/data-fetching/server-actions-and-mutations
+
+**Found and fixed on the way:**
+- Express's `express.Router()` was missed: the chain walk consumed the creating call. Checked creation first.
+- React Router: shorthand `children`, `flatMap`, a route object reached by name, routes behind `&&`, `export default {…}` imports, parameters bound to arguments, and Twenty's settings root (string folding) were each missed once; each is now followed, with a fixture. Twenty 127 screens and LibreChat 23, none incomplete, at the end of the step.
+- Rallly's server actions are next-safe-action chains (`authActionClient…action(async …)`): 2 found against 23 `'use server'` files. Every exported function or call chain now counts; plain values don't (Next.js refuses them). 71 in 23 files, matching a text count of their exports.
+- Three pushes went red on CI from the unit count in RUN-AND-FEATURES alone; `pnpm docs:check` now runs before every push (memory).
+
+**Tests:** 41 detector tests at the end of the step (`pnpm --filter @flowcanvas/connectors-web test`). Measured on the forks with a script kept outside the repository: NestJS 674 in Twenty, 0 incomplete; scripts 610; Documenso route files 185; routers 501; tRPC 307; React Router 150; event props 11,337 (matching text counts).
+
+**Run and check it:** `pnpm --filter @flowcanvas/connectors-web test`.
+
+**Risks and laptop:** R1 to R3 unchanged. The measuring runs took seconds per fork.
+
+**Commits:** `c8a7f7b` routes named by their files; `40d2d8f` NestJS; `ecc5e17` scripts; `1695283` route files' exports; `b11facf` Hono and Express; `e9f77d2` tRPC; `e278edd` React Router; `476cbdf` event props and server actions; `3753d4b` the ADR addendum and test counts.
+
+### Step 8.3 — The engine: entry points in the pass, the protocol and the API (done by Claude; ADRs 0030 and 0026 addenda)
+
+**Goal:** every entry point in the graph, with an edge to what handles it, asked for a page at a time through the API.
+
+**What a person can do now:** `GET /api/projects/:id/workspace/index/entry-points?kind=api-route` on a running workspace lists its API routes, each with its handler. The panel arrives in step 5.
+
+**Files:**
+- `packages/graph-model/src/` `model.ts`, `validate.ts`, `encoding.ts`, `diff.ts` (graph format 4: `GraphNode.entry`), `entries.ts` (`listEntryPoints`).
+- `packages/engine/src/semantics/` `entry-pass.ts` (new), `graph-pass.ts` (handler units; the graph's owner and the Calls tab's apart), `graph.ts` (the join), `semantic-service.ts`, `projects.ts` (`uses`; built exports followed to source); `protocol.ts`, `service.ts` (`entryPoints`); `snapshots.ts` (store format 4).
+- `packages/connectors/web/src/routers.ts` (unmounted Routers), `trpc.ts` (nested objects; nothing dropped).
+- `services/control-plane/src/workspaces/index-routes.ts` (`/index/entry-points`).
+- `corpus/src/calls.ts` and `corpus/labels/calls.json` (the graph's own lists, with why).
+- `apps/web/src/shell/Shell.module.css` and two screen baselines (the canvas scroll fix).
+- ADR 0030 and ADR 0026 addenda; ARCHITECTURE.
+
+**Concepts:**
+- **Keys resolved where the checker is:** each file resolves the names it refers to while its program is in hand; the join after the walk is plain data. A file records the files its keys point into, and is walked again when one changes. https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API#using-the-type-checker
+- **Paging a large answer:** the protocol's lines are 256 KB; Twenty's 7,331 entry points aren't, so one kind's page of at most 200 is asked for at a time, from lists built once per version.
+- **Package `exports` and built output:** `exports` often names `dist/` files that aren't committed; their source at the same place under `src/` is used when it exists. https://nodejs.org/api/packages.html#exports
+
+**Found and fixed on the way:**
+- **A flaky screen, explained:** `project-flow-details` failed CI once (e278edd). Reproduced locally 1 in 30: the dock's separator draws its hover area 2 px past itself, so the canvas column had 2 px to scroll, and selecting a node usually scrolled it; the baseline had recorded the scrolled canvas. The column is `overflow: clip !important` (the panel library sets `overflow: hidden` inline); two baselines updated; 40 of 40 runs pass.
+- **Twenty's shared package:** `twenty-shared/types` named unbuilt `dist/` files, so its enums were unknown: 291 incomplete entry points, and lost calls. Followed to `src/` (ADR 0026 addendum): 3 incomplete.
+- **Unmounted routers as roots:** LibreChat's files routers are made at run time; taken for roots, their routes were listed as complete without their prefix. An Express `Router()` no followed mount reaches is listed under `/:unknown`, not fully detected.
+- **A CommonJS mount through `{ v1: router }`:** TypeScript stops at the property; followed to the value (18 LibreChat routes were otherwise taken for roots).
+- **tRPC:** nested plain objects were dropped (Documenso 134 of 286), and a shorthand `router({ polls })` resolved to the property, so Rallly's routers were taken for roots. Both fixed; a value that can't be read is listed as `key.*`, never dropped.
+- **A handler made by a call** (`useCallback(() => …)`, `form.handleSubmit(async …)`) reached only a name; it's followed to the function it was given.
+- **Code that wasn't needed:** a shorthand rule for CommonJS exports survived its mutation check: TypeScript already follows it. Removed, measured unchanged on LibreChat.
+- **Phase 6's labels** changed where ADR 0030 §3 said they would (Rallly's createPoll, Documenso's normalizeBrandingColors and SignaturePad): each read at the pin, with why. An entry point's edge to its handler isn't compared as a call.
+
+**Tests:** engine 212 (`entry-pass.test.ts` 6: every kind joined across files, handler units owning their calls while the Calls tab keeps TypeScript's view, elements and wrapped handlers, a changed mount and a moved key, route files; `projects.test.ts` 3; protocol and service tests for `entryPoints`), graph-model 33, connectors 43, corpus 34, control-plane routes 22. Mutation checks, each failing a test: no re-walk on a moved key, no wrapped handlers, every handler renamed, delegated routes kept, no `dist` to `src`, handler calls left with the top level, no `{ v1: router }` rule, no shorthand rule (tRPC). Checked locally against the forks before pushing: both forks' 10 phase 6 labels and Documenso's 10 flows as labelled.
+
+**Run and check it:** `pnpm --filter @flowcanvas/engine test`; with a workspace running, `GET …/index/entry-points?kind=screen`.
+
+**Risks and laptop:** R1 measured, R2 built, R3 measured, R4 new (above). The laptop ran each fork's whole pass (Twenty 104 s, 1.1 GB heap) and the flaky screen 85 times, one heavy run at a time.
+
+**Commits:** `fe9154d` the canvas scroll fix; `fb7ac57` graph format 4; `0897727` built exports to source; `0c00a3a` unmounted Routers; `b634c41` entry points in the pass; `2a952a4` tRPC nested objects; `480c36e` `entryPoints` and shorthand routers; `cad7ae0` the labels' graph lists; `c0b3c97` the API route.
 
