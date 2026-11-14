@@ -4,7 +4,15 @@
 // every route its full path, through the mounts, across files. Frameworks are known by the module they're imported
 // or required from, as written. https://hono.dev/docs/api/routing and https://expressjs.com/en/guide/routing.html
 import type * as TS from 'typescript';
-import { importsOf, joinPath, positionOf, spanOf, stringValue, type FileContext } from './ast.js';
+import {
+  importsOf,
+  joinPath,
+  pathValue,
+  positionOf,
+  spanOf,
+  stringValue,
+  type FileContext,
+} from './ast.js';
 import type { FoundEntry, Position, Span } from './types.js';
 
 export type RouterFramework = 'hono' | 'express';
@@ -84,7 +92,7 @@ export function routersOf(context: FileContext): Router[] {
       const name = (call.expression as TS.PropertyAccessExpression).name.text;
       if (framework === 'hono' && name === 'basePath') {
         const value =
-          call.arguments[0] === undefined ? null : stringValue(context, call.arguments[0]);
+          call.arguments[0] === undefined ? null : pathValue(context, call.arguments[0]);
         base = base === null || value === null ? null : joinPath(base, value);
       }
     }
@@ -145,7 +153,7 @@ export function routersOf(context: FileContext): Router[] {
       args[1] !== undefined
     ) {
       router.mounts.push({
-        prefix: args[0] === undefined ? null : stringValue(context, args[0]),
+        prefix: args[0] === undefined ? null : pathValue(context, args[0]),
         target: spanOf(source, args[1]),
         at,
       });
@@ -154,7 +162,7 @@ export function routersOf(context: FileContext): Router[] {
       // ones that are.
       const first = args[0];
       const given =
-        first === undefined || isFunctionLike(ts, first) ? null : stringValue(context, first);
+        first === undefined || isFunctionLike(ts, first) ? null : pathValue(context, first);
       const prefix = given ?? '';
       for (const arg of given === null ? args : args.slice(1)) {
         if (
@@ -337,6 +345,11 @@ export interface JoinableRouter {
   readonly base: string | null;
   /** An Express `Router()`: never a root (see `Router`). */
   readonly mountedOnly?: boolean;
+  /**
+   * Said of every route under it that has nothing else to say: a Hono app served through a function that rewrites
+   * the path when it runs keeps the path it registers, marked so (owner, 14 Nov 2026).
+   */
+  readonly note?: string;
   readonly routes: readonly (RegisteredRoute & { readonly file: string })[];
   /** Each mount's prefix and the key of the router it mounts (unresolved mounts aren't listed). */
   readonly mounts: readonly { readonly prefix: string | null; readonly target: string }[];
@@ -365,18 +378,20 @@ export function joinRouters(
     prefix: string,
     missing: string | null,
     seen: ReadonlySet<string>,
+    note: string | undefined = router.note,
   ) => {
     const base = joinPath(prefix, router.base ?? ':unknown');
     const unknownBase = missing ?? (router.base === null ? ROUTER_MESSAGES.unfixed : null);
     for (const r of router.routes) {
       const why = unknownBase ?? (r.path === null ? ROUTER_MESSAGES.unfixed : null);
+      const said = r.why ?? note;
       found.push({
         kind: 'api-route',
         framework: router.framework,
         name: `${r.method} ${joinPath(base, r.path ?? ':unknown')}`,
         at: r.at,
         complete: why === null,
-        ...(why !== null ? { why } : r.why === undefined ? {} : { why: r.why }),
+        ...(why !== null ? { why } : said === undefined ? {} : { why: said }),
         ...(r.handler === undefined ? {} : { handler: r.handler }),
         ...(r.handlerName === undefined ? {} : { handlerName: r.handlerName }),
         file: r.file,
@@ -390,6 +405,7 @@ export function joinRouters(
         joinPath(base, mount.prefix ?? ':unknown'),
         unknownBase ?? (mount.prefix === null ? ROUTER_MESSAGES.unfixed : null),
         new Set([...seen, next.key]),
+        note ?? next.note,
       );
     }
   };

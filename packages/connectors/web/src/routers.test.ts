@@ -185,6 +185,40 @@ describe('joinRouters', () => {
     ]);
   });
 
+  it('marks the routes of an app served through a rewrite, and names a base path from a variable', () => {
+    const routers: JoinableRouter[] = [
+      {
+        key: 'v1',
+        framework: 'hono',
+        base: '/v1',
+        note: 'Served through a function in route.ts that rewrites the path when it runs.',
+        routes: [route('POST', '/polls')],
+        mounts: [{ prefix: '/spaces', target: 'spaces' }],
+      },
+      { key: 'spaces', framework: 'hono', base: '', routes: [route('GET', '/')], mounts: [] },
+      {
+        key: 'app',
+        framework: 'hono',
+        base: '{NEXT_PUBLIC_BASE_PATH}',
+        routes: [route('GET', '/api/auth/session')],
+        mounts: [],
+      },
+    ];
+    expect(joinRouters(routers).map((e) => [e.name, e.complete, e.why ?? null])).toEqual([
+      [
+        'POST /v1/polls',
+        true,
+        'Served through a function in route.ts that rewrites the path when it runs.',
+      ],
+      [
+        'GET /v1/spaces',
+        true,
+        'Served through a function in route.ts that rewrites the path when it runs.',
+      ],
+      ['GET {NEXT_PUBLIC_BASE_PATH}/api/auth/session', true, null],
+    ]);
+  });
+
   it('lists a Router no followed mount reaches under an unknown prefix, never as a root', () => {
     const routers: JoinableRouter[] = [
       {

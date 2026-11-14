@@ -116,6 +116,75 @@ export function stringValue(
   return null;
 }
 
+/**
+ * A path the code fixes (`stringValue`), or a base path read from an environment variable, written by the variable's
+ * name in braces: `{NEXT_PUBLIC_BASE_PATH}` (owner, 14 Nov 2026). The variable's value is never read (it may be a
+ * secret). Read through a default (`env('X') || '/'`, `?? ''`: the variable when it's set), a string method on it
+ * (`.replace(/\/$/, '')`), parentheses and `const`s; the variable as `process.env.X`, `import.meta.env.X`, or a call
+ * of a function named `env` or `getEnv` with its name.
+ */
+export function pathValue(context: FileContext, expression: TS.Expression): string | null {
+  const fixed = stringValue(context, expression);
+  if (fixed !== null) return fixed;
+  const name = envName(context, expression, 0);
+  return name === null ? null : `{${name}}`;
+}
+
+function envName(context: FileContext, expression: TS.Expression, depth: number): string | null {
+  const { ts, checker } = context;
+  if (depth > 8) return null;
+  const next = (node: TS.Expression) => envName(context, node, depth + 1);
+  if (ts.isParenthesizedExpression(expression) || ts.isAsExpression(expression)) {
+    return next(expression.expression);
+  }
+  if (
+    ts.isBinaryExpression(expression) &&
+    (expression.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+      expression.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)
+  ) {
+    return next(expression.left);
+  }
+  if (ts.isCallExpression(expression)) {
+    const callee = expression.expression;
+    const [first] = expression.arguments;
+    if (
+      ts.isIdentifier(callee) &&
+      /^(get)?env$/i.test(callee.text) &&
+      first !== undefined &&
+      ts.isStringLiteral(first)
+    ) {
+      return first.text;
+    }
+    if (ts.isPropertyAccessExpression(callee)) return next(callee.expression);
+    return null;
+  }
+  // process.env.X, process.env['X'], import.meta.env.X
+  const holder =
+    ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)
+      ? expression.expression
+      : undefined;
+  if (holder !== undefined && /^(process|import\.meta)\.env$/.test(holder.getText())) {
+    if (ts.isPropertyAccessExpression(expression)) return expression.name.text;
+    const argument = (expression as TS.ElementAccessExpression).argumentExpression;
+    return ts.isStringLiteral(argument) ? argument.text : null;
+  }
+  if (ts.isIdentifier(expression) && checker !== undefined) {
+    let symbol = checker.getSymbolAtLocation(expression);
+    if (symbol !== undefined && symbol.flags & ts.SymbolFlags.Alias)
+      symbol = checker.getAliasedSymbol(symbol);
+    const declaration = symbol?.valueDeclaration;
+    if (
+      declaration !== undefined &&
+      ts.isVariableDeclaration(declaration) &&
+      declaration.initializer !== undefined &&
+      (ts.getCombinedNodeFlags(declaration) & ts.NodeFlags.Const) !== 0
+    ) {
+      return next(declaration.initializer);
+    }
+  }
+  return null;
+}
+
 export function positionOf(source: TS.SourceFile, node: TS.Node): Position {
   const { line, character } = source.getLineAndCharacterOfPosition(node.getStart(source));
   return { line: line + 1, column: character + 1 };
@@ -126,13 +195,17 @@ export const spanOf = (source: TS.SourceFile, node: TS.Node): Span => ({
   end: node.getEnd(),
 });
 
-/** A path's pieces joined with single slashes, starting with one: `('/api', 'users/', ':id')` is `/api/users/:id`. */
+/**
+ * A path's pieces joined with single slashes, starting with one: `('/api', 'users/', ':id')` is `/api/users/:id`. A
+ * path starting with an environment variable's base path (`{NAME}`, see `pathValue`) starts with it, as its value
+ * brings its own slash.
+ */
 export function joinPath(...pieces: readonly string[]): string {
   const joined = pieces
     .flatMap((piece) => piece.split('/'))
     .filter((segment) => segment !== '')
     .join('/');
-  return `/${joined}`;
+  return joined.startsWith('{') ? joined : `/${joined}`;
 }
 
 /** A decorator's name as written (`Get` in `@Get('x')`) and its arguments. */
