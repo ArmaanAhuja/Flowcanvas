@@ -21,6 +21,7 @@ import {
   GRAPH_FILE,
   type CallsResult,
   type EngineStatus,
+  type EntryPointsResult,
   type GraphStatus,
   type SearchResult,
 } from '@flowcanvas/engine/protocol';
@@ -33,7 +34,6 @@ import {
   barProblems,
   compareEntryPoints,
   recall,
-  type AnsweredEntryPoint,
   type ForkLabels,
 } from '../../../corpus/src/entry-points.js';
 import { compareFlow, type FlowLabel } from '../../../corpus/src/flows.js';
@@ -361,7 +361,7 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
 
         // Phase 8: every entry point the engine lists, a kind and a page at a time, against the labels.
         const forkEntryLabels = entryLabels[repo.id];
-        const entryPoints: AnsweredEntryPoint[] = [];
+        const entryPoints: EntryPointsResult['entries'][number][] = [];
         let entryPointsMs = 0;
         if (graph.state === 'ready' && forkEntryLabels !== undefined) {
           for (const kind of ['screen', 'element', 'api-route', 'cli-command'] as const) {
@@ -377,6 +377,33 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
         }
         const entryResult =
           forkEntryLabels === undefined ? null : compareEntryPoints(forkEntryLabels, entryPoints);
+
+        // Phase 8's Done when, the other half: each labelled entry point handled by the project's code opens its
+        // flow, rooted at what handles it. Those handled by code that isn't the project's (a prop, a library's
+        // function) have no flow, and say so on the page.
+        const entryFlowsMissing: string[] = [];
+        let entryFlowsOpened = 0;
+        let entryFlowMaxMs = 0;
+        if (forkEntryLabels !== undefined && graph.state === 'ready') {
+          const labelled = new Set(
+            forkEntryLabels.entries.map((l) => `${l.kind}|${l.name}|${l.file}:${String(l.line)}`),
+          );
+          for (const e of entryPoints) {
+            const handler = e.handler;
+            if (e.place === null || handler?.id == null || handler.place === null) continue;
+            if (!labelled.has(`${e.kind}|${e.name}|${e.place.path}:${String(e.place.line)}`))
+              continue;
+            const started = performance.now();
+            const answer = await host.index(ref, { op: 'flow', ...handler.place });
+            entryFlowMaxMs = Math.max(entryFlowMaxMs, performance.now() - started);
+            const flow = answer.ok && 'flow' in answer.result ? answer.result.flow : null;
+            if (flow?.root === handler.id) entryFlowsOpened += 1;
+            else
+              entryFlowsMissing.push(
+                `${e.name}: ${flow === null ? 'no flow' : `rooted at ${flow.root}`}`,
+              );
+          }
+        }
 
         const row = {
           repo: repo.id,
@@ -434,6 +461,8 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
                   entryResult.groups.convention.incomplete.length,
                 entryFalseFinds: entryResult.falseFinds.length,
                 entryPageMaxMs: Math.round(entryPointsMs),
+                entryFlows: `${String(entryFlowsOpened)} of ${String(entryFlowsOpened + entryFlowsMissing.length)}`,
+                entryFlowMaxMs: Math.round(entryFlowMaxMs),
               }
             : {}),
           ...(storedMs.length > 0
@@ -470,6 +499,8 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
               console.log(`${repo.id}: not fully detected: ${line}`);
             }
             expect(barProblems(entryResult)).toEqual([]);
+            expect(entryFlowsMissing).toEqual([]);
+            expect(entryFlowMaxMs).toBeLessThan(ANSWER_MS);
             expect(entryPointsMs).toBeLessThan(ANSWER_MS);
           }
           expect(Math.max(...flowMs, ...detailsMs)).toBeLessThan(ANSWER_MS);
