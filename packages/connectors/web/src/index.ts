@@ -14,3 +14,13 @@ export {
   type RouterFramework,
 } from './routers.js';
 export { projectFile, scriptEntries } from './scripts.js';
+export {
+  joinTrpc,
+  trpcOf,
+  type JoinableTrpc,
+  type JoinableValue,
+  type TrpcFile,
+  type TrpcProcedure,
+  type TrpcRouter,
+  type TrpcValue,
+} from './trpc.js';
