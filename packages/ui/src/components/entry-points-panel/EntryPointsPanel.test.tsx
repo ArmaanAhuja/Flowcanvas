@@ -122,6 +122,14 @@ describe('EntryPointsPanel', () => {
     expect(props.onShowMore).toHaveBeenCalledWith('api');
   });
 
+  it('says nothing of an empty group before the entry points are listed, but still when a kind comes later', () => {
+    renderPanel({ groups: GROUPS.map((g) => ({ ...g, rows: [] })), listed: false });
+    expect(screen.queryByRole('row', { name: 'None found in this project.' })).toBeNull();
+    // Nor a count it doesn't know yet.
+    expect(row('API routes').textContent).toBe('API routes');
+    expect(screen.getAllByRole('row', { name: 'Arrives in phase 11.' })).toHaveLength(2);
+  });
+
   it('filters through the page, and says when nothing matches', async () => {
     const user = userEvent.setup();
     const props = renderPanel({

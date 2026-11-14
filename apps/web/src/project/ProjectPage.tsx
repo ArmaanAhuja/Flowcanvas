@@ -460,6 +460,7 @@ function ReadyProject({
                     (entries.status === 'loading' ? 'Finding entry points…' : null))
               }
               filterRef={entryFilterRef}
+              listed={entries.status === 'ready'}
             />
           </div>
         )

@@ -70,6 +70,11 @@ export interface EntryPointsPanelProps {
   readonly onExpand?: ((row: EntryRow) => void) | undefined;
   /** Said under the filter: still finding entry points, the graph not built, a failure. */
   readonly message?: ReactNode;
+  /**
+   * False until the entry points have been listed (the workspace not running, the graph still being built): an empty
+   * group then says nothing, rather than that none were found.
+   */
+  readonly listed?: boolean | undefined;
   /** The filter's input, for the page's `/` shortcut. */
   readonly filterRef?: Ref<HTMLInputElement> | undefined;
   readonly className?: string | undefined;
@@ -156,6 +161,7 @@ export function EntryPointsPanel({
   onExpand,
   message,
   filterRef,
+  listed = true,
   className,
 }: EntryPointsPanelProps) {
   const total = groups.reduce((sum, group) => sum + group.count, 0);
@@ -176,7 +182,7 @@ export function EntryPointsPanel({
             },
           ]
         : []),
-      ...(group.rows.length === 0
+      ...(group.rows.length === 0 && (listed || group.arrivesIn != null)
         ? [
             {
               type: 'empty' as const,
@@ -206,7 +212,7 @@ export function EntryPointsPanel({
     <section className={classNames(styles.panel, className)} aria-label="Entry points">
       <div className={styles.header}>
         <h2 className={styles.title}>Entry points</h2>
-        <span className={styles.count}>{total}</span>
+        {listed && <span className={styles.count}>{total}</span>}
       </div>
       <Input
         ref={filterRef}
@@ -264,6 +270,7 @@ export function EntryPointsPanel({
                       hasChildItems={hasChildItems}
                       isExpanded={isExpanded}
                       onShowFlow={onShowFlow}
+                      listed={listed}
                     />
                   )}
                 </TreeItemContent>
@@ -284,11 +291,14 @@ function Row({
   hasChildItems,
   isExpanded,
   onShowFlow,
+  listed,
 }: {
   readonly item: Item;
   readonly hasChildItems: boolean;
   readonly isExpanded: boolean;
   readonly onShowFlow: (row: EntryRow) => void;
+  /** Before the entry points are listed, a count isn't known: only a later kind's 0 is. */
+  readonly listed: boolean;
 }) {
   const chevron = hasChildItems ? (
     <Button
@@ -307,7 +317,9 @@ function Row({
         {chevron}
         <span className={styles.icon}>{GROUP_ICONS[item.group.id]}</span>
         <span className={styles.groupTitle}>{GROUP_TITLES[item.group.id]}</span>
-        <span className={styles.groupCount}>{item.group.count}</span>
+        {(listed || item.group.arrivesIn != null) && (
+          <span className={styles.groupCount}>{item.group.count}</span>
+        )}
       </div>
     );
   }

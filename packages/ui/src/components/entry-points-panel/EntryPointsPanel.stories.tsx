@@ -116,6 +116,7 @@ export const Building: Story = {
         onFilterChange={() => undefined}
         onShowFlow={() => undefined}
         message="Entry points are found with the graph, which is still being built."
+        listed={false}
       />
     </div>
   ),
