@@ -67,6 +67,56 @@ export interface GraphNode {
   readonly change: ChangeState;
   /** For an entry point, and only for one: what its framework declares (phase 8, ADR 0030). */
   readonly entry?: EntryDetails;
+  /** For a data access, and only for one: the table it reads or writes (phase 10, ADR 0031). */
+  readonly data?: DataDetails;
+  /** For an external boundary, and only for one: the outside service it calls (phase 10, ADR 0031). */
+  readonly service?: ServiceDetails;
+  /** For an async hand-off, and only for one: what the work is handed to (phase 11, ADR 0031). */
+  readonly handoff?: HandoffDetails;
+}
+
+/** The libraries whose reads and writes are data-access nodes (owner, 15 Nov 2026). */
+export const DATA_LIBRARIES = ['prisma', 'kysely', 'sql', 'mongoose', 'typeorm'] as const;
+export type DataLibrary = (typeof DATA_LIBRARIES)[number];
+export const DATA_OPERATIONS = ['read', 'write'] as const;
+export type DataOperation = (typeof DATA_OPERATIONS)[number];
+
+export interface DataDetails {
+  readonly library: DataLibrary;
+  /** The table (a MongoDB collection for Mongoose), as the database names it; null when the code doesn't fix it. */
+  readonly table: string | null;
+  readonly operation: DataOperation;
+  /** False when part of it couldn't be worked out (shown as not fully detected, never guessed). */
+  readonly complete: boolean;
+  readonly why: string | null;
+}
+
+/** What an external boundary is: the design brief's areas (owner, 15 Nov 2026). */
+export const SERVICE_KINDS = ['email', 'payments', 'storage', 'ai', 'http'] as const;
+export type ServiceKind = (typeof SERVICE_KINDS)[number];
+
+export interface ServiceDetails {
+  readonly kind: ServiceKind;
+  /** The package that reaches it (`nodemailer`, `stripe`, `@aws-sdk/client-s3`), or `fetch`/`axios` for a URL. */
+  readonly library: string;
+  /** For `http`: the URL as the code fixes it (its host at least); null otherwise. */
+  readonly url: string | null;
+  readonly complete: boolean;
+  readonly why: string | null;
+}
+
+/** How work is handed off (build plan phase 11). */
+export const HANDOFF_KINDS = ['queue', 'job', 'cron', 'event', 'timer', 'websocket'] as const;
+export type HandoffKind = (typeof HANDOFF_KINDS)[number];
+
+export interface HandoffDetails {
+  readonly kind: HandoffKind;
+  /** Whose rules found it: `bullmq`, `twenty-queue`, `documenso-jobs`, `nest-schedule`, `nest-events`, … */
+  readonly library: string;
+  /** The queue and job, the schedule, or the event's name; null when the code doesn't fix it. */
+  readonly name: string | null;
+  readonly complete: boolean;
+  readonly why: string | null;
 }
 
 /** The design brief's groups of entry points (§23); jobs, cron and events are phase 11's. */

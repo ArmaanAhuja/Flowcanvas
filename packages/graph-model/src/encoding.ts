@@ -3,11 +3,15 @@
 import {
   CHANGE_STATES,
   CODE_UNIT_KINDS,
+  DATA_LIBRARIES,
+  DATA_OPERATIONS,
   EDGE_KINDS,
   ENTRY_KINDS,
+  HANDOFF_KINDS,
   NODE_KINDS,
   PROVENANCES,
   RELATIONS,
+  SERVICE_KINDS,
   edgeKey,
   type Graph,
   type GraphEdge,
@@ -20,8 +24,9 @@ import { validateGraph } from './validate.js';
  * rather than in every node's id and place. A version 1 snapshot is replaced by the next pass.
  * 3 (phase 7): a call edge says which of its lines are guarded (`GraphEdge.guarded`); a version 2 graph can't say.
  * 4 (phase 8, ADR 0030): an entry point's node carries its details (`GraphNode.entry`); a version 3 graph has none.
+ * 5 (phases 9 to 11, ADR 0031): data-access, external-boundary and async hand-off nodes carry their details.
  */
-export const GRAPH_FORMAT = 4;
+export const GRAPH_FORMAT = 5;
 
 type EncodedNode = [
   /** The id's file, as an index into `paths`; -1 when the id has no `#` (then `idRest` is the whole id). */
@@ -35,8 +40,13 @@ type EncodedNode = [
   column: number,
   unit: number,
   change: number,
-  /** Only on an entry point: its kind, framework (a text), complete (1 or 0), why and within (texts, or -1). */
-  entry?: [kind: number, framework: number, complete: number, why: number, within: number],
+  /**
+   * Only on an entry point, data access, external boundary or hand-off, read by the node's kind. Entry: kind,
+   * framework, complete, why, within. Data: library, table, operation, complete, why. Service: kind, library, url,
+   * complete, why. Hand-off: kind, library, name, complete, why. Texts are indexes into `texts` (-1 for none);
+   * complete is 1 or 0.
+   */
+  details?: [number, number, number, number, number],
 ];
 type EncodedEdge = [
   from: number,
@@ -107,6 +117,30 @@ export function encodeGraph(graph: Graph): string {
           text(n.entry.why),
           text(n.entry.within),
         ]);
+      } else if (n.data !== undefined) {
+        encodedNode.push([
+          DATA_LIBRARIES.indexOf(n.data.library),
+          text(n.data.table),
+          DATA_OPERATIONS.indexOf(n.data.operation),
+          n.data.complete ? 1 : 0,
+          text(n.data.why),
+        ]);
+      } else if (n.service !== undefined) {
+        encodedNode.push([
+          SERVICE_KINDS.indexOf(n.service.kind),
+          text(n.service.library),
+          text(n.service.url),
+          n.service.complete ? 1 : 0,
+          text(n.service.why),
+        ]);
+      } else if (n.handoff !== undefined) {
+        encodedNode.push([
+          HANDOFF_KINDS.indexOf(n.handoff.kind),
+          text(n.handoff.library),
+          text(n.handoff.name),
+          n.handoff.complete ? 1 : 0,
+          text(n.handoff.why),
+        ]);
       }
       return encodedNode;
     }),
@@ -148,25 +182,63 @@ export function decodeGraph(text: string, options: { readonly validate?: boolean
   const paths = encoded.paths ?? [];
   const texts = encoded.texts ?? [];
   const nodes: GraphNode[] = (encoded.nodes ?? []).map(
-    ([idPath, idRest, kind, name, placePath, line, column, unit, change, entry]) => ({
-      id: idPath === -1 ? idRest : `${pick(paths, idPath, 'path')}#${idRest}`,
-      kind: pick(NODE_KINDS, kind, 'node kind'),
-      name,
-      place: placePath === -1 ? null : { path: pick(paths, placePath, 'path'), line, column },
-      unit: unit === -1 ? null : pick(CODE_UNIT_KINDS, unit, 'code unit'),
-      change: pick(CHANGE_STATES, change, 'change state'),
-      ...(entry === undefined
-        ? {}
-        : {
-            entry: {
-              kind: pick(ENTRY_KINDS, entry[0], 'entry kind'),
-              framework: pick(texts, entry[1], 'text'),
-              complete: entry[2] === 1,
-              why: entry[3] === -1 ? null : pick(texts, entry[3], 'text'),
-              within: entry[4] === -1 ? null : pick(texts, entry[4], 'text'),
-            },
-          }),
-    }),
+    ([idPath, idRest, kind, name, placePath, line, column, unit, change, details]) => {
+      const nodeKind = pick(NODE_KINDS, kind, 'node kind');
+      const textOrNull = (i: number) => (i === -1 ? null : pick(texts, i, 'text'));
+      const more =
+        details === undefined
+          ? {}
+          : nodeKind === 'entry-point'
+            ? {
+                entry: {
+                  kind: pick(ENTRY_KINDS, details[0], 'entry kind'),
+                  framework: pick(texts, details[1], 'text'),
+                  complete: details[2] === 1,
+                  why: textOrNull(details[3]),
+                  within: textOrNull(details[4]),
+                },
+              }
+            : nodeKind === 'data-access'
+              ? {
+                  data: {
+                    library: pick(DATA_LIBRARIES, details[0], 'data library'),
+                    table: textOrNull(details[1]),
+                    operation: pick(DATA_OPERATIONS, details[2], 'data operation'),
+                    complete: details[3] === 1,
+                    why: textOrNull(details[4]),
+                  },
+                }
+              : nodeKind === 'external-boundary'
+                ? {
+                    service: {
+                      kind: pick(SERVICE_KINDS, details[0], 'service kind'),
+                      library: pick(texts, details[1], 'text'),
+                      url: textOrNull(details[2]),
+                      complete: details[3] === 1,
+                      why: textOrNull(details[4]),
+                    },
+                  }
+                : nodeKind === 'async-handoff'
+                  ? {
+                      handoff: {
+                        kind: pick(HANDOFF_KINDS, details[0], 'hand-off kind'),
+                        library: pick(texts, details[1], 'text'),
+                        name: textOrNull(details[2]),
+                        complete: details[3] === 1,
+                        why: textOrNull(details[4]),
+                      },
+                    }
+                  : {};
+      return {
+        id: idPath === -1 ? idRest : `${pick(paths, idPath, 'path')}#${idRest}`,
+        kind: nodeKind,
+        name,
+        place: placePath === -1 ? null : { path: pick(paths, placePath, 'path'), line, column },
+        unit: unit === -1 ? null : pick(CODE_UNIT_KINDS, unit, 'code unit'),
+        change: pick(CHANGE_STATES, change, 'change state'),
+        ...more,
+      };
+    },
   );
   const edges: GraphEdge[] = (encoded.edges ?? []).map(
     ([from, to, target, kind, relation, provenance, lines, label, guarded]) => ({
