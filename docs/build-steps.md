@@ -13602,3 +13602,84 @@ pnpm test:visual
 **Risks and laptop:** none new. Laptop: the walkthrough and the flow screens in Playwright's container.
 
 **Commits:** `feat(canvas): open a flow at 100% on its function; F fits it` (`7727c97`); `fix(docs-check): an upgrade-later trigger is reached when its phase starts` (`1a32ef0`); `test: nothing says phase 7 is still to come, now it's accepted` (`7d8ea46`); `fix(web): Graph stats is finished in phase 12, not 7` (`1c57abe`).
+
+## Phase 8 — Entry-point detection
+
+**From the build plan:**
+- **Build:** detect React event props, pages and routes, Next.js server actions and API routes, Express routes, package.json scripts; entry-points panel.
+- **Done when:** at least 90% of hand-listed entry points found across the 4 forks. **Raised by the owner (14 Nov 2026):** 100% recall for convention-based kinds, at least 95% per fork for routes registered in code and event handlers, 100% precision, every miss explained.
+- **Try it:** left panel lists screens, routes, jobs and events (Figma 06); click each to open its flow.
+
+**Decisions** (decisions log, 14 Nov 2026): every framework the 4 forks use (Next.js, React Router, Express, Hono, tRPC, NestJS controllers and GraphQL resolvers, React event props, package.json scripts); hand labels for everything in Rallly and Documenso, a fixed set of modules in LibreChat and Twenty, and the handlers in 5 screens per fork; screens named by their path, the component muted; ⌘K's Entry points and `/` for routes.
+
+**Expected outcome:** with a fork's workspace running, the left panel lists its entry points in the design brief's groups (Screens and elements, API routes, Jobs and cron, Events, CLI commands) with counts and a filter; a screen expands to its elements; clicking any entry point opens its flow. Jobs and events show 0 with the phase they arrive in (11).
+
+**Design references:** Figma 06 (the left panel), 22 (a CLI project's panel), 16 (⌘K's Entry points); design brief §23.
+
+**Scope:**
+- **In:** detection in the engine's graph pass, stored with the graph; `entry-point` nodes with edges to their handlers; the API; the panel; Show flow from an entry point; ⌘K's section; hand labels and recall and precision per fork.
+- **Out:** front-end calls linked to their handlers (phase 9); data and external services (10); jobs, cron and events (11); grouping (12); live frames (15).
+
+### Steps (planned)
+
+| # | Step | Milestone | Status |
+| --- | --- | --- | --- |
+| 0 | The plan and decisions; branch; the post-merge docs (staging at 0.11.0) | A | done (Claude, 14 Nov): `docs: phase 8 plan` |
+| 1 | Spike: each fork's entry points by framework; the detection approach. ADR 0030 | A | done (Claude, 14 Nov): `docs: phase 8 spike` |
+| 2 | `@flowcanvas/connectors-web`: a detector per framework, with fixtures | A | *next* |
+| 3 | The engine: entry points in the pass and the facts; the protocol and the API | A | *planned* |
+| 4 | Hand labels for the 4 forks; the corpus check | B | *planned* |
+| 5 | UI: the entry-points panel in the design system | B | *planned* |
+| 6 | The page: the left panel, Show flow, ⌘K's Entry points | B | *planned* |
+| 7 | Proof: real workspaces, the walkthrough, screens | B | *planned* |
+| 8 | Close: report, 0.12.0 | B | *planned* |
+
+### How each Done-when item is proven
+
+| Item | Test |
+| --- | --- |
+| Hand-listed entry points found: 100% for convention-based kinds, ≥ 95% per fork for code-registered ones, 100% precision | Docker corpus test: recall per fork, per group and overall, and precision, against `corpus/labels/entry-points.json` |
+| Each opens its flow | Every labelled entry point's flow opens at its handler, in real workspaces |
+| The Try it | Walkthrough `try-it/phase-8.spec.ts` |
+
+### Risks (checked at every milestone)
+
+| # | Risk | How we keep it in check | Status |
+| --- | --- | --- | --- |
+| R1 | Twenty: many event props and resolvers inside the pass's time | Detectors in the same walk; measured on Twenty (87 s today on CI) | *to measure* |
+| R2 | Inline handlers (`onClick={() => …}`) have no node | An anonymous handler registered as an entry point becomes a code unit in the graph; the Calls tab keeps TypeScript's view (ADR 0030 §3) | *designed (step 1)* |
+| R3 | Routes built at run time (loops, variables) | Shown as not fully detected, never guessed; each miss explained | *to measure* |
+
+### Step 8.0 — The plan and the owner's decisions (done by Claude)
+
+**Goal:** phase 8's plan, the owner's four answers, a branch from `main` after phase 7's merge (`36076f4`, staging at 0.11.0 deployed by CI).
+
+**What a person can do now:** read the plan above. Nothing in the app changes.
+
+**Files:** `docs/decisions-log.md`, `docs/STATUS.md`, `docs/RUN-AND-FEATURES.md` (0.11.0 on staging), this section.
+
+**Concepts:** none new. **Found and fixed on the way:** none. **Tests:** none (a plan). **Run and check it:** nothing to run. **Risks and laptop:** R1 to R3 above; nothing runs.
+
+**Commit:** `docs: phase 8 plan and the owner's decisions`.
+
+### Step 8.1 — Spike: how each fork declares its entry points (done by Claude; ADR 0030)
+
+**Goal:** know what to detect in each fork, how big it is, and where to do it, before building.
+
+**What a person can do now:** read ADR 0030. Nothing in the app changes.
+
+**Files:** `docs/adr/0030-entry-points.md`. The counting scripts stayed outside the repository.
+
+**Concepts:**
+- **File-based routing** (Next.js's `app/`, `remix-flat-routes`): the file's path is the route's path. https://nextjs.org/docs/app/building-your-application/routing and https://github.com/kiliman/remix-flat-routes
+- **Routes registered in code** (Express, Hono) and **by decorators** (NestJS): the path comes from a call's or decorator's arguments, often from a constant or a mount elsewhere. https://expressjs.com/en/guide/routing.html and https://docs.nestjs.com/controllers
+
+**Found on the way:**
+- **Every fork uses something the build plan doesn't name:** Rallly's Next.js routes hand requests to Hono apps (the Hono routes are the real API); Documenso's pages follow `remix-flat-routes`; LibreChat mounts Express routers across files in CommonJS; Twenty's paths come from enums.
+- **The scale:** about 2,500 to 3,000 entry points across the 4 forks by a first count (the owner chose labels in scope B: decisions log, 14 Nov).
+- **Most handlers are anonymous:** a flow from one needs it to be a node (ADR 0030 §3).
+
+**Tests:** none (a spike). **Run and check it:** ADR 0030. **Risks and laptop:** R1 to R3 updated. **Laptop:** text searches over the corpus, seconds.
+
+**Commit:** `docs: phase 8 spike: entry points by framework (ADR 0030)`.
+

@@ -13,6 +13,8 @@ export interface WorkspacePackage {
   readonly dir: string;
   /** Names of the project's other packages it depends on. */
   readonly dependsOn: readonly string[];
+  /** Every package it declares, installed ones too: which frameworks it uses (phase 8, `next`, `remix-flat-routes`). */
+  readonly uses: readonly string[];
   /** `paths` entries that resolve its imports to its source files (absolute paths). */
   readonly paths: Readonly<Record<string, readonly string[]>>;
 }
@@ -52,11 +54,21 @@ export function analysisDefaults(ts: TypeScript): TS.CompilerOptions {
 const SOURCE = /\.(?:ts|tsx|js|jsx|mts|cts|mjs|cjs)$/;
 const DECLARATION = /\.d\.[cm]?ts$/;
 
-/** The `paths` for a package, from its exports (subpaths and `*` patterns), else types/typings/main. */
+/** Folders packages build into, whose files the repository usually lacks. */
+const BUILT = /^(?:\.\/)?(?:dist|build|lib|out)\//;
+const BUILT_EXTENSION = /(?:\.d)?\.[cm]?[jt]s$/;
+
+/**
+ * The `paths` for a package, from its exports (subpaths and `*` patterns), else types/typings/main. A file in a build
+ * folder the project doesn't have (`./dist/types/index.d.ts`, never committed) is followed to its source at the same
+ * place under `src/` (`src/types/index.ts`) when that exists (phase 8: Twenty's `twenty-shared/types`). `has` says
+ * whether a package-relative file is in the project; without it, every target is taken as written.
+ */
 export function packagePaths(
   name: string,
   folder: string,
   manifest: Record<string, unknown>,
+  has?: (file: string) => boolean,
 ): Record<string, string[]> {
   const paths: Record<string, string[]> = {};
   const target = (value: unknown): string | undefined => {
@@ -74,17 +86,23 @@ export function packagePaths(
           key.startsWith('.'),
         )
       : [];
+  const sourceOf = (file: string): string => {
+    if (has === undefined || file.includes('*') || has(posix.normalize(file)) || !BUILT.test(file))
+      return file;
+    const stem = file.replace(BUILT, 'src/').replace(BUILT_EXTENSION, '');
+    return ['.ts', '.tsx'].map((ext) => stem + ext).find((candidate) => has(candidate)) ?? file;
+  };
   if (subpaths.length > 0) {
     for (const [key, value] of subpaths) {
       const file = target(value);
       if (file === undefined || !(SOURCE.test(file) || file.includes('*'))) continue;
-      paths[key === '.' ? name : `${name}${key.slice(1)}`] = [join(folder, file)];
+      paths[key === '.' ? name : `${name}${key.slice(1)}`] = [join(folder, sourceOf(file))];
     }
   } else {
     const main = [manifest.types, manifest.typings, manifest.main].find(
       (value): value is string => typeof value === 'string',
     );
-    paths[name] = [join(folder, main ?? 'index.ts')];
+    paths[name] = [join(folder, sourceOf(main ?? 'index.ts'))];
   }
   paths[`${name}/*`] ??= [join(folder, '*')];
   return paths;
@@ -313,19 +331,22 @@ export function findPackages(
       // Not JSON: not a package we can use.
     }
   }
+  const known = new Set(files);
   const packages = new Map<string, WorkspacePackage>();
   for (const [name, { dir, manifest }] of manifests) {
-    const dependsOn = ['dependencies', 'devDependencies', 'peerDependencies'].flatMap((field) => {
+    const uses = ['dependencies', 'devDependencies', 'peerDependencies'].flatMap((field) => {
       const value = manifest[field];
-      return typeof value === 'object' && value !== null
-        ? Object.keys(value).filter((dep) => dep !== name && manifests.has(dep))
-        : [];
+      return typeof value === 'object' && value !== null ? Object.keys(value) : [];
     });
+    const dependsOn = uses.filter((dep) => dep !== name && manifests.has(dep));
     packages.set(name, {
       name,
       dir,
       dependsOn: [...new Set(dependsOn)],
-      paths: packagePaths(name, join(root, dir), manifest),
+      uses: [...new Set(uses)],
+      paths: packagePaths(name, join(root, dir), manifest, (file) =>
+        known.has(dir === '' ? file : `${dir}/${file}`),
+      ),
     });
   }
   return packages;

@@ -630,3 +630,19 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 5. **CI's report step: nothing to change.** The "3 minutes per push" in the report was one run: in that run GitHub's download action finished in 5 s and then took 3 minutes to exit; in the runs before and after it took 3 and 7 s. A push takes about 5 minutes in all. Corrected in the report and upgrade-later 7.
 6. **Graph stats' Labs switch: "Finished in phase 12"** (Claude's choice, under the owner's 12 Nov delegation for this switch): it said phase 7, which is now accepted. Flows show one function's part of the graph; the whole graph as something to browse (grouped, expanded, collapsed) is phase 12's. Found by the site's own text test when phase 7 was accepted. The owner can have it leave Labs instead.
 
+## 14 Nov 2026: phase 7 merged; phase 8's plan
+
+**Merged** in PR #21 (`36076f4`). CI deployed staging itself for the first time: it serves `36076f4` and `/api/health` reports 0.11.0; the walkthroughs passed against it; the catalogue was deployed after its checks. Cloudflare's own builds for `main` can now be switched off (asked of the owner).
+
+**Owner, on phase 8's four questions:** "go with recommendation" for each.
+1. **Every framework the 4 forks use is detected:** Next.js (pages, route handlers, server actions), React Router (Documenso, LibreChat, Twenty), Express (LibreChat), Hono and tRPC (Rallly, Documenso), NestJS controllers and GraphQL resolvers (Twenty), React event props, and package.json scripts. Without them, "90% of hand-listed entry points across the 4 forks" would leave most of the forks out.
+2. **Hand labels:** every page, route, API endpoint and script in the 4 forks, and the event handlers in 5 chosen screens per fork (every `onClick` in Twenty isn't practical); written by Claude by reading the code.
+3. **A screen is named by its route path,** with its page component muted beside it (the code has no names like Figma's "Item editor").
+4. **⌘K gets an Entry points section and `/` for routes** (Figma 16), from the same data.
+
+**Open, for the owner:** the Done when's bar. The plan says 90%; the owner asked whether 95, 99 or 100% is better. Claude's recommendation: 100% recall for convention-based kinds (file and config routes, decorators, scripts), at least 95% per fork for routes registered in code and event handlers, 100% precision, and every miss explained in the report. *Settled below, same day.*
+
+**Owner, 14 Nov 2026,** on phase 8's bar and labels: "go with your recommendations".
+- **The bar, stricter than the plan's 90%:** 100% recall for convention-based kinds (file- and config-based routes and pages, decorators, package.json scripts); at least 95% recall per fork (not only overall) for routes registered in code (Express, Hono, tRPC) and event handlers; 100% precision (every false find fixed, or shown to be a labelling mistake); every miss explained in the report and shown on the page as not fully detected, never guessed.
+- **The labels, option B** (the first counts were about 2,500 to 3,000 entry points across the 4 forks, more than estimated): every entry point in Rallly and Documenso; in LibreChat and Twenty, every entry point in a fixed set of modules covering each framework they use; the event handlers in 5 chosen screens per fork. Written by reading the code.
+

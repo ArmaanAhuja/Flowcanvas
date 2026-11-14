@@ -2,6 +2,7 @@ import {
   CHANGE_STATES,
   CODE_UNIT_KINDS,
   EDGE_KINDS,
+  ENTRY_KINDS,
   NODE_KINDS,
   PROVENANCES,
   RELATIONS,
@@ -32,6 +33,24 @@ export function validateGraph(graph: Graph, limit = 50): string[] {
     if (!has(CHANGE_STATES, node.change)) say(`node ${node.id}: unknown change ${node.change}`);
     if (node.kind === 'code-unit' ? !has(CODE_UNIT_KINDS, node.unit) : node.unit !== null) {
       say(`node ${node.id}: a code unit needs what it is, and only a code unit has one`);
+    }
+    if (node.kind === 'entry-point') {
+      const entry = node.entry;
+      if (
+        entry === undefined ||
+        !has(ENTRY_KINDS, entry.kind) ||
+        typeof entry.framework !== 'string' ||
+        entry.framework === '' ||
+        typeof entry.complete !== 'boolean' ||
+        (entry.why !== null && (typeof entry.why !== 'string' || entry.why === '')) ||
+        (entry.within !== null && typeof entry.within !== 'string')
+      ) {
+        say(`node ${node.id}: an entry point needs its kind, framework and whether it's complete`);
+      } else if (!entry.complete && entry.why === null) {
+        say(`node ${node.id}: an entry point not fully detected says why`);
+      }
+    } else if (node.entry !== undefined) {
+      say(`node ${node.id}: only an entry point has entry details`);
     }
     if (
       node.place !== null &&

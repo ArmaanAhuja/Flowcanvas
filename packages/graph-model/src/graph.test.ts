@@ -164,6 +164,7 @@ describe('encodeGraph and decodeGraph', () => {
 
   it('refuses another format, a bad index, and an invalid graph', () => {
     expect(() => decodeGraph('{"format":2}')).toThrow('Unsupported graph format 2');
+    expect(() => decodeGraph('{"format":3}')).toThrow('Unsupported graph format 3');
     const text = JSON.parse(encodeGraph(POLL)) as { edges: number[][] };
     const [first] = text.edges;
     if (first === undefined) throw new Error('no edge');
@@ -339,5 +340,93 @@ describe('decisions (phase 7, ADR 0028)', () => {
     expect(() => decodeGraph('{"format":1,"nodes":[],"texts":[],"edges":[]}')).toThrow(
       'Unsupported graph format 1',
     );
+  });
+});
+
+describe('entry points (phase 8, ADR 0030)', () => {
+  const entry = (
+    id: string,
+    details: Partial<NonNullable<GraphNode['entry']>> = {},
+  ): GraphNode => ({
+    id,
+    kind: 'entry-point',
+    name: id.split('#')[1] ?? id,
+    place: { path: id.split('#')[0] ?? 'a.ts', line: 4, column: 3 },
+    unit: null,
+    change: 'unchanged',
+    entry: {
+      kind: 'api-route',
+      framework: 'hono',
+      complete: true,
+      why: null,
+      within: null,
+      ...details,
+    },
+  });
+  const GRAPH: Graph = {
+    nodes: [
+      ...POLL.nodes,
+      entry('src/route.ts#(entry POST /api/polls)'),
+      entry('src/form.tsx#(entry <button> onClick)', {
+        kind: 'element',
+        framework: 'react',
+        within: 'src/form.tsx#PollForm',
+      }),
+      entry('src/app.ts#(entry GET /:unknown/polls)', {
+        complete: false,
+        why: 'Part of its path isn’t a constant the code fixes.',
+      }),
+    ],
+    edges: [
+      ...POLL.edges,
+      call('src/route.ts#(entry POST /api/polls)', 'src/poll.ts#createPoll', [4], {
+        provenance: 'convention',
+      }),
+    ],
+  };
+
+  it('round-trips their details, and a graph without any encodes as it did', () => {
+    expect(validateGraph(GRAPH)).toEqual([]);
+    const decoded = decodeGraph(encodeGraph(GRAPH));
+    expect(encodeGraph(decoded)).toBe(encodeGraph(GRAPH));
+    expect(
+      decoded.nodes.find((n) => n.kind === 'entry-point' && !n.entry?.complete)?.entry,
+    ).toEqual({
+      kind: 'api-route',
+      framework: 'hono',
+      complete: false,
+      why: 'Part of its path isn’t a constant the code fixes.',
+      within: null,
+    });
+    expect(decodeGraph(encodeGraph(POLL)).nodes.every((n) => !('entry' in n))).toBe(true);
+  });
+
+  it('says what breaks their rules', () => {
+    const { entry: details, ...bare } = entry('a.ts#(entry x)');
+    const bad: Graph = {
+      nodes: [
+        bare,
+        entry('b.ts#(entry y)', { complete: false }),
+        ...(details === undefined ? [] : [{ ...unit('c.ts#f'), entry: details }]),
+      ],
+      edges: [],
+    };
+    expect(validateGraph(bad)).toEqual([
+      "node a.ts#(entry x): an entry point needs its kind, framework and whether it's complete",
+      'node b.ts#(entry y): an entry point not fully detected says why',
+      'node c.ts#f: only an entry point has entry details',
+    ]);
+  });
+
+  it('counts a change to an entry point’s details as modified', () => {
+    const after: Graph = {
+      ...GRAPH,
+      nodes: GRAPH.nodes.map((n) =>
+        n.id === 'src/route.ts#(entry POST /api/polls)' && n.entry !== undefined
+          ? { ...n, entry: { ...n.entry, complete: false, why: 'Its mount isn’t followed.' } }
+          : n,
+      ),
+    };
+    expect(diffGraphs(GRAPH, after).modified).toEqual(['src/route.ts#(entry POST /api/polls)']);
   });
 });
