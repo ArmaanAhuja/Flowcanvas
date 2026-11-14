@@ -44,6 +44,16 @@ export interface CallsLabel {
   readonly column: number;
   readonly callers: readonly CallerLabel[];
   readonly callees: readonly CalleeLabel[];
+  /**
+   * Where the flow graph differs from the Calls tab, and why (phase 8, ADR 0030 §3): an anonymous handler is a unit
+   * of its own in the graph, while the Calls tab keeps TypeScript's view. Lists given here replace the label's for
+   * the graph's check only.
+   */
+  readonly graph?: {
+    readonly why: string;
+    readonly callers?: readonly CallerLabel[];
+    readonly callees?: readonly CalleeLabel[];
+  };
 }
 
 export interface Difference {
@@ -124,6 +134,8 @@ interface GraphPlace {
 export interface LabelGraph {
   readonly nodes: readonly {
     readonly id: string;
+    /** An entry point's edge to its handler isn't a call between code (phase 8): its labels are its own. */
+    readonly kind?: string;
     readonly name: string;
     readonly place: GraphPlace | null;
   }[];
@@ -157,7 +169,8 @@ export function checkGraph(graph: LabelGraph, label: CallsLabel): GraphCheck {
   );
   const withoutBuiltIns: CallsLabel = {
     ...label,
-    callees: label.callees.filter((c) => !c.builtIn),
+    callers: label.graph?.callers ?? label.callers,
+    callees: (label.graph?.callees ?? label.callees).filter((c) => !c.builtIn),
   };
   if (node === undefined) {
     return { node: null, ...compareCalls(withoutBuiltIns, [], []) };
@@ -178,7 +191,9 @@ export function checkGraph(graph: LabelGraph, label: CallsLabel): GraphCheck {
     place: place === null ? null : { path: place.path, line: place.line },
     sites: lines.map((line) => ({ path: sitesIn, line })),
   });
-  const calls = graph.edges.filter((e) => (e.kind ?? 'call') === 'call');
+  const calls = graph.edges.filter(
+    (e) => (e.kind ?? 'call') === 'call' && byId.get(e.from)?.kind !== 'entry-point',
+  );
   const callees = calls
     .filter((e) => e.from === node.id)
     .map((e) => {
