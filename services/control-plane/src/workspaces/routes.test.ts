@@ -141,7 +141,8 @@ describe('POST /api/projects/:id/workspace/:action', () => {
     expect(line).toMatch(
       /^workspace [0-9a-f-]{36} open by user [0-9a-f-]{36}: not_created → running$/,
     );
-    expect(line).not.toContain('ada');
+    // The person's email, never a bare "ada": a random UUID can hold those hex letters (6b910a5f-ada4-…, CI 15 Nov).
+    expect(line).not.toContain('ada@example.com');
     expect(line).not.toContain('github.com');
   });
 });

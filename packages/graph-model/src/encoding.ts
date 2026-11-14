@@ -4,6 +4,7 @@ import {
   CHANGE_STATES,
   CODE_UNIT_KINDS,
   EDGE_KINDS,
+  ENTRY_KINDS,
   NODE_KINDS,
   PROVENANCES,
   RELATIONS,
@@ -18,8 +19,9 @@ import { validateGraph } from './validate.js';
  * 2 (phase 7, ADR 0028): edges carry a label (decisions' outcomes), and file paths are stored once in a table
  * rather than in every node's id and place. A version 1 snapshot is replaced by the next pass.
  * 3 (phase 7): a call edge says which of its lines are guarded (`GraphEdge.guarded`); a version 2 graph can't say.
+ * 4 (phase 8, ADR 0030): an entry point's node carries its details (`GraphNode.entry`); a version 3 graph has none.
  */
-export const GRAPH_FORMAT = 3;
+export const GRAPH_FORMAT = 4;
 
 type EncodedNode = [
   /** The id's file, as an index into `paths`; -1 when the id has no `#` (then `idRest` is the whole id). */
@@ -33,6 +35,8 @@ type EncodedNode = [
   column: number,
   unit: number,
   change: number,
+  /** Only on an entry point: its kind, framework (a text), complete (1 or 0), why and within (texts, or -1). */
+  entry?: [kind: number, framework: number, complete: number, why: number, within: number],
 ];
 type EncodedEdge = [
   from: number,
@@ -73,12 +77,18 @@ export function encodeGraph(graph: Graph): string {
     pathIndex.set(path, at);
     return at;
   };
+  const text = (value: string | null) => {
+    if (value === null) return -1;
+    const at = textIndex.get(value) ?? texts.push(value) - 1;
+    textIndex.set(value, at);
+    return at;
+  };
   const encoded: Encoded = {
     format: GRAPH_FORMAT,
     paths,
     nodes: nodes.map((n) => {
       const hash = n.id.indexOf('#');
-      return [
+      const encodedNode: EncodedNode = [
         hash === -1 ? -1 : pathOf(n.id.slice(0, hash)),
         hash === -1 ? n.id : n.id.slice(hash + 1),
         NODE_KINDS.indexOf(n.kind),
@@ -89,15 +99,19 @@ export function encodeGraph(graph: Graph): string {
         n.unit === null ? -1 : CODE_UNIT_KINDS.indexOf(n.unit),
         CHANGE_STATES.indexOf(n.change),
       ];
+      if (n.entry !== undefined) {
+        encodedNode.push([
+          ENTRY_KINDS.indexOf(n.entry.kind),
+          text(n.entry.framework),
+          n.entry.complete ? 1 : 0,
+          text(n.entry.why),
+          text(n.entry.within),
+        ]);
+      }
+      return encodedNode;
     }),
     texts,
     edges: [...graph.edges].sort(byKey).map((e) => {
-      const text = (value: string | null) => {
-        if (value === null) return -1;
-        const at = textIndex.get(value) ?? texts.push(value) - 1;
-        textIndex.set(value, at);
-        return at;
-      };
       const target = text(e.target);
       const encodedEdge: EncodedEdge = [
         index.get(e.from) ?? -1,
@@ -132,17 +146,28 @@ export function decodeGraph(text: string, options: { readonly validate?: boolean
     return value;
   };
   const paths = encoded.paths ?? [];
+  const texts = encoded.texts ?? [];
   const nodes: GraphNode[] = (encoded.nodes ?? []).map(
-    ([idPath, idRest, kind, name, placePath, line, column, unit, change]) => ({
+    ([idPath, idRest, kind, name, placePath, line, column, unit, change, entry]) => ({
       id: idPath === -1 ? idRest : `${pick(paths, idPath, 'path')}#${idRest}`,
       kind: pick(NODE_KINDS, kind, 'node kind'),
       name,
       place: placePath === -1 ? null : { path: pick(paths, placePath, 'path'), line, column },
       unit: unit === -1 ? null : pick(CODE_UNIT_KINDS, unit, 'code unit'),
       change: pick(CHANGE_STATES, change, 'change state'),
+      ...(entry === undefined
+        ? {}
+        : {
+            entry: {
+              kind: pick(ENTRY_KINDS, entry[0], 'entry kind'),
+              framework: pick(texts, entry[1], 'text'),
+              complete: entry[2] === 1,
+              why: entry[3] === -1 ? null : pick(texts, entry[3], 'text'),
+              within: entry[4] === -1 ? null : pick(texts, entry[4], 'text'),
+            },
+          }),
     }),
   );
-  const texts = encoded.texts ?? [];
   const edges: GraphEdge[] = (encoded.edges ?? []).map(
     ([from, to, target, kind, relation, provenance, lines, label, guarded]) => ({
       from: pick(nodes, from, 'node').id,

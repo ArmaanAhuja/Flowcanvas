@@ -30,7 +30,7 @@ const snapshot: GraphStatsSnapshot = {
   loadMs: 1200,
 };
 // Decisions and branches arrived in phase 7 (accepted): like any kind with no phase given, they show just their zero.
-const arrivesIn = { 'entry-point': 8, 'data-access': 10, data: 10 };
+const arrivesIn = { 'data-access': 10, data: 10 };
 
 /** A group's rows as "name: value". */
 const rows = (name: string) =>
@@ -43,7 +43,7 @@ describe('GraphStats', () => {
     render(<GraphStats state="ready" snapshot={snapshot} arrivesIn={arrivesIn} />);
     expect(screen.getByText('3,327 nodes · 16,394 edges')).toBeTruthy();
     expect(rows('Nodes')).toEqual([
-      'Entry points arrives in phase 8: 0',
+      'Entry points: 0',
       'Code units: 3,327',
       'Decisions: 0',
       'Data access arrives in phase 10: 0',

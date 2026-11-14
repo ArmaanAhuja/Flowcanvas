@@ -21,6 +21,7 @@ import {
   GRAPH_FILE,
   type CallsResult,
   type EngineStatus,
+  type EntryPointsResult,
   type GraphStatus,
   type SearchResult,
 } from '@flowcanvas/engine/protocol';
@@ -29,6 +30,12 @@ import { findObjects, remove } from './clean.js';
 import { dockerCli } from './docker-cli.js';
 import { WorkspaceHost } from './workspaces.js';
 import { checkGraph, compareCalls, type CallsLabel } from '../../../corpus/src/calls.js';
+import {
+  barProblems,
+  compareEntryPoints,
+  recall,
+  type ForkLabels,
+} from '../../../corpus/src/entry-points.js';
 import { compareFlow, type FlowLabel } from '../../../corpus/src/flows.js';
 import { selectRepos } from '../../../corpus/src/select.js';
 
@@ -57,6 +64,8 @@ const repos = selectRepos((corpus('manifest.json') as { repos: Repo[] }).repos, 
 const labels = corpus('labels/symbols.json') as Record<string, Label[] | undefined>;
 const callLabels = corpus('labels/calls.json') as Record<string, CallsLabel[] | undefined>;
 const graphLabels = corpus('labels/graph.json') as Record<string, CallsLabel[] | undefined>;
+/** Phase 8's Done when: each fork's hand-labelled entry points (labels/entry-points.json). */
+const entryLabels = corpus('labels/entry-points.json') as Record<string, ForkLabels | undefined>;
 /** Phase 7's Done when: 10 Documenso flows, labelled by reading the code (labels/flows.json). */
 const flowLabels = corpus('labels/flows.json') as Record<string, FlowLabel[] | undefined>;
 /** Phase 6's four forks (owner, 12 Nov 2026): held to the Done when; Excalidraw and Medusa are reported. */
@@ -196,7 +205,8 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
             line: label.line,
             column: label.column,
           });
-          if (!answer.ok || !('entries' in answer.result)) throw new Error(`no ${op}`);
+          if (!answer.ok || !('entries' in answer.result) || 'counts' in answer.result)
+            throw new Error(`no ${op}`);
           return { result: answer.result, ms: performance.now() - asked };
         };
         // Each labelled function's callers and callees, compared exactly with its labels.
@@ -349,6 +359,52 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
         const membersCallersMs: number[] = [];
         if (graph.state === 'ready') await checkCalls(storedDiffering, storedMs, membersCallersMs);
 
+        // Phase 8: every entry point the engine lists, a kind and a page at a time, against the labels.
+        const forkEntryLabels = entryLabels[repo.id];
+        const entryPoints: EntryPointsResult['entries'][number][] = [];
+        let entryPointsMs = 0;
+        if (graph.state === 'ready' && forkEntryLabels !== undefined) {
+          for (const kind of ['screen', 'element', 'api-route', 'cli-command'] as const) {
+            for (let after: number | null = 0; after !== null;) {
+              const started = performance.now();
+              const answer = await host.index(ref, { op: 'entryPoints', kind, after, limit: 200 });
+              entryPointsMs = Math.max(entryPointsMs, performance.now() - started);
+              if (!answer.ok || !('counts' in answer.result)) throw new Error('no entry points');
+              entryPoints.push(...answer.result.entries);
+              after = answer.result.next;
+            }
+          }
+        }
+        const entryResult =
+          forkEntryLabels === undefined ? null : compareEntryPoints(forkEntryLabels, entryPoints);
+
+        // Phase 8's Done when, the other half: each labelled entry point handled by the project's code opens its
+        // flow, rooted at what handles it. Those handled by code that isn't the project's (a prop, a library's
+        // function) have no flow, and say so on the page.
+        const entryFlowsMissing: string[] = [];
+        let entryFlowsOpened = 0;
+        let entryFlowMaxMs = 0;
+        if (forkEntryLabels !== undefined && graph.state === 'ready') {
+          const labelled = new Set(
+            forkEntryLabels.entries.map((l) => `${l.kind}|${l.name}|${l.file}:${String(l.line)}`),
+          );
+          for (const e of entryPoints) {
+            const handler = e.handler;
+            if (e.place === null || handler?.id == null || handler.place === null) continue;
+            if (!labelled.has(`${e.kind}|${e.name}|${e.place.path}:${String(e.place.line)}`))
+              continue;
+            const started = performance.now();
+            const answer = await host.index(ref, { op: 'flow', ...handler.place });
+            entryFlowMaxMs = Math.max(entryFlowMaxMs, performance.now() - started);
+            const flow = answer.ok && 'flow' in answer.result ? answer.result.flow : null;
+            if (flow?.root === handler.id) entryFlowsOpened += 1;
+            else
+              entryFlowsMissing.push(
+                `${e.name}: ${flow === null ? 'no flow' : `rooted at ${flow.root}`}`,
+              );
+          }
+        }
+
         const row = {
           repo: repo.id,
           files: current.files,
@@ -395,6 +451,20 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
                 labelledFlows: `${String(labelledFlows.length - labelledDiffering.length)} of ${String(labelledFlows.length)}`,
               }
             : {}),
+          ...(entryResult !== null
+            ? {
+                entryPoints: entryPoints.length,
+                entryConvention: `${String(entryResult.groups.convention.found)} of ${String(entryResult.groups.convention.labelled)}`,
+                entryCode: `${String(entryResult.groups.code.found)} of ${String(entryResult.groups.code.labelled)} (${(recall(entryResult.groups.code) * 100).toFixed(1)}%)`,
+                entryNotFullyDetected:
+                  entryResult.groups.code.incomplete.length +
+                  entryResult.groups.convention.incomplete.length,
+                entryFalseFinds: entryResult.falseFinds.length,
+                entryPageMaxMs: Math.round(entryPointsMs),
+                entryFlows: `${String(entryFlowsOpened)} of ${String(entryFlowsOpened + entryFlowsMissing.length)}`,
+                entryFlowMaxMs: Math.round(entryFlowMaxMs),
+              }
+            : {}),
           ...(storedMs.length > 0
             ? {
                 storedCalls: `${String(labelledCalls - storedDiffering.length)} of ${String(labelledCalls)}`,
@@ -420,6 +490,19 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
           expect(flowsDiffering).toEqual([]);
           expect(labelledDiffering).toEqual([]);
           if (repo.id === 'documenso') expect(labelledFlows).toHaveLength(10);
+          // Phase 8's bar (owner, 14 Nov 2026), with every not-fully-detected entry point's reason printed.
+          if (entryResult !== null) {
+            for (const line of [
+              ...entryResult.groups.convention.incomplete,
+              ...entryResult.groups.code.incomplete,
+            ]) {
+              console.log(`${repo.id}: not fully detected: ${line}`);
+            }
+            expect(barProblems(entryResult)).toEqual([]);
+            expect(entryFlowsMissing).toEqual([]);
+            expect(entryFlowMaxMs).toBeLessThan(ANSWER_MS);
+            expect(entryPointsMs).toBeLessThan(ANSWER_MS);
+          }
           expect(Math.max(...flowMs, ...detailsMs)).toBeLessThan(ANSWER_MS);
         }
         expect(current.byStatus.parsed).toBeGreaterThan(0);

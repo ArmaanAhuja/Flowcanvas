@@ -118,9 +118,8 @@ describe('Labs → Graph stats', () => {
     expect(
       within(details()).getByText('Built in 4.1 s · saved in 20 ms · loaded in 10 ms'),
     ).toBeTruthy();
-    expect(within(details()).getByText(/Entry points/).textContent).toBe(
-      'Entry points arrives in phase 8',
-    );
+    // Entry points are in the graph since phase 8: counted, with no "arrives in".
+    expect(within(details()).getByText(/^Entry points/).textContent).toBe('Entry points');
     // Decisions are in the graph since phase 7: counted, with no "arrives in".
     expect(within(details()).getByText(/^Decisions/).textContent).toBe('Decisions');
   });

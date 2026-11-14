@@ -426,3 +426,105 @@ describe('details (phase 7)', () => {
     }
   });
 });
+
+describe('entry points (phase 8)', () => {
+  const request: EngineRequest = { op: 'entryPoints', kind: 'screen', after: 0, limit: 2 };
+  const entry = {
+    id: 'app/page.tsx#(entry /polls)',
+    kind: 'screen',
+    framework: 'next',
+    name: '/polls',
+    place: { path: 'app/page.tsx', line: 3, column: 25 },
+    complete: true,
+    why: null,
+    within: null,
+    handler: {
+      id: 'app/page.tsx#Polls',
+      name: 'Polls',
+      place: { path: 'app/page.tsx', line: 3, column: 25 },
+    },
+  };
+  const result = {
+    counts: { screen: 3, element: 0, 'api-route': 0, 'cli-command': 0 },
+    kind: 'screen',
+    entries: [
+      entry,
+      {
+        ...entry,
+        id: 'b#(entry /x)',
+        complete: false,
+        why: 'Part of its path isn’t known.',
+        handler: null,
+      },
+    ],
+    next: 2,
+    message: null,
+    version: 'c'.repeat(64),
+    takenAt: '2026-11-14T10:00:00.000Z',
+    current: true,
+    complete: true,
+  };
+  const ok = (value: unknown, asked: EngineRequest = request) =>
+    isEngineResponse(asked, { ok: true, result: value });
+
+  it('asks for a page of one kind, at most 200', () => {
+    expect(parseEngineRequest({ ...request })).toEqual(request);
+    expect(ENGINE_LIMITS.entries).toBe(200);
+    for (const bad of [
+      { op: 'entryPoints', kind: 'job', after: 0, limit: 1 },
+      { op: 'entryPoints', kind: 'screen', after: -1, limit: 1 },
+      { op: 'entryPoints', kind: 'screen', after: 0, limit: 0 },
+      { op: 'entryPoints', kind: 'screen', after: 0, limit: 201 },
+    ]) {
+      expect(() => parseEngineRequest(bad)).toThrow(EngineProblem);
+    }
+    // A screen's elements: kind element only.
+    expect(
+      parseEngineRequest({
+        op: 'entryPoints',
+        kind: 'element',
+        after: 0,
+        limit: 5,
+        screen: 'a#(entry /)',
+      }),
+    ).toEqual({ op: 'entryPoints', kind: 'element', after: 0, limit: 5, screen: 'a#(entry /)' });
+    expect(() =>
+      parseEngineRequest({
+        op: 'entryPoints',
+        kind: 'screen',
+        after: 0,
+        limit: 5,
+        screen: 'a#(entry /)',
+      }),
+    ).toThrow(EngineProblem);
+    // Answered from the version in memory: not one of the questions that wait on TypeScript.
+    expect(TYPESCRIPT_OPS).not.toContain('entryPoints');
+  });
+
+  it('accepts a page, a handler that isn’t the project’s code, or none', () => {
+    expect(ok(result)).toBe(true);
+    expect(
+      ok({
+        ...result,
+        entries: [{ ...entry, handler: { id: null, name: 'onClick', place: null } }],
+      }),
+    ).toBe(true);
+    expect(ok({ ...result, entries: [], next: null, version: null, takenAt: null })).toBe(true);
+  });
+
+  it('refuses a page that isn’t what was asked, bounded and well-formed', () => {
+    for (const bad of [
+      { ...result, entries: [entry, entry, entry] },
+      { ...result, kind: 'element' },
+      { ...result, entries: [{ ...entry, kind: 'element' }] },
+      { ...result, entries: [{ ...entry, elements: -1 }] },
+      { ...result, entries: [{ ...entry, complete: false }] },
+      { ...result, entries: [{ ...entry, place: { path: '/etc/passwd', line: 1, column: 1 } }] },
+      { ...result, entries: [{ ...entry, name: 'x'.repeat(ENGINE_LIMITS.text + 1) }] },
+      { ...result, next: 0 },
+      { ...result, counts: { screen: 3 } },
+    ]) {
+      expect(ok(bad)).toBe(false);
+    }
+  });
+});

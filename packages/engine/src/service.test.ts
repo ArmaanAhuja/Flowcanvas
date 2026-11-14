@@ -8,6 +8,7 @@ import { Indexer } from './indexer.js';
 import {
   isEngineResponse,
   type EngineStatus,
+  type EntryPointsResult,
   type FlowResult,
   type SearchResult,
 } from './protocol.js';
@@ -17,6 +18,7 @@ import { GRAPH_FAILED } from './semantics/client.js';
 import { SnapshotStore } from './snapshots.js';
 import type { GraphStatus, NodeDetails } from './protocol.js';
 import {
+  ENTRY_POINT_MESSAGES,
   FLOW_MESSAGES,
   fittingFlow,
   INDEXING_FAILED,
@@ -717,6 +719,154 @@ describe('flows (phase 7)', () => {
     // f0 calls the 60 others: 29 of them are shown.
     expect(fitted?.flow.hidden).toBe(31);
     expect(Buffer.byteLength(JSON.stringify(fitted?.flow))).toBeLessThan(256 * 1024 * 0.75);
+  });
+});
+
+describe('entry points (phase 8)', () => {
+  const route = (id: string, name: string, line: number) => ({
+    id,
+    kind: 'entry-point' as const,
+    name,
+    place: { path: 'a.ts', line, column: 1 },
+    unit: null,
+    change: 'unchanged' as const,
+    entry: {
+      kind: 'api-route' as const,
+      framework: 'hono',
+      complete: true,
+      why: null,
+      within: null,
+    },
+  });
+  const graph: Graph = {
+    nodes: [
+      {
+        id: 'a.ts#list',
+        kind: 'code-unit',
+        name: 'list',
+        place: { path: 'a.ts', line: 9, column: 17 },
+        unit: 'function',
+        change: 'unchanged',
+      },
+      route('a.ts#(entry POST /polls)', 'POST /polls', 2),
+      route('a.ts#(entry GET /polls)', 'GET /polls', 1),
+      route('a.ts#(entry DELETE /polls/:id)', 'DELETE /polls/:id', 3),
+    ],
+    edges: [
+      {
+        from: 'a.ts#(entry GET /polls)',
+        to: 'a.ts#list',
+        target: null,
+        kind: 'call',
+        relation: 'calls',
+        label: null,
+        provenance: 'convention',
+        lines: [1],
+      },
+    ],
+  };
+  const ask = async (after: number, limit: number): Promise<EntryPointsResult> => {
+    const request = { op: 'entryPoints', kind: 'api-route', after, limit } as const;
+    const result = await service.handle(request);
+    // Checked as the control plane will.
+    expect(isEngineResponse(request, { ok: true, result })).toBe(true);
+    return result as EntryPointsResult;
+  };
+
+  it('says so before there’s a graph', async () => {
+    start();
+    expect(await ask(0, 50)).toMatchObject({
+      counts: { screen: 0, element: 0, 'api-route': 0, 'cli-command': 0 },
+      entries: [],
+      next: null,
+      message: NO_GRAPH,
+    });
+    expect(ENTRY_POINT_MESSAGES.noGraph).toContain('graph');
+  });
+
+  it('answers a screen’s elements, and gives each screen its count', async () => {
+    const screen = {
+      ...route('a.ts#(entry /polls)', '/polls', 1),
+      entry: {
+        kind: 'screen' as const,
+        framework: 'next',
+        complete: true,
+        why: null,
+        within: null,
+      },
+    };
+    const element = {
+      ...route('a.ts#(entry <button> onClick)', '<button> onClick', 9),
+      entry: {
+        kind: 'element' as const,
+        framework: 'react',
+        complete: true,
+        why: null,
+        within: 'a.ts#list',
+      },
+    };
+    const withScreen: Graph = {
+      nodes: [...graph.nodes.slice(0, 1), screen, element],
+      edges: [
+        {
+          from: 'a.ts#(entry /polls)',
+          to: 'a.ts#list',
+          target: null,
+          kind: 'call',
+          relation: 'renders',
+          label: null,
+          provenance: 'convention',
+          lines: [1],
+        },
+      ],
+    };
+    const snapshots = new SnapshotStore(':memory:');
+    snapshots.save(encodeGraph(withScreen), {
+      complete: true,
+      note: null,
+      files: 1,
+      builtInCalls: 0,
+    });
+    start({ snapshots });
+    const screens = await service.handle({
+      op: 'entryPoints',
+      kind: 'screen',
+      after: 0,
+      limit: 10,
+    });
+    expect((screens as EntryPointsResult).entries[0]?.elements).toBe(1);
+    const request = {
+      op: 'entryPoints',
+      kind: 'element',
+      after: 0,
+      limit: 10,
+      screen: 'a.ts#(entry /polls)',
+    } as const;
+    const result = await service.handle(request);
+    expect(isEngineResponse(request, { ok: true, result })).toBe(true);
+    expect((result as EntryPointsResult).entries.map((e) => e.name)).toEqual(['<button> onClick']);
+  });
+
+  it('answers a page of one kind in name order from the latest version, with what handles each', async () => {
+    const snapshots = new SnapshotStore(':memory:');
+    // A version from before a restart: answered from it until the first pass replaces it.
+    snapshots.save(
+      encodeGraph(graph),
+      { complete: true, note: null, files: 1, builtInCalls: 0 },
+      new Date('2026-11-14T10:00:00.000Z'),
+    );
+    start({ snapshots });
+    const first = await ask(0, 2);
+    expect(first.counts['api-route']).toBe(3);
+    expect(first.entries.map((e) => [e.name, e.handler?.name ?? null])).toEqual([
+      ['DELETE /polls/:id', null],
+      ['GET /polls', 'list'],
+    ]);
+    expect(first.next).toBe(2);
+    const second = await ask(2, 2);
+    expect(second.entries.map((e) => e.name)).toEqual(['POST /polls']);
+    expect(second.next).toBeNull();
+    expect(second.version).toMatch(/^[0-9a-f]{64}$/);
   });
 });
 

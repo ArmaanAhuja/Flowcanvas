@@ -48,7 +48,6 @@ export function graphStats(graph: Graph): GraphStats {
 
 /** When each kind not filled yet arrives (build plan): shown with its zero (owner, 12 Nov 2026). */
 export const ARRIVES_IN: Readonly<Partial<Record<NodeKind | EdgeKind, number>>> = {
-  'entry-point': 8,
   'data-access': 10,
   'external-boundary': 10,
   'async-handoff': 11,

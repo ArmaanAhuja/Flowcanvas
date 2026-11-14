@@ -528,8 +528,27 @@ importers:
         specifier: 'catalog:'
         version: 6.0.3
 
+  packages/connectors/web:
+    dependencies:
+      '@flowcanvas/graph-model':
+        specifier: workspace:*
+        version: link:../../graph-model
+    devDependencies:
+      eslint:
+        specifier: 'catalog:'
+        version: 10.13.0(supports-color@10.2.2)
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.5(@types/node@26.6.5)(jsdom@30.1.3)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15))
+
   packages/engine:
     dependencies:
+      '@flowcanvas/connectors-web':
+        specifier: workspace:*
+        version: link:../connectors/web
       '@flowcanvas/graph-model':
         specifier: workspace:*
         version: link:../graph-model

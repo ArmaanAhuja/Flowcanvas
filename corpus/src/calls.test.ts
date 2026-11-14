@@ -127,6 +127,16 @@ describe('labels/calls.json', () => {
     }
   });
 
+  it('says why wherever the graph is held to lists of its own (phase 8)', () => {
+    for (const repo of ['rallly', 'documenso']) {
+      for (const l of file[repo] as CallsLabel[]) {
+        if (l.graph === undefined) continue;
+        expect(l.graph.why.length).toBeGreaterThan(20);
+        expect(l.graph.callers ?? l.graph.callees).toBeDefined();
+      }
+    }
+  });
+
   it('labels every caller and callee with lines, and places as path:line', () => {
     for (const repo of ['rallly', 'documenso']) {
       for (const l of file[repo] as CallsLabel[]) {

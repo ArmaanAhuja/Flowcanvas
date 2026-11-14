@@ -440,7 +440,8 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
     };
     // createPoll in Rallly at its pin (corpus/labels/symbols.json): the first question builds the web app's program.
     const first = await ask('callers', 'apps/web/src/features/poll/mutations.ts', 98, 14);
-    if (!('entries' in first.result)) throw new Error('not a calls answer');
+    if (!('entries' in first.result) || 'counts' in first.result)
+      throw new Error('not a calls answer');
     console.log(
       `Rallly: createPoll's callers in ${String(first.ms)} ms (the first TypeScript question)`,
     );
@@ -453,7 +454,8 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
     for (const entry of first.result.entries) expect(entry.provenance).toBe('resolved');
 
     const callees = await ask('callees', 'apps/web/src/features/poll/mutations.ts', 98, 14);
-    if (!('entries' in callees.result)) throw new Error('not a calls answer');
+    if (!('entries' in callees.result) || 'counts' in callees.result)
+      throw new Error('not a calls answer');
     console.log(`Rallly: createPoll's callees in ${String(callees.ms)} ms`);
     const names = callees.result.entries.map((e) => `${e.provenance} ${e.name}`);
     expect(names).toContain('resolved toPollResponse');
@@ -462,7 +464,8 @@ describe('workspace host with Docker', { timeout: 120_000 }, () => {
 
     // Button in the ui package, rendered across the three packages.
     const button = await ask('callers', 'packages/ui/src/button.tsx', 18, 7);
-    if (!('entries' in button.result)) throw new Error('not a calls answer');
+    if (!('entries' in button.result) || 'counts' in button.result)
+      throw new Error('not a calls answer');
     console.log(
       `Rallly: Button's callers in ${String(button.ms)} ms: ${String(button.result.entries.length)}`,
     );

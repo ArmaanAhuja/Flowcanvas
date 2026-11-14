@@ -249,7 +249,12 @@
           "path": "apps/web/src/lib/maintenance-server.ts",
           "lines": [16]
         },
-        { "name": "proxy", "relation": "calls", "path": "apps/web/src/proxy.ts", "lines": [53] },
+        {
+          "name": "proxy",
+          "relation": "calls",
+          "path": "apps/web/src/proxy.ts",
+          "lines": [53]
+        },
         {
           "name": "maintenance.test.ts (top level)",
           "relation": "calls",
@@ -549,7 +554,24 @@
           "place": "apps/web/src/features/poll/mutations.ts:82",
           "lines": [152]
         }
-      ]
+      ],
+      "graph": {
+        "why": "Phase 8 (ADR 0030 §3): each call is in a Hono route's anonymous handler, a unit of its own in the graph named after its route; the Calls tab keeps TypeScript's view (the file's top level). Read at the pin: both calls are in the POST /polls handler, one per branch.",
+        "callers": [
+          {
+            "name": "POST /api/private/polls",
+            "relation": "calls",
+            "path": "apps/web/src/app/api/private/[...route]/route.ts",
+            "lines": [404, 476]
+          },
+          {
+            "name": "POST /v1/polls",
+            "relation": "calls",
+            "path": "apps/web/src/app/api/v1/[...route]/route.ts",
+            "lines": [612, 683]
+          }
+        ]
+      }
     },
     {
       "name": "decrypt",
@@ -905,7 +927,30 @@
           "place": null,
           "lines": [41]
         }
-      ]
+      ],
+      "graph": {
+        "why": "Phase 8 (ADR 0030 §3): each call is in a tRPC procedure's anonymous handler, a unit of its own in the graph named after its procedure; the Calls tab keeps TypeScript's view (the file's top level).",
+        "callers": [
+          {
+            "name": "BrandingPreferencesForm",
+            "relation": "calls",
+            "path": "apps/remix/app/components/forms/branding-preferences-form.tsx",
+            "lines": [118]
+          },
+          {
+            "name": "mutation organisation.settings.update",
+            "relation": "calls",
+            "path": "packages/trpc/server/organisation-router/update-organisation-settings.ts",
+            "lines": [148]
+          },
+          {
+            "name": "mutation team.settings.update",
+            "relation": "calls",
+            "path": "packages/trpc/server/team-router/update-team-settings.ts",
+            "lines": [151]
+          }
+        ]
+      }
     },
     {
       "name": "recipientAbbreviation",
@@ -1252,7 +1297,132 @@
           "place": "packages/ui/primitives/signature-pad/signature-pad-upload.tsx:79",
           "lines": [190]
         }
-      ]
+      ],
+      "graph": {
+        "why": "Phase 8 (ADR 0030 §3): onTabChange is called in the anonymous onValueChange handler on <Tabs> (line 145), a unit of its own in the graph; the Calls tab keeps TypeScript's view (SignaturePad).",
+        "callees": [
+          {
+            "name": "isBase64Image",
+            "relation": "calls",
+            "provenance": "resolved",
+            "builtIn": false,
+            "place": "packages/lib/constants/signatures.ts:4",
+            "lines": [45, 46, 47]
+          },
+          {
+            "name": "useState",
+            "relation": "calls",
+            "provenance": "unresolved",
+            "builtIn": false,
+            "place": null,
+            "lines": [45, 46, 47, 55]
+          },
+          {
+            "name": "Error",
+            "relation": "calls",
+            "provenance": "resolved",
+            "builtIn": true,
+            "place": null,
+            "lines": [83]
+          },
+          {
+            "name": "Tabs",
+            "relation": "renders",
+            "provenance": "resolved",
+            "builtIn": false,
+            "place": "packages/ui/primitives/signature-pad/signature-tabs.tsx:28",
+            "lines": [139]
+          },
+          {
+            "name": "cn",
+            "relation": "calls",
+            "provenance": "resolved",
+            "builtIn": false,
+            "place": "packages/ui/lib/utils.ts:5",
+            "lines": [141, 186]
+          },
+          {
+            "name": "TabsList",
+            "relation": "renders",
+            "provenance": "resolved",
+            "builtIn": false,
+            "place": "packages/ui/primitives/signature-pad/signature-tabs.tsx:60",
+            "lines": [147]
+          },
+          {
+            "name": "TabsTrigger",
+            "relation": "renders",
+            "provenance": "resolved",
+            "builtIn": false,
+            "place": "packages/ui/primitives/signature-pad/signature-tabs.tsx:74",
+            "lines": [149, 156, 163]
+          },
+          {
+            "name": "SignatureIcon",
+            "relation": "renders",
+            "provenance": "resolved",
+            "builtIn": false,
+            "place": "packages/ui/icons/signature.tsx:4",
+            "lines": [150]
+          },
+          {
+            "name": "Trans",
+            "relation": "renders",
+            "provenance": "unresolved",
+            "builtIn": false,
+            "place": null,
+            "lines": [151, 158, 165]
+          },
+          {
+            "name": "KeyboardIcon",
+            "relation": "renders",
+            "provenance": "unresolved",
+            "builtIn": false,
+            "place": null,
+            "lines": [157]
+          },
+          {
+            "name": "UploadCloudIcon",
+            "relation": "renders",
+            "provenance": "unresolved",
+            "builtIn": false,
+            "place": null,
+            "lines": [164]
+          },
+          {
+            "name": "TabsContent",
+            "relation": "renders",
+            "provenance": "resolved",
+            "builtIn": false,
+            "place": "packages/ui/primitives/signature-pad/signature-tabs.tsx:117",
+            "lines": [170, 177, 184]
+          },
+          {
+            "name": "SignaturePadDraw",
+            "relation": "renders",
+            "provenance": "resolved",
+            "builtIn": false,
+            "place": "packages/ui/primitives/signature-pad/signature-pad-draw.tsx:22",
+            "lines": [174]
+          },
+          {
+            "name": "SignaturePadType",
+            "relation": "renders",
+            "provenance": "resolved",
+            "builtIn": false,
+            "place": "packages/ui/primitives/signature-pad/signature-pad-type.tsx:13",
+            "lines": [181]
+          },
+          {
+            "name": "SignaturePadUpload",
+            "relation": "renders",
+            "provenance": "resolved",
+            "builtIn": false,
+            "place": "packages/ui/primitives/signature-pad/signature-pad-upload.tsx:79",
+            "lines": [190]
+          }
+        ]
+      }
     },
     {
       "name": "addPoint",

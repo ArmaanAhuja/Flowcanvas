@@ -29,6 +29,7 @@
     "test:perf": "vitest run perf.test"
   },
   "dependencies": {
+    "@flowcanvas/connectors-web": "workspace:*",
     "@flowcanvas/graph-model": "workspace:*",
     "@flowcanvas/workspace-agent": "workspace:*",
     "tree-sitter-css": "catalog:",

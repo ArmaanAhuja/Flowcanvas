@@ -5,7 +5,7 @@ import { edgeKey, type Graph, type GraphEdge, type GraphNode } from './model.js'
 export interface GraphDiff {
   readonly added: readonly string[];
   readonly removed: readonly string[];
-  /** In both, but its name, kind, place, what it is, or its outgoing edges changed. */
+  /** In both, but its name, kind, place, what it is, its entry details, or its outgoing edges changed. */
   readonly modified: readonly string[];
   readonly edgesAdded: readonly GraphEdge[];
   readonly edgesRemoved: readonly GraphEdge[];
@@ -17,7 +17,12 @@ const sameNode = (a: GraphNode, b: GraphNode) =>
   a.unit === b.unit &&
   a.place?.path === b.place?.path &&
   a.place?.line === b.place?.line &&
-  a.place?.column === b.place?.column;
+  a.place?.column === b.place?.column &&
+  a.entry?.kind === b.entry?.kind &&
+  a.entry?.framework === b.entry?.framework &&
+  a.entry?.complete === b.entry?.complete &&
+  a.entry?.why === b.entry?.why &&
+  a.entry?.within === b.entry?.within;
 
 const sameLines = (a: readonly number[], b: readonly number[]) =>
   a.length === b.length && a.every((line, i) => line === b[i]);

@@ -99,7 +99,8 @@ test('phase 6: Labs → Graph stats shows the graph’s node and edge counts', a
     await expect(stats.getByText('3,327 nodes · 16,394 edges')).toBeVisible();
     const nodes = stats.getByRole('region', { name: 'Nodes' });
     await expect(nodes).toContainText('Code units');
-    await expect(nodes).toContainText('Entry points arrives in phase 8');
+    await expect(nodes).toContainText('Entry points');
+    await expect(nodes).not.toContainText('Entry points arrives');
     const known = stats.getByRole('region', { name: 'How edges are known' });
     await expect(known).toContainText('Resolved proven by the compiler');
     await expect(known).toContainText('7,514');

@@ -43,6 +43,62 @@ interface ApiOptions {
   readonly documenso?: boolean;
 }
 
+/** The engine's entry points (phase 8): Rallly's (the walkthrough's fixture, with a screen's elements and a route's
+ * flow) and Documenso's, each answered for its project. */
+interface EntryItem {
+  readonly id: string;
+  readonly name: string;
+  readonly handler: {
+    readonly place: { readonly path: string; readonly line: number } | null;
+  } | null;
+}
+const RALLLY_ENTRIES = JSON.parse(
+  readFileSync(new URL('../try-it/fixtures/phase-8-rallly.json', import.meta.url), 'utf8'),
+) as {
+  lists: Record<string, readonly EntryItem[]>;
+  screen: string;
+  elements: readonly EntryItem[];
+  flow: unknown;
+};
+const DOCUMENSO_ENTRIES = JSON.parse(
+  readFileSync(
+    new URL('../try-it/fixtures/phase-8-documenso-entry-points.json', import.meta.url),
+    'utf8',
+  ),
+) as { lists: Record<string, readonly EntryItem[]> };
+const RALLLY_POST_AT = RALLLY_ENTRIES.lists['api-route']?.find(
+  (e) => e.name === 'POST /api/private/polls',
+)?.handler?.place;
+const RALLLY_POST_KEY =
+  RALLLY_POST_AT == null ? null : `${RALLLY_POST_AT.path}:${String(RALLLY_POST_AT.line)}`;
+const entryAnswer = (documenso: boolean) => (url: URL) => {
+  const lists = documenso ? DOCUMENSO_ENTRIES.lists : RALLLY_ENTRIES.lists;
+  const kind = url.searchParams.get('kind') ?? '';
+  const screen = url.searchParams.get('screen');
+  const entries =
+    screen === null
+      ? (lists[kind] ?? [])
+      : !documenso && screen === RALLLY_ENTRIES.screen
+        ? RALLLY_ENTRIES.elements
+        : [];
+  return {
+    counts: {
+      screen: lists.screen?.length ?? 0,
+      element: 0,
+      'api-route': lists['api-route']?.length ?? 0,
+      'cli-command': lists['cli-command']?.length ?? 0,
+    },
+    kind,
+    entries,
+    next: null,
+    message: null,
+    version: 'c'.repeat(64),
+    takenAt: '2026-11-14T10:00:00.000Z',
+    current: true,
+    complete: true,
+  };
+};
+
 /** The engine's own flow and details for Documenso's deleteFolder (the phase 7 walkthrough's fixture). */
 const DELETE_FOLDER = JSON.parse(
   readFileSync(new URL('../try-it/fixtures/phase-7-delete-folder.json', import.meta.url), 'utf8'),
@@ -244,7 +300,21 @@ async function fakeApi(page: Page, options: ApiOptions = {}): Promise<void> {
       '/workspace/index/graph': () => GRAPH,
       '/workspace/index/callers': () => CALLS.callers,
       '/workspace/index/callees': () => CALLS.callees,
-      '/workspace/index/flow': () => DELETE_FOLDER.flow,
+      '/workspace/index/entry-points': entryAnswer(options.documenso === true),
+      // Rallly's POST /api/private/polls from its handler (phase 8); deleteFolder's flow otherwise (phase 7).
+      '/workspace/index/flow': (url) =>
+        options.documenso !== true &&
+        `${url.searchParams.get('path') ?? ''}:${url.searchParams.get('line') ?? ''}` ===
+          RALLLY_POST_KEY
+          ? {
+              flow: RALLLY_ENTRIES.flow,
+              message: null,
+              version: 'c'.repeat(64),
+              takenAt: '2026-11-14T10:00:00.000Z',
+              current: true,
+              complete: true,
+            }
+          : DELETE_FOLDER.flow,
       '/workspace/index/details': (url) =>
         Object.values(DELETE_FOLDER.details).find(
           (answer) =>
@@ -377,6 +447,36 @@ const SCREENS: readonly Screen[] = [
   },
   // Phase 7: a function's flow on the canvas (Figma 06), opened from ⌘K; and a function selected in it, its details
   // in the inspector (design brief, "Node inspector"). The engine's own answers for Documenso's deleteFolder.
+  // Phase 8: the left panel's entry points (Figma 06), a screen open to its elements; and a route found with the filter,
+  // its flow drawn from its handler. The engine's own entry points for Rallly.
+  {
+    name: 'project-entry-points',
+    api: { running: true },
+    arrange: openPollsScreen,
+  },
+  {
+    name: 'project-entry-flow',
+    api: { running: true },
+    arrange: async (page) => {
+      const panel = page.getByRole('region', { name: 'Entry points' });
+      // The top row, always in view: the panel is virtualized, so "API routes" is out of the page once the 65
+      // screens are listed above it.
+      await expect(panel.getByRole('row', { name: /^Screens and elements/ })).toContainText('65');
+      await page.getByRole('textbox', { name: 'Filter entry points' }).click();
+      await page.keyboard.type('private/polls');
+      const post = panel.getByRole('row', { name: /^POST \/api\/private\/polls/ });
+      await expect(post).toBeVisible();
+      await post.hover();
+      await post
+        .getByRole('button', { name: 'Show the flow from POST /api/private/polls' })
+        .click();
+      await expect(page.getByRole('main', { name: 'Canvas' }).getByRole('status')).toContainText(
+        'edges',
+      );
+      // The pointer off the panel, so no row is hovered in the picture.
+      await page.mouse.move(700, 450);
+    },
+  },
   {
     name: 'project-flow',
     api: { running: true, documenso: true },
@@ -399,6 +499,19 @@ const SCREENS: readonly Screen[] = [
     },
   },
 ];
+
+/** Phase 8: Rallly's entry points, a screen opened to its elements (arrow right, as the WAI-ARIA tree). */
+async function openPollsScreen(page: Page): Promise<void> {
+  const panel = page.getByRole('region', { name: 'Entry points' });
+  await expect(panel.getByRole('row', { name: /^Screens and elements/ })).toContainText('65');
+  // Filtered first, so the screen opened is in view.
+  await page.getByRole('textbox', { name: 'Filter entry points' }).click();
+  await page.keyboard.type('locale/polls');
+  const polls = panel.getByRole('row', { name: '/:locale/polls', exact: true });
+  await polls.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(panel.getByRole('row', { name: /^<Link> onNavigate/ })).toBeVisible();
+}
 
 /** ⌘K → deleteFolder's flow, laid out on the canvas with its counts. */
 async function showDeleteFolder(page: Page): Promise<void> {

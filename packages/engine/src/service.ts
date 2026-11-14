@@ -2,11 +2,16 @@
 // re-indexing as the watcher reports changes, and answers to status and search. Its files and watcher are
 // passed in, so tests run it without a container.
 import {
+  ENTRY_KINDS,
   FLOW_MAX_NODES,
+  elementsByScreen,
   buildFlow,
   graphStats,
   indexGraph,
+  listEntryPoints,
   placeKey,
+  type EntryPointItem,
+  type EntryPointLists,
   type Flow,
   type Graph,
   type GraphIndex,
@@ -19,6 +24,7 @@ import type {
   EngineResults,
   EngineState,
   EngineStatus,
+  EntryPointsResult,
   GraphSnapshotInfo,
   GraphState,
   GraphStatus,
@@ -123,6 +129,10 @@ export const FLOW_MESSAGES = {
     `Shown with up to ${String(nodes)} nodes: the whole flow is too large to send at once.`,
 } as const;
 
+export const ENTRY_POINT_MESSAGES = {
+  noGraph: 'Entry points are found with the graph, which is still being built.',
+} as const;
+
 /** A flow's answer has to fit in one message line (ENGINE_LIMITS.lineBytes), with room for the rest. */
 const FLOW_BYTES = ENGINE_LIMITS.lineBytes * 0.75;
 
@@ -164,8 +174,13 @@ export function startEngineService(options: EngineServiceOptions): EngineService
   let graphInfo: GraphSnapshotInfo | null = null;
   // The latest version, decoded and indexed (about 60 MB for Twenty): flows are built from it in milliseconds.
   let graphIndex: GraphIndex | undefined;
+  // Its entry points, listed once per version (phase 8): a page of them is a slice.
+  let entryLists: EntryPointLists | undefined;
+  let screenElements: ReadonlyMap<string, readonly EntryPointItem[]> | undefined;
   const keep = (graph: Graph) => {
     graphIndex = indexGraph(graph);
+    entryLists = listEntryPoints(graphIndex);
+    screenElements = elementsByScreen(graphIndex, entryLists.screen, entryLists.element);
   };
   let graphTimer: NodeJS.Timeout | undefined;
   let graphRunning: Promise<void> | undefined;
@@ -464,6 +479,33 @@ export function startEngineService(options: EngineServiceOptions): EngineService
     complete: graphInfo?.complete ?? false,
   });
 
+  const entryPoints = (
+    kind: EntryPointsResult['kind'],
+    after: number,
+    limit: number,
+    screen?: string,
+  ): EntryPointsResult => {
+    const lists = entryLists;
+    const all = screen === undefined ? (lists?.[kind] ?? []) : (screenElements?.get(screen) ?? []);
+    const entries = all.slice(after, after + limit);
+    const end = after + entries.length;
+    return {
+      counts: Object.fromEntries(
+        ENTRY_KINDS.map((each) => [each, lists?.[each].length ?? 0]),
+      ) as EntryPointsResult['counts'],
+      kind,
+      entries,
+      next: end < all.length ? end : null,
+      message:
+        lists !== undefined
+          ? null
+          : graphState === 'failed'
+            ? (graphMessage ?? ENTRY_POINT_MESSAGES.noGraph)
+            : ENTRY_POINT_MESSAGES.noGraph,
+      ...aboutGraph(),
+    };
+  };
+
   const search = (query: string, limit: number): SearchResult => {
     const started = performance.now();
     const symbols = store.search(query, limit);
@@ -503,7 +545,14 @@ export function startEngineService(options: EngineServiceOptions): EngineService
           const { path, line, column } = request;
           const unit = options.facts?.unitAt(path, line, column);
           const stored = unit === undefined ? undefined : options.facts?.details(unit.id);
-          if (stored !== undefined) return Promise.resolve({ details: stored, message: null });
+          // An entry point's handler is named after its entry point in the graph (the pass names it last).
+          const named = unit === undefined ? undefined : graphIndex?.nodes.get(unit.id)?.name;
+          if (stored !== undefined) {
+            return Promise.resolve({
+              details: named === undefined ? stored : { ...stored, name: named },
+              message: null,
+            });
+          }
           return options.semantics === undefined
             ? Promise.resolve(emptyAnswer('details', NO_SEMANTICS) as EngineResults['details'])
             : options.semantics.ask('details', { path, line, column });
@@ -512,6 +561,10 @@ export function startEngineService(options: EngineServiceOptions): EngineService
           const { path, line, column } = request;
           return flow({ path, line, column });
         }
+        case 'entryPoints':
+          return Promise.resolve(
+            entryPoints(request.kind, request.after, request.limit, request.screen),
+          );
       }
     },
     settled: async () => {

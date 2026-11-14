@@ -4,6 +4,34 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-11-15 — Phase 8: entry points
+
+See where a project can be entered: its pages, its API routes, the event handlers on its screens and its commands, found in the code, listed in the left panel, each opening the flow from what handles it. Every framework the test projects use is read (Next.js, React Router, Express, Hono, tRPC, NestJS and GraphQL, React's event props, package.json scripts), and anything the code doesn't fix is shown as not fully detected, with why, never guessed. Workspaces still run on your own computer (`pnpm dev`).
+
+### Try it
+
+1. Open a project with its workspace running; once its graph is built, the left panel lists its **entry points**: screens and elements, API routes, and CLI commands, with their counts (jobs and events arrive in phase 11).
+2. **Open a screen** (arrow right, or its chevron) to see the event handlers on it.
+3. **Show flow** on any entry point (or Enter on its row): the flow from what handles it, on the canvas. An entry point handled by code that isn't the project's (a prop, a library's function) says so.
+4. **Filter** the list (press `/`), or press **⌘K** and type `/` to search only entry points.
+
+### Added
+
+- **Entry points found in the code**, by framework, joined across files: a router mounted in another file, a tRPC router nested from another, a route's component, a base path read from an environment variable (written by its name, its value never read).
+- **The entry-points panel** in the left panel (Figma 06), and ⌘K's Entry points with `/` for routes (Figma 16).
+- **A flow from any entry point**, starting at its handler; an inline handler (`onClick={() => …}`) is a function of its own in the flow, named after its entry point, with its own details in the inspector.
+- **Held to hand labels:** 2,118 entry points in the four test projects, every convention-based one found, at least 95% of the rest, nothing listed that isn't one.
+
+### Changed
+
+- **JavaScript projects with a `jsconfig.json`** are understood like TypeScript ones: their path aliases resolve, for the Calls tab and flows too.
+- **Workspace packages built to `dist/`** are followed to their source when the build isn't committed.
+
+### Fixed
+
+- **The canvas no longer shifts 2 px** under the top bar when a node is selected.
+
+
 ## [0.11.0] — 2026-11-14 — Phase 7: flows and the inspector
 
 Pick any function and see where it leads: every function it calls, and theirs, laid out top to bottom on the canvas, with the conditions that decide each branch. Click a node to read what its code reveals, and open its code at that line. Every line on the canvas says how it's known, and calls that can't be resolved are shown as such, never guessed. Workspaces still run on your own computer (`pnpm dev`).

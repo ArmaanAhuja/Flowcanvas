@@ -30,6 +30,10 @@
   flex: 1;
   min-inline-size: 0;
   min-block-size: 0;
+  /* Never scrollable: a separator's hover area reaches 2 px past it, which at the group's edge (the collapsed dock)
+     made 2 px to scroll, and selecting a node usually scrolled the canvas 2 px under the top bar (phase 8). The
+     panel library sets `overflow: hidden` inline (which can still be scrolled), so only !important overrides it. */
+  overflow: clip !important;
 }
 
 .left,

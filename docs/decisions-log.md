@@ -630,3 +630,39 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 5. **CI's report step: nothing to change.** The "3 minutes per push" in the report was one run: in that run GitHub's download action finished in 5 s and then took 3 minutes to exit; in the runs before and after it took 3 and 7 s. A push takes about 5 minutes in all. Corrected in the report and upgrade-later 7.
 6. **Graph stats' Labs switch: "Finished in phase 12"** (Claude's choice, under the owner's 12 Nov delegation for this switch): it said phase 7, which is now accepted. Flows show one function's part of the graph; the whole graph as something to browse (grouped, expanded, collapsed) is phase 12's. Found by the site's own text test when phase 7 was accepted. The owner can have it leave Labs instead.
 
+## 14 Nov 2026: phase 7 merged; phase 8's plan
+
+**Merged** in PR #21 (`36076f4`). CI deployed staging itself for the first time: it serves `36076f4` and `/api/health` reports 0.11.0; the walkthroughs passed against it; the catalogue was deployed after its checks. Cloudflare's own builds for `main` can now be switched off (asked of the owner).
+
+**Owner, on phase 8's four questions:** "go with recommendation" for each.
+1. **Every framework the 4 forks use is detected:** Next.js (pages, route handlers, server actions), React Router (Documenso, LibreChat, Twenty), Express (LibreChat), Hono and tRPC (Rallly, Documenso), NestJS controllers and GraphQL resolvers (Twenty), React event props, and package.json scripts. Without them, "90% of hand-listed entry points across the 4 forks" would leave most of the forks out.
+2. **Hand labels:** every page, route, API endpoint and script in the 4 forks, and the event handlers in 5 chosen screens per fork (every `onClick` in Twenty isn't practical); written by Claude by reading the code.
+3. **A screen is named by its route path,** with its page component muted beside it (the code has no names like Figma's "Item editor").
+4. **⌘K gets an Entry points section and `/` for routes** (Figma 16), from the same data.
+
+**Open, for the owner:** the Done when's bar. The plan says 90%; the owner asked whether 95, 99 or 100% is better. Claude's recommendation: 100% recall for convention-based kinds (file and config routes, decorators, scripts), at least 95% per fork for routes registered in code and event handlers, 100% precision, and every miss explained in the report. *Settled below, same day.*
+
+**Owner, 14 Nov 2026,** on phase 8's bar and labels: "go with your recommendations".
+- **The bar, stricter than the plan's 90%:** 100% recall for convention-based kinds (file- and config-based routes and pages, decorators, package.json scripts); at least 95% recall per fork (not only overall) for routes registered in code (Express, Hono, tRPC) and event handlers; 100% precision (every false find fixed, or shown to be a labelling mistake); every miss explained in the report and shown on the page as not fully detected, never guessed.
+- **The labels, option B** (the first counts were about 2,500 to 3,000 entry points across the 4 forks, more than estimated): every entry point in Rallly and Documenso; in LibreChat and Twenty, every entry point in a fixed set of modules covering each framework they use; the event handlers in 5 chosen screens per fork. Written by reading the code.
+
+
+## 14 Nov 2026: phase 8 milestone A's questions
+
+**Owner:** "1 - go with recommendation 2 - b (recommended 3 - recomennded 4 - recommended continue ahead".
+
+1. **Test and story files aren't entry points.** Routes, apps and elements in `*.test.*`, `*.spec.*`, `__tests__/` and Storybook story files (`*.stories.*`) aren't listed: they're how the code is tested, not how the product is entered (LibreChat's test apps, Twenty's test decorators: about 60). Their code stays in the graph as before.
+2. **A base path set by an environment variable is shown by its name and counts as found:** Documenso's `basePath(env('NEXT_PUBLIC_BASE_PATH') || '/')` makes `{NEXT_PUBLIC_BASE_PATH}/api/auth/session`, fully detected, since that's exactly what the code says. The variable's value is never read (it may be a secret).
+3. **A Hono app served through a function that rewrites the URL keeps the path it registers,** marked "served through a rewrite": Rallly's v1 API is listed as `POST /v1/polls`, with why, so it isn't taken for the public URL.
+4. **The engine reads `jsconfig.json` as it reads `tsconfig.json`** (a small engine step in milestone B): LibreChat's `~/` imports then resolve, so its routes reach their handlers and its call graph gains those calls; its phase 6 numbers are checked against its labels.
+
+## 15 Nov 2026: phase 8 accepted; the plan kept as written; Medusa's graph time in phase 9
+
+**The vision, discussed and kept for now.** The owner reviewed what's built against the product they imagine (running screens on the canvas, short readable flows with colour and symbols, expandable detail, no paths on the canvas, the AI's changes shown on screens and flows). Claude mapped each point to the plan: most arrive in later phases (12 progressive disclosure, 15 to 17 live frames and element to flow, 19 to 23 agent and change states, 31 readable names); kind colours and symbols, and paths kept off the canvas, aren't in the plan. Claude proposed reordering around one end-to-end slice. **Owner:** "no let's not change anything for now, and go what we have decided and let the whole project be built first since you said there are things in later phases so yes let's build ahead". The build plan stays as written; the points that aren't in it are to be raised again when their phases come (12, 15 to 17, 31).
+
+**Owner:** "phase 8 - accepted, medusa fix let's do in phase 9".
+- **Phase 8 accepted.** PR #22 marked ready for review and merged once every check is green, as with phase 7. On acceptance, `pnpm docs:check` found Graph stats still saying entry points "arrive in phase 8"; fixed (`518c21f`).
+- **Medusa's graph time** (141 s on CI against 44 s in phase 7, caused by following built exports to their source; report, known issues): fixed in phase 9, with every fork's graph time held to a recorded figure by the Docker test.
+
+**Owner:** "we need to increase the speed of development, since it's taking too long for each phase". Claude's proposals are in the next entry once the owner answers.
+

@@ -44,11 +44,15 @@ import { askSemantic } from '../symbols/api';
 import { useCalls } from '../symbols/useCalls';
 import { useProjectIndex, useSymbolSearch } from '../symbols/useProjectIndex';
 import { Inspector } from './Inspector';
+import { entryById, entryGroups, useEntryPoints } from '../entry-points/useEntryPoints';
 import styles from './ProjectPage.module.css';
 
 // The file tree (React Aria's Tree) only when Files is shown, and CodeMirror only when the Code view opens:
 // each in its own chunk, so a project page that never opens them doesn't download them.
 const FilesPanel = lazy(async () => ({ default: (await import('../code/FilesPanel')).FilesPanel }));
+const EntryPointsLeft = lazy(async () => ({
+  default: (await import('../entry-points/EntryPointsLeft')).EntryPointsLeft,
+}));
 const CodeView = lazy(async () => ({ default: (await import('../code/CodeView')).CodeView }));
 // Quick-open (Ctrl/⌘+P) and the command palette (⌘K, phase 4): one chunk of their own (SearchDialogs.ts), fetched in
 // the background once the workspace runs, so it's there before the first keypress. Loading it on the keypress lost
@@ -70,7 +74,7 @@ const WorkspaceTerminal = lazy(async () => ({
  * whatever arrives later says so with its build-plan phase (owner, 12 Nov 2026).
  */
 export const EMPTY = {
-  left: 'Entry points arrive with entry-point detection (phase 8): pages, routes, event handlers and jobs found in the code.',
+  left: 'Start the workspace to list the project’s entry points: its pages, routes, event handlers and commands.',
   canvas:
     'Choose a function to see its flow: right-click its name in the Code view and choose Show flow, or find it with Search.',
   right: 'Select a node in a flow to see what its code reveals.',
@@ -302,6 +306,76 @@ function ReadyProject({
       else calls.notice(answer.message ?? 'TypeScript found no definition for this.');
     });
   };
+  // Entry points (phase 8): the left panel lists them; each opens the flow from what handles it.
+  const entries = useEntryPoints(project.id, running, fetcher);
+  const [entryFilter, setEntryFilter] = useState('');
+  const [entryShown, setEntryShown] = useState<string | null>(null);
+  const [entryNotice, setEntryNotice] = useState<string | null>(null);
+  const entryFilterRef = useRef<HTMLInputElement>(null);
+  // ⌘K's Entry points (phase 8; Figma 16): screens with their component, routes and commands with their place.
+  const paletteEntries = useMemo(
+    () =>
+      [...entries.lists.screen, ...entries.lists['api-route'], ...entries.lists['cli-command']].map(
+        (item) => ({
+          id: item.id,
+          kind: item.kind as 'screen' | 'api-route' | 'cli-command',
+          name: item.name,
+          detail:
+            item.kind === 'screen' && item.handler?.id != null
+              ? item.handler.name
+              : item.place === null
+                ? null
+                : `${item.place.path}:${String(item.place.line)}`,
+        }),
+      ),
+    [entries.lists],
+  );
+  // `/` focuses the filter (Figma 06's hint), unless something else takes typing.
+  useEffect(() => {
+    if (leftTool !== 'entry-points') return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return;
+      // What has focus, not the event's target: a dialog's field (⌘K) can be reached through another element, and
+      // the editor's lives in a shadow root.
+      let focused = document.activeElement;
+      while (focused?.shadowRoot?.activeElement != null) focused = focused.shadowRoot.activeElement;
+      if (
+        event.defaultPrevented ||
+        (focused instanceof HTMLElement &&
+          (focused.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focused.tagName))) ||
+        focused?.closest('[role="dialog"]') != null
+      )
+        return;
+      event.preventDefault();
+      entryFilterRef.current?.focus();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [leftTool]);
+  const showEntryFlow = (id: string) => {
+    const item = entryById(entries).get(id);
+    if (item === undefined) return;
+    const handler = item.handler;
+    if (handler?.id != null && handler.place !== null) {
+      setEntryNotice(null);
+      setEntryShown(id);
+      showFlow({
+        path: handler.place.path,
+        line: handler.place.line,
+        column: handler.place.column,
+      });
+    } else {
+      // Said in the left panel: shown, so the reason is seen wherever it was asked from.
+      setLeftTool('entry-points');
+      setEntryNotice(
+        handler === null
+          ? `${item.name} has no handler in the project’s code to start a flow from.`
+          : `${item.name} is handled by ${handler.name}, which isn’t the project’s code: there’s no flow to show.`,
+      );
+    }
+  };
   const showFlow = (at: CallPlace) => {
     if (view !== 'graph') setView('graph');
     setSelected(null);
@@ -367,13 +441,32 @@ function ReadyProject({
             />
           </Suspense>
         ) : (
-          <section className={styles.panel} aria-labelledby="entry-points">
-            <h2 id="entry-points" className={styles.panelTitle}>
-              Entry points
-            </h2>
+          <div className={styles.entries}>
             <IndexChip status={index.status} className={styles.panelChip} />
-            <p className={styles.empty}>{EMPTY.left}</p>
-          </section>
+            <Suspense fallback={<p className={styles.empty}>Finding entry points…</p>}>
+              <EntryPointsLeft
+                groups={entryGroups(entries, entryFilter)}
+                filter={entryFilter}
+                onFilterChange={setEntryFilter}
+                selected={entryShown}
+                onShowFlow={(row) => {
+                  showEntryFlow(row.id);
+                }}
+                onExpand={(row) => {
+                  void entries.openScreen(row.id);
+                }}
+                message={
+                  !running
+                    ? EMPTY.left
+                    : (entryNotice ??
+                      entries.message ??
+                      (entries.status === 'loading' ? 'Finding entry points…' : null))
+                }
+                filterRef={entryFilterRef}
+                listed={entries.status === 'ready'}
+              />
+            </Suspense>
+          </div>
         )
       }
       canvas={
@@ -411,6 +504,10 @@ function ReadyProject({
                 }}
                 onShowFlow={(symbol) => {
                   showFlow({ path: symbol.path, line: symbol.line, column: symbol.column });
+                }}
+                entryPoints={paletteEntries}
+                onShowEntry={(entry) => {
+                  showEntryFlow(entry.id);
                 }}
               />
             </Suspense>

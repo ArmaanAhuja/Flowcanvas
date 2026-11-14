@@ -13602,3 +13602,296 @@ pnpm test:visual
 **Risks and laptop:** none new. Laptop: the walkthrough and the flow screens in Playwright's container.
 
 **Commits:** `feat(canvas): open a flow at 100% on its function; F fits it` (`7727c97`); `fix(docs-check): an upgrade-later trigger is reached when its phase starts` (`1a32ef0`); `test: nothing says phase 7 is still to come, now it's accepted` (`7d8ea46`); `fix(web): Graph stats is finished in phase 12, not 7` (`1c57abe`).
+
+## Phase 8 — Entry-point detection
+
+**From the build plan:**
+- **Build:** detect React event props, pages and routes, Next.js server actions and API routes, Express routes, package.json scripts; entry-points panel.
+- **Done when:** at least 90% of hand-listed entry points found across the 4 forks. **Raised by the owner (14 Nov 2026):** 100% recall for convention-based kinds, at least 95% per fork for routes registered in code and event handlers, 100% precision, every miss explained.
+- **Try it:** left panel lists screens, routes, jobs and events (Figma 06); click each to open its flow.
+
+**Decisions** (decisions log, 14 Nov 2026): every framework the 4 forks use (Next.js, React Router, Express, Hono, tRPC, NestJS controllers and GraphQL resolvers, React event props, package.json scripts); hand labels for everything in Rallly and Documenso, a fixed set of modules in LibreChat and Twenty, and the handlers in 5 screens per fork; screens named by their path, the component muted; ⌘K's Entry points and `/` for routes.
+
+**Expected outcome:** with a fork's workspace running, the left panel lists its entry points in the design brief's groups (Screens and elements, API routes, Jobs and cron, Events, CLI commands) with counts and a filter; a screen expands to its elements; clicking any entry point opens its flow. Jobs and events show 0 with the phase they arrive in (11).
+
+**Design references:** Figma 06 (the left panel), 22 (a CLI project's panel), 16 (⌘K's Entry points); design brief §23.
+
+**Scope:**
+- **In:** detection in the engine's graph pass, stored with the graph; `entry-point` nodes with edges to their handlers; the API; the panel; Show flow from an entry point; ⌘K's section; hand labels and recall and precision per fork.
+- **Out:** front-end calls linked to their handlers (phase 9); data and external services (10); jobs, cron and events (11); grouping (12); live frames (15).
+
+### Steps (planned)
+
+| # | Step | Milestone | Status |
+| --- | --- | --- | --- |
+| 0 | The plan and decisions; branch; the post-merge docs (staging at 0.11.0) | A | done (Claude, 14 Nov): `docs: phase 8 plan` |
+| 1 | Spike: each fork's entry points by framework; the detection approach. ADR 0030 | A | done (Claude, 14 Nov): `docs: phase 8 spike` |
+| 2 | `@flowcanvas/connectors-web`: a detector per framework, with fixtures | A | done (Claude, 14 Nov): `c8a7f7b`, `40d2d8f`, `ecc5e17`, `1695283`, `b11facf`, `e9f77d2`, `e278edd`, `476cbdf`, `3753d4b` |
+| 3 | The engine: entry points in the pass; the protocol and the API | A | done (Claude, 14 Nov): `fe9154d`, `fb7ac57`, `0897727`, `0c00a3a`, `b634c41`, `2a952a4`, `480c36e`, `cad7ae0`, `c0b3c97`, `da6820b` |
+| 4 | The owner's answers to milestone A (decisions log, 14 Nov): test and story files left out, a base path by its variable's name, a rewrite marked; the engine reads `jsconfig.json` | B | done (Claude, 14 Nov): `5e74ca7`, `c71cc1a`, `d255cb5` |
+| 5 | Hand labels for the 4 forks; the corpus check | B | done (Claude, 14 Nov): `ea100e5`, `7e51f4b`, `e8868fd` |
+| 6 | UI: the entry-points panel in the design system | B | done (Claude, 14 Nov): `036605e` |
+| 7 | The page: the left panel, Show flow, ⌘K's Entry points | C | done (Claude, 15 Nov): `0032082`, `6534485`, `0e57d66`, `c718227`, `297524a` |
+| 8 | Proof: real workspaces, the walkthrough, screens | C | done (Claude, 15 Nov): `a53000a`, `8836eb3`, `ff57c8e` |
+| 9 | Close: report, 0.12.0 | C | done (Claude, 15 Nov): `a7cf9c0` and the close |
+
+### How each Done-when item is proven
+
+| Item | Test |
+| --- | --- |
+| Hand-listed entry points found: 100% for convention-based kinds, ≥ 95% per fork for code-registered ones, 100% precision | Docker corpus test: recall per fork, per group and overall, and precision, against `corpus/labels/entry-points.json` |
+| Each opens its flow | Every labelled entry point's flow opens at its handler, in real workspaces |
+| The Try it | Walkthrough `try-it/phase-8.spec.ts` |
+
+### Risks (checked at every milestone)
+
+| # | Risk | How we keep it in check | Status |
+| --- | --- | --- | --- |
+| R1 | Twenty: many event props and resolvers inside the pass's time | Detectors in the same walk; measured on Twenty (87 s today on CI) | *measured (step 3):* 7,331 entry points and 3,093 handler units; the graph has 10% more nodes and 2% more edges than phase 7's; the whole pass 104 s on the laptop. CI's Twenty shard times save and load |
+| R2 | Inline handlers (`onClick={() => …}`) have no node | An anonymous handler registered as an entry point becomes a code unit in the graph; the Calls tab keeps TypeScript's view (ADR 0030 §3) | *built (step 3):* three phase 6 labels gained the graph's own lists, each read at the pin |
+| R3 | Routes built at run time (loops, variables) | Shown as not fully detected, never guessed; each miss explained | *measured (step 3):* incomplete: Rallly 3, Documenso 64 (60 behind an environment variable's base path: a question for the owner), LibreChat 42 (routers made at run time), Twenty 3 (test decorators) |
+| R4 | A handler unit has no stored facts: the inspector shows the function around it | Step 5 or 6 gives it details when the panel opens one | *closed (step 7):* its own facts stored by the pass, under its entry point's name |
+
+### Step 8.0 — The plan and the owner's decisions (done by Claude)
+
+**Goal:** phase 8's plan, the owner's four answers, a branch from `main` after phase 7's merge (`36076f4`, staging at 0.11.0 deployed by CI).
+
+**What a person can do now:** read the plan above. Nothing in the app changes.
+
+**Files:** `docs/decisions-log.md`, `docs/STATUS.md`, `docs/RUN-AND-FEATURES.md` (0.11.0 on staging), this section.
+
+**Concepts:** none new. **Found and fixed on the way:** none. **Tests:** none (a plan). **Run and check it:** nothing to run. **Risks and laptop:** R1 to R3 above; nothing runs.
+
+**Commit:** `docs: phase 8 plan and the owner's decisions`.
+
+### Step 8.1 — Spike: how each fork declares its entry points (done by Claude; ADR 0030)
+
+**Goal:** know what to detect in each fork, how big it is, and where to do it, before building.
+
+**What a person can do now:** read ADR 0030. Nothing in the app changes.
+
+**Files:** `docs/adr/0030-entry-points.md`. The counting scripts stayed outside the repository.
+
+**Concepts:**
+- **File-based routing** (Next.js's `app/`, `remix-flat-routes`): the file's path is the route's path. https://nextjs.org/docs/app/building-your-application/routing and https://github.com/kiliman/remix-flat-routes
+- **Routes registered in code** (Express, Hono) and **by decorators** (NestJS): the path comes from a call's or decorator's arguments, often from a constant or a mount elsewhere. https://expressjs.com/en/guide/routing.html and https://docs.nestjs.com/controllers
+
+**Found on the way:**
+- **Every fork uses something the build plan doesn't name:** Rallly's Next.js routes hand requests to Hono apps (the Hono routes are the real API); Documenso's pages follow `remix-flat-routes`; LibreChat mounts Express routers across files in CommonJS; Twenty's paths come from enums.
+- **The scale:** about 2,500 to 3,000 entry points across the 4 forks by a first count (the owner chose labels in scope B: decisions log, 14 Nov).
+- **Most handlers are anonymous:** a flow from one needs it to be a node (ADR 0030 §3).
+
+**Tests:** none (a spike). **Run and check it:** ADR 0030. **Risks and laptop:** R1 to R3 updated. **Laptop:** text searches over the corpus, seconds.
+
+**Commit:** `docs: phase 8 spike: entry points by framework (ADR 0030)`.
+
+### Step 8.2 — `@flowcanvas/connectors-web`: a detector per framework (done by Claude; ADR 0030 addendum)
+
+**Goal:** pure detectors, one per framework the forks use, each tested on fixtures and measured on the forks before the engine runs them.
+
+**What a person can do now:** nothing in the app yet: the detectors are a package the engine uses from step 3.
+
+**Files:** `packages/connectors/web/` (`types.ts`, `ast.ts` with `stringValue`, `file-routes.ts`, `route-files.ts`, `nestjs.ts`, `scripts.ts`, `routers.ts`, `trpc.ts`, `react-router.ts`, `react.ts`, `test-program.ts`, and a test file for each); `docs/adr/0030-entry-points.md` (addendum).
+
+**Concepts:**
+- **The TypeScript checker as a resolver:** a detector sees one file's syntax tree, and asks the checker what a name refers to (an enum member, an imported router, a constant's value). https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API
+- **Constant folding:** a path built from literals, templates, `+`, string methods and enum members is worked out to its text; anything else stays unknown. https://www.typescriptlang.org/docs/handbook/enums.html
+- **Joiners:** what one file can't settle (a router mounted elsewhere, a tRPC router nested from another file, a `<Routes>` block inside a component) is reported with keys and joined across files after.
+- **Server actions:** a `'use server'` file's exports, and functions marked in their own body. https://nextjs.org/docs/app/building-your-application/data-fetching/server-actions-and-mutations
+
+**Found and fixed on the way:**
+- Express's `express.Router()` was missed: the chain walk consumed the creating call. Checked creation first.
+- React Router: shorthand `children`, `flatMap`, a route object reached by name, routes behind `&&`, `export default {…}` imports, parameters bound to arguments, and Twenty's settings root (string folding) were each missed once; each is now followed, with a fixture. Twenty 127 screens and LibreChat 23, none incomplete, at the end of the step.
+- Rallly's server actions are next-safe-action chains (`authActionClient…action(async …)`): 2 found against 23 `'use server'` files. Every exported function or call chain now counts; plain values don't (Next.js refuses them). 71 in 23 files, matching a text count of their exports.
+- Three pushes went red on CI from the unit count in RUN-AND-FEATURES alone; `pnpm docs:check` now runs before every push (memory).
+
+**Tests:** 41 detector tests at the end of the step (`pnpm --filter @flowcanvas/connectors-web test`). Measured on the forks with a script kept outside the repository: NestJS 674 in Twenty, 0 incomplete; scripts 610; Documenso route files 185; routers 501; tRPC 307; React Router 150; event props 11,337 (matching text counts).
+
+**Run and check it:** `pnpm --filter @flowcanvas/connectors-web test`.
+
+**Risks and laptop:** R1 to R3 unchanged. The measuring runs took seconds per fork.
+
+**Commits:** `c8a7f7b` routes named by their files; `40d2d8f` NestJS; `ecc5e17` scripts; `1695283` route files' exports; `b11facf` Hono and Express; `e9f77d2` tRPC; `e278edd` React Router; `476cbdf` event props and server actions; `3753d4b` the ADR addendum and test counts.
+
+### Step 8.3 — The engine: entry points in the pass, the protocol and the API (done by Claude; ADRs 0030 and 0026 addenda)
+
+**Goal:** every entry point in the graph, with an edge to what handles it, asked for a page at a time through the API.
+
+**What a person can do now:** `GET /api/projects/:id/workspace/index/entry-points?kind=api-route` on a running workspace lists its API routes, each with its handler. The panel arrives in step 5.
+
+**Files:**
+- `packages/graph-model/src/` `model.ts`, `validate.ts`, `encoding.ts`, `diff.ts` (graph format 4: `GraphNode.entry`), `entries.ts` (`listEntryPoints`).
+- `packages/engine/src/semantics/` `entry-pass.ts` (new), `graph-pass.ts` (handler units; the graph's owner and the Calls tab's apart), `graph.ts` (the join), `semantic-service.ts`, `projects.ts` (`uses`; built exports followed to source); `protocol.ts`, `service.ts` (`entryPoints`); `snapshots.ts` (store format 4).
+- `packages/connectors/web/src/routers.ts` (unmounted Routers), `trpc.ts` (nested objects; nothing dropped).
+- `services/control-plane/src/workspaces/index-routes.ts` (`/index/entry-points`).
+- `corpus/src/calls.ts` and `corpus/labels/calls.json` (the graph's own lists, with why).
+- `apps/web/src/shell/Shell.module.css` and two screen baselines (the canvas scroll fix).
+- ADR 0030 and ADR 0026 addenda; ARCHITECTURE.
+
+**Concepts:**
+- **Keys resolved where the checker is:** each file resolves the names it refers to while its program is in hand; the join after the walk is plain data. A file records the files its keys point into, and is walked again when one changes. https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API#using-the-type-checker
+- **Paging a large answer:** the protocol's lines are 256 KB; Twenty's 7,331 entry points aren't, so one kind's page of at most 200 is asked for at a time, from lists built once per version.
+- **Package `exports` and built output:** `exports` often names `dist/` files that aren't committed; their source at the same place under `src/` is used when it exists. https://nodejs.org/api/packages.html#exports
+
+**Found and fixed on the way:**
+- **A flaky screen, explained:** `project-flow-details` failed CI once (e278edd). Reproduced locally 1 in 30: the dock's separator draws its hover area 2 px past itself, so the canvas column had 2 px to scroll, and selecting a node usually scrolled it; the baseline had recorded the scrolled canvas. The column is `overflow: clip !important` (the panel library sets `overflow: hidden` inline); two baselines updated; 40 of 40 runs pass.
+- **Twenty's shared package:** `twenty-shared/types` named unbuilt `dist/` files, so its enums were unknown: 291 incomplete entry points, and lost calls. Followed to `src/` (ADR 0026 addendum): 3 incomplete.
+- **Unmounted routers as roots:** LibreChat's files routers are made at run time; taken for roots, their routes were listed as complete without their prefix. An Express `Router()` no followed mount reaches is listed under `/:unknown`, not fully detected.
+- **A CommonJS mount through `{ v1: router }`:** TypeScript stops at the property; followed to the value (18 LibreChat routes were otherwise taken for roots).
+- **tRPC:** nested plain objects were dropped (Documenso 134 of 286), and a shorthand `router({ polls })` resolved to the property, so Rallly's routers were taken for roots. Both fixed; a value that can't be read is listed as `key.*`, never dropped.
+- **A handler made by a call** (`useCallback(() => …)`, `form.handleSubmit(async …)`) reached only a name; it's followed to the function it was given.
+- **Code that wasn't needed:** a shorthand rule for CommonJS exports survived its mutation check: TypeScript already follows it. Removed, measured unchanged on LibreChat.
+- **Phase 6's labels** changed where ADR 0030 §3 said they would (Rallly's createPoll, Documenso's normalizeBrandingColors and SignaturePad): each read at the pin, with why. An entry point's edge to its handler isn't compared as a call.
+
+**Tests:** engine 212 (`entry-pass.test.ts` 6: every kind joined across files, handler units owning their calls while the Calls tab keeps TypeScript's view, elements and wrapped handlers, a changed mount and a moved key, route files; `projects.test.ts` 3; protocol and service tests for `entryPoints`), graph-model 33, connectors 43, corpus 34, control-plane routes 22. Mutation checks, each failing a test: no re-walk on a moved key, no wrapped handlers, every handler renamed, delegated routes kept, no `dist` to `src`, handler calls left with the top level, no `{ v1: router }` rule, no shorthand rule (tRPC). Checked locally against the forks before pushing: both forks' 10 phase 6 labels and Documenso's 10 flows as labelled.
+
+**Run and check it:** `pnpm --filter @flowcanvas/engine test`; with a workspace running, `GET …/index/entry-points?kind=screen`.
+
+**Risks and laptop:** R1 measured, R2 built, R3 measured, R4 new (above). The laptop ran each fork's whole pass (Twenty 104 s, 1.1 GB heap) and the flaky screen 85 times, one heavy run at a time.
+
+**Commits:** `fe9154d` the canvas scroll fix; `fb7ac57` graph format 4; `0897727` built exports to source; `0c00a3a` unmounted Routers; `b634c41` entry points in the pass; `2a952a4` tRPC nested objects; `480c36e` `entryPoints` and shorthand routers; `cad7ae0` the labels' graph lists; `c0b3c97` the API route; `da6820b` the Docker tests' calls-answer checks (the new answer also has `entries`: lint failed CI on `59537a0`, in a package the local run had filtered out; the fast suites now run whole-repository before a push).
+
+
+### Step 8.4 — The owner's answers to milestone A (done by Claude; ADR 0030 and 0026 addenda)
+
+**Goal:** the four answers in the code: test and story files left out, a base path from an environment variable named, a rewritten app marked, and `jsconfig.json` read.
+
+**What a person can do now:** `GET …/index/entry-points` no longer lists test apps (LibreChat: 896 fewer); Documenso's routes read `{NEXT_PUBLIC_BASE_PATH}/api/…`, fully detected; Rallly's v1 routes say they're served through a rewrite; LibreChat's routes reach their controllers (`~/` imports resolve).
+
+**Files:** `packages/connectors/web/src/ast.ts` (`pathValue`, `joinPath`), `routers.ts` (a router's `note`); `packages/engine/src/semantics/entry-pass.ts` (`NOT_ENTRY_FILES`, the rewrite), `projects.ts` and `semantic-service.ts` (`jsconfig.json`); `docs/decisions-log.md`; ADR 0030 and 0026 addenda; ARCHITECTURE.
+
+**Concepts:**
+- **`jsconfig.json`:** TypeScript's project file for JavaScript; it carries `paths` like a `tsconfig.json`. https://code.visualstudio.com/docs/languages/jsconfig
+- **Naming a value without reading it:** an environment variable's name stands for its value in a path (`{NEXT_PUBLIC_BASE_PATH}`); the value (possibly a secret) is never read.
+
+**Found and fixed on the way:** none beyond the answers; the engine's fixture was given the rewrite and test-file shapes.
+
+**Tests:** engine entry-pass tests (test files, the rewrite, `jsconfig.json`), connectors 46 (`pathValue`, `joinPath`, a router's note). Mutation checks, each failing a test: test files not skipped; no rewrite note; no `jsconfig.json`.
+
+**Run and check it:** `pnpm --filter @flowcanvas/engine test`; on a running Documenso workspace, `GET …/index/entry-points?kind=api-route`.
+
+**Risks and laptop:** LibreChat's graph gains the calls `~/` imports hid (its 3 labelled functions still match). Laptop: each fork's pass once.
+
+**Commits:** `5e74ca7` the answers recorded; `c71cc1a` a base path named, a router's note; `d255cb5` test files left out, rewrites marked, `jsconfig.json` read.
+
+### Step 8.5 — Hand labels for the four forks, and the bar held (done by Claude; ADR 0030 addendum)
+
+**Goal:** the Done when's proof: every entry point of Rallly and Documenso, fixed modules of LibreChat and Twenty, and 5 screens' events per fork, labelled without the detectors; the engine held to them in real workspaces.
+
+**What a person can do now:** read `corpus/labels/entry-points.json` (2,118 entry points, each with its group and the scope written down); run the Docker corpus test to see each fork's recall, not-fully-detected entries and false finds.
+
+**Files:** `corpus/labels/entry-points.json`; `corpus/src/entry-points.ts` (`compareEntryPoints`, `barProblems`) and its test; `workspace/host/src/corpus.docker.test.ts`; the engine and connectors fixes below; ADR 0030 addendum. The labelling scripts stayed outside the repository.
+
+**Concepts:**
+- **Independent labels:** built by text scans and hand-written readers (tRPC objects, Express mounts, `<Route>` trees, NestJS decorators), not the detectors; every difference read in the code and settled. Two methods agreeing, and every disagreement read, is the evidence.
+- **Recall and precision per group:** convention-based entry points (file routes, decorators, scripts) must all be found; code-registered ones at least 95% per fork; nothing listed that isn't one.
+
+**Found and fixed on the way** (each with a fixture test that fails without it):
+- A Next.js `route.tsx` wasn't a route (Documenso's OG images).
+- A route handler handing requests to Hono through a factory was listed (Rallly's integrations).
+- A router a function makes and returns was taken for unmounted (LibreChat's files: 84% to 100%).
+- A renamed destructuring of a shorthand export wasn't followed (LibreChat's agents avatar router): the rule removed in step 3 was needed after all.
+- A route whose component only redirects was a screen (LibreChat's `PromptsRedirect`, Twenty's legacy settings paths).
+- A NestJS path array kept only its first path (Twenty's API keys: 5 routes).
+- Two packages with one name lost the second's scripts (Twenty's app templates).
+- A named catch-all (`*path`) is written `*`.
+- The labelling scripts' own mistakes (a comment's apostrophe, a type argument, decorators over several lines) were fixed in the scripts.
+
+**Tests:** corpus 4 (the comparison, the bar, the label file); engine and connectors fixtures for each fix. **In real workspaces** (CI, run 43604622876): Rallly 279 of 279 convention, 90 of 93 code (96.8%), 3 not fully detected (the OAuth factory's routes), 0 false finds; Documenso 308 of 308 and 443 of 443; LibreChat 235 of 235 and 271 of 271; Twenty 311 of 311 and 178 of 178; every page answered in under 50 ms; Twenty's snapshot saved in 439 ms and loaded in 375 ms.
+
+**Run and check it:** `CORPUS_ONLY=rallly pnpm test:docker` (or any fork); its row prints `entryConvention`, `entryCode`, `entryNotFullyDetected`, `entryFalseFinds`, and each not-fully-detected entry with why.
+
+**Risks and laptop:** R3 measured: Rallly's 3 are the only incomplete labelled entry points. Laptop: each fork's pass several times (Twenty about 100 s, 1.1 GB heap), one at a time.
+
+**Commits:** `ea100e5` route.tsx, NestJS arrays, catch-alls, awaited mounts; `7e51f4b` the engine's fixes; `e8868fd` the labels and the check.
+
+### Step 8.6 — The entry-points panel in the design system (done by Claude)
+
+**Goal:** Figma 06's left panel as a component, in the catalogue, before the page uses it.
+
+**What a person can do now:** open the catalogue's Canvas / EntryPointsPanel: groups with counts, a screen opening to its elements, an API route marked not fully detected, jobs and events saying phase 11 brings them; filter, Show flow and Enter work.
+
+**Files:** `packages/ui/src/components/entry-points-panel/` (component, styles, stories, tests); `packages/ui/src/index.ts`; four catalogue baselines.
+
+**Concepts:**
+- **React Aria's Tree** (the WAI-ARIA tree grid): arrows move and open, Enter acts; a row with children not loaded yet gets a "Loading elements…" child, as this version only marks real children expandable. https://react-spectrum.adobe.com/react-aria/Tree.html
+- **Contrast on the selected row:** muted text falls under WCAG AA on `surface/selected`, so the suffix steps up to secondary there (found by axe).
+
+**Found and fixed on the way:** axe's contrast finding on the selected row; names cut short by a hidden Show flow button that still took room (it now takes none until wanted); the site's later-phases test required "phase N" in the arrives text.
+
+**Tests:** ui 5 (groups and counts, the not-fully-detected mark, Show flow and Enter, opening a screen and Show more, the filter); catalogue screenshots of 2 stories in both themes with axe.
+
+**Run and check it:** `pnpm --filter @flowcanvas/ui test`; `pnpm --filter @flowcanvas/ui storybook`, Canvas / EntryPointsPanel.
+
+**Risks and laptop:** R4 (a handler unit's details) is step 7's. Laptop: the catalogue's visual tests for this component, in Playwright's image.
+
+**Commits:** `036605e` the panel.
+
+### Step 8.7 — The page: the left panel, Show flow, ⌘K's Entry points (done by Claude)
+
+**Goal:** the panel on the project page with the engine's entry points, each opening its flow; ⌘K's section with `/` for routes.
+
+**What a person can do now:** with a workspace running, read the left panel's entry points with their counts; open a screen to its elements; press `/` to filter; Show flow (or Enter) opens the flow from an entry point's handler, or says why there's none; ⌘K, `/`, a route's name, Enter.
+
+**Files:** `apps/web/src/entry-points/` (`api.ts`, `useEntryPoints.ts`, the page's tests), `apps/web/src/project/ProjectPage.tsx` and its CSS, `apps/web/src/test/setup.ts`; `packages/ui/src/components/command-palette/` (Entry points, `ROUTES_PREFIX`); `packages/graph-model/src/entries.ts` (`elementsByScreen`); `packages/engine/src/protocol.ts`, `service.ts`, `semantics/details.ts` (a handler's facts); `services/control-plane/src/workspaces/index-routes.ts`; ARCHITECTURE.
+
+**Concepts:**
+- **A screen's elements:** the elements in every component the screen renders, through `renders` edges and decisions, worked out once per version.
+- **Never awake for a poll:** the page asks for entry points while the graph builds and every 20 s for a new version; the route doesn't count as activity, so it never keeps a workspace awake.
+
+**Found and fixed on the way:**
+- R4: an anonymous handler showed the details of the function around it. Its own facts are stored by the pass, and its details carry its entry point's name.
+- In jsdom every box is empty, so a click lands on the panels' resize handle: the page test types from the keyboard, and the walkthrough clicks the filter in a real browser.
+- The page's `/` shortcut judged by the event's target and swallowed `/` typed into ⌘K: it now looks at what has focus (through shadow roots), and leaves dialogs alone.
+- The panel's `<header>` was read as a second page banner; it's a plain element.
+- Five page tests timed out only when every package's tests ran at once (Testing Library's 1 s wait): the wait is 5 s for the web app, as its tests' own limits are.
+- A push went out with the docs check failing (`;` instead of `&&`); fixed in the next commit (memory).
+
+**Tests:** web 6 entry-point page tests (not running, building, listing and a screen's elements, Show flow and its reason, the filter and `/`, ⌘K); ui palette 13, panel 6; engine and graph-model tests for a screen's elements and a handler's facts; control plane 22.
+
+**Run and check it:** `pnpm dev`, open a project with its workspace running, the left panel; `pnpm --filter @flowcanvas/web test`.
+
+**Risks and laptop:** R4 closed. Laptop: the page's tests.
+
+**Commits:** `0032082` a screen's elements, a handler's details; `6534485` the API, never as activity; `0e57d66` ⌘K's entry points; `c718227` the page; `297524a` ARCHITECTURE and counts.
+
+### Step 8.8 — Proof: real workspaces, the walkthrough, the screens (done by Claude)
+
+**Goal:** the Done when proven end to end: each labelled entry point opens its flow in real workspaces; the Try it recorded in a real browser; the screens in both themes.
+
+**What a person can do now:** watch the walkthrough's recording on the PR's report; read each fork's `entryFlows` row in the Docker job.
+
+**Files:** `workspace/host/src/corpus.docker.test.ts`; `e2e/try-it/phase-8.spec.ts` and `fixtures/phase-8-rallly.json`, `fixtures/phase-8-documenso-entry-points.json` (the engine's own output, names and places only); `e2e/visual/screens.spec.ts` and baselines; the panel (`listed`).
+
+**Concepts:**
+- **Virtualized lists in a real browser:** only the rows in view are in the page, so the walkthrough closes a group (arrow left) to reach the next, as a person would scroll.
+
+**Found and fixed on the way:** before the entry points were listed, the panel said "None found in this project." and 0 under each group: neither was known. Until they're listed, an empty group says nothing and shows no count.
+
+**Tests:** Docker: every labelled entry point handled by the project's code opens a flow rooted at its handler (checked locally first: Rallly 267, Documenso 649, LibreChat 266); the walkthrough (1); screens 38 in both themes, with axe; the catalogue 194.
+
+**Run and check it:** `pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-8.spec.ts`; `pnpm test:visual`; `CORPUS_ONLY=twenty pnpm test:docker`.
+
+**Risks and laptop:** none open. Laptop: the screens and catalogue in Playwright's image, one run at a time.
+
+**Commits:** `a53000a` each labelled entry point opens its flow; `8836eb3` no untrue count before listing; `ff57c8e` the walkthrough and screens.
+
+### Step 8.9 — Close: report, 0.12.0 (done by Claude)
+
+**Goal:** the phase report with every Done-when item's evidence, the release, and the docs re-read.
+
+**What a person can do now:** read `docs/reports/phase-8.md` and `phase-8-figma-differences.md`; What's new shows 0.12.0.
+
+**Files:** `apps/web/src/entry-points/EntryPointsLeft.tsx`, `apps/web/src/project/ProjectPage.tsx`, `apps/web/scripts/bundle-size.ts`; `CHANGELOG.md`, `package.json` (0.12.0), `docs/reports/phase-8.md`, `docs/reports/phase-8-figma-differences.md`, `docs/reports/phase-8/*.png`; STATUS, RUN-AND-FEATURES, ARCHITECTURE, README, upgrade-later.
+
+**Concepts:** none new.
+
+**Found and fixed on the way:** CI's bundle budget went red on `ff57c8e`: the project page's chunk was 135.8 kB against its 110 kB budget, since the entry-points panel brought React Aria's tree and virtualizer into it (the file tree's chunk fell from 25.0 to 2.5 kB as they moved). The panel now loads on its own, as the file tree does (`apps/web/src/entry-points/EntryPointsLeft.tsx`, lazy in ProjectPage, "Finding entry points…" while it loads): the page is 110.6 kB, the panel 3.6 kB, and the virtualizer the two left panels share 22.8 kB. The page's budget went 110 → 115 for its 1.6 kB of entry-point wiring, every open project's default; FilesPanel's went 30 → 5, and the two new chunks have their own (`apps/web/scripts/bundle-size.ts`, each with why). The local fast suites didn't run the build, so they missed it; they do now. The split then made one screen test flaky: `project-entry-flow` waited for the "API routes" row, which the virtualized panel leaves out of the page once the 65 screens are listed above it (the panel used to render before they arrived). It waits for the top row now (`9d00267`); both entry-point screens passed 20 of 20 runs locally.
+
+**Tests:** `pnpm docs:milestone`; CI green on the close.
+
+**Run and check it:** the report's "How to try it".
+
+**Risks and laptop:** none. Laptop: none.
+
+**Commits:** `a7cf9c0` the release; `9cd17fb` the panel's own chunk; `51ab01b` the close; `9d00267` the entry-flow screen's wait; `3dbe2ac` the record of it. **After acceptance (15 Nov):** `518c21f` Graph stats stopped saying entry points "arrive in phase 8" (they're in the graph since this phase; found by `pnpm docs:check` once the phase was accepted); and the acceptance recorded (`8121c52`: STATUS, RUN-AND-FEATURES, ARCHITECTURE, the report, the decisions log). `53361d6`: a flaky control-plane test fixed, found on the merge's CI run: it checked a log line didn't contain "ada" (the person's name), and a random user ID held those letters (`6b910a5f-ada4-…`); it checks the email now, and the line's pattern already proves it holds IDs only. This commit, the record of it.

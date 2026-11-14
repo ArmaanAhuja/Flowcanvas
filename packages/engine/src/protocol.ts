@@ -6,12 +6,15 @@ import {
   CHANGE_STATES,
   CODE_UNIT_KINDS,
   EDGE_KINDS,
+  ENTRY_KINDS,
   FLOW_LIMITS,
   FLOW_MAX_NODES,
   NODE_KINDS,
   PROVENANCES as GRAPH_PROVENANCES,
   RELATIONS as GRAPH_RELATIONS,
   type CodeUnitKind,
+  type EntryKind,
+  type EntryPointItem,
   type Flow,
   type GraphStats,
 } from '@flowcanvas/graph-model';
@@ -37,6 +40,8 @@ export const ENGINE_LIMITS = {
   lineBytes: 256 * 1024,
   /** Longest name, path or container passed on (longer ones are cut, never dropped). */
   text: 1024,
+  /** Most entry points in one answer: a page of about 200 bytes each stays far inside a line (phase 8). */
+  entries: 200,
 } as const;
 
 export const SYMBOL_KIND_NAMES = [
@@ -63,7 +68,17 @@ export type EngineRequest =
   | { readonly op: 'search'; readonly query: string; readonly limit: number }
   | ({ readonly op: SemanticOp } & CodePosition)
   /** A flow from the code unit at a place (phase 7, ADR 0028). */
-  | ({ readonly op: 'flow' } & CodePosition);
+  | ({ readonly op: 'flow' } & CodePosition)
+  /** A page of one kind of entry point, in name order, from the latest version (phase 8, ADR 0030 §5). */
+  | {
+      readonly op: 'entryPoints';
+      readonly kind: EntryKind;
+      /** How many of that kind come before the page. */
+      readonly after: number;
+      readonly limit: number;
+      /** With kind `element`: only that screen's elements (its id). */
+      readonly screen?: string;
+    };
 
 // TypeScript semantics (phase 5, ADR 0026): questions about the name at a place in a file.
 export const SEMANTIC_OPS = ['definition', 'references', 'callers', 'callees', 'details'] as const;
@@ -238,6 +253,20 @@ export interface FlowResult {
   readonly complete: boolean;
 }
 
+export interface EntryPointsResult {
+  /** How many of each kind the version has. */
+  readonly counts: Readonly<Record<EntryKind, number>>;
+  readonly kind: EntryKind;
+  readonly entries: readonly EntryPointItem[];
+  /** Where the next page starts; null after the last. */
+  readonly next: number | null;
+  readonly message: string | null;
+  readonly version: string | null;
+  readonly takenAt: string | null;
+  readonly current: boolean;
+  readonly complete: boolean;
+}
+
 /** What the inspector shows of a code unit (phase 7, ADR 0028 §3): each list's first items, and how many in all. */
 export const DETAIL_LIMITS = { items: 50, params: 30, outcomes: 30, text: 300 } as const;
 export const DECISION_KINDS = ['if', 'switch', 'ternary', 'catch'] as const;
@@ -309,6 +338,7 @@ export interface EngineResults {
   readonly callees: CallsResult;
   readonly flow: FlowResult;
   readonly details: DetailsResult;
+  readonly entryPoints: EntryPointsResult;
 }
 
 export const ENGINE_ERROR_CODES = ['invalid_request', 'failed'] as const;
@@ -389,6 +419,32 @@ export function parseEngineRequest(input: unknown): EngineRequest {
         throw new EngineProblem('invalid_request', 'Give a line and a column, counting from 1.');
       }
       return { op: fields.op, path, line, column };
+    }
+    case 'entryPoints': {
+      const { kind, after, limit } = fields;
+      if (!(ENTRY_KINDS as readonly unknown[]).includes(kind)) {
+        throw new EngineProblem('invalid_request', `Ask for one kind: ${ENTRY_KINDS.join(', ')}.`);
+      }
+      if (!isCount(after) || !isPositive(limit) || limit > ENGINE_LIMITS.entries) {
+        throw new EngineProblem(
+          'invalid_request',
+          `Ask for 1 to ${String(ENGINE_LIMITS.entries)} entry points, after 0 or more.`,
+        );
+      }
+      const { screen } = fields;
+      if (screen !== undefined && (kind !== 'element' || !isText(screen))) {
+        throw new EngineProblem(
+          'invalid_request',
+          'A screen’s entry points are its elements: ask for kind element.',
+        );
+      }
+      return {
+        op: 'entryPoints',
+        kind: kind as EntryKind,
+        after,
+        limit,
+        ...(screen === undefined ? {} : { screen }),
+      };
     }
     default:
       throw new EngineProblem('invalid_request', 'Unknown operation.');
@@ -640,6 +696,65 @@ function isFlowResult(value: unknown): value is FlowResult {
   );
 }
 
+function isPlace(value: unknown): boolean {
+  const p = record(value);
+  return (
+    p !== undefined &&
+    isText(p.path) &&
+    !p.path.startsWith('/') &&
+    isPositive(p.line) &&
+    isPositive(p.column)
+  );
+}
+
+function isEntryPoint(value: unknown, kind: EntryKind): value is EntryPointItem {
+  const e = record(value);
+  const handler = e?.handler === null ? null : record(e?.handler);
+  return (
+    e !== undefined &&
+    isText(e.id) &&
+    e.kind === kind &&
+    isText(e.framework) &&
+    isText(e.name) &&
+    (e.place === null || isPlace(e.place)) &&
+    typeof e.complete === 'boolean' &&
+    (e.why === null || (isText(e.why) && e.why.length <= 300)) &&
+    (e.complete || e.why !== null) &&
+    (e.within === null || isText(e.within)) &&
+    (e.elements === undefined || (kind === 'screen' && isCount(e.elements))) &&
+    (handler === null ||
+      (handler !== undefined &&
+        (handler.id === null || isText(handler.id)) &&
+        isText(handler.name) &&
+        (handler.place === null || isPlace(handler.place))))
+  );
+}
+
+function isEntryPointsResult(
+  value: unknown,
+  request: Extract<EngineRequest, { op: 'entryPoints' }>,
+): value is EntryPointsResult {
+  const r = record(value);
+  const counts = record(r?.counts);
+  return (
+    r !== undefined &&
+    counts !== undefined &&
+    Object.keys(counts).length === ENTRY_KINDS.length &&
+    ENTRY_KINDS.every((kind) => isCount(counts[kind])) &&
+    r.kind === request.kind &&
+    isList(r.entries, request.limit, (e) => isEntryPoint(e, request.kind)) &&
+    (r.next === null || (isCount(r.next) && r.next > request.after)) &&
+    isMessage(r.message) &&
+    (r.version === null || (typeof r.version === 'string' && /^[0-9a-f]{64}$/.test(r.version))) &&
+    (r.takenAt === null ||
+      (typeof r.takenAt === 'string' &&
+        r.takenAt.length <= 40 &&
+        !Number.isNaN(Date.parse(r.takenAt)))) &&
+    typeof r.current === 'boolean' &&
+    typeof r.complete === 'boolean'
+  );
+}
+
 function isHit(value: unknown): value is SymbolHit {
   const h = record(value);
   return (
@@ -681,6 +796,8 @@ export function isEngineResponse(request: EngineRequest, value: unknown): value 
       return isGraphStatus(result);
     case 'flow':
       return isFlowResult(result);
+    case 'entryPoints':
+      return isEntryPointsResult(result, request);
     case 'details':
       return (
         result !== undefined &&

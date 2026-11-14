@@ -3,6 +3,8 @@ import { diffGraphs, withChanges } from './diff.js';
 import { decodeGraph, encodeGraph } from './encoding.js';
 import { edgeKey, type Graph, type GraphEdge, type GraphNode } from './model.js';
 import { ARRIVES_IN, graphStats } from './stats.js';
+import { elementsByScreen, listEntryPoints } from './entries.js';
+import { indexGraph } from './flow.js';
 import { validateGraph } from './validate.js';
 
 const unit = (id: string, line = 1, extra: Partial<GraphNode> = {}): GraphNode => ({
@@ -164,6 +166,7 @@ describe('encodeGraph and decodeGraph', () => {
 
   it('refuses another format, a bad index, and an invalid graph', () => {
     expect(() => decodeGraph('{"format":2}')).toThrow('Unsupported graph format 2');
+    expect(() => decodeGraph('{"format":3}')).toThrow('Unsupported graph format 3');
     const text = JSON.parse(encodeGraph(POLL)) as { edges: number[][] };
     const [first] = text.edges;
     if (first === undefined) throw new Error('no edge');
@@ -251,14 +254,16 @@ describe('graphStats', () => {
       unknown: 1,
     });
     expect(stats.byEdgeKind.call).toBe(4);
-    // Every kind not filled yet names its phase (build plan, stage 1); code units and decisions are filled.
+    // Every kind not filled yet names its phase (build plan, stage 1); code units, decisions (phase 7) and entry
+    // points (phase 8) are filled.
     for (const [kind, count] of Object.entries(stats.byNodeKind)) {
       if (kind === 'code-unit') expect(count).toBe(4);
-      else if (kind !== 'decision') {
-        expect(ARRIVES_IN[kind as keyof typeof ARRIVES_IN], kind).toBeGreaterThan(7);
+      else if (kind !== 'decision' && kind !== 'entry-point') {
+        expect(ARRIVES_IN[kind as keyof typeof ARRIVES_IN], kind).toBeGreaterThan(8);
       }
     }
     expect(ARRIVES_IN).not.toHaveProperty('decision');
+    expect(ARRIVES_IN).not.toHaveProperty('entry-point');
     expect(ARRIVES_IN).not.toHaveProperty('branch');
   });
 });
@@ -339,5 +344,210 @@ describe('decisions (phase 7, ADR 0028)', () => {
     expect(() => decodeGraph('{"format":1,"nodes":[],"texts":[],"edges":[]}')).toThrow(
       'Unsupported graph format 1',
     );
+  });
+});
+
+describe('entry points (phase 8, ADR 0030)', () => {
+  const entry = (
+    id: string,
+    details: Partial<NonNullable<GraphNode['entry']>> = {},
+  ): GraphNode => ({
+    id,
+    kind: 'entry-point',
+    name: id.split('#')[1] ?? id,
+    place: { path: id.split('#')[0] ?? 'a.ts', line: 4, column: 3 },
+    unit: null,
+    change: 'unchanged',
+    entry: {
+      kind: 'api-route',
+      framework: 'hono',
+      complete: true,
+      why: null,
+      within: null,
+      ...details,
+    },
+  });
+  const GRAPH: Graph = {
+    nodes: [
+      ...POLL.nodes,
+      entry('src/route.ts#(entry POST /api/polls)'),
+      entry('src/form.tsx#(entry <button> onClick)', {
+        kind: 'element',
+        framework: 'react',
+        within: 'src/form.tsx#PollForm',
+      }),
+      entry('src/app.ts#(entry GET /:unknown/polls)', {
+        complete: false,
+        why: 'Part of its path isn’t a constant the code fixes.',
+      }),
+    ],
+    edges: [
+      ...POLL.edges,
+      call('src/route.ts#(entry POST /api/polls)', 'src/poll.ts#createPoll', [4], {
+        provenance: 'convention',
+      }),
+    ],
+  };
+
+  it('round-trips their details, and a graph without any encodes as it did', () => {
+    expect(validateGraph(GRAPH)).toEqual([]);
+    const decoded = decodeGraph(encodeGraph(GRAPH));
+    expect(encodeGraph(decoded)).toBe(encodeGraph(GRAPH));
+    expect(
+      decoded.nodes.find((n) => n.kind === 'entry-point' && !n.entry?.complete)?.entry,
+    ).toEqual({
+      kind: 'api-route',
+      framework: 'hono',
+      complete: false,
+      why: 'Part of its path isn’t a constant the code fixes.',
+      within: null,
+    });
+    expect(decodeGraph(encodeGraph(POLL)).nodes.every((n) => !('entry' in n))).toBe(true);
+  });
+
+  it('says what breaks their rules', () => {
+    const { entry: details, ...bare } = entry('a.ts#(entry x)');
+    const bad: Graph = {
+      nodes: [
+        bare,
+        entry('b.ts#(entry y)', { complete: false }),
+        ...(details === undefined ? [] : [{ ...unit('c.ts#f'), entry: details }]),
+      ],
+      edges: [],
+    };
+    expect(validateGraph(bad)).toEqual([
+      "node a.ts#(entry x): an entry point needs its kind, framework and whether it's complete",
+      'node b.ts#(entry y): an entry point not fully detected says why',
+      'node c.ts#f: only an entry point has entry details',
+    ]);
+  });
+
+  it('counts a change to an entry point’s details as modified', () => {
+    const after: Graph = {
+      ...GRAPH,
+      nodes: GRAPH.nodes.map((n) =>
+        n.id === 'src/route.ts#(entry POST /api/polls)' && n.entry !== undefined
+          ? { ...n, entry: { ...n.entry, complete: false, why: 'Its mount isn’t followed.' } }
+          : n,
+      ),
+    };
+    expect(diffGraphs(GRAPH, after).modified).toEqual(['src/route.ts#(entry POST /api/polls)']);
+  });
+});
+
+describe('listEntryPoints', () => {
+  it('lists each kind in name order, with what handles each: a node, code by its text, or nothing', () => {
+    const point = (
+      id: string,
+      name: string,
+      kind: 'screen' | 'api-route',
+      line = 1,
+    ): GraphNode => ({
+      id,
+      kind: 'entry-point',
+      name,
+      place: { path: id.split('#')[0] ?? '', line, column: 1 },
+      unit: null,
+      change: 'unchanged',
+      entry: { kind, framework: 'next', complete: true, why: null, within: null },
+    });
+    const graph: Graph = {
+      nodes: [
+        unit('app/page.tsx#Home', 3, { unit: 'component' }),
+        point('app/page.tsx#(entry /)', '/', 'screen'),
+        point('app/b.ts#(entry POST /b)', 'POST /b', 'api-route'),
+        point('app/a.ts#(entry GET /a)', 'GET /a', 'api-route', 2),
+        point('app/a.ts#(entry GET /a)~2', 'GET /a', 'api-route', 1),
+      ],
+      edges: [
+        call('app/page.tsx#(entry /)', 'app/page.tsx#Home', [1], {
+          relation: 'renders',
+          provenance: 'convention',
+        }),
+        { ...unknown('app/b.ts#(entry POST /b)', 'handler', [1]) },
+      ],
+    };
+    const lists = listEntryPoints(indexGraph(graph));
+    expect(lists.screen.map((e) => [e.name, e.handler])).toEqual([
+      [
+        '/',
+        {
+          id: 'app/page.tsx#Home',
+          name: 'Home',
+          place: { path: 'app/page.tsx', line: 3, column: 1 },
+        },
+      ],
+    ]);
+    expect(lists['api-route'].map((e) => [e.id, e.handler?.name ?? null])).toEqual([
+      ['app/a.ts#(entry GET /a)~2', null],
+      ['app/a.ts#(entry GET /a)', null],
+      ['app/b.ts#(entry POST /b)', 'handler'],
+    ]);
+    expect(lists['api-route'][2]?.handler?.id).toBeNull();
+    expect([lists.element, lists['cli-command']]).toEqual([[], []]);
+  });
+});
+
+describe('elementsByScreen', () => {
+  it('gives a screen the elements of every component it renders, through decisions, and none of the rest', () => {
+    const entry = (
+      id: string,
+      kind: 'screen' | 'element',
+      within: string | null = null,
+    ): GraphNode => ({
+      id,
+      kind: 'entry-point',
+      name: id.split('#')[1] ?? id,
+      place: { path: id.split('#')[0] ?? '', line: 1, column: 1 },
+      unit: null,
+      change: 'unchanged',
+      entry: { kind, framework: 'react', complete: true, why: null, within },
+    });
+    const graph: Graph = {
+      nodes: [
+        unit('page.tsx#Page', 1, { unit: 'component' }),
+        unit('form.tsx#Form', 1, { unit: 'component' }),
+        unit('other.tsx#Other', 1, { unit: 'component' }),
+        { ...unit('page.tsx#Page?1'), kind: 'decision', unit: null, name: 'open' },
+        entry('page.tsx#(entry /polls)', 'screen'),
+        entry('form.tsx#(entry <button> onClick)', 'element', 'form.tsx#Form'),
+        entry('page.tsx#(entry <a> onClick)', 'element', 'page.tsx#Page'),
+        entry('other.tsx#(entry <input> onChange)', 'element', 'other.tsx#Other'),
+      ],
+      edges: [
+        call('page.tsx#(entry /polls)', 'page.tsx#Page', [1], {
+          relation: 'renders',
+          provenance: 'convention',
+        }),
+        {
+          from: 'page.tsx#Page',
+          to: 'page.tsx#Page?1',
+          target: null,
+          kind: 'branch',
+          relation: null,
+          label: null,
+          provenance: 'resolved',
+          lines: [2],
+        },
+        {
+          from: 'page.tsx#Page?1',
+          to: 'form.tsx#Form',
+          target: null,
+          kind: 'branch',
+          relation: 'renders',
+          label: 'yes',
+          provenance: 'resolved',
+          lines: [2],
+        },
+      ],
+    };
+    expect(validateGraph(graph)).toEqual([]);
+    const lists = listEntryPoints(indexGraph(graph));
+    const byScreen = elementsByScreen(indexGraph(graph), lists.screen, lists.element);
+    expect(byScreen.get('page.tsx#(entry /polls)')?.map((e) => e.id)).toEqual([
+      'form.tsx#(entry <button> onClick)',
+      'page.tsx#(entry <a> onClick)',
+    ]);
+    expect(lists.screen[0]?.elements).toBe(2);
   });
 });

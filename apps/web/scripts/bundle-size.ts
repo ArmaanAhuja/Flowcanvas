@@ -15,16 +15,24 @@ export const BUDGETS: Readonly<Record<string, number>> = {
   'First load': 160,
   // Raised 95 → 110 on 8 Nov 2026 (owner: "choose the best"): phase 3's journal and autosave (93.1 kB) must run
   // whenever a project is open, the Graph view included, to keep unsaved work safe; loading them lazily would only
-  // delay that protection.
-  ProjectPage: 110,
+  // delay that protection. Raised 110 → 115 on 15 Nov 2026 (phase 8, 110.6 kB): the entry points' lists, groups, `/`
+  // shortcut and notices (1.6 kB) are needed whenever a project is open, as the left panel's default; the panel
+  // itself (React Aria's tree and virtualizer) loads on its own, below.
+  ProjectPage: 115,
   WorkspaceTerminal: 95,
   // 8 Nov 2026 (phase 3): the editor's core, only with the Code view (115.5 kB; ADR 0021 estimated about 150 with
   // a language).
   codemirror: 130,
   // Every language's parser together (74.8 kB); each loads on its own, with its first file (JavaScript 33.7 kB).
   lang: 85,
-  // The file tree (React Aria's Tree and virtualizer), only when Files is shown (24.9 kB).
-  FilesPanel: 30,
+  // The file tree, only when Files is shown (24.9 kB with React Aria's virtualizer; 2.5 kB since phase 8, when the
+  // virtualizer moved to the chunk both left panels share; lowered 30 → 5 then).
+  FilesPanel: 5,
+  // 15 Nov 2026 (phase 8): the entry-points panel (3.7 kB with its styles), loaded with the left panel...
+  EntryPointsLeft: 6,
+  // ...and React Aria's virtualizer and tree parts, shared by both left panels (22.5 kB; Rollup names the chunk after
+  // its first module).
+  Virtualizer: 27,
   // 8 Nov 2026 (phase 3 step 7): quick-open, fetched once the workspace runs (11.8 kB). 11 Nov 2026 (phase 4 step
   // 5): with the command palette, one chunk, since they share React Aria's search parts (13.7 kB together).
   SearchDialogs: 15,

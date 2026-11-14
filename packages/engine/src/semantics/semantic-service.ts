@@ -16,16 +16,17 @@ import {
   type ReferencesResult,
   type Relation,
 } from '../protocol.js';
-import { assemble, GRAPH_FILES_BETWEEN_PAUSES, GRAPH_HEAP_SHARE, type GraphPass } from './graph.js';
+import {
+  assemble,
+  GRAPH_FILES_BETWEEN_PAUSES,
+  GRAPH_HEAP_SHARE,
+  type GraphPass,
+  type PassFile,
+} from './graph.js';
+import { entriesOfFile, routeFileOf, scriptsOf } from './entry-pass.js';
 import { contentHash, type FileFacts } from '../facts.js';
 import { detailsAt, fileFacts } from './details.js';
-import {
-  projectPath,
-  unitNodeAt,
-  walkFile,
-  type FileGraph,
-  type GraphContext,
-} from './graph-pass.js';
+import { projectPath, unitNodeAt, walkFile, type GraphContext } from './graph-pass.js';
 import { createProjectHost, type ProjectHost } from './host.js';
 import {
   callableAt,
@@ -86,7 +87,7 @@ export class SemanticService {
   readonly #facts: FactsSink | undefined;
   #squeezed = false;
   /** The flow graph, by walked file (ADR 0027 §1): a file's code units and the calls they make. */
-  #graphFiles = new Map<string, FileGraph>();
+  #graphFiles = new Map<string, PassFile>();
   /** Files changed since the graph was last brought up to date (absolute); everything when it never was. */
   readonly #graphPending = new Set<string>();
   #graphBuilt = false;
@@ -117,7 +118,11 @@ export class SemanticService {
     const host = createProjectHost({
       root: this.#root,
       libDir: this.#libDir,
-      packages: new Map([...packages.values()].map((p) => [p.name, join(this.#root, p.dir)])),
+      packages: new Map(
+        [...packages]
+          .filter(([key, p]) => key === p.name)
+          .map(([, p]) => [p.name, join(this.#root, p.dir)]),
+      ),
     });
     return { host, model: new ProjectModel(this.#ts, this.#root, host, files, packages) };
   }
@@ -134,7 +139,7 @@ export class SemanticService {
       this.#versions.set(absolute, (this.#versions.get(absolute) ?? 0) + 1);
       this.#graphPending.add(absolute);
       const name = path.split('/').pop() ?? '';
-      if (name === 'tsconfig.json' || name === 'package.json') {
+      if (name === 'tsconfig.json' || name === 'jsconfig.json' || name === 'package.json') {
         structural = true;
         // Programs may now hold other files: the graph is built again from the start.
         this.#graphBuilt = false;
@@ -164,14 +169,18 @@ export class SemanticService {
     const full = !this.#graphBuilt;
     const changed = [...this.#graphPending];
     this.#graphPending.clear();
-    const files = full ? new Map<string, FileGraph>() : new Map(this.#graphFiles);
+    const files = full ? new Map<string, PassFile>() : new Map(this.#graphFiles);
     // What to walk: everything, or the changed files and every file with a call into one of them.
     let todo: Set<string> | undefined;
     if (!full) {
       const paths = new Set(changed.map((file) => relative(this.#root, file).split(sep).join('/')));
       todo = new Set(changed);
       for (const [file, part] of this.#graphFiles) {
-        if (part.edges.some((e) => e.to !== null && paths.has(e.to.slice(0, e.to.indexOf('#'))))) {
+        if (
+          part.edges.some((e) => e.to !== null && paths.has(e.to.slice(0, e.to.indexOf('#')))) ||
+          // Its entry points refer to a declaration there (a mounted router, a route's component).
+          (part.entries?.dependsOn.some((path) => paths.has(path)) ?? false)
+        ) {
           todo.add(file);
         }
       }
@@ -207,18 +216,26 @@ export class SemanticService {
         const source = program.getSourceFile(file);
         seen.add(file);
         if (source === undefined) continue;
-        const part = walkFile(context, program, source);
+        // Entry points first: the walk makes their anonymous handlers code units (ADR 0030 §3).
+        const { entries, handlers } = entriesOfFile(
+          context,
+          program,
+          source,
+          routeFileOf(projectPath(context, file), this.#model.packages.values()),
+        );
+        const part = walkFile(context, program, source, handlers);
         // The graph's part is held for the next pass; the calls go to the store with the rest of the facts.
         files.set(file, {
           nodes: part.nodes,
           targets: part.targets,
           edges: part.edges,
           builtInCalls: part.builtInCalls,
+          entries,
         });
         // Worked out now, while the program is here, and stored rather than held (owner, 13 Nov 2026).
         this.#facts?.put(projectPath(context, file), {
           hash: contentHash(source.text),
-          units: fileFacts(context, program, source, part),
+          units: fileFacts(context, program, source, part, handlers),
         });
         walked += 1;
         if (walked % filesBetweenPauses === 0) {
@@ -246,7 +263,12 @@ export class SemanticService {
     this.#facts?.flush();
     this.#graphFiles = files;
     this.#graphBuilt = true;
-    return assemble(files, complete);
+    // Each package's scripts: read again every pass, as there are few and a changed package.json rebuilds anyway.
+    const scripts = [...this.#model.packages.values()].flatMap((pkg) => {
+      const text = this.#host.readFile(join(this.#root, pkg.dir, 'package.json'));
+      return text === undefined ? [] : scriptsOf(pkg, text);
+    });
+    return assemble(files, complete, scripts);
   }
 
   /** How many language services are held (for tests and diagnostics). */

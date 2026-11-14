@@ -13,12 +13,14 @@ export interface WorkspacePackage {
   readonly dir: string;
   /** Names of the project's other packages it depends on. */
   readonly dependsOn: readonly string[];
+  /** Every package it declares, installed ones too: which frameworks it uses (phase 8, `next`, `remix-flat-routes`). */
+  readonly uses: readonly string[];
   /** `paths` entries that resolve its imports to its source files (absolute paths). */
   readonly paths: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface ProjectConfig {
-  /** Project-relative path of the tsconfig.json; for an inferred program, `<folder>/(inferred)`. */
+  /** Project-relative path of the tsconfig.json (or jsconfig.json); for an inferred program, `<folder>/(inferred)`. */
   readonly path: string;
   /** The package it belongs to (the nearest package.json above it), if any. */
   readonly packageName: string | null;
@@ -52,11 +54,21 @@ export function analysisDefaults(ts: TypeScript): TS.CompilerOptions {
 const SOURCE = /\.(?:ts|tsx|js|jsx|mts|cts|mjs|cjs)$/;
 const DECLARATION = /\.d\.[cm]?ts$/;
 
-/** The `paths` for a package, from its exports (subpaths and `*` patterns), else types/typings/main. */
+/** Folders packages build into, whose files the repository usually lacks. */
+const BUILT = /^(?:\.\/)?(?:dist|build|lib|out)\//;
+const BUILT_EXTENSION = /(?:\.d)?\.[cm]?[jt]s$/;
+
+/**
+ * The `paths` for a package, from its exports (subpaths and `*` patterns), else types/typings/main. A file in a build
+ * folder the project doesn't have (`./dist/types/index.d.ts`, never committed) is followed to its source at the same
+ * place under `src/` (`src/types/index.ts`) when that exists (phase 8: Twenty's `twenty-shared/types`). `has` says
+ * whether a package-relative file is in the project; without it, every target is taken as written.
+ */
 export function packagePaths(
   name: string,
   folder: string,
   manifest: Record<string, unknown>,
+  has?: (file: string) => boolean,
 ): Record<string, string[]> {
   const paths: Record<string, string[]> = {};
   const target = (value: unknown): string | undefined => {
@@ -74,17 +86,23 @@ export function packagePaths(
           key.startsWith('.'),
         )
       : [];
+  const sourceOf = (file: string): string => {
+    if (has === undefined || file.includes('*') || has(posix.normalize(file)) || !BUILT.test(file))
+      return file;
+    const stem = file.replace(BUILT, 'src/').replace(BUILT_EXTENSION, '');
+    return ['.ts', '.tsx'].map((ext) => stem + ext).find((candidate) => has(candidate)) ?? file;
+  };
   if (subpaths.length > 0) {
     for (const [key, value] of subpaths) {
       const file = target(value);
       if (file === undefined || !(SOURCE.test(file) || file.includes('*'))) continue;
-      paths[key === '.' ? name : `${name}${key.slice(1)}`] = [join(folder, file)];
+      paths[key === '.' ? name : `${name}${key.slice(1)}`] = [join(folder, sourceOf(file))];
     }
   } else {
     const main = [manifest.types, manifest.typings, manifest.main].find(
       (value): value is string => typeof value === 'string',
     );
-    paths[name] = [join(folder, main ?? 'index.ts')];
+    paths[name] = [join(folder, sourceOf(main ?? 'index.ts'))];
   }
   paths[`${name}/*`] ??= [join(folder, '*')];
   return paths;
@@ -121,10 +139,17 @@ export class ProjectModel {
     this.#files = files;
     const packageDirs = [...packages.values()].sort((a, b) => b.dir.length - a.dir.length);
     this.#packageDirs = packageDirs;
+    // A jsconfig.json is a tsconfig.json for JavaScript (LibreChat's `~/` imports; owner, 14 Nov 2026); where a folder
+    // has both, TypeScript uses the tsconfig.json, and so does the engine.
+    const tsconfigDirs = new Set(
+      files.filter((file) => posix.basename(file) === 'tsconfig.json').map((f) => posix.dirname(f)),
+    );
     this.configs = files
       .filter(
         (file) =>
-          posix.basename(file) === 'tsconfig.json' && !file.split('/').includes('node_modules'),
+          !file.split('/').includes('node_modules') &&
+          (posix.basename(file) === 'tsconfig.json' ||
+            (posix.basename(file) === 'jsconfig.json' && !tsconfigDirs.has(posix.dirname(file)))),
       )
       .map((path) => {
         const dir = posix.dirname(path) === '.' ? '' : posix.dirname(path);
@@ -227,6 +252,10 @@ export class ProjectModel {
         options: {
           ...analysisDefaults(ts),
           ...parsed.options,
+          // A jsconfig.json is for JavaScript, whatever it says.
+          ...(posix.basename(config.path) === 'jsconfig.json'
+            ? { allowJs: true, checkJs: false }
+            : {}),
           paths: { ...this.#workspacePaths, ...(parsed.options.paths ?? {}) },
           noEmit: true,
           skipLibCheck: true,
@@ -307,25 +336,38 @@ export function findPackages(
       const manifest = JSON.parse(read(join(root, file)) ?? '') as Record<string, unknown>;
       if (typeof manifest.name === 'string' && manifest.name !== '') {
         const dir = posix.dirname(file) === '.' ? '' : posix.dirname(file);
-        manifests.set(manifest.name, { dir, manifest });
+        // Two packages with one name (Twenty's two app templates): the first keeps the name for imports; the
+        // other is kept by its folder too, so its scripts aren't lost (phase 8).
+        manifests.set(manifests.has(manifest.name) ? `${manifest.name}@${dir}` : manifest.name, {
+          dir,
+          manifest,
+        });
       }
     } catch {
       // Not JSON: not a package we can use.
     }
   }
+  const known = new Set(files);
   const packages = new Map<string, WorkspacePackage>();
-  for (const [name, { dir, manifest }] of manifests) {
-    const dependsOn = ['dependencies', 'devDependencies', 'peerDependencies'].flatMap((field) => {
+  for (const [key, { dir, manifest }] of manifests) {
+    const name = manifest.name as string;
+    const uses = ['dependencies', 'devDependencies', 'peerDependencies'].flatMap((field) => {
       const value = manifest[field];
-      return typeof value === 'object' && value !== null
-        ? Object.keys(value).filter((dep) => dep !== name && manifests.has(dep))
-        : [];
+      return typeof value === 'object' && value !== null ? Object.keys(value) : [];
     });
-    packages.set(name, {
+    const dependsOn = uses.filter((dep) => dep !== name && manifests.has(dep));
+    packages.set(key, {
       name,
       dir,
       dependsOn: [...new Set(dependsOn)],
-      paths: packagePaths(name, join(root, dir), manifest),
+      uses: [...new Set(uses)],
+      // Only the package that holds the name resolves imports of it.
+      paths:
+        key === name
+          ? packagePaths(name, join(root, dir), manifest, (file) =>
+              known.has(dir === '' ? file : `${dir}/${file}`),
+            )
+          : {},
     });
   }
   return packages;

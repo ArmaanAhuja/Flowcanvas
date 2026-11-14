@@ -89,6 +89,50 @@ describe('checkGraph', () => {
     });
   });
 
+  it('holds the graph to its own lists where the label says the graph differs, and why (phase 8)', () => {
+    // The route's anonymous handler is a unit of its own in the graph, and calls createPoll from there.
+    const handler = 'src/route.ts#(handler POST /polls)';
+    const moved: LabelGraph = {
+      nodes: [
+        ...graph.nodes,
+        { id: handler, name: 'POST /api/polls', place: place('src/route.ts', 3, 20) },
+        // An entry point's edge to its handler isn't a call between code: not a caller.
+        {
+          id: 'src/route.ts#(entry POST /api/polls)',
+          kind: 'entry-point',
+          name: 'POST /api/polls',
+          place: place('src/route.ts', 3, 1),
+        },
+      ],
+      edges: [
+        ...graph.edges.map((e) =>
+          e.from === 'src/route.ts#(top level)' ? { ...e, from: handler } : e,
+        ),
+        {
+          from: 'src/route.ts#(entry POST /api/polls)',
+          to: 'src/poll.ts#createPoll',
+          target: null,
+          relation: 'calls',
+          provenance: 'convention',
+          lines: [3],
+        },
+      ],
+    };
+    const graphView = {
+      why: 'Called from the route’s anonymous handler, a unit of its own in the graph (ADR 0030 §3).',
+      callers: [
+        { name: 'POST /api/polls', relation: 'calls', path: 'src/route.ts', lines: [4, 9] },
+      ],
+    };
+    expect(checkGraph(moved, { ...label, graph: graphView })).toEqual({
+      node: 'src/poll.ts#createPoll',
+      callers: none,
+      callees: none,
+    });
+    // Without it, the Calls tab's view is what the graph is held to.
+    expect(checkGraph(moved, label).callers.missing).toHaveLength(1);
+  });
+
   it('compares calls only: a decision’s branches repeat calls already there (phase 7)', () => {
     const withBranches: LabelGraph = {
       nodes: [

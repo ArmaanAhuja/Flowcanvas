@@ -28,7 +28,6 @@ const rallly: GraphStatsSnapshot = {
   loadMs: 10,
 };
 const ARRIVES_IN = {
-  'entry-point': 8,
   'data-access': 10,
   'external-boundary': 10,
   'async-handoff': 11,

@@ -74,6 +74,15 @@ export {
   type EditorTabsProps,
 } from './components/editor-tabs/EditorTabs';
 export { FileTree, type FileTreeProps } from './components/file-tree/FileTree';
+export {
+  EntryPointsPanel,
+  GROUP_TITLES,
+  type EntryGroup,
+  type EntryGroupId,
+  type EntryPointsPanelProps,
+  type EntryRow,
+  type EntryRowKind,
+} from './components/entry-points-panel/EntryPointsPanel';
 export { buildTree, ancestorsOf, type TreeNode } from './components/file-tree/tree-model';
 export {
   Breadcrumb,
@@ -83,10 +92,11 @@ export {
 export { StatusBar, type StatusBarProps } from './components/status-bar/StatusBar';
 export { QuickOpen, type QuickOpenProps } from './components/quick-open/QuickOpen';
 export { rankPaths, scorePath, type Match } from './components/quick-open/fuzzy';
-export { FILES_PREFIX } from './components/command-palette/prefixes';
+export { FILES_PREFIX, ROUTES_PREFIX } from './components/command-palette/prefixes';
 export {
   CommandPalette,
   type CommandPaletteProps,
+  type PaletteEntry,
   type PaletteSymbol,
   type PaletteSymbolKind,
 } from './components/command-palette/CommandPalette';

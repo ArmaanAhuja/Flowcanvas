@@ -2,7 +2,7 @@ import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CommandPalette, type PaletteSymbol } from './CommandPalette';
+import { CommandPalette, type PaletteEntry, type PaletteSymbol } from './CommandPalette';
 
 afterEach(cleanup);
 
@@ -42,6 +42,17 @@ const SYMBOLS: PaletteSymbol[] = [
 ];
 
 /** The page's part: keeps the query, and answers symbol searches after `delayMs`, as the API would. */
+const ENTRIES: PaletteEntry[] = [
+  { id: 's1', kind: 'screen', name: '/polls/:urlId', detail: 'PollPage' },
+  {
+    id: 'a1',
+    kind: 'api-route',
+    name: 'POST /api/private/polls',
+    detail: 'apps/web/src/app/api/private/route.ts:230',
+  },
+  { id: 'c1', kind: 'cli-command', name: '@rallly/web: dev', detail: 'apps/web/package.json:6' },
+];
+
 function Harness(props: {
   readonly delayMs?: number;
   readonly note?: string;
@@ -49,6 +60,7 @@ function Harness(props: {
   readonly onOpenSymbol?: (symbol: PaletteSymbol) => void;
   readonly onOpenChange?: (open: boolean) => void;
   readonly onShowFlow?: (symbol: PaletteSymbol) => void;
+  readonly onShowEntry?: (entry: PaletteEntry) => void;
 }) {
   const [query, setQuery] = useState('');
   const [symbols, setSymbols] = useState<PaletteSymbol[]>([]);
@@ -75,6 +87,9 @@ function Harness(props: {
       symbols={symbols}
       symbolsNote={props.note}
       {...(props.onShowFlow === undefined ? {} : { onShowFlow: props.onShowFlow })}
+      {...(props.onShowEntry === undefined
+        ? {}
+        : { onShowEntry: props.onShowEntry, entryPoints: ENTRIES })}
       files={FILES}
       onOpenFile={props.onOpenFile ?? vi.fn()}
       onOpenSymbol={props.onOpenSymbol ?? vi.fn()}
@@ -223,6 +238,24 @@ describe('CommandPalette', () => {
     await user.clear(screen.getByRole('searchbox'));
     await user.keyboard('#');
     expect(results().textContent).toBe('Type part of a file’s name.');
+  });
+
+  it('finds entry points with the rest, and only them after / (phase 8), opening the top one with Enter', async () => {
+    const user = userEvent.setup();
+    const onShowEntry = vi.fn();
+    render(<Harness onShowEntry={onShowEntry} />);
+    await user.keyboard('poll');
+    expect(groups().find((g) => g.name === 'Entry points')?.rows).toEqual([
+      'Show the flow from /polls/:urlId, screen, PollPage',
+      'Show the flow from POST /api/private/polls, api route, apps/web/src/app/api/private/route.ts:230',
+    ]);
+    await user.clear(screen.getByRole('searchbox'));
+    await user.keyboard('/');
+    expect(results().textContent).toBe('Type part of a route, screen or command.');
+    await user.keyboard('po');
+    expect(groups().map((g) => g.name)).toEqual(['Entry points']);
+    await user.keyboard('{Enter}');
+    expect(onShowEntry).toHaveBeenCalledWith(ENTRIES[0]);
   });
 
   it('shows the index’s note under Symbols, with the results so far', async () => {

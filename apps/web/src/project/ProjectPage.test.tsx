@@ -62,9 +62,11 @@ describe('ProjectPage', () => {
       />,
     );
     await screen.findByText('Rallly');
-    for (const text of [EMPTY.left, EMPTY.canvas, EMPTY.right, EMPTY.review]) {
+    for (const text of [EMPTY.canvas, EMPTY.right, EMPTY.review]) {
       expect(screen.getByText(text)).toBeTruthy();
     }
+    // The workspace runs: the entry points are being asked for (this fake never lists any).
+    expect(await screen.findByText('Finding entry points…')).toBeTruthy();
   });
 
   it('opens the review bar’s detail, and offers only the views that exist', async () => {

@@ -271,6 +271,53 @@ describe('flows and details (phase 7)', () => {
   });
 });
 
+describe('entry points (phase 8)', () => {
+  beforeEach(async () => {
+    await call('POST', '/open');
+  });
+
+  it('asks for a page of one kind, the first 200 unless told, or a screen’s elements, never as activity', async () => {
+    const answer = {
+      counts: { screen: 1, element: 0, 'api-route': 0, 'cli-command': 0 },
+      kind: 'screen' as const,
+      entries: [],
+      next: null,
+      message: null,
+      version: null,
+      takenAt: null,
+      current: false,
+      complete: false,
+    };
+    provider.indexAnswer = { ok: true, result: answer };
+    now += 9 * 60_000;
+    expect(await call('GET', '/index/entry-points?kind=screen')).toEqual({
+      status: 200,
+      json: answer,
+    });
+    await call('GET', '/index/entry-points?kind=api-route&after=200&limit=50');
+    await call('GET', '/index/entry-points?kind=element&screen=app%2Fpage.tsx%23(entry%20%2F)');
+    expect(provider.indexRequests.map(({ request }) => request)).toEqual([
+      { op: 'entryPoints', kind: 'screen', after: 0, limit: 200 },
+      { op: 'entryPoints', kind: 'api-route', after: 200, limit: 50 },
+      {
+        op: 'entryPoints',
+        kind: 'element',
+        after: 0,
+        limit: 200,
+        screen: 'app/page.tsx#(entry /)',
+      },
+    ]);
+    // Polled while the graph builds: never keeps the workspace awake.
+    expect(await lastActive()).not.toBe(now);
+  });
+
+  it('refuses a kind it doesn’t know, or too many, without asking the workspace', async () => {
+    expect((await call('GET', '/index/entry-points?kind=job')).status).toBe(400);
+    expect((await call('GET', '/index/entry-points?kind=screen&limit=500')).status).toBe(400);
+    expect(provider.indexRequests).toEqual([]);
+  });
+});
+
 it('needs a running workspace', async () => {
   expect(await call('GET', '/index/status')).toEqual({
     status: 409,
