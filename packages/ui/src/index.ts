@@ -92,10 +92,11 @@ export {
 export { StatusBar, type StatusBarProps } from './components/status-bar/StatusBar';
 export { QuickOpen, type QuickOpenProps } from './components/quick-open/QuickOpen';
 export { rankPaths, scorePath, type Match } from './components/quick-open/fuzzy';
-export { FILES_PREFIX } from './components/command-palette/prefixes';
+export { FILES_PREFIX, ROUTES_PREFIX } from './components/command-palette/prefixes';
 export {
   CommandPalette,
   type CommandPaletteProps,
+  type PaletteEntry,
   type PaletteSymbol,
   type PaletteSymbolKind,
 } from './components/command-palette/CommandPalette';

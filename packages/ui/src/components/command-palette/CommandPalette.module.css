@@ -69,3 +69,11 @@
 .keys {
   display: contents;
 }
+
+/* Routes and commands as the code writes them (Graphite: paths in mono). */
+.mono {
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  font-weight: var(--text-mono-small-font-weight);
+  line-height: var(--text-mono-small-line-height);
+}

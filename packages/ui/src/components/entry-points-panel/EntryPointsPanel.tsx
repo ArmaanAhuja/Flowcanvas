@@ -204,10 +204,10 @@ export function EntryPointsPanel({
 
   return (
     <section className={classNames(styles.panel, className)} aria-label="Entry points">
-      <header className={styles.header}>
+      <div className={styles.header}>
         <h2 className={styles.title}>Entry points</h2>
         <span className={styles.count}>{total}</span>
-      </header>
+      </div>
       <Input
         ref={filterRef}
         controlSize="sm"

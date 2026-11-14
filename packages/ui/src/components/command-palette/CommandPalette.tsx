@@ -4,6 +4,9 @@ import {
   FileText,
   Hash,
   Heading,
+  Monitor,
+  Route,
+  SquareTerminal,
   ListOrdered,
   Package,
   Parentheses,
@@ -31,7 +34,16 @@ import { classNames } from '../../class-names';
 import { rankPaths } from '../quick-open/fuzzy';
 import quickOpen from '../quick-open/QuickOpen.module.css';
 import styles from './CommandPalette.module.css';
-import { FILES_PREFIX } from './prefixes';
+import { FILES_PREFIX, ROUTES_PREFIX } from './prefixes';
+
+/** An entry point the palette can find (phase 8): a screen, an API route or a command. */
+export interface PaletteEntry {
+  readonly id: string;
+  readonly kind: 'screen' | 'api-route' | 'cli-command';
+  readonly name: string;
+  /** Said muted beside it: a screen's component, or where it's declared. */
+  readonly detail: string | null;
+}
 
 /** A symbol found by the project index (the engine's SymbolHit). */
 export interface PaletteSymbol {
@@ -88,7 +100,21 @@ export interface CommandPaletteProps {
   readonly onOpenSymbol: (symbol: PaletteSymbol) => void;
   /** Opens a function's flow (phase 7): offered for the matching functions, methods and components. */
   readonly onShowFlow?: ((symbol: PaletteSymbol) => void) | undefined;
+  /** The project's entry points (phase 8), matched here as you type; `/` searches only them. */
+  readonly entryPoints?: readonly PaletteEntry[] | undefined;
+  /** Opens the flow from an entry point. */
+  readonly onShowEntry?: ((entry: PaletteEntry) => void) | undefined;
 }
+
+/** Entry points offered at once, or with `/`. */
+const MOST_ENTRIES = 6;
+const MOST_ENTRIES_ONLY = 30;
+const ENTRY_ICONS = { screen: Monitor, 'api-route': Route, 'cli-command': SquareTerminal } as const;
+const ENTRY_LABELS = {
+  screen: 'Screen',
+  'api-route': 'API route',
+  'cli-command': 'Command',
+} as const;
 
 /** Flows offered at once: the best few matches that have one. */
 const MOST_FLOWS = 5;
@@ -100,7 +126,8 @@ const TOP_HINT_ID = 'command-palette-top-hint';
 type Row =
   | { readonly id: string; readonly type: 'symbol'; readonly symbol: PaletteSymbol }
   | { readonly id: string; readonly type: 'flow'; readonly symbol: PaletteSymbol }
-  | { readonly id: string; readonly type: 'file'; readonly path: string };
+  | { readonly id: string; readonly type: 'file'; readonly path: string }
+  | { readonly id: string; readonly type: 'entry'; readonly entry: PaletteEntry };
 
 const symbolId = (s: PaletteSymbol) => `symbol:${s.path}:${String(s.line)}:${String(s.column)}`;
 
@@ -129,22 +156,38 @@ export function CommandPalette({
   onOpenFile,
   onOpenSymbol,
   onShowFlow,
+  entryPoints = [],
+  onShowEntry,
 }: CommandPaletteProps) {
   const filesOnly = query.startsWith(FILES_PREFIX);
+  const entriesOnly = onShowEntry !== undefined && query.startsWith(ROUTES_PREFIX);
+  // Matched as typed (a route's `/` included), those starting with it first.
+  const entryRows = useMemo<Row[]>(() => {
+    const words = query.trim().toLowerCase();
+    if (onShowEntry === undefined || filesOnly || words === '' || words === ROUTES_PREFIX)
+      return [];
+    const found = entryPoints.filter((e) => e.name.toLowerCase().includes(words));
+    const starts = (e: PaletteEntry) =>
+      e.name.toLowerCase().startsWith(words) || e.name.toLowerCase().includes(` ${words}`) ? 0 : 1;
+    found.sort((a, b) => starts(a) - starts(b) || a.name.localeCompare(b.name));
+    return found
+      .slice(0, entriesOnly ? MOST_ENTRIES_ONLY : MOST_ENTRIES)
+      .map((entry) => ({ id: `entry:${entry.id}`, type: 'entry', entry }) as const);
+  }, [query, entryPoints, onShowEntry, filesOnly, entriesOnly]);
   const fileQuery = (filesOnly ? query.slice(FILES_PREFIX.length) : query).trim();
   const fileRows = useMemo<Row[]>(
     () =>
-      fileQuery === ''
+      fileQuery === '' || entriesOnly
         ? []
         : rankPaths(fileQuery, files, MOST_FILES).map((match) => ({
             id: `file:${match.path}`,
             type: 'file',
             path: match.path,
           })),
-    [fileQuery, files],
+    [fileQuery, files, entriesOnly],
   );
   const symbolRows = useMemo<Row[]>(() => {
-    if (filesOnly || query.trim() === '') return [];
+    if (filesOnly || entriesOnly || query.trim() === '') return [];
     // One row per place: the same name at the same position can't appear twice.
     const seen = new Set<string>();
     return symbols.flatMap((symbol) => {
@@ -153,8 +196,8 @@ export function CommandPalette({
       seen.add(id);
       return [{ id, type: 'symbol', symbol } as const];
     });
-  }, [filesOnly, query, symbols]);
-  const showSymbols = !filesOnly && query.trim() !== '';
+  }, [filesOnly, entriesOnly, query, symbols]);
+  const showSymbols = !filesOnly && !entriesOnly && query.trim() !== '';
   const flowRows: Row[] = useMemo(
     () =>
       onShowFlow === undefined
@@ -169,12 +212,17 @@ export function CommandPalette({
     [onShowFlow, symbolRows],
   );
   const byId = useMemo(
-    () => new Map([...symbolRows, ...flowRows, ...fileRows].map((row) => [row.id, row])),
-    [symbolRows, flowRows, fileRows],
+    () =>
+      new Map([...symbolRows, ...entryRows, ...flowRows, ...fileRows].map((row) => [row.id, row])),
+    [symbolRows, entryRows, flowRows, fileRows],
   );
   // Whether the person has moved through the results since they last typed.
   const [moved, setMoved] = useState(false);
-  const top = moved ? undefined : (symbolRows[0] ?? fileRows[0]);
+  const top = moved
+    ? undefined
+    : entriesOnly
+      ? entryRows[0]
+      : (symbolRows[0] ?? entryRows[0] ?? fileRows[0]);
 
   const close = () => {
     onQueryChange('');
@@ -183,6 +231,7 @@ export function CommandPalette({
   const open = (row: Row) => {
     if (row.type === 'symbol') onOpenSymbol(row.symbol);
     else if (row.type === 'flow') onShowFlow?.(row.symbol);
+    else if (row.type === 'entry') onShowEntry?.(row.entry);
     else onOpenFile(row.path);
     close();
   };
@@ -244,10 +293,14 @@ export function CommandPalette({
               className={classNames(quickOpen.results)}
               renderEmptyState={() => (
                 <p className={classNames(quickOpen.empty)}>
-                  {query.trim() === '' || (filesOnly && fileQuery === '')
+                  {query.trim() === '' ||
+                  (filesOnly && fileQuery === '') ||
+                  query.trim() === ROUTES_PREFIX
                     ? filesOnly
                       ? 'Type part of a file’s name.'
-                      : 'Type part of a function, component or file name.'
+                      : entriesOnly
+                        ? 'Type part of a route, screen or command.'
+                        : 'Type part of a function, component or file name.'
                     : 'Nothing matches.'}
                 </p>
               )}
@@ -263,6 +316,18 @@ export function CommandPalette({
                     {(row) =>
                       row.type === 'symbol' ? (
                         <SymbolRow symbol={row.symbol} isTop={row.id === top?.id} />
+                      ) : null
+                    }
+                  </Collection>
+                </ListBoxSection>
+              )}
+              {entryRows.length > 0 && (
+                <ListBoxSection id="entry-points" className={classNames(styles.section)}>
+                  <Header className={classNames(styles.header)}>Entry points</Header>
+                  <Collection items={entryRows} dependencies={[top?.id]}>
+                    {(row) =>
+                      row.type === 'entry' ? (
+                        <EntryRow entry={row.entry} isTop={row.id === top?.id} />
                       ) : null
                     }
                   </Collection>
@@ -303,6 +368,11 @@ export function CommandPalette({
             <span>
               <kbd className={classNames(quickOpen.kbd)}>#</kbd> files only
             </span>
+            {onShowEntry !== undefined && (
+              <span>
+                <kbd className={classNames(quickOpen.kbd)}>/</kbd> routes
+              </span>
+            )}
             <span>
               <kbd className={classNames(quickOpen.kbd)}>esc</kbd> close
             </span>
@@ -329,6 +399,28 @@ function SymbolRow({ symbol, isTop }: { readonly symbol: PaletteSymbol; readonly
       <span className={classNames(quickOpen.name)}>{symbol.name}</span>
       <span className={classNames(styles.kind)}>{label}</span>
       <span className={classNames(quickOpen.folder, styles.place)}>{detail}</span>
+    </ListBoxItem>
+  );
+}
+
+function EntryRow({ entry, isTop }: { readonly entry: PaletteEntry; readonly isTop: boolean }) {
+  const Icon = ENTRY_ICONS[entry.kind];
+  const label = ENTRY_LABELS[entry.kind];
+  return (
+    <ListBoxItem
+      id={`entry:${entry.id}`}
+      textValue={entry.name}
+      aria-label={`Show the flow from ${entry.name}, ${label.toLowerCase()}${entry.detail === null ? '' : `, ${entry.detail}`}`}
+      className={classNames(quickOpen.row, isTop && styles.top)}
+    >
+      <Icon size={14} className={classNames(quickOpen.icon)} aria-hidden="true" />
+      <span className={classNames(quickOpen.name, entry.kind !== 'screen' && styles.mono)}>
+        {entry.name}
+      </span>
+      <span className={classNames(styles.kind)}>{label}</span>
+      {entry.detail !== null && (
+        <span className={classNames(quickOpen.folder, styles.place)}>{entry.detail}</span>
+      )}
     </ListBoxItem>
   );
 }

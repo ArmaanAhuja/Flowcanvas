@@ -3,3 +3,6 @@
 
 /** `#` at the start limits the palette to files. */
 export const FILES_PREFIX = '#';
+
+/** `/` at the start limits the palette to entry points (phase 8; Figma 16), matched as typed: `/po` finds `/polls`. */
+export const ROUTES_PREFIX = '/';
