@@ -1,6 +1,6 @@
 # Architecture
 
-The system as it is **today** (phase 8, in review). Kept current with every milestone, and held to the code by `pnpm docs:check`: the parts table names every package and every source folder, the dependencies match each `package.json`, and this line names the phase the work is at. Why things are this way is in `docs/adr/`; what's deferred is in `docs/upgrade-later.md`.
+The system as it is **today** (phase 8, accepted). Kept current with every milestone, and held to the code by `pnpm docs:check`: the parts table names every package and every source folder, the dependencies match each `package.json`, and this line names the phase the work is at. Why things are this way is in `docs/adr/`; what's deferred is in `docs/upgrade-later.md`.
 
 **Reviewed:** phase 8, milestone C (15 Nov 2026): re-read in full against the code; the entry points on the page, ⌘K and the API brought up to date. At every milestone this doc is re-read in full, and this line names the milestone (`pnpm docs:milestone` checks it).
 

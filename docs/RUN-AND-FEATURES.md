@@ -4,8 +4,8 @@ The one place to see how to run Flowcanvas, how to test it, and which features e
 
 - **Last updated:** 15 Nov 2026: phase 8 closed for review, 0.12.0 (entry points in the left panel and ⌘K, each opening its flow; held to 2,118 hand-labelled entry points), branch `phase/8-entry-points`, PR #22
 - **Reviewed:** phase 8, milestone C (15 Nov 2026): re-read in full against the code; phase 8's section and Coming next brought up to date. At every milestone this doc is re-read in full, and this line names the milestone (`pnpm docs:milestone` checks it).
-- **Released (on staging):** `0.11.0`, phase 7 (checked: staging's `/api/health` reports 0.11.0, deployed by CI from `36076f4`). `0.12.0`, phase 8, is in review and reaches staging when it merges.
-- **Progress:** phases 1, 1a, 1b, 1c, 2, 3, 4, 5, 6 and 7 are accepted; 1d is in review (until a cloud provider). That's 10 of the build plan's 96 phases accepted; 8 is in review. Stage 1's goal: see a project's real flows, from code, honestly.
+- **Released (on staging):** `0.12.0`, phase 8, deployed to staging by CI when PR #22 merges (to be checked: staging's `/api/health` reporting 0.12.0). Before it, `0.11.0`, phase 7.
+- **Progress:** phases 1, 1a, 1b, 1c, 2, 3, 4, 5, 6, 7 and 8 are accepted; 1d is in review (until a cloud provider). That's 11 of the build plan's 96 phases accepted. Stage 1's goal: see a project's real flows, from code, honestly.
 
 ## Where it runs
 
@@ -166,7 +166,7 @@ CI runs the checks (with the bundle budget), Docker (four parallel jobs), visual
   - ✅ **Proof:** 10 Documenso flows, labelled by reading the code, drawn exactly as labelled in real workspaces (`pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts`, row `labelledFlows`: 10 of 10 on CI); walkthrough `pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-7.spec.ts`; screens of a flow and a function's details in both themes.
   - **Try it:** `pnpm dev`, create a project with Documenso's corpus fork (its address is in `corpus/manifest.json`) and start its workspace; once the graph is built, ⌘K → `deleteFolder` → Show the flow; click getTeam, read the inspector, Open code.
 
-### Entry points (phase 8, in review, 0.12.0)
+### Entry points (phase 8, accepted, 0.12.0)
 - **What it does:**
   - 🟡 **Found in each workspace's graph pass** (ADR 0030): screens (Next.js pages, React Router routes, `remix-flat-routes` files), elements (every `on…` prop on a JSX element), API routes (Next.js route handlers and server actions, Express, Hono, tRPC procedures, NestJS controllers and GraphQL operations, React Router loaders and actions) and CLI commands (package.json scripts), joined across files: a router mounted elsewhere, a tRPC router nested from another file, a route's component. Each is a node in the graph with an edge to what handles it; an anonymous handler is a function of its own in the graph, named after its entry point.
   - 🟡 **Never guessed:** a part of a path the code doesn't fix is written `:unknown`, and the entry point says it isn't fully detected, and why.

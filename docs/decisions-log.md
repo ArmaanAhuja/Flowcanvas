@@ -655,3 +655,14 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 2. **A base path set by an environment variable is shown by its name and counts as found:** Documenso's `basePath(env('NEXT_PUBLIC_BASE_PATH') || '/')` makes `{NEXT_PUBLIC_BASE_PATH}/api/auth/session`, fully detected, since that's exactly what the code says. The variable's value is never read (it may be a secret).
 3. **A Hono app served through a function that rewrites the URL keeps the path it registers,** marked "served through a rewrite": Rallly's v1 API is listed as `POST /v1/polls`, with why, so it isn't taken for the public URL.
 4. **The engine reads `jsconfig.json` as it reads `tsconfig.json`** (a small engine step in milestone B): LibreChat's `~/` imports then resolve, so its routes reach their handlers and its call graph gains those calls; its phase 6 numbers are checked against its labels.
+
+## 15 Nov 2026: phase 8 accepted; the plan kept as written; Medusa's graph time in phase 9
+
+**The vision, discussed and kept for now.** The owner reviewed what's built against the product they imagine (running screens on the canvas, short readable flows with colour and symbols, expandable detail, no paths on the canvas, the AI's changes shown on screens and flows). Claude mapped each point to the plan: most arrive in later phases (12 progressive disclosure, 15 to 17 live frames and element to flow, 19 to 23 agent and change states, 31 readable names); kind colours and symbols, and paths kept off the canvas, aren't in the plan. Claude proposed reordering around one end-to-end slice. **Owner:** "no let's not change anything for now, and go what we have decided and let the whole project be built first since you said there are things in later phases so yes let's build ahead". The build plan stays as written; the points that aren't in it are to be raised again when their phases come (12, 15 to 17, 31).
+
+**Owner:** "phase 8 - accepted, medusa fix let's do in phase 9".
+- **Phase 8 accepted.** PR #22 marked ready for review and merged once every check is green, as with phase 7. On acceptance, `pnpm docs:check` found Graph stats still saying entry points "arrive in phase 8"; fixed (`518c21f`).
+- **Medusa's graph time** (141 s on CI against 44 s in phase 7, caused by following built exports to their source; report, known issues): fixed in phase 9, with every fork's graph time held to a recorded figure by the Docker test.
+
+**Owner:** "we need to increase the speed of development, since it's taking too long for each phase". Claude's proposals are in the next entry once the owner answers.
+

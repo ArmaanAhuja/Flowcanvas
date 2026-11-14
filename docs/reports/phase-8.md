@@ -3,7 +3,7 @@
 - Version: `0.12.0`
 - Branch: `phase/8-entry-points`; PR #22
 - Dates: 14 to 15 Nov 2026
-- Status: **in review**, waiting for the owner's acceptance.
+- Status: **accepted** by the owner on 15 Nov 2026.
 
 ## From the build plan
 

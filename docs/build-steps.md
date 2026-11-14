@@ -13894,4 +13894,4 @@ pnpm test:visual
 
 **Risks and laptop:** none. Laptop: none.
 
-**Commits:** `a7cf9c0` the release; `9cd17fb` the panel's own chunk; `51ab01b` the close; `9d00267` the entry-flow screen's wait; this commit, the record of it.
+**Commits:** `a7cf9c0` the release; `9cd17fb` the panel's own chunk; `51ab01b` the close; `9d00267` the entry-flow screen's wait; `3dbe2ac` the record of it. **After acceptance (15 Nov):** `518c21f` Graph stats stopped saying entry points "arrive in phase 8" (they're in the graph since this phase; found by `pnpm docs:check` once the phase was accepted); and the acceptance recorded (STATUS, RUN-AND-FEATURES, ARCHITECTURE, the report, the decisions log).
