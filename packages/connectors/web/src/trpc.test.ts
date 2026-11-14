@@ -33,6 +33,14 @@ const FILES = {
     '  }),',
     ');',
   ].join('\n'),
+  '/nested.ts': [
+    "import { publicProcedure, router } from './trpc';",
+    'declare function makeRouter(): unknown;',
+    'export const orgRouter = router({',
+    '  analytics: { overview: publicProcedure.query(() => 1), deep: { more: publicProcedure.query(() => 2) } },',
+    '  made: makeRouter(),',
+    '});',
+  ].join('\n'),
   '/not-trpc.ts': [
     'const router = (o: object) => o;',
     'const procedure = { query: (f: () => void) => f };',
@@ -66,6 +74,17 @@ describe('trpcOf', () => {
     ).toEqual([['query', 4, true]]);
   });
 
+  it('reads a plain object as a router of its own, and keeps what it can’t read rather than dropping it', () => {
+    const nested = trpcOf(file('/nested.ts'));
+    // The router, `analytics`, and `deep`.
+    expect(nested.routers).toHaveLength(3);
+    const outer = nested.routers.find((r) => r.keys.some((k) => k.key === 'made'));
+    expect(outer?.keys.map((k) => [k.key, Object.keys(k.value)[0]])).toEqual([
+      ['analytics', 'router'],
+      ['made', 'unreadable'],
+    ]);
+  });
+
   it('isn’t fooled by functions that are only named like tRPC’s', () => {
     expect(trpcOf(file('/not-trpc.ts'))).toEqual({ routers: [], procedures: [] });
   });
@@ -88,6 +107,8 @@ describe('joinTrpc', () => {
             { key: 'admin', value: { ref: 'admin' } },
             { key: 'health', value: { procedure: proc('query', 6) } },
             { key: 'billing', value: { unresolved: true } },
+            // Resolved to a name that holds neither a router nor a procedure.
+            { key: 'other', value: { ref: 'nothing' } },
           ],
           merged: [],
         },
@@ -104,6 +125,7 @@ describe('joinTrpc', () => {
       ['query admin.search', true],
       ['query health', true],
       ['billing.*', false],
+      ['other.*', false],
     ]);
   });
 });

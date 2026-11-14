@@ -17,9 +17,15 @@ export interface TrpcProcedure {
   readonly why?: string;
 }
 
-/** What a router's key holds: a procedure written there, or a name (a procedure or a router elsewhere). */
+/**
+ * What a router's key holds: a procedure written there, a name (a procedure or a router elsewhere), a router written
+ * there (`router({…})`, or a plain object, which tRPC takes as one), or something the code builds that isn't read.
+ */
 export type TrpcValue =
-  { readonly procedure: TrpcProcedure } | { readonly target: Span } | { readonly router: Span };
+  | { readonly procedure: TrpcProcedure }
+  | { readonly target: Span }
+  | { readonly router: Span }
+  | { readonly unreadable: true };
 
 export interface TrpcRouter {
   /** The `router(…)` call (or the variable holding it): the joiner's key. */
@@ -53,28 +59,9 @@ export function trpcOf(context: FileContext): TrpcFile {
     const merged: TrpcValue[] = [];
     if (made === 'router') {
       const object = call.arguments[0];
-      if (object !== undefined && ts.isObjectLiteralExpression(object)) {
-        for (const property of object.properties) {
-          if (ts.isPropertyAssignment(property)) {
-            const key = property.name.getText(source).replace(/^['"]|['"]$/g, '');
-            const value = valueOf(property.initializer);
-            if (value !== null) keys.push({ key, value });
-          } else if (ts.isShorthandPropertyAssignment(property)) {
-            keys.push({
-              key: property.name.text,
-              value: { target: spanOf(source, property.name) },
-            });
-          } else if (ts.isSpreadAssignment(property)) {
-            const value = valueOf(property.expression);
-            if (value !== null) merged.push(value);
-          }
-        }
-      }
+      if (object !== undefined && ts.isObjectLiteralExpression(object)) read(object, keys, merged);
     } else {
-      for (const argument of call.arguments) {
-        const value = valueOf(argument);
-        if (value !== null) merged.push(value);
-      }
+      for (const argument of call.arguments) merged.push(valueOf(argument));
     }
     routers.push({
       id,
@@ -85,18 +72,49 @@ export function trpcOf(context: FileContext): TrpcFile {
     return id;
   };
 
-  const valueOf = (expression: TS.Expression): TrpcValue | null => {
+  /** A router's object: each key and what it holds, and the routers spread into it. */
+  const read = (
+    object: TS.ObjectLiteralExpression,
+    keys: { key: string; value: TrpcValue }[],
+    merged: TrpcValue[],
+  ) => {
+    for (const property of object.properties) {
+      if (ts.isPropertyAssignment(property)) {
+        const key = property.name.getText(source).replace(/^['"]|['"]$/g, '');
+        keys.push({ key, value: valueOf(property.initializer) });
+      } else if (ts.isShorthandPropertyAssignment(property)) {
+        keys.push({
+          key: property.name.text,
+          value: { target: spanOf(source, property.name) },
+        });
+      } else if (ts.isSpreadAssignment(property)) {
+        merged.push(valueOf(property.expression));
+      }
+    }
+  };
+
+  // Never dropped: what can't be read is kept as such, and the join lists it as not fully detected.
+  const valueOf = (expression: TS.Expression): TrpcValue => {
     if (ts.isCallExpression(expression)) {
       const nested = routerAt(expression);
       if (nested !== null) return { router: nested };
       const procedure = procedureOf(context, expression, from);
       if (procedure !== null) return { procedure };
-      return null;
+      return { unreadable: true };
+    }
+    // A plain object in a router is a router of its own (tRPC's nested routes, Documenso's `analytics: {…}`).
+    if (ts.isObjectLiteralExpression(expression)) {
+      const id = spanOf(source, expression);
+      const keys: { key: string; value: TrpcValue }[] = [];
+      const merged: TrpcValue[] = [];
+      read(expression, keys, merged);
+      routers.push({ id, keys, merged });
+      return { router: id };
     }
     if (ts.isIdentifier(expression) || ts.isPropertyAccessExpression(expression)) {
       return { target: spanOf(source, expression) };
     }
-    return null;
+    return { unreadable: true };
   };
 
   const visit = (node: TS.Node) => {
@@ -281,14 +299,14 @@ export function joinTrpc(trpc: JoinableTrpc): (FoundEntry & { readonly file: str
     const router = byKey.get(key);
     if (router === undefined) return;
     const step = (value: JoinableValue, path: string, file: string) => {
+      const procedure = 'ref' in value ? trpc.procedures.get(value.ref) : undefined;
       if ('procedure' in value) add(path, value.procedure);
-      else if ('ref' in value) {
-        const procedure = trpc.procedures.get(value.ref);
-        if (procedure !== undefined) add(path, procedure);
-        else if (byKey.has(value.ref) && !seen.has(value.ref)) {
-          walk(value.ref, path, new Set([...seen, value.ref]));
-        }
+      else if (procedure !== undefined) add(path, procedure);
+      else if ('ref' in value && byKey.has(value.ref)) {
+        // A cycle of routers is cut where it repeats.
+        if (!seen.has(value.ref)) walk(value.ref, path, new Set([...seen, value.ref]));
       } else {
+        // A name that isn't a router or procedure the code makes, or a value that isn't read: never dropped.
         found.push({
           kind: 'api-route',
           framework: 'trpc',
