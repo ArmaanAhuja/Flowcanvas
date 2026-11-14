@@ -194,6 +194,10 @@ export class SemanticService {
       ? this.#model.allConfigs
       : [...(todo ?? [])].flatMap((file) => this.#model.configsFor(file).slice(0, 1));
     const seen = new Set<string>();
+    // The last program built for the pass, held until the next is built: the files they share (a workspace package's
+    // source, imported by every package around it) are parsed and bound again only when they've left both, not once
+    // per program. Medusa's 203 configs: 118 s against 169 s (phase 9). Holding more measured no faster.
+    const held: ProjectConfig[] = [];
     for (const config of new Set(configs)) {
       const parsed = this.#model.parse(config);
       if (parsed === null) continue;
@@ -211,6 +215,7 @@ export class SemanticService {
       // them until memory runs high took Twenty past the worker's cap (found on the fork, phase 6 step 3).
       const warm = this.#live.has(config.path);
       const program = this.#service(config)?.getProgram();
+      for (const done of held.splice(0)) this.#release(done);
       if (program === undefined) continue;
       for (const file of mine) {
         const source = program.getSourceFile(file);
@@ -245,12 +250,15 @@ export class SemanticService {
             // The structure changed: start again from everything.
             for (const file of changed) this.#graphPending.add(file);
             this.#graphBuilt = false;
+            for (const done of held) this.#release(done);
+            if (!warm) this.#release(config);
             return null;
           }
         }
       }
-      if (!warm) this.#release(config);
+      if (!warm) held.push(config);
     }
+    for (const config of held) this.#release(config);
     // Files changed but not walked again are gone (deleted, or in no program): so are their facts. After a
     // whole-project pass, only the files it walked keep theirs.
     if (full) {
