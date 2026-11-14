@@ -9,6 +9,11 @@ describe('nextAppRoute', () => {
       path: '/settings/profile',
     });
     expect(nextAppRoute('api/status/route.ts')).toEqual({ kind: 'route', path: '/api/status' });
+    // An OG image route is written with JSX (Documenso's docs).
+    expect(nextAppRoute('og/docs/[...slug]/route.tsx')).toEqual({
+      kind: 'route',
+      path: '/og/docs/*',
+    });
   });
 
   it('writes parameters as :name and the rest of a path as *', () => {

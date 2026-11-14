@@ -168,7 +168,9 @@ export function routersOf(context: FileContext): Router[] {
         if (
           ts.isIdentifier(arg) ||
           ts.isPropertyAccessExpression(arg) ||
-          ts.isCallExpression(arg)
+          ts.isCallExpression(arg) ||
+          // `await routes.files.initialize()`: a router made when the app starts (the engine follows it).
+          ts.isAwaitExpression(arg)
         ) {
           router.mounts.push({ prefix, target: spanOf(source, arg), at });
         }

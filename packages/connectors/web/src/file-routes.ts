@@ -20,7 +20,8 @@ export function nextAppRoute(inApp: string): NextRoute | null {
   const file = parts.pop() ?? '';
   const kind = /^page\.(tsx|ts|jsx|js|mdx)$/.test(file)
     ? 'page'
-    : /^route\.(ts|js)$/.test(file)
+    : // route.tsx too: Next.js takes any page extension, and OG images are written with JSX (Documenso's docs).
+      /^route\.(ts|tsx|js|jsx)$/.test(file)
       ? 'route'
       : null;
   if (kind === null) return null;

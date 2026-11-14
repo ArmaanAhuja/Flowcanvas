@@ -81,5 +81,6 @@ describe('pathValue and joinPath (owner, 14 Nov 2026)', () => {
       '{NEXT_PUBLIC_BASE_PATH}/api/auth/session',
     );
     expect(joinPath('', '/api/', ':id')).toBe('/api/:id');
+    expect(joinPath('rest', 'batch/*path')).toBe('/rest/batch/*');
   });
 });

@@ -52,11 +52,11 @@ function classEntries(
 ): FoundEntry[] {
   const { ts, source } = context;
   const found: FoundEntry[] = [];
-  let prefix: { path: string | null } | null = null;
+  let prefixes: (string | null)[] | null = null;
   for (const decorator of ts.getDecorators(node) ?? []) {
     const call = decoratorCall(ts, decorator);
     if (call === null || from('@nestjs/common', call.name) !== 'Controller') continue;
-    prefix = { path: pathArgument(context, call.args[0]) };
+    prefixes = pathArguments(context, call.args[0]);
   }
   for (const member of node.members) {
     if (!ts.isMethodDeclaration(member)) continue;
@@ -65,18 +65,21 @@ function classEntries(
       if (call === null) continue;
       const http = from('@nestjs/common', call.name);
       const graphql = from('@nestjs/graphql', call.name);
-      if (prefix !== null && http !== null && http in HTTP) {
-        const own = pathArgument(context, call.args[0]);
-        const complete = prefix.path !== null && own !== null;
-        found.push({
-          kind: 'api-route',
-          framework: 'nestjs',
-          name: `${HTTP[http as keyof typeof HTTP]} ${joinPath(prefix.path ?? ':unknown', own ?? ':unknown')}`,
-          at: positionOf(source, member.name),
-          complete,
-          ...(complete ? {} : { why: 'Its path isn’t a constant the code fixes.' }),
-          handler: spanOf(source, member),
-        });
+      if (prefixes !== null && http !== null && http in HTTP) {
+        for (const prefix of prefixes) {
+          for (const own of pathArguments(context, call.args[0])) {
+            const complete = prefix !== null && own !== null;
+            found.push({
+              kind: 'api-route',
+              framework: 'nestjs',
+              name: `${HTTP[http as keyof typeof HTTP]} ${joinPath(prefix ?? ':unknown', own ?? ':unknown')}`,
+              at: positionOf(source, member.name),
+              complete,
+              ...(complete ? {} : { why: 'Its path isn’t a constant the code fixes.' }),
+              handler: spanOf(source, member),
+            });
+          }
+        }
       } else if (graphql !== null && graphql in GRAPHQL) {
         // No name given: the method's. A name given that the code doesn't fix: unknown, never the method's.
         const named = operationName(context, call.args);
@@ -98,22 +101,30 @@ function classEntries(
 }
 
 /** A controller's or method's path: none (`''`), a string the code fixes, or the first of a list. */
-function pathArgument(context: FileContext, argument: TS.Expression | undefined): string | null {
+/**
+ * A decorator's paths: one, or each of an array's (`@Controller([`${ApiPath.Rest}/apiKeys`, …])` serves both: Twenty),
+ * null for one the code doesn't fix.
+ */
+function pathArguments(
+  context: FileContext,
+  argument: TS.Expression | undefined,
+): (string | null)[] {
   const { ts } = context;
-  if (argument === undefined) return '';
+  if (argument === undefined) return [''];
   if (ts.isArrayLiteralExpression(argument)) {
-    const first = argument.elements[0];
-    return first === undefined ? '' : stringValue(context, first);
+    return argument.elements.length === 0
+      ? ['']
+      : argument.elements.map((element) => stringValue(context, element));
   }
   if (ts.isObjectLiteralExpression(argument)) {
     const path = argument.properties.find(
       (p) => ts.isPropertyAssignment(p) && ts.isIdentifier(p.name) && p.name.text === 'path',
     );
     return path !== undefined && ts.isPropertyAssignment(path)
-      ? stringValue(context, path.initializer)
-      : '';
+      ? pathArguments(context, path.initializer)
+      : [''];
   }
-  return stringValue(context, argument);
+  return [stringValue(context, argument)];
 }
 
 /** GraphQL's `{ name: 'x' }` option, in either argument: undefined when it isn't given, null when it isn't known. */

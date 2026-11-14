@@ -29,6 +29,31 @@ describe('nestEntries', () => {
     expect(found[0]?.handler).toBeDefined();
   });
 
+  it('lists a route under each of its controller’s paths, and each of its own (Twenty’s API keys)', () => {
+    const file = programOf({
+      '/paths.ts': ENUM,
+      '/api-key.controller.ts': [
+        "import { Controller, Delete, Get } from '@nestjs/common';",
+        "import { ApiPath } from './paths';",
+        '@Controller([`${ApiPath.Rest}/apiKeys`, `${ApiPath.Rest}/metadata/apiKeys`])',
+        'export class ApiKeyController {',
+        "  @Get(['', 'list'])",
+        '  list() {}',
+        "  @Delete(':id')",
+        '  remove() {}',
+        '}',
+      ].join('\n'),
+    });
+    expect(nestEntries(file('/api-key.controller.ts')).map((e) => e.name)).toEqual([
+      'GET /rest/apiKeys',
+      'GET /rest/apiKeys/list',
+      'GET /rest/metadata/apiKeys',
+      'GET /rest/metadata/apiKeys/list',
+      'DELETE /rest/apiKeys/:id',
+      'DELETE /rest/metadata/apiKeys/:id',
+    ]);
+  });
+
   it('lists GraphQL operations by name, whatever wraps the resolver class, and not field resolvers', () => {
     const file = programOf({
       '/apikey.resolver.ts': [

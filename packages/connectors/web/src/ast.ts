@@ -204,6 +204,8 @@ export function joinPath(...pieces: readonly string[]): string {
   const joined = pieces
     .flatMap((piece) => piece.split('/'))
     .filter((segment) => segment !== '')
+    // A named catch-all (`*path`, NestJS's and Express 5's) is written `*`, as every other (ADR 0030).
+    .map((segment) => (/^\*\w+$/.test(segment) ? '*' : segment))
     .join('/');
   return joined.startsWith('{') ? joined : `/${joined}`;
 }
