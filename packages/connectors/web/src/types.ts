@@ -1,9 +1,10 @@
 // What a detector reports (ADR 0030 §2): an entry point as its framework declares it, where, and what handles it.
 // Paths are written one way for every framework: `:name` for a parameter, `*` for the rest of the path.
 
-/** The design brief's groups (§23); jobs, cron and events are phase 11's. */
-export const ENTRY_KINDS = ['screen', 'element', 'api-route', 'cli-command'] as const;
-export type EntryKind = (typeof ENTRY_KINDS)[number];
+import type { EntryKind } from '@flowcanvas/graph-model';
+
+/** The design brief's groups (§23), as the graph keeps them. */
+export { ENTRY_KINDS, type EntryKind } from '@flowcanvas/graph-model';
 
 export const FRAMEWORKS = [
   'next',

@@ -18,6 +18,9 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
+  "dependencies": {
+    "@flowcanvas/graph-model": "workspace:*"
+  },
   "devDependencies": {
     "eslint": "catalog:",
     "typescript": "catalog:",

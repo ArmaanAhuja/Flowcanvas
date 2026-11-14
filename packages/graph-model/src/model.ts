@@ -65,6 +65,24 @@ export interface GraphNode {
   /** For a code unit: what it is. */
   readonly unit: CodeUnitKind | null;
   readonly change: ChangeState;
+  /** For an entry point, and only for one: what its framework declares (phase 8, ADR 0030). */
+  readonly entry?: EntryDetails;
+}
+
+/** The design brief's groups of entry points (§23); jobs, cron and events are phase 11's. */
+export const ENTRY_KINDS = ['screen', 'element', 'api-route', 'cli-command'] as const;
+export type EntryKind = (typeof ENTRY_KINDS)[number];
+
+export interface EntryDetails {
+  readonly kind: EntryKind;
+  /** The framework whose rules found it (`next`, `hono`, `package-json`, …). */
+  readonly framework: string;
+  /** False when part of it couldn't be worked out from the code: shown as not fully detected, never guessed. */
+  readonly complete: boolean;
+  /** What couldn't be worked out, or why it has no handler: null when there's nothing to say. */
+  readonly why: string | null;
+  /** For an element: the id of the code unit it's in, whose screens list it. Null otherwise, or when it's at a top level. */
+  readonly within: string | null;
 }
 
 export interface GraphEdge {

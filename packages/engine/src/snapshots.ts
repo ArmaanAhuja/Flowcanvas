@@ -9,7 +9,8 @@ import { decodeGraph, type Graph } from '@flowcanvas/graph-model';
 /** Raise when the table changes: snapshots under another format are dropped (the next pass makes a new one). */
 /** 2 (phase 7, ADR 0028): zstd rather than gzip, checked against the version's SHA-256 on load. */
 /** 3 (phase 7): graph format 3 (guarded lines); format 2 graphs are dropped rather than failing to load. */
-export const SNAPSHOT_STORE_FORMAT = 3;
+/** 4 (phase 8, ADR 0030): graph format 4 (entry points' details); format 3 graphs are dropped the same way. */
+export const SNAPSHOT_STORE_FORMAT = 4;
 /** Versions kept; checkpoints that pin their own arrive in stage 3. */
 export const SNAPSHOTS_KEPT = 20;
 

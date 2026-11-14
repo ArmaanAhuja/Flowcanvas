@@ -529,6 +529,10 @@ importers:
         version: 6.0.3
 
   packages/connectors/web:
+    dependencies:
+      '@flowcanvas/graph-model':
+        specifier: workspace:*
+        version: link:../../graph-model
     devDependencies:
       eslint:
         specifier: 'catalog:'
@@ -542,6 +546,9 @@ importers:
 
   packages/engine:
     dependencies:
+      '@flowcanvas/connectors-web':
+        specifier: workspace:*
+        version: link:../connectors/web
       '@flowcanvas/graph-model':
         specifier: workspace:*
         version: link:../graph-model
