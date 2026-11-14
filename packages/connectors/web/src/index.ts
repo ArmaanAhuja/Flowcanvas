@@ -21,6 +21,7 @@ export {
   type RouteNode,
   type RouteTree,
 } from './react-router.js';
+export { eventEntries, serverActionEntries, type ElementEntry } from './react.js';
 export { projectFile, scriptEntries } from './scripts.js';
 export {
   joinTrpc,
