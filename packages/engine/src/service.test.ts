@@ -784,6 +784,69 @@ describe('entry points (phase 8)', () => {
     expect(ENTRY_POINT_MESSAGES.noGraph).toContain('graph');
   });
 
+  it('answers a screen’s elements, and gives each screen its count', async () => {
+    const screen = {
+      ...route('a.ts#(entry /polls)', '/polls', 1),
+      entry: {
+        kind: 'screen' as const,
+        framework: 'next',
+        complete: true,
+        why: null,
+        within: null,
+      },
+    };
+    const element = {
+      ...route('a.ts#(entry <button> onClick)', '<button> onClick', 9),
+      entry: {
+        kind: 'element' as const,
+        framework: 'react',
+        complete: true,
+        why: null,
+        within: 'a.ts#list',
+      },
+    };
+    const withScreen: Graph = {
+      nodes: [...graph.nodes.slice(0, 1), screen, element],
+      edges: [
+        {
+          from: 'a.ts#(entry /polls)',
+          to: 'a.ts#list',
+          target: null,
+          kind: 'call',
+          relation: 'renders',
+          label: null,
+          provenance: 'convention',
+          lines: [1],
+        },
+      ],
+    };
+    const snapshots = new SnapshotStore(':memory:');
+    snapshots.save(encodeGraph(withScreen), {
+      complete: true,
+      note: null,
+      files: 1,
+      builtInCalls: 0,
+    });
+    start({ snapshots });
+    const screens = await service.handle({
+      op: 'entryPoints',
+      kind: 'screen',
+      after: 0,
+      limit: 10,
+    });
+    expect((screens as EntryPointsResult).entries[0]?.elements).toBe(1);
+    const request = {
+      op: 'entryPoints',
+      kind: 'element',
+      after: 0,
+      limit: 10,
+      screen: 'a.ts#(entry /polls)',
+    } as const;
+    const result = await service.handle(request);
+    expect(isEngineResponse(request, { ok: true, result })).toBe(true);
+    expect((result as EntryPointsResult).entries.map((e) => e.name)).toEqual(['<button> onClick']);
+  });
+
   it('answers a page of one kind in name order from the latest version, with what handles each', async () => {
     const snapshots = new SnapshotStore(':memory:');
     // A version from before a restart: answered from it until the first pass replaces it.

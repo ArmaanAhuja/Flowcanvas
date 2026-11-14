@@ -20,6 +20,8 @@ export interface EntryPointItem {
     readonly name: string;
     readonly place: Place | null;
   } | null;
+  /** For a screen: how many elements the components it renders hold (`elementsByScreen`). */
+  readonly elements?: number;
 }
 
 export type EntryPointLists = Readonly<Record<EntryKind, readonly EntryPointItem[]>>;
@@ -34,6 +36,52 @@ const byName = (a: EntryPointItem, b: EntryPointItem) =>
         : (a.place?.path ?? '') > (b.place?.path ?? '')
           ? 1
           : (a.place?.line ?? 0) - (b.place?.line ?? 0);
+
+/**
+ * Each screen's elements (ADR 0030 §2): those in the code units its component renders, directly or through other
+ * components (`renders` edges, through decisions too), in file and line order. A screen without a component found
+ * has none.
+ */
+export function elementsByScreen(
+  index: GraphIndex,
+  screens: readonly EntryPointItem[],
+  elements: readonly EntryPointItem[],
+): ReadonlyMap<string, readonly EntryPointItem[]> {
+  const byUnit = new Map<string, EntryPointItem[]>();
+  for (const element of elements) {
+    if (element.within === null) continue;
+    byUnit.set(element.within, [...(byUnit.get(element.within) ?? []), element]);
+  }
+  const rendered = (start: string): Set<string> => {
+    const seen = new Set([start]);
+    const queue = [start];
+    for (let id = queue.shift(); id !== undefined; id = queue.shift()) {
+      for (const edge of index.out.get(id) ?? []) {
+        if (edge.to === null || seen.has(edge.to)) continue;
+        const toDecision = index.nodes.get(edge.to)?.kind === 'decision';
+        if (edge.relation === 'renders' || toDecision) {
+          seen.add(edge.to);
+          queue.push(edge.to);
+        }
+      }
+    }
+    return seen;
+  };
+  const found = new Map<string, readonly EntryPointItem[]>();
+  for (const screen of screens) {
+    const component = screen.handler?.id;
+    if (component == null) continue;
+    const mine = [...rendered(component)].flatMap((unit) => byUnit.get(unit) ?? []);
+    mine.sort(
+      (a, b) =>
+        (a.place?.path ?? '').localeCompare(b.place?.path ?? '') ||
+        (a.place?.line ?? 0) - (b.place?.line ?? 0) ||
+        (a.place?.column ?? 0) - (b.place?.column ?? 0),
+    );
+    found.set(screen.id, mine);
+  }
+  return found;
+}
 
 /** Every entry point, by kind, each kind in name order (then file and line), with what handles it. */
 export function listEntryPoints(index: GraphIndex): EntryPointLists {
@@ -62,5 +110,11 @@ export function listEntryPoints(index: GraphIndex): EntryPointLists {
     });
   }
   for (const kind of ENTRY_KINDS) lists[kind].sort(byName);
+  // Each screen says how many elements it has; they're asked for a screen at a time.
+  const byScreen = elementsByScreen(index, lists.screen, lists.element);
+  lists.screen = lists.screen.map((screen) => ({
+    ...screen,
+    elements: byScreen.get(screen.id)?.length ?? 0,
+  }));
   return lists;
 }

@@ -3,7 +3,7 @@ import { diffGraphs, withChanges } from './diff.js';
 import { decodeGraph, encodeGraph } from './encoding.js';
 import { edgeKey, type Graph, type GraphEdge, type GraphNode } from './model.js';
 import { ARRIVES_IN, graphStats } from './stats.js';
-import { listEntryPoints } from './entries.js';
+import { elementsByScreen, listEntryPoints } from './entries.js';
 import { indexGraph } from './flow.js';
 import { validateGraph } from './validate.js';
 
@@ -483,5 +483,69 @@ describe('listEntryPoints', () => {
     ]);
     expect(lists['api-route'][2]?.handler?.id).toBeNull();
     expect([lists.element, lists['cli-command']]).toEqual([[], []]);
+  });
+});
+
+describe('elementsByScreen', () => {
+  it('gives a screen the elements of every component it renders, through decisions, and none of the rest', () => {
+    const entry = (
+      id: string,
+      kind: 'screen' | 'element',
+      within: string | null = null,
+    ): GraphNode => ({
+      id,
+      kind: 'entry-point',
+      name: id.split('#')[1] ?? id,
+      place: { path: id.split('#')[0] ?? '', line: 1, column: 1 },
+      unit: null,
+      change: 'unchanged',
+      entry: { kind, framework: 'react', complete: true, why: null, within },
+    });
+    const graph: Graph = {
+      nodes: [
+        unit('page.tsx#Page', 1, { unit: 'component' }),
+        unit('form.tsx#Form', 1, { unit: 'component' }),
+        unit('other.tsx#Other', 1, { unit: 'component' }),
+        { ...unit('page.tsx#Page?1'), kind: 'decision', unit: null, name: 'open' },
+        entry('page.tsx#(entry /polls)', 'screen'),
+        entry('form.tsx#(entry <button> onClick)', 'element', 'form.tsx#Form'),
+        entry('page.tsx#(entry <a> onClick)', 'element', 'page.tsx#Page'),
+        entry('other.tsx#(entry <input> onChange)', 'element', 'other.tsx#Other'),
+      ],
+      edges: [
+        call('page.tsx#(entry /polls)', 'page.tsx#Page', [1], {
+          relation: 'renders',
+          provenance: 'convention',
+        }),
+        {
+          from: 'page.tsx#Page',
+          to: 'page.tsx#Page?1',
+          target: null,
+          kind: 'branch',
+          relation: null,
+          label: null,
+          provenance: 'resolved',
+          lines: [2],
+        },
+        {
+          from: 'page.tsx#Page?1',
+          to: 'form.tsx#Form',
+          target: null,
+          kind: 'branch',
+          relation: 'renders',
+          label: 'yes',
+          provenance: 'resolved',
+          lines: [2],
+        },
+      ],
+    };
+    expect(validateGraph(graph)).toEqual([]);
+    const lists = listEntryPoints(indexGraph(graph));
+    const byScreen = elementsByScreen(indexGraph(graph), lists.screen, lists.element);
+    expect(byScreen.get('page.tsx#(entry /polls)')?.map((e) => e.id)).toEqual([
+      'form.tsx#(entry <button> onClick)',
+      'page.tsx#(entry <a> onClick)',
+    ]);
+    expect(lists.screen[0]?.elements).toBe(2);
   });
 });

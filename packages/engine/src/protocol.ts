@@ -76,6 +76,8 @@ export type EngineRequest =
       /** How many of that kind come before the page. */
       readonly after: number;
       readonly limit: number;
+      /** With kind `element`: only that screen's elements (its id). */
+      readonly screen?: string;
     };
 
 // TypeScript semantics (phase 5, ADR 0026): questions about the name at a place in a file.
@@ -429,7 +431,20 @@ export function parseEngineRequest(input: unknown): EngineRequest {
           `Ask for 1 to ${String(ENGINE_LIMITS.entries)} entry points, after 0 or more.`,
         );
       }
-      return { op: 'entryPoints', kind: kind as EntryKind, after, limit };
+      const { screen } = fields;
+      if (screen !== undefined && (kind !== 'element' || !isText(screen))) {
+        throw new EngineProblem(
+          'invalid_request',
+          'A screen’s entry points are its elements: ask for kind element.',
+        );
+      }
+      return {
+        op: 'entryPoints',
+        kind: kind as EntryKind,
+        after,
+        limit,
+        ...(screen === undefined ? {} : { screen }),
+      };
     }
     default:
       throw new EngineProblem('invalid_request', 'Unknown operation.');
@@ -706,6 +721,7 @@ function isEntryPoint(value: unknown, kind: EntryKind): value is EntryPointItem 
     (e.why === null || (isText(e.why) && e.why.length <= 300)) &&
     (e.complete || e.why !== null) &&
     (e.within === null || isText(e.within)) &&
+    (e.elements === undefined || (kind === 'screen' && isCount(e.elements))) &&
     (handler === null ||
       (handler !== undefined &&
         (handler.id === null || isText(handler.id)) &&

@@ -478,6 +478,25 @@ describe('entry points (phase 8)', () => {
     ]) {
       expect(() => parseEngineRequest(bad)).toThrow(EngineProblem);
     }
+    // A screen's elements: kind element only.
+    expect(
+      parseEngineRequest({
+        op: 'entryPoints',
+        kind: 'element',
+        after: 0,
+        limit: 5,
+        screen: 'a#(entry /)',
+      }),
+    ).toEqual({ op: 'entryPoints', kind: 'element', after: 0, limit: 5, screen: 'a#(entry /)' });
+    expect(() =>
+      parseEngineRequest({
+        op: 'entryPoints',
+        kind: 'screen',
+        after: 0,
+        limit: 5,
+        screen: 'a#(entry /)',
+      }),
+    ).toThrow(EngineProblem);
     // Answered from the version in memory: not one of the questions that wait on TypeScript.
     expect(TYPESCRIPT_OPS).not.toContain('entryPoints');
   });
@@ -498,6 +517,7 @@ describe('entry points (phase 8)', () => {
       { ...result, entries: [entry, entry, entry] },
       { ...result, kind: 'element' },
       { ...result, entries: [{ ...entry, kind: 'element' }] },
+      { ...result, entries: [{ ...entry, elements: -1 }] },
       { ...result, entries: [{ ...entry, complete: false }] },
       { ...result, entries: [{ ...entry, place: { path: '/etc/passwd', line: 1, column: 1 } }] },
       { ...result, entries: [{ ...entry, name: 'x'.repeat(ENGINE_LIMITS.text + 1) }] },

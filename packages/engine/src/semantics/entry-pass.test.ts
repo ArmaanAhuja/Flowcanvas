@@ -7,6 +7,7 @@ import * as ts from 'typescript';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { validateGraph, type Graph, type GraphNode } from '@flowcanvas/graph-model';
 import { ENTRY_MESSAGES, routeFileOf } from './entry-pass.js';
+import { FactsStore } from '../facts.js';
 import { SemanticService } from './semantic-service.js';
 
 // Real TypeScript programs, as in semantic-service.test.ts.
@@ -306,6 +307,24 @@ describe('entry points in the graph pass', () => {
     // The Calls tab keeps TypeScript's view: the top level calls slug (owner, 12 Nov 2026).
     const callers = service.callers('apps/web/src/lib/slug.ts', 1, 17);
     expect(callers.entries.map((e) => e.name)).toContain('polls.ts (top level)');
+  });
+
+  it('stores a handler’s own facts, so a place inside it is its, with its own details (R4)', async () => {
+    const facts = new FactsStore(':memory:');
+    const stored = new SemanticService({ ts, root, files: Object.keys(FILES), facts });
+    try {
+      await stored.graph(() => Promise.resolve());
+      // Inside `(c) => { slug('c'); … }`, line 5 of polls.ts.
+      const unit = facts.unitAt('apps/web/src/server/polls.ts', 5, 3);
+      expect(unit?.id).toBe('apps/web/src/server/polls.ts#(handler GET /:id)');
+      expect(unit === undefined ? undefined : facts.details(unit.id)?.place).toEqual({
+        path: 'apps/web/src/server/polls.ts',
+        line: 4,
+        column: 19,
+      });
+    } finally {
+      stored.dispose();
+    }
   });
 
   it('gives an element the unit it’s in, and follows a handler made by a call to the function it was given', async () => {

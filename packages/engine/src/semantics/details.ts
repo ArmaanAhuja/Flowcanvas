@@ -28,6 +28,7 @@ import {
   walkFile,
   type GraphContext,
   containerOf,
+  type HandlerUnit,
   type WalkedFile,
 } from './graph-pass.js';
 
@@ -101,6 +102,7 @@ export function fileFacts(
   program: TS.Program,
   source: TS.SourceFile,
   walked: WalkedFile,
+  handlers: ReadonlyMap<TS.Node, HandlerUnit> = new Map(),
 ): UnitFacts[] {
   const { ts } = ctx;
   const checker = program.getTypeChecker();
@@ -165,6 +167,16 @@ export function fileFacts(
         containerOf(ts, node),
       ),
     );
+  }
+  // An entry point's anonymous handler (phase 8, ADR 0030 §3): a unit of its own in the graph, so its details are its
+  // own too (its name is its entry point's, given when answering). No Calls-tab entry: TypeScript's view has none.
+  for (const [node, handler] of handlers) {
+    facts.push({
+      id: handler.id,
+      start: at(node.getStart(source)),
+      end: at(node.getEnd()),
+      details: unitDetails(ctx, checker, source, node, handler.id, walked.edges, file),
+    });
   }
   return facts;
 }

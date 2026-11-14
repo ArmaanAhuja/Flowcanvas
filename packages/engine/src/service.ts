@@ -4,11 +4,13 @@
 import {
   ENTRY_KINDS,
   FLOW_MAX_NODES,
+  elementsByScreen,
   buildFlow,
   graphStats,
   indexGraph,
   listEntryPoints,
   placeKey,
+  type EntryPointItem,
   type EntryPointLists,
   type Flow,
   type Graph,
@@ -174,9 +176,11 @@ export function startEngineService(options: EngineServiceOptions): EngineService
   let graphIndex: GraphIndex | undefined;
   // Its entry points, listed once per version (phase 8): a page of them is a slice.
   let entryLists: EntryPointLists | undefined;
+  let screenElements: ReadonlyMap<string, readonly EntryPointItem[]> | undefined;
   const keep = (graph: Graph) => {
     graphIndex = indexGraph(graph);
     entryLists = listEntryPoints(graphIndex);
+    screenElements = elementsByScreen(graphIndex, entryLists.screen, entryLists.element);
   };
   let graphTimer: NodeJS.Timeout | undefined;
   let graphRunning: Promise<void> | undefined;
@@ -479,9 +483,10 @@ export function startEngineService(options: EngineServiceOptions): EngineService
     kind: EntryPointsResult['kind'],
     after: number,
     limit: number,
+    screen?: string,
   ): EntryPointsResult => {
     const lists = entryLists;
-    const all = lists?.[kind] ?? [];
+    const all = screen === undefined ? (lists?.[kind] ?? []) : (screenElements?.get(screen) ?? []);
     const entries = all.slice(after, after + limit);
     const end = after + entries.length;
     return {
@@ -540,7 +545,14 @@ export function startEngineService(options: EngineServiceOptions): EngineService
           const { path, line, column } = request;
           const unit = options.facts?.unitAt(path, line, column);
           const stored = unit === undefined ? undefined : options.facts?.details(unit.id);
-          if (stored !== undefined) return Promise.resolve({ details: stored, message: null });
+          // An entry point's handler is named after its entry point in the graph (the pass names it last).
+          const named = unit === undefined ? undefined : graphIndex?.nodes.get(unit.id)?.name;
+          if (stored !== undefined) {
+            return Promise.resolve({
+              details: named === undefined ? stored : { ...stored, name: named },
+              message: null,
+            });
+          }
           return options.semantics === undefined
             ? Promise.resolve(emptyAnswer('details', NO_SEMANTICS) as EngineResults['details'])
             : options.semantics.ask('details', { path, line, column });
@@ -550,7 +562,9 @@ export function startEngineService(options: EngineServiceOptions): EngineService
           return flow({ path, line, column });
         }
         case 'entryPoints':
-          return Promise.resolve(entryPoints(request.kind, request.after, request.limit));
+          return Promise.resolve(
+            entryPoints(request.kind, request.after, request.limit, request.screen),
+          );
       }
     },
     settled: async () => {

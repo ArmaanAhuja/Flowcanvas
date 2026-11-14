@@ -235,7 +235,7 @@ export class SemanticService {
         // Worked out now, while the program is here, and stored rather than held (owner, 13 Nov 2026).
         this.#facts?.put(projectPath(context, file), {
           hash: contentHash(source.text),
-          units: fileFacts(context, program, source, part),
+          units: fileFacts(context, program, source, part, handlers),
         });
         walked += 1;
         if (walked % filesBetweenPauses === 0) {
