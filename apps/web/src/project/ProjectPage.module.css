@@ -77,6 +77,22 @@
   padding: 0 var(--space-4);
 }
 
+/* The left panel's entry points (phase 8): the index's chip while it runs, then the panel filling the rest. */
+.entries {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  block-size: 100%;
+  min-block-size: 0;
+  padding: calc(var(--space-8) + var(--space-2)) var(--space-8) var(--space-12);
+}
+
+.entries > :last-child {
+  flex: 1;
+  min-block-size: 0;
+}
+
 /* The index's progress chip under the Entry points title (design brief, "Still indexing"). */
 .panelChip {
   align-self: flex-start;

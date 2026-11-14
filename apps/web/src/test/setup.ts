@@ -34,3 +34,11 @@ if (typeof Range !== 'undefined' && typeof Range.prototype.getClientRects !== 'f
 if (typeof document !== 'undefined' && !('execCommand' in document)) {
   Object.defineProperty(document, 'execCommand', { value: () => false, configurable: true });
 }
+
+// Testing Library's findBy* and waitFor wait 1 s by default. The whole project page renders in many tests, and when
+// every package's tests share the laptop's cores (`pnpm test`), a page's first answers can take longer: phase 8's
+// entry points added a few requests at start, and five page tests timed out only under that load (each passed
+// alone). The work is what's tested, so the wait is set for it, as the tests' own time limits are.
+import { configure } from '@testing-library/react';
+
+configure({ asyncUtilTimeout: 5000 });
