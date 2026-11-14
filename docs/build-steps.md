@@ -13627,7 +13627,7 @@ pnpm test:visual
 | 0 | The plan and decisions; branch; the post-merge docs (staging at 0.11.0) | A | done (Claude, 14 Nov): `docs: phase 8 plan` |
 | 1 | Spike: each fork's entry points by framework; the detection approach. ADR 0030 | A | done (Claude, 14 Nov): `docs: phase 8 spike` |
 | 2 | `@flowcanvas/connectors-web`: a detector per framework, with fixtures | A | done (Claude, 14 Nov): `c8a7f7b`, `40d2d8f`, `ecc5e17`, `1695283`, `b11facf`, `e9f77d2`, `e278edd`, `476cbdf`, `3753d4b` |
-| 3 | The engine: entry points in the pass; the protocol and the API | A | done (Claude, 14 Nov): `fe9154d`, `fb7ac57`, `0897727`, `0c00a3a`, `b634c41`, `2a952a4`, `480c36e`, `cad7ae0`, `c0b3c97` |
+| 3 | The engine: entry points in the pass; the protocol and the API | A | done (Claude, 14 Nov): `fe9154d`, `fb7ac57`, `0897727`, `0c00a3a`, `b634c41`, `2a952a4`, `480c36e`, `cad7ae0`, `c0b3c97`, `da6820b` |
 | 4 | Hand labels for the 4 forks; the corpus check | B | *planned* |
 | 5 | UI: the entry-points panel in the design system | B | *planned* |
 | 6 | The page: the left panel, Show flow, ⌘K's Entry points | B | *planned* |
@@ -13748,5 +13748,5 @@ pnpm test:visual
 
 **Risks and laptop:** R1 measured, R2 built, R3 measured, R4 new (above). The laptop ran each fork's whole pass (Twenty 104 s, 1.1 GB heap) and the flaky screen 85 times, one heavy run at a time.
 
-**Commits:** `fe9154d` the canvas scroll fix; `fb7ac57` graph format 4; `0897727` built exports to source; `0c00a3a` unmounted Routers; `b634c41` entry points in the pass; `2a952a4` tRPC nested objects; `480c36e` `entryPoints` and shorthand routers; `cad7ae0` the labels' graph lists; `c0b3c97` the API route.
+**Commits:** `fe9154d` the canvas scroll fix; `fb7ac57` graph format 4; `0897727` built exports to source; `0c00a3a` unmounted Routers; `b634c41` entry points in the pass; `2a952a4` tRPC nested objects; `480c36e` `entryPoints` and shorthand routers; `cad7ae0` the labels' graph lists; `c0b3c97` the API route; `da6820b` the Docker tests' calls-answer checks (the new answer also has `entries`: lint failed CI on `59537a0`, in a package the local run had filtered out; the fast suites now run whole-repository before a push).
 
