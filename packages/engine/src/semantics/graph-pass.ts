@@ -231,6 +231,17 @@ function targetOf(ctx: GraphContext, declaration: TS.Declaration): TS.Node | und
   return isUnit(ts, declaration) ? declaration : undefined;
 }
 
+/** The graph's id for a declaration the project's code is called through (a code unit), when it's one. */
+export function unitIdOf(ctx: GraphContext, declaration: TS.Declaration): string | undefined {
+  const target = targetOf(ctx, declaration);
+  return target === undefined ? undefined : idsOf(ctx, target.getSourceFile()).get(target);
+}
+
+/** A function's own id when it's a named code unit; undefined for an anonymous one. */
+export function namedUnitId(ctx: GraphContext, node: TS.Node): string | undefined {
+  return isNamedCallable(ctx.ts, node) ? idsOf(ctx, node.getSourceFile()).get(node) : undefined;
+}
+
 /** A construct that decides whether a call happens (ADR 0028 §1), and which of its outcomes the call is on. */
 interface Guard {
   readonly construct: TS.Node;
@@ -354,10 +365,17 @@ function calledName(ts: TypeScript, source: TS.SourceFile, start: number): numbe
     : start;
 }
 
+/** An anonymous function an entry point is handled by (ADR 0030 §3): a code unit of its own in the graph. */
+export interface HandlerUnit {
+  readonly id: string;
+  readonly name: string;
+}
+
 export function walkFile(
   ctx: GraphContext,
   program: TS.Program,
   source: TS.SourceFile,
+  handlers: ReadonlyMap<TS.Node, HandlerUnit> = new Map(),
 ): WalkedFile {
   const { ts } = ctx;
   const checker = program.getTypeChecker();
@@ -461,14 +479,30 @@ export function walkFile(
     }
   };
 
-  const visit = (node: TS.Node, owner: string, ownerNode: TS.Node): void => {
+  // `owner` has the call in the graph; `caller` in the Calls tab, which keeps TypeScript's view: an anonymous
+  // handler's calls are its own in the graph, and the function's or top level's around it there (ADR 0030 §3).
+  const visit = (node: TS.Node, owner: string, ownerNode: TS.Node, caller: string): void => {
     let current = owner;
     let currentNode = ownerNode;
+    let calling = caller;
     const id = own.get(node);
+    const handler = handlers.get(node);
     if (id !== undefined && isNamedCallable(ts, node)) {
       current = id;
       currentNode = node;
+      calling = id;
       nodes.set(id, nodeOf(ctx, node, id));
+    } else if (handler !== undefined) {
+      current = handler.id;
+      currentNode = node;
+      nodes.set(handler.id, {
+        id: handler.id,
+        kind: 'code-unit',
+        name: handler.name,
+        place: placeOf(ctx, node),
+        unit: 'function',
+        change: 'unchanged',
+      });
     }
     const jsx = ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node);
     if (jsx || ts.isCallExpression(node) || ts.isNewExpression(node)) {
@@ -499,7 +533,7 @@ export function walkFile(
           // Built-ins: named as the compiler names them (`split`, `Promise`), one row per name.
           const named = cut(symbol?.getName() ?? calleeText(ts, callee, source));
           record(
-            current,
+            calling,
             `builtin:${named}:${relation}`,
             {
               name: named,
@@ -556,7 +590,7 @@ export function walkFile(
           if (target !== undefined && targetId !== undefined) {
             const reached = nodeOf(ctx, target, targetId);
             record(
-              current,
+              calling,
               `${targetId}:${relation}`,
               {
                 name: reached.name,
@@ -580,7 +614,7 @@ export function walkFile(
             const named = cut(symbol?.getName() ?? calleeText(ts, callee, source));
             const owner = declaration.parent;
             record(
-              current,
+              calling,
               `package:${declaredIn}:${String(declaration.getStart())}:${relation}`,
               {
                 name: named,
@@ -600,7 +634,7 @@ export function walkFile(
           } else {
             const written = cut(calleeText(ts, callee, source));
             record(
-              current,
+              calling,
               `unresolved:${written}:${relation}`,
               { name: written, kind: null, container: null, place: null, builtIn: false },
               relation,
@@ -635,10 +669,10 @@ export function walkFile(
       }
     }
     ts.forEachChild(node, (child) => {
-      visit(child, current, currentNode);
+      visit(child, current, currentNode, calling);
     });
   };
-  visit(source, top, source);
+  visit(source, top, source, top);
 
   return {
     calls: new Map(
