@@ -3,4 +3,5 @@ export * from './types.js';
 export { type FileContext, type TypeScript } from './ast.js';
 export { flatRoute, nextAppRoute, type FlatRoute, type NextRoute } from './file-routes.js';
 export { nestEntries } from './nestjs.js';
+export { exportsOf, flatRouteEntries, nextRouteEntries, type Exported } from './route-files.js';
 export { projectFile, scriptEntries } from './scripts.js';

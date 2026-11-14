@@ -41,8 +41,10 @@ export interface FoundEntry {
   readonly complete: boolean;
   /** Why it isn't complete. */
   readonly why?: string;
-  /** The function or method that handles it, when the code names or holds one. */
+  /** The function or method that handles it, when it's declared right there. */
   readonly handler?: Span;
+  /** An identifier naming its handler, declared elsewhere (`export default DocumentPage`), for the engine to resolve. */
+  readonly handlerName?: Span;
   /** A script's project file (`scripts/seed.ts`, from the package's folder), when its command runs one. */
   readonly runs?: string;
 }
