@@ -680,3 +680,12 @@ Claude's account of phase 8's time: the stricter bar and 2,118 hand labels; six 
 
 CLAUDE.md's "Working pace" says the same.
 
+
+## 15 Nov 2026: phases 9 to 11's plan (owner)
+
+**Owner:** "1 - recommended, 2 - okay recommended, 3 - recommended, 4 - recommended, 5 - include it, you can continue now".
+1. **Phase 8's bar for every connector:** 100% precision; at least 95% recall per fork; every miss explained and shown as not fully detected. Labels: every connector site in Rallly and Documenso, and in the same fixed modules of LibreChat and Twenty as phase 8.
+2. **Data libraries beyond the plan's Prisma and raw SQL:** Kysely (Documenso), Mongoose (LibreChat; collections in place of tables) and TypeORM (Twenty), so every fork shows its database.
+3. **External boundaries:** email (nodemailer, Resend), payments (Stripe), storage (S3), AI (OpenAI), and `fetch`/axios calls to fixed outside URLs.
+4. **Queues beyond BullMQ:** Documenso's own job client (`triggerJob` → its handler) and Twenty's message queue (which wraps BullMQ).
+5. **Twenty's GraphQL** (Apollo's `useMutation` and `useQuery` → NestJS resolvers, matched by operation name) is a UI → API link, since the *Done when* asks for all 4 forks.
