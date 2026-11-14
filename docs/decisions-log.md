@@ -664,5 +664,19 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 - **Phase 8 accepted.** PR #22 marked ready for review and merged once every check is green, as with phase 7. On acceptance, `pnpm docs:check` found Graph stats still saying entry points "arrive in phase 8"; fixed (`518c21f`).
 - **Medusa's graph time** (141 s on CI against 44 s in phase 7, caused by following built exports to their source; report, known issues): fixed in phase 9, with every fork's graph time held to a recorded figure by the Docker test.
 
-**Owner:** "we need to increase the speed of development, since it's taking too long for each phase". Claude's proposals are in the next entry once the owner answers.
+**Owner:** "we need to increase the speed of development, since it's taking too long for each phase". Answered in the next entry.
+
+## 15 Nov 2026: a faster pace (owner)
+
+Claude's account of phase 8's time: the stricter bar and 2,118 hand labels; six red CI rounds, each something the laptop's checks didn't run; docs (per-step entries, living docs re-read every milestone); waiting at three milestone stops; real-browser test details. Five options, A to E.
+
+**Owner:** "a - accepted, b - not accepted, c - accepted, d - accepted, e - not accepted, continue ahead".
+- **A, accepted: one report per phase.** After "go" on the plan, the whole phase is built and reported once, at the end, when CI is green. Mid-phase stops only for product questions the documents don't settle, or risky actions.
+- **B, not accepted:** the plan's bar with a sampled set of labels. Bars and labels stay as rigorous as phase 8's.
+- **C, accepted: docs once per phase.** One build-steps entry per phase (the full template, every commit named); the living docs re-read once, before the phase's report. The decisions log, ADRs, report, STATUS and RUN-AND-FEATURES stay as they are.
+- **D, accepted: related phases grouped.** Phases 9 to 11 (the connectors) in one branch, pull request, plan and acceptance; then 12 and 13. Each phase's *Done when* and *Try it* still have their own named tests.
+- **E, not accepted:** parallel subagents.
+- **Claude's engineering changes, without a question:** the laptop's fast suites now run what CI's main job runs (with the web build, its bundle budget and the docs check), and new screen baselines are kept to what each phase's UI needs.
+
+CLAUDE.md's "Working pace" says the same.
 
