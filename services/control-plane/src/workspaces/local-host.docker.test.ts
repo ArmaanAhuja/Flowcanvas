@@ -126,6 +126,9 @@ describe('the control plane driving the real workspace host', { timeout: 120_000
     expect(await status()).toBe('exited');
     await provider.start(ref);
     expect(await status()).toBe('running');
+    // Stopped again: a workspace left running took one of the host's two places from the tests after it (CI, 15 Nov).
+    await provider.stop(ref);
+    expect(await status()).toBe('exited');
   });
 
   it('asks the agent inside the workspace', async () => {
@@ -136,6 +139,10 @@ describe('the control plane driving the real workspace host', { timeout: 120_000
       error: { code: 'not_found', message: 'This workspace has no project files yet.' },
     });
     await provider.stop(ref);
+    // Stopped, not still counted as running (the host's cap counts running containers).
+    expect(
+      (await run('docker', ['inspect', '--format', '{{.State.Status}}', ref])).stdout.trim(),
+    ).toBe('exited');
   });
 
   it("passes the host's refusals through with their kind and sentence", async () => {
