@@ -135,7 +135,7 @@ export class SemanticService {
       this.#versions.set(absolute, (this.#versions.get(absolute) ?? 0) + 1);
       this.#graphPending.add(absolute);
       const name = path.split('/').pop() ?? '';
-      if (name === 'tsconfig.json' || name === 'package.json') {
+      if (name === 'tsconfig.json' || name === 'jsconfig.json' || name === 'package.json') {
         structural = true;
         // Programs may now hold other files: the graph is built again from the start.
         this.#graphBuilt = false;

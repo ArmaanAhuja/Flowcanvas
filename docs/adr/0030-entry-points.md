@@ -81,3 +81,9 @@ Each rule below came from a miss on a fork, was fixed in the detector, and is co
 - **Asked for** (§5): `entryPoints` answers a page of one kind (at most 200, in name order, then file and line) and every kind's count, from lists worked out once per version; API `…/index/entry-points`.
 - **Phase 6's labels.** Where an anonymous handler now owns calls the Calls tab gives a file's top level or a component, the label keeps the Calls tab's view and adds the graph's own lists with why (`calls.json`, `graph`: Rallly's createPoll, Documenso's normalizeBrandingColors and SignaturePad, each read at the pin). The graph's check leaves out an entry point's edge to its handler, which isn't a call between code; step 4's labels hold those.
 - **Measured** (laptop, whole pass): Rallly 872 entry points in 8.6 s; Documenso 2,239 in 19 s; LibreChat 3,648 in 66 s; Twenty 7,331 in 104 s, its graph 10% more nodes (105,965) and 2% more edges than phase 7's (R1).
+
+## Addendum (14 Nov 2026, step 4): the owner's answers to milestone A
+
+- **Test and story files aren't entry points:** nothing is detected in `*.test.*`, `*.spec.*`, `__tests__/` or `*.stories.*` files (LibreChat: 896 fewer, mostly elements in tests). Their code stays in the graph.
+- **A base path from an environment variable is named, never read:** `pathValue` writes it `{NEXT_PUBLIC_BASE_PATH}`, through a default (`|| '/'`, `?? ''`), a string method and `const`s, for `process.env.X`, `import.meta.env.X` and `env('X')`/`getEnv('X')`; the route is fully detected. Documenso's incomplete routes went from 64 to 0.
+- **A rewrite is marked:** a Next.js route handler that calls a Hono app's `fetch` itself (not `handle(app)`) marks that app's routes with why: they keep the paths the app registers (Rallly's `POST /v1/polls`).

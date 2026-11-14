@@ -20,7 +20,7 @@ export interface WorkspacePackage {
 }
 
 export interface ProjectConfig {
-  /** Project-relative path of the tsconfig.json; for an inferred program, `<folder>/(inferred)`. */
+  /** Project-relative path of the tsconfig.json (or jsconfig.json); for an inferred program, `<folder>/(inferred)`. */
   readonly path: string;
   /** The package it belongs to (the nearest package.json above it), if any. */
   readonly packageName: string | null;
@@ -139,10 +139,17 @@ export class ProjectModel {
     this.#files = files;
     const packageDirs = [...packages.values()].sort((a, b) => b.dir.length - a.dir.length);
     this.#packageDirs = packageDirs;
+    // A jsconfig.json is a tsconfig.json for JavaScript (LibreChat's `~/` imports; owner, 14 Nov 2026); where a folder
+    // has both, TypeScript uses the tsconfig.json, and so does the engine.
+    const tsconfigDirs = new Set(
+      files.filter((file) => posix.basename(file) === 'tsconfig.json').map((f) => posix.dirname(f)),
+    );
     this.configs = files
       .filter(
         (file) =>
-          posix.basename(file) === 'tsconfig.json' && !file.split('/').includes('node_modules'),
+          !file.split('/').includes('node_modules') &&
+          (posix.basename(file) === 'tsconfig.json' ||
+            (posix.basename(file) === 'jsconfig.json' && !tsconfigDirs.has(posix.dirname(file)))),
       )
       .map((path) => {
         const dir = posix.dirname(path) === '.' ? '' : posix.dirname(path);
@@ -245,6 +252,10 @@ export class ProjectModel {
         options: {
           ...analysisDefaults(ts),
           ...parsed.options,
+          // A jsconfig.json is for JavaScript, whatever it says.
+          ...(posix.basename(config.path) === 'jsconfig.json'
+            ? { allowJs: true, checkJs: false }
+            : {}),
           paths: { ...this.#workspacePaths, ...(parsed.options.paths ?? {}) },
           noEmit: true,
           skipLibCheck: true,

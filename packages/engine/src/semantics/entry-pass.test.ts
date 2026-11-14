@@ -70,6 +70,27 @@ const FILES: Record<string, string> = {
     '',
   ].join('\n'),
   'apps/web/src/server/polls.ts': POLLS,
+  // Rallly's v1 API: a Hono app served through a function that rewrites the path (owner, 14 Nov 2026).
+  'apps/web/src/app/api/v1/[...route]/route.ts': [
+    "import { Hono } from 'hono';",
+    "const app = new Hono().basePath('/v1');",
+    "app.post('/polls', (c) => c.json({}));",
+    'async function handler(request: Request) {',
+    '  const url = new URL(request.url);',
+    '  url.pathname = url.pathname.slice(4);',
+    '  return app.fetch(new Request(url, request));',
+    '}',
+    'export const POST = handler;',
+    '',
+  ].join('\n'),
+  // A test file's app and elements aren't entry points (owner, 14 Nov 2026).
+  'apps/web/src/server/polls.test.tsx': [
+    "import { Hono } from 'hono';",
+    'const testApp = new Hono();',
+    "testApp.get('/only-in-a-test', (c) => c.json({}));",
+    'export const Probe = () => <button onClick={() => undefined} />;',
+    '',
+  ].join('\n'),
   // Rallly's shape: tRPC routers held by name in the root's shorthand properties.
   'apps/web/src/trpc/init.ts': [
     "import { initTRPC } from '@trpc/server';",
@@ -98,10 +119,14 @@ const FILES: Record<string, string> = {
     "app.use('/api/auth', routes.auth);",
     '',
   ].join('\n'),
+  'apps/api/jsconfig.json': JSON.stringify({
+    compilerOptions: { baseUrl: './', paths: { '~/*': ['./*'] } },
+  }),
   'apps/api/routes/index.js': "const { auth } = require('./auth');\nmodule.exports = { auth };\n",
   'apps/api/routes/auth.js': [
     "const express = require('express');",
-    "const { login } = require('../controllers/login');",
+    // Through jsconfig.json's alias, which only it defines.
+    "const { login } = require('~/controllers/login');",
     'const router = express.Router();',
     "router.post('/login', login);",
     // A property naming the router (LibreChat's `{ v1: router }`), which TypeScript doesn't follow by itself.
@@ -159,6 +184,8 @@ describe('entry points in the graph pass', () => {
     ).toEqual([
       ['api-route', 'express', 'POST /api/auth/login'],
       ['api-route', 'hono', 'GET /api/polls/:id'],
+      ['api-route', 'hono', 'POST /v1/polls'],
+      ['api-route', 'next', 'POST /api/v1/*'],
       ['api-route', 'trpc', 'query polls.list'],
       ['cli-command', 'package-json', '@fx/web: dev'],
       ['cli-command', 'package-json', '@fx/web: seed'],
@@ -186,6 +213,11 @@ describe('entry points in the graph pass', () => {
     // A script that runs no project file has nothing to reach, rather than a guess.
     expect(handledBy(graph, named(graph, '@fx/web: dev'))).toEqual([]);
     expect(entries(graph).every((n) => n.entry?.complete)).toBe(true);
+    // The path the app registers, marked as served through a rewrite; the route file's own entry reaches its handler.
+    expect(named(graph, 'POST /v1/polls')?.entry?.why).toBe(ENTRY_MESSAGES.rewritten('route.ts'));
+    expect(handledBy(graph, named(graph, 'POST /api/v1/*'))).toEqual([
+      ['apps/web/src/app/api/v1/[...route]/route.ts#handler', 'convention', 'calls'],
+    ]);
   });
 
   it('makes an anonymous handler a code unit named after its entry point, owning its calls in the graph', async () => {
@@ -253,7 +285,7 @@ describe('entry points in the graph pass', () => {
       entries(graph)
         .filter((n) => n.entry?.framework === 'hono')
         .map((n) => n.name),
-    ).toEqual(['GET /v2/polls/:id']);
+    ).toEqual(['POST /v1/polls', 'GET /v2/polls/:id']);
   });
 });
 

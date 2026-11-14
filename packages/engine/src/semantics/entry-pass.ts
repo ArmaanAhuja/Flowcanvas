@@ -81,7 +81,23 @@ export type RouteFile =
 
 export const ENTRY_MESSAGES = {
   delegated: 'Its requests go to a Hono app, whose own routes are listed.',
+  rewritten: (file: string) =>
+    `Served through a function in ${file} that rewrites the path when it runs: the path is the one the app registers.`,
 } as const;
+
+/** Test and story files: how the code is tested, not how the product is entered (owner, 14 Nov 2026). */
+export const NOT_ENTRY_FILES = /(^|\/)__tests__\/|\.(test|spec|stories)\.[cm]?[jt]sx?$/;
+
+const NO_ENTRIES: FileEntries = {
+  found: [],
+  routers: [],
+  trpcRouters: [],
+  trpcProcedures: [],
+  trees: [],
+  reaches: new Map(),
+  dependsOn: [],
+  anonymous: [],
+};
 
 /**
  * Whether a file is a route file: in a Next.js package's `app/` (or `src/app/`) folder, or a `remix-flat-routes`
@@ -120,6 +136,7 @@ export function entriesOfFile(
   const checker = program.getTypeChecker();
   const context: FileContext = { ts, source, checker };
   const path = projectPath(ctx, source.fileName);
+  if (NOT_ENTRY_FILES.test(path)) return { entries: NO_ENTRIES, handlers: new Map() };
   const dependsOn = new Set<string>();
   const handlers = new Map<TS.Node, HandlerUnit>();
   const handlerIds = new Map<string, number>();
@@ -244,6 +261,7 @@ export function entriesOfFile(
 
   // Settled in this file.
   const found: Located[] = [];
+  const rewritten = new Set<string>();
   const keep = (entry: FoundEntry, within?: string | null) => {
     resolveHandlers(entry, entry.name);
     found.push({ ...entry, file: path, ...(within === undefined ? {} : { within }) });
@@ -266,6 +284,31 @@ export function entriesOfFile(
       if (entry.kind === 'api-route' && delegated(entry.name)) continue;
       keep(entry);
     }
+    // A handler that rewrites the path and calls a Hono app's `fetch` (Rallly's v1 API): the app's routes keep the
+    // paths it registers, marked so (owner, 14 Nov 2026).
+    for (const exported of exports.values()) {
+      const value = exported.value;
+      const fn =
+        exported.fn ??
+        (value !== null && ts.isIdentifier(value) ? declarationOf(value) : undefined);
+      if (fn === undefined) continue;
+      const visit = (node: TS.Node) => {
+        if (
+          ts.isCallExpression(node) &&
+          ts.isPropertyAccessExpression(node.expression) &&
+          node.expression.name.text === 'fetch' &&
+          ts.isIdentifier(node.expression.expression)
+        ) {
+          const key = keyOf({
+            start: node.expression.expression.getStart(source),
+            end: node.expression.expression.getEnd(),
+          });
+          if (key !== null) rewritten.add(key);
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(fn);
+    }
   } else if (routeFile?.kind === 'flat') {
     for (const entry of flatRouteEntries(context, routeFile.route)) keep(entry);
   }
@@ -282,6 +325,9 @@ export function entriesOfFile(
     framework: router.framework,
     base: router.base,
     mountedOnly: router.mountedOnly,
+    ...(rewritten.has(`${path}:${String(router.id.start)}`)
+      ? { note: ENTRY_MESSAGES.rewritten(posix.basename(path)) }
+      : {}),
     routes: router.routes.map((route) => {
       resolveHandlers(route, `${route.method} ${route.path ?? ':unknown'}`);
       return { ...route, file: path };
