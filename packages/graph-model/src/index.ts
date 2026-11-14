@@ -26,6 +26,7 @@ export { validateGraph } from './validate.js';
 export { GRAPH_FORMAT, decodeGraph, encodeGraph } from './encoding.js';
 export { diffGraphs, withChanges, type GraphDiff } from './diff.js';
 export { ARRIVES_IN, graphStats, type GraphStats } from './stats.js';
+export { listEntryPoints, type EntryPointItem, type EntryPointLists } from './entries.js';
 export {
   FLOW_LIMITS,
   FLOW_MAX_NODES,

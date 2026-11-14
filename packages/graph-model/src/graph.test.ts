@@ -3,6 +3,8 @@ import { diffGraphs, withChanges } from './diff.js';
 import { decodeGraph, encodeGraph } from './encoding.js';
 import { edgeKey, type Graph, type GraphEdge, type GraphNode } from './model.js';
 import { ARRIVES_IN, graphStats } from './stats.js';
+import { listEntryPoints } from './entries.js';
+import { indexGraph } from './flow.js';
 import { validateGraph } from './validate.js';
 
 const unit = (id: string, line = 1, extra: Partial<GraphNode> = {}): GraphNode => ({
@@ -428,5 +430,58 @@ describe('entry points (phase 8, ADR 0030)', () => {
       ),
     };
     expect(diffGraphs(GRAPH, after).modified).toEqual(['src/route.ts#(entry POST /api/polls)']);
+  });
+});
+
+describe('listEntryPoints', () => {
+  it('lists each kind in name order, with what handles each: a node, code by its text, or nothing', () => {
+    const point = (
+      id: string,
+      name: string,
+      kind: 'screen' | 'api-route',
+      line = 1,
+    ): GraphNode => ({
+      id,
+      kind: 'entry-point',
+      name,
+      place: { path: id.split('#')[0] ?? '', line, column: 1 },
+      unit: null,
+      change: 'unchanged',
+      entry: { kind, framework: 'next', complete: true, why: null, within: null },
+    });
+    const graph: Graph = {
+      nodes: [
+        unit('app/page.tsx#Home', 3, { unit: 'component' }),
+        point('app/page.tsx#(entry /)', '/', 'screen'),
+        point('app/b.ts#(entry POST /b)', 'POST /b', 'api-route'),
+        point('app/a.ts#(entry GET /a)', 'GET /a', 'api-route', 2),
+        point('app/a.ts#(entry GET /a)~2', 'GET /a', 'api-route', 1),
+      ],
+      edges: [
+        call('app/page.tsx#(entry /)', 'app/page.tsx#Home', [1], {
+          relation: 'renders',
+          provenance: 'convention',
+        }),
+        { ...unknown('app/b.ts#(entry POST /b)', 'handler', [1]) },
+      ],
+    };
+    const lists = listEntryPoints(indexGraph(graph));
+    expect(lists.screen.map((e) => [e.name, e.handler])).toEqual([
+      [
+        '/',
+        {
+          id: 'app/page.tsx#Home',
+          name: 'Home',
+          place: { path: 'app/page.tsx', line: 3, column: 1 },
+        },
+      ],
+    ]);
+    expect(lists['api-route'].map((e) => [e.id, e.handler?.name ?? null])).toEqual([
+      ['app/a.ts#(entry GET /a)~2', null],
+      ['app/a.ts#(entry GET /a)', null],
+      ['app/b.ts#(entry POST /b)', 'handler'],
+    ]);
+    expect(lists['api-route'][2]?.handler?.id).toBeNull();
+    expect([lists.element, lists['cli-command']]).toEqual([[], []]);
   });
 });

@@ -70,6 +70,25 @@ const FILES: Record<string, string> = {
     '',
   ].join('\n'),
   'apps/web/src/server/polls.ts': POLLS,
+  // Rallly's shape: tRPC routers held by name in the root's shorthand properties.
+  'apps/web/src/trpc/init.ts': [
+    "import { initTRPC } from '@trpc/server';",
+    'const t = initTRPC.create();',
+    'export const router = t.router;',
+    'export const publicProcedure = t.procedure;',
+    '',
+  ].join('\n'),
+  'apps/web/src/trpc/polls.ts': [
+    "import { publicProcedure, router } from './init';",
+    'export const polls = router({ list: publicProcedure.query(() => []) });',
+    '',
+  ].join('\n'),
+  'apps/web/src/trpc/index.ts': [
+    "import { router } from './init';",
+    "import { polls } from './polls';",
+    'export const appRouter = router({ polls });',
+    '',
+  ].join('\n'),
   // LibreChat's shape: CommonJS routers gathered in an index and mounted through it.
   'apps/api/package.json': JSON.stringify({ name: '@fx/api', dependencies: { express: '4.0.0' } }),
   'apps/api/server.js': [
@@ -140,6 +159,7 @@ describe('entry points in the graph pass', () => {
     ).toEqual([
       ['api-route', 'express', 'POST /api/auth/login'],
       ['api-route', 'hono', 'GET /api/polls/:id'],
+      ['api-route', 'trpc', 'query polls.list'],
       ['cli-command', 'package-json', '@fx/web: dev'],
       ['cli-command', 'package-json', '@fx/web: seed'],
       ['element', 'react', '<button> onClick'],

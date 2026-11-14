@@ -141,7 +141,12 @@ export function entriesOfFile(
       symbol !== undefined && symbol.flags & ts.SymbolFlags.Alias
         ? checker.getAliasedSymbol(symbol)
         : symbol;
-    let symbol = resolved(checker.getSymbolAtLocation(name));
+    // A shorthand property's name is the property to the checker: its value is the variable (`router({ polls })`).
+    let symbol = resolved(
+      ts.isShorthandPropertyAssignment(node.parent) && node.parent.name === node
+        ? checker.getShorthandAssignmentValueSymbol(node.parent)
+        : checker.getSymbolAtLocation(name),
+    );
     // TypeScript follows `routes.auth` through `module.exports = { auth }` and a `require` itself, but stops at a
     // property naming another value (`module.exports = { v1: router }`, LibreChat's agents): followed to that value,
     // or the router would be taken for a root and its paths listed without their mount.
@@ -295,6 +300,7 @@ export function entriesOfFile(
       return { procedure: { ...held.procedure, file: path } };
     }
     if ('router' in held) return { ref: `${path}:${String(held.router.start)}` };
+    if ('unreadable' in held) return { unresolved: true };
     const target = keyOf(held.target);
     return target === null ? { unresolved: true } : { ref: target };
   };
