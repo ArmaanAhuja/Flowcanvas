@@ -459,10 +459,13 @@ const SCREENS: readonly Screen[] = [
     api: { running: true },
     arrange: async (page) => {
       const panel = page.getByRole('region', { name: 'Entry points' });
-      await expect(panel.getByRole('row', { name: /^API routes/ })).toBeAttached();
+      // The top row, always in view: the panel is virtualized, so "API routes" is out of the page once the 65
+      // screens are listed above it.
+      await expect(panel.getByRole('row', { name: /^Screens and elements/ })).toContainText('65');
       await page.getByRole('textbox', { name: 'Filter entry points' }).click();
       await page.keyboard.type('private/polls');
       const post = panel.getByRole('row', { name: /^POST \/api\/private\/polls/ });
+      await expect(post).toBeVisible();
       await post.hover();
       await post
         .getByRole('button', { name: 'Show the flow from POST /api/private/polls' })
