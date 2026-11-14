@@ -74,6 +74,15 @@ export {
   type EditorTabsProps,
 } from './components/editor-tabs/EditorTabs';
 export { FileTree, type FileTreeProps } from './components/file-tree/FileTree';
+export {
+  EntryPointsPanel,
+  GROUP_TITLES,
+  type EntryGroup,
+  type EntryGroupId,
+  type EntryPointsPanelProps,
+  type EntryRow,
+  type EntryRowKind,
+} from './components/entry-points-panel/EntryPointsPanel';
 export { buildTree, ancestorsOf, type TreeNode } from './components/file-tree/tree-model';
 export {
   Breadcrumb,

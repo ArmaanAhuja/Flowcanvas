@@ -1,0 +1,230 @@
+/*
+ * Figma 06's left panel: the header (Small strong, the count in Caption), the filter (28 px, `/`), groups headed
+ * in Caption with their counts, and 28 px rows (Graphite compact) with a 14 px icon, the name in Small (Mono small
+ * for routes, elements and commands), a muted suffix, and Show flow. Each level indents 12 px, as the file tree.
+ */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  block-size: 100%;
+  min-block-size: 0;
+}
+
+.header {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+  padding: var(--space-2) var(--space-8) 0;
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-family: var(--text-small-strong-font-family);
+  font-size: var(--text-small-strong-font-size);
+  font-weight: var(--text-small-strong-font-weight);
+  line-height: var(--text-small-strong-line-height);
+}
+
+.count,
+.groupCount {
+  color: var(--color-text-muted);
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  font-weight: var(--text-caption-font-weight);
+  line-height: var(--text-caption-line-height);
+}
+
+.kbd {
+  color: var(--color-text-muted);
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+}
+
+.message {
+  margin: 0;
+  padding-inline: var(--space-8);
+  color: var(--color-text-secondary);
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  line-height: var(--text-small-line-height);
+}
+
+.tree {
+  flex: 1;
+  min-block-size: 0;
+  overflow: auto;
+  outline: none;
+}
+
+.item {
+  box-sizing: border-box;
+  border-radius: var(--radius-control);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  outline: none;
+}
+
+.item[data-hovered] {
+  background: var(--color-surface-hover);
+}
+
+.item[data-current] {
+  background: var(--color-surface-selected);
+  color: var(--color-text-primary);
+}
+
+.item[data-focus-visible] {
+  outline: var(--border-width-focus) solid var(--color-accent-solid);
+  outline-offset: calc(-1 * var(--border-width-focus));
+}
+
+.row {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+  block-size: var(--size-row-compact);
+  padding-inline: calc(var(--space-4) + (var(--tree-item-level) - 1) * var(--space-12))
+    var(--space-8);
+}
+
+.chevron {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: var(--size-icon-sm);
+  block-size: var(--size-icon-sm);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+
+.chevron svg {
+  transition: transform var(--duration-hover) ease-out;
+}
+
+.open {
+  transform: rotate(90deg);
+}
+
+.spacer {
+  flex: none;
+  inline-size: var(--size-icon-sm);
+}
+
+.icon {
+  display: grid;
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+
+.item[data-current] .icon {
+  color: var(--color-text-primary);
+}
+
+.groupRow .groupTitle {
+  flex: 1;
+  color: var(--color-text-muted);
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  font-weight: var(--text-caption-font-weight);
+  line-height: var(--text-caption-line-height);
+}
+
+.label,
+.more,
+.empty {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  font-weight: var(--text-small-font-weight);
+  line-height: var(--text-small-line-height);
+}
+
+.mono {
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  font-weight: var(--text-mono-small-font-weight);
+  line-height: var(--text-mono-small-line-height);
+}
+
+.label {
+  flex: 0 1 auto;
+}
+
+/* The suffix gives way first: the name is what's read. */
+.suffix {
+  flex: 0 100 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  font-weight: var(--text-caption-font-weight);
+  line-height: var(--text-caption-line-height);
+}
+
+/* On the current row's selected surface, muted text falls under WCAG AA: the suffix steps up to secondary. */
+.item[data-current] .suffix {
+  color: var(--color-text-secondary);
+}
+
+.empty {
+  color: var(--color-text-muted);
+}
+
+.more {
+  color: var(--color-text-secondary);
+}
+
+.fill {
+  flex: 1;
+}
+
+/* Not fully detected: a dashed circle, never colour alone; its reason is its label. */
+.partial {
+  display: grid;
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+
+/* Show flow: on the row the pointer or focus is on, and the current one. */
+.showFlow {
+  flex: none;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--color-text-secondary);
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  font-weight: var(--text-caption-font-weight);
+  line-height: var(--text-caption-line-height);
+  cursor: pointer;
+  display: none;
+}
+
+/* Only where it's wanted, so it takes no room from names; Enter on a row shows its flow from the keyboard. */
+.item[data-hovered] .showFlow,
+.item[data-focused] .showFlow,
+.item[data-current] .showFlow,
+.showFlow[data-focus-visible] {
+  display: block;
+}
+
+.showFlow[data-hovered] {
+  color: var(--color-text-primary);
+}
+
+.showFlow[data-focus-visible] {
+  outline: var(--border-width-focus) solid var(--color-accent-solid);
+}
