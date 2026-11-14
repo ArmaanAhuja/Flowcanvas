@@ -29,6 +29,13 @@ import { findObjects, remove } from './clean.js';
 import { dockerCli } from './docker-cli.js';
 import { WorkspaceHost } from './workspaces.js';
 import { checkGraph, compareCalls, type CallsLabel } from '../../../corpus/src/calls.js';
+import {
+  barProblems,
+  compareEntryPoints,
+  recall,
+  type AnsweredEntryPoint,
+  type ForkLabels,
+} from '../../../corpus/src/entry-points.js';
 import { compareFlow, type FlowLabel } from '../../../corpus/src/flows.js';
 import { selectRepos } from '../../../corpus/src/select.js';
 
@@ -57,6 +64,8 @@ const repos = selectRepos((corpus('manifest.json') as { repos: Repo[] }).repos, 
 const labels = corpus('labels/symbols.json') as Record<string, Label[] | undefined>;
 const callLabels = corpus('labels/calls.json') as Record<string, CallsLabel[] | undefined>;
 const graphLabels = corpus('labels/graph.json') as Record<string, CallsLabel[] | undefined>;
+/** Phase 8's Done when: each fork's hand-labelled entry points (labels/entry-points.json). */
+const entryLabels = corpus('labels/entry-points.json') as Record<string, ForkLabels | undefined>;
 /** Phase 7's Done when: 10 Documenso flows, labelled by reading the code (labels/flows.json). */
 const flowLabels = corpus('labels/flows.json') as Record<string, FlowLabel[] | undefined>;
 /** Phase 6's four forks (owner, 12 Nov 2026): held to the Done when; Excalidraw and Medusa are reported. */
@@ -350,6 +359,25 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
         const membersCallersMs: number[] = [];
         if (graph.state === 'ready') await checkCalls(storedDiffering, storedMs, membersCallersMs);
 
+        // Phase 8: every entry point the engine lists, a kind and a page at a time, against the labels.
+        const forkEntryLabels = entryLabels[repo.id];
+        const entryPoints: AnsweredEntryPoint[] = [];
+        let entryPointsMs = 0;
+        if (graph.state === 'ready' && forkEntryLabels !== undefined) {
+          for (const kind of ['screen', 'element', 'api-route', 'cli-command'] as const) {
+            for (let after: number | null = 0; after !== null;) {
+              const started = performance.now();
+              const answer = await host.index(ref, { op: 'entryPoints', kind, after, limit: 200 });
+              entryPointsMs = Math.max(entryPointsMs, performance.now() - started);
+              if (!answer.ok || !('counts' in answer.result)) throw new Error('no entry points');
+              entryPoints.push(...answer.result.entries);
+              after = answer.result.next;
+            }
+          }
+        }
+        const entryResult =
+          forkEntryLabels === undefined ? null : compareEntryPoints(forkEntryLabels, entryPoints);
+
         const row = {
           repo: repo.id,
           files: current.files,
@@ -396,6 +424,18 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
                 labelledFlows: `${String(labelledFlows.length - labelledDiffering.length)} of ${String(labelledFlows.length)}`,
               }
             : {}),
+          ...(entryResult !== null
+            ? {
+                entryPoints: entryPoints.length,
+                entryConvention: `${String(entryResult.groups.convention.found)} of ${String(entryResult.groups.convention.labelled)}`,
+                entryCode: `${String(entryResult.groups.code.found)} of ${String(entryResult.groups.code.labelled)} (${(recall(entryResult.groups.code) * 100).toFixed(1)}%)`,
+                entryNotFullyDetected:
+                  entryResult.groups.code.incomplete.length +
+                  entryResult.groups.convention.incomplete.length,
+                entryFalseFinds: entryResult.falseFinds.length,
+                entryPageMaxMs: Math.round(entryPointsMs),
+              }
+            : {}),
           ...(storedMs.length > 0
             ? {
                 storedCalls: `${String(labelledCalls - storedDiffering.length)} of ${String(labelledCalls)}`,
@@ -421,6 +461,17 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
           expect(flowsDiffering).toEqual([]);
           expect(labelledDiffering).toEqual([]);
           if (repo.id === 'documenso') expect(labelledFlows).toHaveLength(10);
+          // Phase 8's bar (owner, 14 Nov 2026), with every not-fully-detected entry point's reason printed.
+          if (entryResult !== null) {
+            for (const line of [
+              ...entryResult.groups.convention.incomplete,
+              ...entryResult.groups.code.incomplete,
+            ]) {
+              console.log(`${repo.id}: not fully detected: ${line}`);
+            }
+            expect(barProblems(entryResult)).toEqual([]);
+            expect(entryPointsMs).toBeLessThan(ANSWER_MS);
+          }
           expect(Math.max(...flowMs, ...detailsMs)).toBeLessThan(ANSWER_MS);
         }
         expect(current.byStatus.parsed).toBeGreaterThan(0);

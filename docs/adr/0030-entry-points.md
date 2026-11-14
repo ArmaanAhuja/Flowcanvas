@@ -87,3 +87,18 @@ Each rule below came from a miss on a fork, was fixed in the detector, and is co
 - **Test and story files aren't entry points:** nothing is detected in `*.test.*`, `*.spec.*`, `__tests__/` or `*.stories.*` files (LibreChat: 896 fewer, mostly elements in tests). Their code stays in the graph.
 - **A base path from an environment variable is named, never read:** `pathValue` writes it `{NEXT_PUBLIC_BASE_PATH}`, through a default (`|| '/'`, `?? ''`), a string method and `const`s, for `process.env.X`, `import.meta.env.X` and `env('X')`/`getEnv('X')`; the route is fully detected. Documenso's incomplete routes went from 64 to 0.
 - **A rewrite is marked:** a Next.js route handler that calls a Hono app's `fetch` itself (not `handle(app)`) marks that app's routes with why: they keep the paths the app registers (Rallly's `POST /v1/polls`).
+
+## Addendum (14 Nov 2026, step 5): what the hand labels found
+
+The labels (`corpus/labels/entry-points.json`, 2,118 entry points) were built without the detectors, and every difference was read in the code. These were the engine's, each fixed with a fixture test that fails without it:
+
+- **A route handler written as `route.tsx`** (Documenso's OG images) wasn't a route: Next.js takes any page extension.
+- **A route handler handing requests to Hono through a factory** (Rallly's `const { handler } = OAuthIntegration(…)`) was listed: the handler is followed through constants and a function's returned object to Hono's `handle`.
+- **A router a function makes and returns** (LibreChat's `app.use('/api/files', await routes.files.initialize())`) was taken for unmounted: the mount follows the function to the router its `return` names. LibreChat's code-registered routes went from 84% to 100%.
+- **A renamed destructuring of a shorthand export** (`const { avatar: agentAvatar } = require(…)` against `module.exports = { v1: router, avatar }`): TypeScript stops at the shorthand; followed to its variable (the rule removed in step 3, needed after all, now with its test).
+- **A route whose component only redirects** (LibreChat's `PromptsRedirect`, Twenty's `LegacySettingsPathRedirect`: every value returned is a `<Navigate>`) is a redirect, not a screen.
+- **A NestJS path array** (`@Controller([…/apiKeys, …/metadata/apiKeys])`): a route under each, not the first only.
+- **Two packages with one name** (Twenty's two app templates): the second was dropped; both are kept, and the first resolves imports of the name.
+- **A named catch-all** (`*path`, `*relativePath`) is written `*`, as the notation says.
+
+The rest of the differences were the labelling scripts' own mistakes (a comment's apostrophe read as a string, a type argument read as a tag, decorators spanning lines), each fixed in the script. At the pins, every fork's labels match the engine's entry points exactly, apart from Rallly's three OAuth routes: their base path is a factory's argument, so the engine lists them under `/:unknown`, not fully detected, with why.
