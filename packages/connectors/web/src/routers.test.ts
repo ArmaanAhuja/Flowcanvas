@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { joinRouters, routersOf, type JoinableRouter } from './routers.js';
+import { joinRouters, ROUTER_MESSAGES, routersOf, type JoinableRouter } from './routers.js';
 import { programOf } from './test-program.js';
 
 describe('routersOf: Hono', () => {
@@ -108,6 +108,9 @@ describe('routersOf: Express', () => {
     });
     expect(routersOf(file('/a.js'))[0]?.routes[0]?.path).toBe('/x');
     expect(routersOf(file('/b.ts'))[0]?.routes[0]?.path).toBe('/y');
+    // A Router serves nothing until mounted; an app is a root.
+    expect(routersOf(file('/a.js'))[0]?.mountedOnly).toBe(true);
+    expect(routersOf(file('/b.ts'))[0]?.mountedOnly).toBe(false);
   });
 });
 
@@ -179,6 +182,49 @@ describe('joinRouters', () => {
     expect(joinRouters(routers).map((e) => [e.name, e.complete, e.why])).toEqual([
       ['GET /:unknown/x', false, 'Part of its path isn’t a constant the code fixes.'],
       ['GET /:unknown/:unknown', false, 'Part of its path isn’t a constant the code fixes.'],
+    ]);
+  });
+
+  it('lists a Router no followed mount reaches under an unknown prefix, never as a root', () => {
+    const routers: JoinableRouter[] = [
+      {
+        key: 'app',
+        framework: 'express',
+        base: '',
+        mountedOnly: false,
+        routes: [route('GET', '/health')],
+        mounts: [{ prefix: '/api/files', target: 'files' }],
+      },
+      {
+        key: 'files',
+        framework: 'express',
+        base: '',
+        mountedOnly: true,
+        routes: [route('GET', '/:id')],
+        mounts: [],
+      },
+      {
+        key: 'agents',
+        framework: 'express',
+        base: '',
+        mountedOnly: true,
+        routes: [route('DELETE', '/:id')],
+        mounts: [{ prefix: '/actions', target: 'actions' }],
+      },
+      {
+        key: 'actions',
+        framework: 'express',
+        base: '',
+        mountedOnly: true,
+        routes: [route('GET', '/')],
+        mounts: [],
+      },
+    ];
+    expect(joinRouters(routers).map((e) => [e.name, e.complete, e.why ?? null])).toEqual([
+      ['GET /health', true, null],
+      ['GET /api/files/:id', true, null],
+      ['DELETE /:unknown/:id', false, ROUTER_MESSAGES.unmounted],
+      ['GET /:unknown/actions', false, ROUTER_MESSAGES.unmounted],
     ]);
   });
 });

@@ -36,6 +36,8 @@ export interface Router {
   readonly framework: RouterFramework;
   /** A Hono app's `basePath('/api/private')`: `''` without one, null when the code doesn't fix it. */
   readonly base: string | null;
+  /** An Express `Router()`: it serves nothing until an app mounts it, so it's never a root (an `express()` app is). */
+  readonly mountedOnly: boolean;
   readonly routes: readonly RegisteredRoute[];
   readonly mounts: readonly Mount[];
 }
@@ -48,14 +50,20 @@ export function routersOf(context: FileContext): Router[] {
   // Each router by its variable (or, unnamed, its creating expression), and what's registered on it.
   const routers = new Map<
     TS.Node,
-    { framework: RouterFramework; base: string | null; routes: RegisteredRoute[]; mounts: Mount[] }
+    {
+      framework: RouterFramework;
+      base: string | null;
+      mountedOnly: boolean;
+      routes: RegisteredRoute[];
+      mounts: Mount[];
+    }
   >();
   const byName = new Map<string, TS.Node>();
 
   /** If `expression` is a chain that starts by creating a router, the router's framework and its base path. */
   const created = (
     expression: TS.Expression,
-  ): { framework: RouterFramework; base: string | null } | null => {
+  ): { framework: RouterFramework; base: string | null; mountedOnly: boolean } | null => {
     let node: TS.Expression = expression;
     let base: string | null = '';
     const chain: TS.CallExpression[] = [];
@@ -71,6 +79,7 @@ export function routersOf(context: FileContext): Router[] {
     }
     const framework = creation(context, creators, node);
     if (framework === null) return null;
+    const mountedOnly = framework === 'express' && expressRouter(context, creators, node);
     for (const call of chain.reverse()) {
       const name = (call.expression as TS.PropertyAccessExpression).name.text;
       if (framework === 'hono' && name === 'basePath') {
@@ -79,7 +88,7 @@ export function routersOf(context: FileContext): Router[] {
         base = base === null || value === null ? null : joinPath(base, value);
       }
     }
-    return { framework, base };
+    return { framework, base, mountedOnly };
   };
 
   // Routers held by variables.
@@ -307,20 +316,42 @@ function creation(
   return null;
 }
 
+/** `express.Router()` or `Router()`, rather than `express()`. */
+function expressRouter(
+  context: FileContext,
+  creators: { hono: Set<string>; express: Set<string> },
+  node: TS.Expression,
+): boolean {
+  const { ts } = context;
+  if (!ts.isCallExpression(node)) return false;
+  const callee = node.expression;
+  return ts.isIdentifier(callee)
+    ? creators.express.has(`Router:${callee.text}`)
+    : ts.isPropertyAccessExpression(callee) && callee.name.text === 'Router';
+}
+
 /** A router across files, as the joiner sees it: `key` is its file and id, `mounts` resolved to other routers' keys. */
 export interface JoinableRouter {
   readonly key: string;
   readonly framework: RouterFramework;
   readonly base: string | null;
+  /** An Express `Router()`: never a root (see `Router`). */
+  readonly mountedOnly?: boolean;
   readonly routes: readonly (RegisteredRoute & { readonly file: string })[];
   /** Each mount's prefix and the key of the router it mounts (unresolved mounts aren't listed). */
   readonly mounts: readonly { readonly prefix: string | null; readonly target: string }[];
 }
 
+export const ROUTER_MESSAGES = {
+  unfixed: 'Part of its path isn’t a constant the code fixes.',
+  unmounted: 'Its router is mounted where the code isn’t followed.',
+} as const;
+
 /**
  * Every route with its full path: from each router no other mounts (a root), down its mounts. A router mounted at
  * two prefixes has its routes under both. A prefix or path the code doesn't fix makes the route incomplete, its
- * unknown part written `:unknown`; a cycle of mounts is cut where it repeats.
+ * unknown part written `:unknown`; a cycle of mounts is cut where it repeats. An Express `Router()` no followed mount
+ * reaches is mounted somewhere the code isn't followed: its routes are listed under an unknown prefix (ADR 0030 §4).
  */
 export function joinRouters(
   routers: readonly JoinableRouter[],
@@ -328,21 +359,24 @@ export function joinRouters(
   const byKey = new Map(routers.map((router) => [router.key, router]));
   const mounted = new Set(routers.flatMap((router) => router.mounts.map((m) => m.target)));
   const found: (FoundEntry & { file: string })[] = [];
-  const walk = (router: JoinableRouter, prefix: string | null, seen: ReadonlySet<string>) => {
-    const base = prefix === null || router.base === null ? null : joinPath(prefix, router.base);
+  // `prefix` is written out, `:unknown` where the code doesn't fix a part; `missing` says why, once a part is unknown.
+  const walk = (
+    router: JoinableRouter,
+    prefix: string,
+    missing: string | null,
+    seen: ReadonlySet<string>,
+  ) => {
+    const base = joinPath(prefix, router.base ?? ':unknown');
+    const unknownBase = missing ?? (router.base === null ? ROUTER_MESSAGES.unfixed : null);
     for (const r of router.routes) {
-      const complete = base !== null && r.path !== null;
+      const why = unknownBase ?? (r.path === null ? ROUTER_MESSAGES.unfixed : null);
       found.push({
         kind: 'api-route',
         framework: router.framework,
-        name: `${r.method} ${joinPath(base ?? ':unknown', r.path ?? ':unknown')}`,
+        name: `${r.method} ${joinPath(base, r.path ?? ':unknown')}`,
         at: r.at,
-        complete,
-        ...(complete
-          ? r.why === undefined
-            ? {}
-            : { why: r.why }
-          : { why: 'Part of its path isn’t a constant the code fixes.' }),
+        complete: why === null,
+        ...(why !== null ? { why } : r.why === undefined ? {} : { why: r.why }),
         ...(r.handler === undefined ? {} : { handler: r.handler }),
         ...(r.handlerName === undefined ? {} : { handlerName: r.handlerName }),
         file: r.file,
@@ -353,13 +387,17 @@ export function joinRouters(
       if (next === undefined || seen.has(next.key)) continue;
       walk(
         next,
-        base === null || mount.prefix === null ? null : joinPath(base, mount.prefix),
+        joinPath(base, mount.prefix ?? ':unknown'),
+        unknownBase ?? (mount.prefix === null ? ROUTER_MESSAGES.unfixed : null),
         new Set([...seen, next.key]),
       );
     }
   };
   for (const router of routers) {
-    if (!mounted.has(router.key)) walk(router, '', new Set([router.key]));
+    if (mounted.has(router.key)) continue;
+    if (router.mountedOnly === true) {
+      walk(router, ':unknown', ROUTER_MESSAGES.unmounted, new Set([router.key]));
+    } else walk(router, '', null, new Set([router.key]));
   }
   return found;
 }
