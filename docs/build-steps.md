@@ -13628,10 +13628,10 @@ pnpm test:visual
 | 1 | Spike: each fork's entry points by framework; the detection approach. ADR 0030 | A | done (Claude, 14 Nov): `docs: phase 8 spike` |
 | 2 | `@flowcanvas/connectors-web`: a detector per framework, with fixtures | A | done (Claude, 14 Nov): `c8a7f7b`, `40d2d8f`, `ecc5e17`, `1695283`, `b11facf`, `e9f77d2`, `e278edd`, `476cbdf`, `3753d4b` |
 | 3 | The engine: entry points in the pass; the protocol and the API | A | done (Claude, 14 Nov): `fe9154d`, `fb7ac57`, `0897727`, `0c00a3a`, `b634c41`, `2a952a4`, `480c36e`, `cad7ae0`, `c0b3c97`, `da6820b` |
-| 4 | The owner's answers to milestone A (decisions log, 14 Nov): test and story files left out, a base path by its variable's name, a rewrite marked; the engine reads `jsconfig.json` | B | *next* |
-| 5 | Hand labels for the 4 forks; the corpus check | B | *planned* |
-| 6 | UI: the entry-points panel in the design system | B | *planned* |
-| 7 | The page: the left panel, Show flow, ⌘K's Entry points | C | *planned* |
+| 4 | The owner's answers to milestone A (decisions log, 14 Nov): test and story files left out, a base path by its variable's name, a rewrite marked; the engine reads `jsconfig.json` | B | done (Claude, 14 Nov): `5e74ca7`, `c71cc1a`, `d255cb5` |
+| 5 | Hand labels for the 4 forks; the corpus check | B | done (Claude, 14 Nov): `ea100e5`, `7e51f4b`, `e8868fd` |
+| 6 | UI: the entry-points panel in the design system | B | done (Claude, 14 Nov): `036605e` |
+| 7 | The page: the left panel, Show flow, ⌘K's Entry points | C | *next* |
 | 8 | Proof: real workspaces, the walkthrough, screens | C | *planned* |
 | 9 | Close: report, 0.12.0 | C | *planned* |
 
@@ -13751,3 +13751,78 @@ pnpm test:visual
 
 **Commits:** `fe9154d` the canvas scroll fix; `fb7ac57` graph format 4; `0897727` built exports to source; `0c00a3a` unmounted Routers; `b634c41` entry points in the pass; `2a952a4` tRPC nested objects; `480c36e` `entryPoints` and shorthand routers; `cad7ae0` the labels' graph lists; `c0b3c97` the API route; `da6820b` the Docker tests' calls-answer checks (the new answer also has `entries`: lint failed CI on `59537a0`, in a package the local run had filtered out; the fast suites now run whole-repository before a push).
 
+
+### Step 8.4 — The owner's answers to milestone A (done by Claude; ADR 0030 and 0026 addenda)
+
+**Goal:** the four answers in the code: test and story files left out, a base path from an environment variable named, a rewritten app marked, and `jsconfig.json` read.
+
+**What a person can do now:** `GET …/index/entry-points` no longer lists test apps (LibreChat: 896 fewer); Documenso's routes read `{NEXT_PUBLIC_BASE_PATH}/api/…`, fully detected; Rallly's v1 routes say they're served through a rewrite; LibreChat's routes reach their controllers (`~/` imports resolve).
+
+**Files:** `packages/connectors/web/src/ast.ts` (`pathValue`, `joinPath`), `routers.ts` (a router's `note`); `packages/engine/src/semantics/entry-pass.ts` (`NOT_ENTRY_FILES`, the rewrite), `projects.ts` and `semantic-service.ts` (`jsconfig.json`); `docs/decisions-log.md`; ADR 0030 and 0026 addenda; ARCHITECTURE.
+
+**Concepts:**
+- **`jsconfig.json`:** TypeScript's project file for JavaScript; it carries `paths` like a `tsconfig.json`. https://code.visualstudio.com/docs/languages/jsconfig
+- **Naming a value without reading it:** an environment variable's name stands for its value in a path (`{NEXT_PUBLIC_BASE_PATH}`); the value (possibly a secret) is never read.
+
+**Found and fixed on the way:** none beyond the answers; the engine's fixture was given the rewrite and test-file shapes.
+
+**Tests:** engine entry-pass tests (test files, the rewrite, `jsconfig.json`), connectors 46 (`pathValue`, `joinPath`, a router's note). Mutation checks, each failing a test: test files not skipped; no rewrite note; no `jsconfig.json`.
+
+**Run and check it:** `pnpm --filter @flowcanvas/engine test`; on a running Documenso workspace, `GET …/index/entry-points?kind=api-route`.
+
+**Risks and laptop:** LibreChat's graph gains the calls `~/` imports hid (its 3 labelled functions still match). Laptop: each fork's pass once.
+
+**Commits:** `5e74ca7` the answers recorded; `c71cc1a` a base path named, a router's note; `d255cb5` test files left out, rewrites marked, `jsconfig.json` read.
+
+### Step 8.5 — Hand labels for the four forks, and the bar held (done by Claude; ADR 0030 addendum)
+
+**Goal:** the Done when's proof: every entry point of Rallly and Documenso, fixed modules of LibreChat and Twenty, and 5 screens' events per fork, labelled without the detectors; the engine held to them in real workspaces.
+
+**What a person can do now:** read `corpus/labels/entry-points.json` (2,118 entry points, each with its group and the scope written down); run the Docker corpus test to see each fork's recall, not-fully-detected entries and false finds.
+
+**Files:** `corpus/labels/entry-points.json`; `corpus/src/entry-points.ts` (`compareEntryPoints`, `barProblems`) and its test; `workspace/host/src/corpus.docker.test.ts`; the engine and connectors fixes below; ADR 0030 addendum. The labelling scripts stayed outside the repository.
+
+**Concepts:**
+- **Independent labels:** built by text scans and hand-written readers (tRPC objects, Express mounts, `<Route>` trees, NestJS decorators), not the detectors; every difference read in the code and settled. Two methods agreeing, and every disagreement read, is the evidence.
+- **Recall and precision per group:** convention-based entry points (file routes, decorators, scripts) must all be found; code-registered ones at least 95% per fork; nothing listed that isn't one.
+
+**Found and fixed on the way** (each with a fixture test that fails without it):
+- A Next.js `route.tsx` wasn't a route (Documenso's OG images).
+- A route handler handing requests to Hono through a factory was listed (Rallly's integrations).
+- A router a function makes and returns was taken for unmounted (LibreChat's files: 84% to 100%).
+- A renamed destructuring of a shorthand export wasn't followed (LibreChat's agents avatar router): the rule removed in step 3 was needed after all.
+- A route whose component only redirects was a screen (LibreChat's `PromptsRedirect`, Twenty's legacy settings paths).
+- A NestJS path array kept only its first path (Twenty's API keys: 5 routes).
+- Two packages with one name lost the second's scripts (Twenty's app templates).
+- A named catch-all (`*path`) is written `*`.
+- The labelling scripts' own mistakes (a comment's apostrophe, a type argument, decorators over several lines) were fixed in the scripts.
+
+**Tests:** corpus 4 (the comparison, the bar, the label file); engine and connectors fixtures for each fix. **In real workspaces** (CI, run 43604622876): Rallly 279 of 279 convention, 90 of 93 code (96.8%), 3 not fully detected (the OAuth factory's routes), 0 false finds; Documenso 308 of 308 and 443 of 443; LibreChat 235 of 235 and 271 of 271; Twenty 311 of 311 and 178 of 178; every page answered in under 50 ms; Twenty's snapshot saved in 439 ms and loaded in 375 ms.
+
+**Run and check it:** `CORPUS_ONLY=rallly pnpm test:docker` (or any fork); its row prints `entryConvention`, `entryCode`, `entryNotFullyDetected`, `entryFalseFinds`, and each not-fully-detected entry with why.
+
+**Risks and laptop:** R3 measured: Rallly's 3 are the only incomplete labelled entry points. Laptop: each fork's pass several times (Twenty about 100 s, 1.1 GB heap), one at a time.
+
+**Commits:** `ea100e5` route.tsx, NestJS arrays, catch-alls, awaited mounts; `7e51f4b` the engine's fixes; `e8868fd` the labels and the check.
+
+### Step 8.6 — The entry-points panel in the design system (done by Claude)
+
+**Goal:** Figma 06's left panel as a component, in the catalogue, before the page uses it.
+
+**What a person can do now:** open the catalogue's Canvas / EntryPointsPanel: groups with counts, a screen opening to its elements, an API route marked not fully detected, jobs and events saying phase 11 brings them; filter, Show flow and Enter work.
+
+**Files:** `packages/ui/src/components/entry-points-panel/` (component, styles, stories, tests); `packages/ui/src/index.ts`; four catalogue baselines.
+
+**Concepts:**
+- **React Aria's Tree** (the WAI-ARIA tree grid): arrows move and open, Enter acts; a row with children not loaded yet gets a "Loading elements…" child, as this version only marks real children expandable. https://react-spectrum.adobe.com/react-aria/Tree.html
+- **Contrast on the selected row:** muted text falls under WCAG AA on `surface/selected`, so the suffix steps up to secondary there (found by axe).
+
+**Found and fixed on the way:** axe's contrast finding on the selected row; names cut short by a hidden Show flow button that still took room (it now takes none until wanted); the site's later-phases test required "phase N" in the arrives text.
+
+**Tests:** ui 5 (groups and counts, the not-fully-detected mark, Show flow and Enter, opening a screen and Show more, the filter); catalogue screenshots of 2 stories in both themes with axe.
+
+**Run and check it:** `pnpm --filter @flowcanvas/ui test`; `pnpm --filter @flowcanvas/ui storybook`, Canvas / EntryPointsPanel.
+
+**Risks and laptop:** R4 (a handler unit's details) is step 7's. Laptop: the catalogue's visual tests for this component, in Playwright's image.
+
+**Commits:** `036605e` the panel.
