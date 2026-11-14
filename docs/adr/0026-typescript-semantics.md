@@ -120,3 +120,11 @@ After the fixes, all 20 match the labels exactly (in-process on the laptop; in r
 | Documenso (all 16) | 7.5 s, 0.57 GB | 8.9 s, 0.75 GB |
 
 Both stay far inside the worker's 2.5 GB cap. Twenty, which never fit whole, relies on the LRU (section 1) as before; its Docker test on CI is the check.
+
+## Addendum (14 Nov 2026, phase 8): exports that point at unbuilt files
+
+A package whose `exports` name its build output (`"./types": { "types": "./dist/types/index.d.ts" }`) points at files the repository doesn't have: `dist/` is built, never committed. Twenty's `twenty-shared` is one, and every import of `twenty-shared/types` resolved to nothing, so the enums its NestJS paths are built from were unknown (291 of Twenty's entry points, found measuring phase 8; the call graph lost the same calls).
+
+**Decision:** a target in a build folder (`dist/`, `build/`, `lib/`, `out/`) that isn't in the project is followed to the source file at the same place under `src/` (`src/types/index.ts`, `.ts` then `.tsx`), and only when that file exists; otherwise the target stays as written. A committed build file is used as it is. This keeps the section's rule that imports reach the real source files, and guesses nothing: a package laid out otherwise stays unresolved, as before.
+
+**Consequences:** on Twenty, the incomplete entry points went from 291 to 3 (each in a test decorator whose routes come from props), and calls into `twenty-shared` now resolve. Tested in `projects.test.ts`.
