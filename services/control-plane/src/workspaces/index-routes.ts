@@ -1,4 +1,5 @@
 import {
+  ENGINE_LIMITS,
   EngineProblem,
   parseEngineRequest,
   TYPESCRIPT_OPS,
@@ -23,8 +24,9 @@ const PROVIDER_STATUS: Record<ProviderErrorKind, 409 | 502 | 503> = {
 /**
  * The project index (phase 4, ADR 0025): /api/projects/:projectId/workspace/index/{status,search}; (phase 5)
  * /index/{definition,references,callers,callees}; (phase 6, ADR 0027) /index/graph, the flow graph's state and
- * its latest version's counts; and (phase 7, ADR 0028) /index/flow, the flow from the function at a place. Only the
- * project's owner, only while the workspace runs.
+ * its latest version's counts; (phase 7, ADR 0028) /index/flow, the flow from the function at a place; and (phase 8,
+ * ADR 0030) /index/entry-points, a page of one kind of entry point. Only the project's owner, only while the workspace
+ * runs.
  *
  * Indexing is not activity (decisions log, 9 Nov 2026): the page asks for the status while it shows progress,
  * and that must never keep a workspace awake. The graph's state is asked for the same way, while it's built. A search is the person using the project, like opening a file,
@@ -92,6 +94,22 @@ export function indexRoutes(deps: WorkspaceDependencies) {
         op: 'search',
         query: c.req.query('q'),
         ...(limit === undefined ? {} : { limit: Number(limit) }),
+      },
+      true,
+    );
+  });
+
+  // A page of one kind of entry point (phase 8): the person browsing the project, so activity.
+  index.get('/index/entry-points', (c) => {
+    const after = c.req.query('after');
+    const limit = c.req.query('limit');
+    return ask(
+      c,
+      {
+        op: 'entryPoints',
+        kind: c.req.query('kind'),
+        after: after === undefined ? 0 : Number(after),
+        limit: limit === undefined ? ENGINE_LIMITS.entries : Number(limit),
       },
       true,
     );
