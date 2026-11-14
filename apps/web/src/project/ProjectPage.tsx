@@ -1,7 +1,6 @@
 import {
   Button,
   ContextMenu,
-  EntryPointsPanel,
   GraphStats,
   MenuItem,
   Rail,
@@ -51,6 +50,9 @@ import styles from './ProjectPage.module.css';
 // The file tree (React Aria's Tree) only when Files is shown, and CodeMirror only when the Code view opens:
 // each in its own chunk, so a project page that never opens them doesn't download them.
 const FilesPanel = lazy(async () => ({ default: (await import('../code/FilesPanel')).FilesPanel }));
+const EntryPointsLeft = lazy(async () => ({
+  default: (await import('../entry-points/EntryPointsLeft')).EntryPointsLeft,
+}));
 const CodeView = lazy(async () => ({ default: (await import('../code/CodeView')).CodeView }));
 // Quick-open (Ctrl/⌘+P) and the command palette (⌘K, phase 4): one chunk of their own (SearchDialogs.ts), fetched in
 // the background once the workspace runs, so it's there before the first keypress. Loading it on the keypress lost
@@ -441,27 +443,29 @@ function ReadyProject({
         ) : (
           <div className={styles.entries}>
             <IndexChip status={index.status} className={styles.panelChip} />
-            <EntryPointsPanel
-              groups={entryGroups(entries, entryFilter)}
-              filter={entryFilter}
-              onFilterChange={setEntryFilter}
-              selected={entryShown}
-              onShowFlow={(row) => {
-                showEntryFlow(row.id);
-              }}
-              onExpand={(row) => {
-                void entries.openScreen(row.id);
-              }}
-              message={
-                !running
-                  ? EMPTY.left
-                  : (entryNotice ??
-                    entries.message ??
-                    (entries.status === 'loading' ? 'Finding entry points…' : null))
-              }
-              filterRef={entryFilterRef}
-              listed={entries.status === 'ready'}
-            />
+            <Suspense fallback={<p className={styles.empty}>Finding entry points…</p>}>
+              <EntryPointsLeft
+                groups={entryGroups(entries, entryFilter)}
+                filter={entryFilter}
+                onFilterChange={setEntryFilter}
+                selected={entryShown}
+                onShowFlow={(row) => {
+                  showEntryFlow(row.id);
+                }}
+                onExpand={(row) => {
+                  void entries.openScreen(row.id);
+                }}
+                message={
+                  !running
+                    ? EMPTY.left
+                    : (entryNotice ??
+                      entries.message ??
+                      (entries.status === 'loading' ? 'Finding entry points…' : null))
+                }
+                filterRef={entryFilterRef}
+                listed={entries.status === 'ready'}
+              />
+            </Suspense>
           </div>
         )
       }
