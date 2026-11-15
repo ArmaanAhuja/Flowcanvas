@@ -129,3 +129,46 @@ describe('originOf through a function typed to hand back what it’s given', () 
     ).toEqual({ module: '@prisma/client', name: 'PrismaClient', steps: ['new', 'envelope'] });
   });
 });
+
+describe('originOf through assignments and pass-through wrappers', () => {
+  it('follows a lazily set variable to what it’s assigned (`let client: Stripe | undefined`)', () => {
+    expect(
+      originAt(
+        {
+          '/service.ts': [
+            "import Stripe from 'stripe';",
+            'let client: Stripe | undefined;',
+            'export function getStripe() {',
+            "  if (!client) client = new Stripe('k');",
+            '  return client;',
+            '}',
+          ].join('\n'),
+          '/use.ts':
+            "import { getStripe } from './service';\ngetStripe().prices.retrieve('p'); // here",
+        },
+        '/use.ts',
+      ),
+    ).toEqual({ module: 'stripe', name: 'default', steps: ['new', 'prices'] });
+  });
+
+  it('follows React’s cache to the function it wraps', () => {
+    expect(
+      originAt(
+        {
+          '/ssr.ts': [
+            "import { cache } from 'react';",
+            "import { createServerSideHelpers } from '@trpc/react-query/server';",
+            'export const helper = cache(async () => createServerSideHelpers({}));',
+          ].join('\n'),
+          '/page.ts':
+            "import { helper } from './ssr';\nconst trpc = await helper();\ntrpc.calendars.list.prefetch(); // here",
+        },
+        '/page.ts',
+      ),
+    ).toEqual({
+      module: '@trpc/react-query/server',
+      name: 'createServerSideHelpers',
+      steps: ['(_)', 'calendars', 'list'],
+    });
+  });
+});

@@ -88,7 +88,40 @@ describe('dataOf', () => {
     ]);
   });
 
+  it('finds a client given as a destructured parameter, by its default or its declared type', () => {
+    expect(
+      found(
+        {
+          '/db.ts': PRISMA,
+          '/q.ts': [
+            "import { prisma } from './db';",
+            "import type { PrismaClient } from '@prisma/client';",
+            'export const count = ({ db = prisma }: { db?: unknown }) => db.poll.count();',
+            'export const all = ({ client }: { client: PrismaClient }) => client.option.findMany();',
+          ].join('\n'),
+        },
+        '/q.ts',
+      ).map((h) => [h.table, h.operation]),
+    ).toEqual([
+      ['polls', 'read'],
+      ['Option', 'read'],
+    ]);
+  });
+
   it('finds a transaction client’s reads and writes (`tx: Prisma.TransactionClient`)', () => {
+    // Re-exported from a client generated at build time, which the repository doesn't have (Rallly).
+    expect(
+      found(
+        {
+          '/database.ts': "export { Prisma } from './generated/prisma/client';",
+          '/use.ts': [
+            "import { Prisma } from './database';",
+            'export const go = (tx: Prisma.TransactionClient) => tx.poll.update({});',
+          ].join('\n'),
+        },
+        '/use.ts',
+      ).map((h) => h.table),
+    ).toEqual(['polls']);
     const hits = found(
       {
         '/t.ts': [
@@ -118,6 +151,7 @@ describe('dataOf', () => {
           "db.selectFrom('Envelope as e').where((eb) => eb.exists(eb.selectFrom('Recipient')));",
           "db.updateTable('Envelope').set({});",
           'sql`DELETE FROM "Session" WHERE expires < now()`;',
+          'sql`SELECT pg_advisory_xact_lock(1)`;',
         ].join('\n'),
       },
       '/q.ts',
@@ -127,6 +161,7 @@ describe('dataOf', () => {
       ['kysely', 'Recipient', 'read'],
       ['kysely', 'Envelope', 'write'],
       ['sql', 'Session', 'write'],
+      ['sql', null, 'read'],
     ]);
   });
 

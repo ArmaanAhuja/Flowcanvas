@@ -93,6 +93,9 @@ describe('handoffOf and receiversOf', () => {
         "bus.emit('poll.created', {});",
         "await mail.add('welcome', {});",
         'setTimeout(() => {}, 1000);',
+        'window.setInterval(() => {}, 1000);',
+        'const [, setInterval] = [0, (v: string) => v];',
+        "setInterval('monthly');",
         'await new Promise((resolve) => setTimeout(resolve, 50));',
         'await new Promise((r) => setTimeout(() => r(undefined), 50));',
       ].join('\n'),
@@ -101,6 +104,7 @@ describe('handoffOf and receiversOf', () => {
       ['event', 'event:poll.created', 'poll.created', null],
       ['queue', 'bullmq:mail', 'mail · welcome', null],
       ['timer', null, 'setTimeout', null],
+      ['timer', null, 'setInterval', null],
     ]);
     expect(
       receiversOf(programOf(files)('/e.ts'))

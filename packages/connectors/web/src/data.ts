@@ -295,10 +295,13 @@ function rawSql(context: FileContext, query: TS.Node | undefined): FoundData {
     };
   }
   const { tables, operation } = sqlTables(text);
-  const [table] = tables;
-  return table === undefined
-    ? { library: 'sql', table: null, operation, complete: false, why: DATA_MESSAGES.sql }
-    : { library: 'sql', table: tables.join(', '), operation, complete: true };
+  // Text the code fixes that names no table (`SELECT pg_advisory_xact_lock(…)`): the database, no table.
+  return {
+    library: 'sql',
+    table: tables.length === 0 ? null : tables.join(', '),
+    operation,
+    complete: true,
+  };
 }
 
 /**

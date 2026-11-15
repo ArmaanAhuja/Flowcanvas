@@ -230,6 +230,9 @@ function declarationOrigin(
         const followed = declarationOrigin(context, target, depth + 1, seen);
         if (followed !== null) return followed;
       }
+      // Re-exported through the project to a module it doesn't have (a generated client): the last re-export's.
+      const reexported = lastReexport(ts, checker, symbol);
+      if (reexported !== null) return reexported;
     }
     return imported;
   }
@@ -237,6 +240,18 @@ function declarationOrigin(
     if (declaration.initializer !== undefined) {
       const followed = next(declaration.initializer);
       if (followed !== null) return followed;
+    }
+    // `let client: Stripe | undefined; … client = createStripeClient(…)`: what it's assigned, when all agree.
+    const assigned = assignmentsOf(context, declaration).map((value) =>
+      trace(context, value, depth + 1, new Set(seen)),
+    );
+    const [first] = assigned;
+    if (
+      first !== null &&
+      first !== undefined &&
+      assigned.every((o) => o !== null && o.module === first.module && o.name === first.name)
+    ) {
+      return first;
     }
     return declaration.type === undefined
       ? null
@@ -253,6 +268,19 @@ function declarationOrigin(
     const pattern = declaration.parent;
     const holder = pattern.parent;
     if (property === null || !ts.isObjectBindingPattern(pattern)) return null;
+    // A destructured parameter (`{ db = prisma }`, `{ stripe }: { stripe: Stripe }`): its default, else its declared
+    // type's property.
+    if (ts.isParameter(holder)) {
+      if (declaration.initializer !== undefined) {
+        const followed = next(declaration.initializer);
+        if (followed !== null) return followed;
+      }
+      const member = checker?.getPropertyOfType(checker.getTypeAtLocation(holder), property);
+      const memberDeclaration = member?.valueDeclaration ?? member?.declarations?.[0];
+      return memberDeclaration === undefined || memberDeclaration.getSourceFile().isDeclarationFile
+        ? null
+        : declarationOrigin(context, memberDeclaration, depth + 1, seen);
+    }
     if (ts.isVariableDeclaration(holder) && holder.initializer !== undefined) {
       // A property the project declares on what's destructured: followed to its value.
       const member = checker?.getPropertyOfType(
@@ -315,6 +343,17 @@ function typeOrigin(
   seen: Set<TS.Node>,
 ): Origin | null {
   const { ts, checker } = context;
+  // `Stripe | undefined`: its one type that isn't nothing.
+  if (ts.isUnionTypeNode(type)) {
+    const real = type.types.filter(
+      (t) =>
+        !(ts.isLiteralTypeNode(t) && t.literal.kind === ts.SyntaxKind.NullKeyword) &&
+        t.kind !== ts.SyntaxKind.UndefinedKeyword &&
+        t.kind !== ts.SyntaxKind.NullKeyword,
+    );
+    const [only] = real;
+    return real.length === 1 && only !== undefined ? typeOrigin(context, only, depth, seen) : null;
+  }
   // `typeof import('mongoose')`: the module itself.
   if (ts.isImportTypeNode(type) && type.isTypeOf) {
     const argument = type.argument;
@@ -395,6 +434,11 @@ function returnedValue(context: FileContext, callee: TS.Expression): TS.Expressi
   if (declaration === undefined || declaration.getSourceFile().isDeclarationFile) return undefined;
   if (ts.isVariableDeclaration(declaration) && declaration.initializer !== undefined) {
     declaration = declaration.initializer;
+  }
+  // A known wrapper that calls the function it's given (`cache(async () => …)`): that function.
+  if (ts.isCallExpression(declaration)) {
+    const wrapped = wrappedFunction(context, declaration);
+    if (wrapped !== undefined) declaration = wrapped;
   }
   if (!(
     ts.isFunctionDeclaration(declaration) ||
@@ -481,4 +525,72 @@ function passedThrough(
     }
   }
   return undefined;
+}
+
+/**
+ * Following an import one alias at a time, the last `export { X } from 'm'` on the way: where the project says the value
+ * comes from when the module itself isn't there (Rallly's `export { Prisma } from '../generated/prisma/client'`).
+ */
+function lastReexport(ts: typeof TS, checker: TS.TypeChecker, symbol: TS.Symbol): Origin | null {
+  let found: Origin | null = null;
+  let current = symbol;
+  for (let hops = 0; hops < 8; hops += 1) {
+    // Only an alias has a next step (the checker asserts it).
+    if ((current.flags & ts.SymbolFlags.Alias) === 0) break;
+    const next = checker.getImmediateAliasedSymbol(current);
+    const declaration = next?.declarations?.[0];
+    if (next === undefined || declaration === undefined) break;
+    if (ts.isExportSpecifier(declaration)) {
+      const module = declaration.parent.parent.moduleSpecifier;
+      if (module !== undefined && ts.isStringLiteral(module)) {
+        found = {
+          module: module.text,
+          name: (declaration.propertyName ?? declaration.name).text,
+          steps: [],
+        };
+      }
+    }
+    current = next;
+  }
+  return found;
+}
+
+/** Functions that hand back the function they're given, calling it as it is (memoised): React's and lodash's. */
+const PASS_THROUGH: Readonly<Record<string, ReadonlySet<string>>> = {
+  react: new Set(['cache', 'useCallback']),
+  lodash: new Set(['memoize', 'once']),
+  'lodash/memoize': new Set(['default']),
+  'lodash/once': new Set(['default']),
+};
+
+function wrappedFunction(context: FileContext, call: TS.CallExpression): TS.Expression | undefined {
+  const { ts } = context;
+  const [fn] = call.arguments;
+  if (fn === undefined || !(ts.isArrowFunction(fn) || ts.isFunctionExpression(fn)))
+    return undefined;
+  const wrapper = trace(context, call.expression, 0, new Set());
+  if (wrapper?.module == null || wrapper.steps.length > 0) return undefined;
+  return PASS_THROUGH[wrapper.module]?.has(wrapper.name) === true ? fn : undefined;
+}
+
+/** The values a variable is assigned in its file (`client = createStripeClient(…)`). */
+function assignmentsOf(context: FileContext, declaration: TS.VariableDeclaration): TS.Expression[] {
+  const { ts, checker } = context;
+  if (checker === undefined || !ts.isIdentifier(declaration.name)) return [];
+  const symbol = checker.getSymbolAtLocation(declaration.name);
+  if (symbol === undefined) return [];
+  const values: TS.Expression[] = [];
+  const visit = (node: TS.Node): void => {
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      ts.isIdentifier(node.left) &&
+      checker.getSymbolAtLocation(node.left) === symbol
+    ) {
+      values.push(node.right);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(declaration.getSourceFile());
+  return values;
 }

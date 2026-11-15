@@ -117,10 +117,20 @@ export function handoffOf(context: FileContext, call: TS.CallExpression): FoundH
   const callee = call.expression;
   const [first] = call.arguments;
 
-  // Timers: run here, later.
-  if (ts.isIdentifier(callee) && TIMERS.has(callee.text)) {
-    const origin = originOf(context, callee);
-    if (origin?.module !== null || origin.name !== callee.text) return null;
+  // Timers: run here, later; `setTimeout(…)`, or through `window` or `globalThis`.
+  const timer = ts.isIdentifier(callee)
+    ? callee
+    : ts.isPropertyAccessExpression(callee) &&
+        ts.isIdentifier(callee.expression) &&
+        /^(window|globalThis|self)$/.test(callee.expression.text)
+      ? callee.name
+      : undefined;
+  if (timer !== undefined && ts.isIdentifier(timer) && TIMERS.has(timer.text)) {
+    // A function the project declares with that name (a state setter called `setInterval`) isn't the timer.
+    if (ts.isIdentifier(callee)) {
+      const origin = originOf(context, callee);
+      if (origin?.module !== null || origin.name !== callee.text) return null;
+    }
     // `new Promise((resolve) => setTimeout(resolve, ms))`, or a function that only resolves one: a pause, not work.
     if (first !== undefined && resolvesPromise(context, first)) return null;
     return first === undefined
@@ -129,7 +139,7 @@ export function handoffOf(context: FileContext, call: TS.CallExpression): FoundH
           kind: 'timer',
           library: 'timers',
           key: null,
-          name: callee.text,
+          name: timer.text,
           complete: true,
           runs: first,
         };
