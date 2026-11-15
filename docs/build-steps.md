@@ -13984,3 +13984,28 @@ pnpm test:visual
 **Risks and laptop:** Laptop runs all unit, walkthrough, and lint suites in seconds. Graph memory on Twenty kept under 1.2 GB.
 
 **Commits:** `2d962fb`, `c07492c`, `0ad9f79`, `511ec45`, `16077ea`, `c4abd0f`, `65e56b3`, `2ceeb7b`, `3f299ba`, `c5c0cc9`, `9fffabc`, `d49eacd`, `a01dde0`, `808899a`, `5c3fbf5`, `1ed8ebd`, `a772e5b`, `1fd99c3`, `b8f4e76`, `4790336`, `f47728f`, `eb73caf`, `f324e29`, `ef8e11f`, `3a6ecb5`, `95eaa9a`, `4fbfad1`, `9f8f493`, `6e00c53`, `1fca557`, `0250751`, `775dcdc`, `1f948d5`, `32c5b26`.
+
+### Step 9.2 — The close checked: real walkthroughs, read labels, the chains, Twenty's slow file (done by Claude)
+
+**Goal:** check step 9.1's close against the bar before reporting, and fix what didn't hold.
+
+**What a person can do now:** run the three walkthroughs and see the forks' real flows (Rallly's CreatePoll into polls.make's handler; Documenso's sendDocument writes and its signing email's nodemailer boundary; Twenty's email queue and its worker in the Background lane); read `corpus/labels/connections.json`, whose sites were each read against an independent scan, with the Done whens' chains; Twenty's graph builds in about 3 minutes again.
+
+**Files:** `e2e/try-it/phase-9.spec.ts`, `phase-10.spec.ts`, `phase-11.spec.ts` and their fixtures `e2e/try-it/fixtures/phase-9-rallly.json`, `phase-10-documenso.json`, `phase-11-twenty.json`; `corpus/labels/connections.json`; `corpus/src/connections.ts` (`chainProblems`) and its test; `workspace/host/src/corpus.docker.test.ts`; `packages/engine/src/semantics/connection-pass.ts` (bundled output), `projects.ts` (built exports' source); `packages/connectors/web/src/links.ts` (mutations through the project's own hooks); `docs/adr/0031-connectors.md` (addendum); the report and the living docs.
+
+**Concepts:** none new.
+
+**Found and fixed on the way:**
+- **The walkthroughs drew flows written by hand**, with files and tables the forks don't have (`polls/new/create-poll-form.tsx` in Rallly, a `documents` table in Documenso, `workspace/clean.ts` and `cleanWorker` in Twenty): against rule 3, never fabricate. Rewritten on the engine's own flows, cut from each fork's graph at its pin.
+- **The labels were the engine's own output**, so the bar checked the engine against itself, and LibreChat's and Twenty's scopes had been widened past phase 8's modules (LibreChat's 88 timer sites were in `client/src/components/`). Rebuilt from graphs whose every difference with an independent scan was read in the code, in the owner's scope; the one miss is labelled with why.
+- **Twenty took over 10 minutes** (step 9.1 raised CI's limit to 10 minutes): one 1 MB minified bundle (`seed-project/hello-world/index.mjs`, a line of 242,630 characters) took 418 s once the connectors traced values through it. Files with a line over 10,000 characters are built output and the connectors skip them; CI's limit is back to 7 minutes; Twenty builds in 179 s locally.
+- **The Done whens' chains weren't held.** Each fork's labels now name them, each node reached from the one before in the stored graph: a submit into its API's handler in all four forks; Documenso's writes and its email through the signing job; Twenty's enqueue → queue → worker → result.
+- **LibreChat's login form didn't reach its API:** its mutation comes from the project's own hook (React Query 4's `useMutation([key], { mutationFn })` inside `useLoginUserMutation`), and its data provider's types are `./dist/types/index.d.ts` (the JavaScript entry `./dist/index.mjs` is `src/index.ts`; `src/types/index.ts` holds its types alone). Both followed now; LibreChat's links 241 → 340.
+
+**Tests:** the walkthroughs (3, each on the engine's own flows; 9 of 9 repeats pass locally); the connectors' two screens, both themes (20 of 20 repeats); the corpus's chain test (where a chain breaks, and a missing node); `isBundled`; the built-export mapping (the JavaScript entry's source first); mutations through the project's own hook. In real workspaces on CI (run 43712385746): Rallly 569 of 569, Documenso 1,598 of 1,599 (the miss read), LibreChat 5 of 5, Twenty 20 of 20; no false finds; every chain holds (1, 3, 1 and 2).
+
+**Run and check it:** `pnpm test:e2e -- try-it/phase-9.spec.ts try-it/phase-10.spec.ts try-it/phase-11.spec.ts`; `pnpm test:docker` (the bar and the chains, in real workspaces); the report's "How to try it".
+
+**Risks and laptop:** none new. Laptop: each fork's graph built here one at a time (Twenty 179 s, LibreChat 149 s).
+
+**Commits:** `e11e093` the connectors skip bundled output; `6560fda` the walkthroughs on the engine's flows; `44476d0` the chains, and mutations through the project's own hooks; `19fa14c` and `db6882d` built exports' source; `59de3f5` ADR 0031's addendum; `067f0d8` the labels; `f9865d7` formatting; `aece166` test counts; `7b2666f` the connectors' screens, search typed once it listens (3 of 10 repeats had timed out), every fork's graph time held to its recorded CI figure plus half; this commit, the record of it and the report.

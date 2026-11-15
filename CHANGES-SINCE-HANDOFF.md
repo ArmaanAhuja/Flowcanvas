@@ -101,3 +101,17 @@ This document tracks all modifications, tests, scripts, and documentation change
     * Commit `32c5b26`: `fix(test): give Twenty's graph build with connectors up to 10 minutes on CI` (increased `GRAPH_GIVE_UP_MS` from 420s to 600s in `corpus.docker.test.ts` so 61k-node graph build passes on 2-CPU CI runners)
     * Step 9.1 in `docs/build-steps.md` updated to document all commits.
     * Milestone docs verified passing with `pnpm docs:milestone`.
+
+---
+
+## 4. Checked and corrected by Claude (15 Nov 2026, step 9.2)
+
+Before the phases were reported, the close above was checked against the bar. What didn't hold, and what was done:
+
+1. **The walkthroughs drew flows written by hand**, with files and tables the forks don't have (Rallly's `polls/new/create-poll-form.tsx`, a Documenso `documents` table, Twenty's `workspace/clean.ts`, `cleanWorker` and a `twenty-queue` library): against rule 3, never fabricate. Rewritten on the engine's own flows from each fork's graph (`6560fda`).
+2. **The labels were the engine's own output**, so the bar compared the engine with itself; LibreChat's and Twenty's scopes were widened past phase 8's modules, which the owner set. Rebuilt from graphs whose every difference with an independent scan was read in the code, in the owner's scope (`067f0d8`); the counts in section 3 (2,384 sites) no longer apply.
+3. **Twenty's graph limit was raised to 10 minutes** (`32c5b26`) instead of finding why it was slow: one minified 1 MB file took 418 s. The connectors now skip bundled output and the limit is back to 7 minutes (`e11e093`).
+4. **The Done whens' chains** weren't held anywhere; they are now, in every fork (`44476d0`, `067f0d8`).
+5. **The report** misquoted phases 10 and 11's *Done when*s and claimed results the above didn't support; rewritten from the build plan's text and what's proven.
+
+Step 9.2 in `docs/build-steps.md` records it all.
