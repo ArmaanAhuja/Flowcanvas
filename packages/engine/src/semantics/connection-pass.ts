@@ -55,6 +55,21 @@ export interface FileConnections {
 
 export const NO_CONNECTIONS: FileConnections = { links: [], receivers: [] };
 
+/** Bundled or minified output (a line this long): built code, not the project's own; the connectors skip it. */
+export const BUNDLED_LINE = 10_000;
+
+/** Whether a file is bundled output: any line longer than `BUNDLED_LINE` (Twenty's 1 MB seed bundle took 418 s). */
+export function isBundled(text: string): boolean {
+  let start = 0;
+  while (start < text.length) {
+    const end = text.indexOf('\n', start);
+    const stop = end === -1 ? text.length : end;
+    if (stop - start > BUNDLED_LINE) return true;
+    start = stop + 1;
+  }
+  return false;
+}
+
 /** What a call reaches, as the walk adds it: a node, and the kind of edge to it. */
 export interface Reached {
   readonly node: GraphNode;
@@ -139,6 +154,8 @@ export class FileConnector {
   readonly #ctx: GraphContext;
   readonly #tables: ReadonlyMap<string, string>;
   readonly #path: string;
+  /** Bundled output: nothing is asked of the connectors in it, so its calls stay what they were. */
+  readonly #bundled: boolean;
 
   constructor(
     ctx: GraphContext,
@@ -150,10 +167,12 @@ export class FileConnector {
     this.#context = { ts: ctx.ts, source, checker: program.getTypeChecker() };
     this.#tables = tables;
     this.#path = projectPath(ctx, source.fileName);
+    this.#bundled = isBundled(source.text);
   }
 
   /** Whether a call is a connection: something it reaches, or a link with a key. */
   claims(node: TS.CallExpression | TS.NewExpression): boolean {
+    if (this.#bundled) return false;
     const ts = this.#ctx.ts;
     if (this.reached(node, 0) !== null) return true;
     if (!ts.isCallExpression(node)) return false;
@@ -163,6 +182,7 @@ export class FileConnector {
 
   /** For a call that isn't the project's own code: what it reaches, or null. */
   reached(node: TS.CallExpression | TS.NewExpression, line: number): Reached | null {
+    if (this.#bundled) return null;
     const ts = this.#ctx.ts;
     if (ts.isNewExpression(node)) {
       const socket = socketOf(this.#context, node);
@@ -188,6 +208,7 @@ export class FileConnector {
 
   /** For a call into the project's own code: work it hands off as well (`jobs.triggerJob(…)`), or null. */
   alongside(node: TS.CallExpression, line: number): Reached | null {
+    if (this.#bundled) return null;
     const handoff = handoffOf(this.#context, node);
     return handoff === null || handoff.kind === 'timer'
       ? null
@@ -196,6 +217,7 @@ export class FileConnector {
 
   /** A tagged template of raw SQL. */
   reachedByTemplate(node: TS.TaggedTemplateExpression): Reached | null {
+    if (this.#bundled) return null;
     const data = taggedDataOf(this.#context, node);
     return data === null ? null : { node: dataNode(data), edge: 'data' };
   }
@@ -208,6 +230,7 @@ export class FileConnector {
     line: number,
     at: number,
   ): void {
+    if (this.#bundled) return;
     const { ts } = this.#ctx;
     const found = linkOf(this.#context, node);
     if (found !== null && found.keys.length > 0) {
@@ -229,6 +252,7 @@ export class FileConnector {
    * its declaration, for the walk to reach as it reaches a resolved call.
    */
   through(node: TS.CallExpression): TS.Declaration | undefined {
+    if (this.#bundled) return undefined;
     const { ts } = this.#ctx;
     const checker = this.#context.checker;
     const fn = mutationFunction(this.#context, node);
@@ -276,6 +300,7 @@ export function receiversOfFile(
   handlers: Map<TS.Node, HandlerUnit>,
 ): PendingReceiver[] {
   const { ts } = ctx;
+  if (isBundled(source.text)) return [];
   const context: FileContext = { ts, source, checker: program.getTypeChecker() };
   const path = projectPath(ctx, source.fileName);
   const receivers: PendingReceiver[] = [];

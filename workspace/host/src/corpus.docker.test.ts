@@ -90,7 +90,7 @@ const SNAPSHOT_MS = 1000;
  */
 const ANSWER_MS = 1000;
 /** A whole-project graph on CI's two CPUs: minutes for the largest; a pass that never ends is still a failure. */
-const GRAPH_GIVE_UP_MS = 600_000;
+const GRAPH_GIVE_UP_MS = 420_000;
 
 /** The build plan's two forks: held to the targets. The other four are measured and reported. */
 const HELD = new Set(['rallly', 'documenso']);

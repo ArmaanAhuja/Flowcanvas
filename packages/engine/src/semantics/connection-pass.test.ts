@@ -199,3 +199,11 @@ describe('which route method serves a call', () => {
     expect(servesMethod('GET', 'POST')).toBe(false);
   });
 });
+
+describe('bundled output', () => {
+  it('is a file with a line over 10,000 characters, which the connectors skip', async () => {
+    const { isBundled } = await import('./connection-pass.js');
+    expect(isBundled(`const a = 1;\n${'x'.repeat(10_001)}\n`)).toBe(true);
+    expect(isBundled(`const a = 1;\n${'x'.repeat(9_999)}\n`)).toBe(false);
+  });
+});
