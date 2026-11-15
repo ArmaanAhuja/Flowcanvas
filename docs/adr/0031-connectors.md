@@ -52,3 +52,15 @@ Each kind has Graphite's icon (data, external service or AI, queue) and says wha
 - Unknown edges fall (Rallly: about 70 mutations now reach their server action or API), but the rule set is a list: a library or pattern not on it stays unknown, and is added when a project needs it. Nothing is matched by a name alone.
 - `originOf` is the most intricate reader in the engine; each rule it follows has a test, and the labels hold it to the forks.
 - The pass does more per call; measured on the forks with the graph times the Docker test records.
+
+## Addendum (15 Nov 2026): what the forks taught, and an installed package's types
+
+Comparing the engine with an independent text scan of each fork's connector sites, and reading every difference in the code, found about 25 rules `originOf` and the pass needed. They're general TypeScript patterns, not one fork's: re-exports of a module the repository doesn't have (Rallly's generated Prisma client) and of a type; a variable set later; a union's one real type; several returns that agree; a function typed to hand back what it's given; React's `cache` and lodash's `memoize` as pass-through wrappers; destructured parameters by their default, declared type, or as a callback's; a parameter typed by its function's declared type; type aliases; a property a type declares; dynamic and namespace imports. And in the pass:
+
+- **Calls into the project's own code** still hand off and link: `jobs.triggerJob` on Documenso's own job client, a wrapper's `request.post(url)`.
+- **A connection is drawn at its method's line** (`.selectFrom` in a chain written over lines).
+- **Bundled output is skipped:** a file with a line over 10,000 characters is built code; the connectors aren't asked about it (Twenty's 1 MB minified seed bundle took 418 s alone).
+- **Declarations built into `dist/types`** reach the source they mirror (`src/index.ts`), so LibreChat's client reaches its data provider.
+- **Not fixed by these:** a value the code hands through a prop (LibreChat's login form's `onSubmit`), and a file over the engine's 1 MB read limit (Twenty's 1.5 MB generated GraphQL documents): both stay unknown.
+
+**An installed package's types (owner, 15 Nov 2026).** In a user's workspace the packages are installed, so TypeScript can say what a value is however the code wraps it. Where following the code reaches nothing, the type TypeScript gives the value, when an installed package declares it, names the package and type (`node_modules/stripe`, `@types/nodemailer` for `nodemailer`). Following the code still goes first: it knows a Prisma model's accessor and a Mongoose model's name, which a type doesn't. The corpus forks don't install their packages, so this is proven by unit tests until the workspaces install (phase 37).
