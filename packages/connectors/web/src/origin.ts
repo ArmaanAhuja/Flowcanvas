@@ -74,8 +74,22 @@ function unwrap(ts: typeof TS, expression: TS.Expression): TS.Expression {
   }
 }
 
-const withSteps = (origin: Origin | null, ...steps: Step[]): Origin | null =>
-  origin === null ? null : { ...origin, steps: [...origin.steps, ...steps] };
+const withSteps = (origin: Origin | null, ...steps: Step[]): Origin | null => {
+  if (origin === null) return null;
+  // A property taken from a whole module (`import * as m`, `await import('m')`) is that module's export.
+  const [first, ...rest] = steps;
+  if (
+    origin.name === '*' &&
+    origin.steps.length === 0 &&
+    first !== undefined &&
+    first !== NEW &&
+    first !== PARAM &&
+    !first.startsWith('(')
+  ) {
+    return { module: origin.module, name: first, steps: rest };
+  }
+  return { ...origin, steps: [...origin.steps, ...steps] };
+};
 
 function trace(
   context: FileContext,
@@ -111,6 +125,13 @@ function trace(
   }
   if (ts.isCallExpression(expression)) {
     const callee = unwrap(ts, expression.expression);
+    // `await import('m')`: the whole module.
+    if (callee.kind === ts.SyntaxKind.ImportKeyword) {
+      const [first] = expression.arguments;
+      return first !== undefined && ts.isStringLiteralLike(first)
+        ? { module: first.text, name: '*', steps: [] }
+        : null;
+    }
     // `require('m')` in CommonJS (LibreChat's server).
     if (ts.isIdentifier(callee) && callee.text === 'require') {
       const [first] = expression.arguments;

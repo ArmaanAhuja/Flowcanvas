@@ -165,6 +165,22 @@ describe('dataOf', () => {
     ]);
   });
 
+  it("finds a Mongoose model made from a module typed `typeof import('mongoose')` (LibreChat’s data schemas)", () => {
+    const hits = found(
+      {
+        '/user.ts': [
+          "export const createUserModel = (mongoose: typeof import('mongoose')) =>",
+          "  mongoose.models.User || mongoose.model('User', {});",
+          "export const find = (mongoose: typeof import('mongoose')) => createUserModel(mongoose).findOne({});",
+        ].join('\n'),
+      },
+      '/user.ts',
+    );
+    expect(hits.map((h) => [h.library, h.table, h.operation])).toEqual([
+      ['mongoose', 'User', 'read'],
+    ]);
+  });
+
   it('finds Mongoose models’ reads and writes, from a factory of models (CommonJS)', () => {
     const hits = found(
       {

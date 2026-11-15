@@ -178,7 +178,11 @@ function isKysely(origin: Origin): boolean {
 /** A Mongoose model's name, when the value is the model itself (`mongoose.model('User', …)`, `models.User`). */
 function mongooseModel(origin: Origin): string | null {
   if (origin.module !== 'mongoose') return null;
-  const steps = origin.steps;
+  // From `typeof import('mongoose')` the first property is the import's name (`models`): read it as a step.
+  const steps =
+    origin.name === 'default' || origin.name === '*'
+      ? origin.steps
+      : [origin.name, ...origin.steps];
   for (let i = steps.length - 1; i >= 0; i -= 1) {
     const step = steps[i] ?? '';
     if (step === 'model' && isCall(steps[i + 1]) && i + 2 === steps.length) {

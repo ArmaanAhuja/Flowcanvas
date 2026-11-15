@@ -210,3 +210,30 @@ describe('originOf through several returns and type aliases', () => {
     ).toEqual({ module: 'kysely', name: 'ExpressionBuilder', steps: ['new'] });
   });
 });
+
+describe('originOf through dynamic and namespace imports', () => {
+  it('names the export a property of a whole module is', () => {
+    expect(
+      originAt(
+        {
+          '/s.ts': [
+            'export async function sign() {',
+            "  const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');",
+            '  return getSignedUrl({}, {}); // here',
+            '}',
+          ].join('\n'),
+        },
+        '/s.ts',
+      ),
+    ).toEqual({ module: '@aws-sdk/s3-request-presigner', name: 'getSignedUrl', steps: [] });
+    expect(
+      originAt(
+        {
+          '/n.ts':
+            "import * as presigner from '@aws-sdk/s3-request-presigner';\npresigner.getSignedUrl.call(null); // here",
+        },
+        '/n.ts',
+      ),
+    ).toEqual({ module: '@aws-sdk/s3-request-presigner', name: 'getSignedUrl', steps: [] });
+  });
+});
