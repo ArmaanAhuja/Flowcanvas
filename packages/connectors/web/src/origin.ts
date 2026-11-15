@@ -573,24 +573,42 @@ function wrappedFunction(context: FileContext, call: TS.CallExpression): TS.Expr
   return PASS_THROUGH[wrapper.module]?.has(wrapper.name) === true ? fn : undefined;
 }
 
+/** Each file's assignments to a plain name, by the name's symbol: one walk per file and checker, kept. */
+const ASSIGNMENTS = new WeakMap<
+  TS.TypeChecker,
+  WeakMap<TS.SourceFile, Map<TS.Symbol, TS.Expression[]>>
+>();
+
 /** The values a variable is assigned in its file (`client = createStripeClient(…)`). */
 function assignmentsOf(context: FileContext, declaration: TS.VariableDeclaration): TS.Expression[] {
   const { ts, checker } = context;
   if (checker === undefined || !ts.isIdentifier(declaration.name)) return [];
   const symbol = checker.getSymbolAtLocation(declaration.name);
   if (symbol === undefined) return [];
-  const values: TS.Expression[] = [];
-  const visit = (node: TS.Node): void => {
-    if (
-      ts.isBinaryExpression(node) &&
-      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-      ts.isIdentifier(node.left) &&
-      checker.getSymbolAtLocation(node.left) === symbol
-    ) {
-      values.push(node.right);
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(declaration.getSourceFile());
-  return values;
+  const file = declaration.getSourceFile();
+  let files = ASSIGNMENTS.get(checker);
+  if (files === undefined) {
+    files = new WeakMap();
+    ASSIGNMENTS.set(checker, files);
+  }
+  let all = files.get(file);
+  if (all === undefined) {
+    const found = new Map<TS.Symbol, TS.Expression[]>();
+    const visit = (node: TS.Node): void => {
+      if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+        ts.isIdentifier(node.left)
+      ) {
+        const assigned = checker.getSymbolAtLocation(node.left);
+        if (assigned !== undefined)
+          found.set(assigned, [...(found.get(assigned) ?? []), node.right]);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(file);
+    all = found;
+    files.set(file, all);
+  }
+  return all.get(symbol) ?? [];
 }
