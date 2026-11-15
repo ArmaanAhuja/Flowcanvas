@@ -14034,4 +14034,4 @@ pnpm test:visual
 
 **Risks and laptop:** stored graphs are rebuilt once (format 6). Laptop: each fork's graph built once and saved for every comparison (owner's CI answer 4), Twenty 5 min; the screenshot suite run once before the push (answer 3).
 
-**Commits:** `23d6f28` jobs, cron and events as entry points; `acbd109` hand-off kind type in join test; this commit.
+**Commits:** `23d6f28` jobs, cron and events as entry points; `acbd109` hand-off kind type in join test; `1f05687` entry points test lint fix; this commit.

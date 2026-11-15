@@ -134,3 +134,9 @@ Step 9.2 in `docs/build-steps.md` records it all.
    - Recorded commit SHAs `23d6f28` and `acbd109` under Step 9.3 in `docs/build-steps.md`.
    - Verified that `pnpm docs:milestone` and `pnpm docs:check` pass green.
 
+4. **Lint Fix for Entry Points Test (`1f05687`)**:
+   - Fixed `@typescript-eslint/no-unnecessary-condition` and `@typescript-eslint/no-unnecessary-boolean-literal-compare` in `apps/web/src/entry-points/entry-points.test.tsx` (removed unnecessary optional chains and boolean comparisons on non-nullish row text).
+   - Verified `pnpm --filter @flowcanvas/web lint` and `entry-points.test.tsx` pass.
+   - Recorded commit SHA `1f05687` under Step 9.3 in `docs/build-steps.md`.
+
+
