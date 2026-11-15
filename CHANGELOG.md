@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-11-16 — Phases 12 and 13: progressive disclosure and sequence view (in progress)
+
+Progressive disclosure (phase 12: semantic grouping, expand/collapse, pinned positions, unknown stubs, completeness pill) and Sequence view (phase 13: waterfall timeline, order from code, async hops in background lane, Graph / Sequence switch). Grouped per owner decision (15 Nov 2026).
+
+### Added
+
+- **Progressive disclosure (phase 12):** semantic grouping into stacked cards, expand and collapse with pinned positions, unknown stubs, completeness pill.
+- **Sequence view (phase 13):** waterfall timeline showing synchronous execution order and async hand-offs in a Background lane; Graph / Sequence switch in the top bar.
+
 ## [0.13.0] — 2026-11-15 — Phases 9 to 11: connectors
 
 Flows now cross from a form into the API that serves it, show each read and write with its table, each email, payment, storage or AI call as an outside service, and work handed to a queue or job in a Background lane below the main flow (phases 9 to 11). Workspaces still run on your own computer (`pnpm dev`).

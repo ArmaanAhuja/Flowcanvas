@@ -2,9 +2,9 @@
 
 The one place to see how to run Flowcanvas, how to test it, and which features exist so far. It's updated at every build step. Details for each step live in `docs/build-steps.md`; phase status in `docs/STATUS.md`; how it's put together in `ARCHITECTURE.md`.
 
-- **Last updated:** 15 Nov 2026: phases 9 to 11 closed for review, 0.13.0 (connectors: UI → API links, reads and writes with their tables, outside services, hand-offs to a framed Background lane; held to every connector site of Rallly and Documenso and phase 8's modules of LibreChat and Twenty, each read against an independent scan, and to the Done whens' chains), branch `phase/9-connectors`, PR #23
-- **Reviewed:** phase 9, close (15 Nov 2026): re-read in full against the code; phase 9, 10, and 11 sections and Coming next brought up to date. At every milestone this doc is re-read in full, and this line names the milestone (`pnpm docs:milestone` checks it).
-- **Released (on staging):** `0.13.0`, phases 9 to 11, deployed to staging by CI when PR #23 merges (to be checked: staging's `/api/health` reporting 0.13.0). Before it, `0.12.0`, phase 8.
+- **Last updated:** 16 Nov 2026: phases 12 and 13 in progress, 0.14.0 (progressive disclosure: semantic grouping, expand and collapse, pinned positions, unknown stubs, completeness pill; sequence view: waterfall timeline, order from code, async hops in background lane, Graph / Sequence switch), branch `phase/12-progressive-disclosure`
+- **Reviewed:** phases 12 and 13, step 12.0 (16 Nov 2026): re-read in full against the code; phases 12 and 13 initiated. At every milestone this doc is re-read in full, and this line names the milestone (`pnpm docs:milestone` checks it).
+- **Released (on staging):** `0.13.0`, phases 9 to 11, serving on staging (`https://flowcanvas.ahujaarmaan7777.workers.dev/api/health`). Before it, `0.12.0`, phase 8.
 - **Progress:** phases 1, 1a, 1b, 1c, 2, 3, 4, 5, 6, 7, 8, 9, 10 and 11 are accepted; 1d is in review (until a cloud provider). That's 13 of the build plan's 96 phases accepted. Stage 1's goal: see a project's real flows, from code, honestly.
 
 ## Where it runs
@@ -189,5 +189,5 @@ CI runs the checks (with the bundle budget), Docker (four parallel jobs), visual
   - **Try it:** `pnpm dev`, a fork's corpus project with its workspace running. Rallly: ⌘K `CreatePoll`, Show flow, follow to `mutation polls.make` and its handler. Documenso: ⌘K `sendDocument` (its writes), then `run` in `send-signing-email.handler.ts` (`Email · nodemailer`). Twenty: ⌘K `send` (EmailService), the email queue's hand-off and `EmailSenderJob.handle` in the Background lane; or, in the left panel, Jobs and cron → `email-queue · EmailSenderJob`, Show flow.
 
 ### Coming next
-- **Phase 12, Progressive disclosure:** collapsible groups, zoom-dependent detail, and navigation across large graphs.
-- **After that:** stage 1 concludes with grouped flows (phase 12) and sequence view (phase 13); stage 2 adds live frames of the running app.
+- **Phases 12 and 13, Progressive disclosure and Sequence view:** semantic grouping, expand and collapse, pinned positions, unknown stubs, completeness pill, and waterfall sequence view with Graph / Sequence switch.
+- **After that:** stage 2 adds live frames of the running app (phases 14 to 18).

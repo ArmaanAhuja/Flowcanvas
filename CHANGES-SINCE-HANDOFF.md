@@ -166,6 +166,33 @@ Step 9.2 in `docs/build-steps.md` records it all.
    - Increased Medusa CI graph build threshold in `corpus.docker.test.ts` from 145s to 180s to absorb runner CPU jitter.
    - Recorded `b570009` in `docs/build-steps.md`.
 
+4. **PR #23 100% Green CI & Merged into `main` (`d9f3a6f`)**:
+   - CI run `43748710731` passed 100% green across all 9 jobs on GitHub Actions.
+   - Merged PR #23 into `main` using `gh pr merge 23 --merge --subject "Merge: phases 9 to 11, connectors (0.13.0) (#23)"`.
+   - Post-merge CI run `43749414990` on `main` passed 100% green across all 9 jobs, deploying Release 0.13.0 to Cloudflare Pages staging.
+   - Staging verified via `curl -s https://flowcanvas.ahujaarmaan7777.workers.dev/api/health`, returning `{"status":"ok","service":"control-plane","version":"0.13.0"}`.
+
+---
+
+## 7. Initiation of Grouped Phases 12 & 13: Progressive Disclosure and Sequence View
+
+1. **Branch Created**:
+   - Created branch `phase/12-progressive-disclosure` branched from `main` (`d9f3a6f`).
+   - Grouping Phases 12 and 13 under one branch, one report, and one acceptance per owner decision (15 Nov 2026).
+
+2. **Architecture and ADR 0032**:
+   - Authored `docs/adr/0032-progressive-disclosure-and-sequence-view.md` detailing the design for semantic grouping, expand/collapse with pinned positions, unknown stubs, completeness pill, and waterfall sequence view with Graph/Sequence top-bar switch and bidirectional node inspection.
+
+3. **Living Documentation & Milestone Gate**:
+   - Bumped `package.json` version to `0.14.0`.
+   - Updated `CHANGELOG.md` with section for `[0.14.0]`.
+   - Updated `docs/STATUS.md` setting current milestone to `phases 12 and 13, step 12.0` and adding rows 12 and 13 as `in progress` (`0.14.0`).
+   - Updated `docs/RUN-AND-FEATURES.md`, `ARCHITECTURE.md`, `README.md`, and `docs/upgrade-later.md` with the new milestone.
+   - Added Step 12.0 to `docs/build-steps.md`.
+   - Verified that `pnpm docs:check` and `pnpm docs:milestone` pass green.
+
+
+
 
 
 

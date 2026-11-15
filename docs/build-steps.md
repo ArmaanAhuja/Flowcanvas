@@ -14035,3 +14035,46 @@ pnpm test:visual
 **Risks and laptop:** stored graphs are rebuilt once (format 6). Laptop: each fork's graph built once and saved for every comparison (owner's CI answer 4), Twenty 5 min; the screenshot suite run once before the push (answer 3).
 
 **Commits:** `23d6f28` jobs, cron and events as entry points; `acbd109` hand-off kind type in join test; `1f05687` entry points test lint fix; `3ba2a71` Graph stats no longer says data and async arrive in phases 10 and 11; `b570009` Graph stats visual baselines and Medusa limit; this commit. **After acceptance (15 Nov):** Graph stats stopped saying data and async arrive in phases 10 and 11 (all kinds are in the graph since phases 10 and 11; found by `pnpm docs:check` once the phases were accepted); and the acceptance recorded (STATUS, RUN-AND-FEATURES, ARCHITECTURE, the report, the decisions log).
+
+
+## Phases 12 and 13 — Progressive disclosure and Sequence view
+
+**Build:**
+- **Phase 12, Progressive disclosure:** semantic grouping, expand and collapse, *unknown* stubs, completeness pill per flow, pinned positions.
+- **Phase 13, Sequence view:** timeline of the same flow (order from code, async hops in background lane, retries, failure paths); Graph / Sequence switch in the 40 px top bar.
+
+**Done when:**
+- Phase 12: A 60-node flow opens as 8 or fewer groups; expanding one moves no other node.
+- Phase 13: Same flow reads correctly in both views.
+
+**Try it:**
+- Phase 12: Open Twenty's largest flow; expand a group; read the completeness pill.
+- Phase 13: Switch to Sequence on any flow; compare with Figma 08.
+
+**Design references:** Figma 06 (canvas and flow layout); Figma 08 (Sequence view); design brief ("Flow graph view", "Sequence (timeline) view", "Completeness pill"); ADR 0032.
+
+### Steps (planned)
+
+| # | Step | Milestone | Status |
+| --- | --- | --- | --- |
+| 0 | The plan and decisions; branch; pace option C (phases 12 and 13 grouped) | A | done (Claude & Antigravity, 16 Nov): `docs: phases 12 and 13's plan` |
+| 1 | Progressive disclosure: semantic grouping, expand/collapse, pinned positions, unknown stubs, completeness pill | A | *next* |
+| 2 | Sequence view: timeline layout, order from code, async hops, Graph/Sequence switch, bidirectional inspector | A | *planned* |
+| 3 | Verification on corpus (Twenty 60-node flow), walkthroughs, visual baselines, report, release 0.14.0 | A | *planned* |
+
+### Step 12.0 — The plan and the owner's decisions (done by Claude & Antigravity)
+
+**Goal:** plan for phases 12 and 13 grouped into branch `phase/12-progressive-disclosure` under pace option C (one report, one build-steps entry, living docs re-read at release).
+
+**What a person can do now:** read the plan in `docs/decisions-log.md` and ADR 0032. Nothing in the app changes yet.
+
+**Files:** `docs/decisions-log.md`, `docs/adr/0032-progressive-disclosure-and-sequence-view.md`, `docs/STATUS.md`, `docs/RUN-AND-FEATURES.md`, `ARCHITECTURE.md`, `README.md`, `package.json`, `CHANGELOG.md`.
+
+**Concepts:**
+- **Semantic grouping:** Grouping related nodes (by module/folder/service boundaries or category, e.g. "Validation", "Auth service") so a 60-node flow opens as 8 or fewer initial groups.
+- **Pinned layout:** Expanding or collapsing a group reveals its child nodes in place without moving any other node in the layout.
+- **Completeness pill:** Displaying the provenance breakdown top-left on the canvas; clicking it filters/highlights weak edges.
+- **Sequence view:** Timeline waterfall representation of the exact same flow graph (synchronous order, async hops in background lane, failure paths).
+
+**Found on the way:** grouping phases 12 and 13 per owner decision (15 Nov 2026); release 0.14.0 in progress.
+
