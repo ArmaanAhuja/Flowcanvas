@@ -139,4 +139,11 @@ Step 9.2 in `docs/build-steps.md` records it all.
    - Verified `pnpm --filter @flowcanvas/web lint` and `entry-points.test.tsx` pass.
    - Recorded commit SHA `1f05687` under Step 9.3 in `docs/build-steps.md`.
 
+5. **CI Run 43744981137 Green & PR #23 Ready for Review**:
+   - Pushed commit `6d94dd7` to `origin/phase/9-connectors`.
+   - CI run `43744981137` completed 100% green across all 9 parallel jobs (including Twenty Docker shard in 4m28s, 26 walkthroughs passed, 198 visual tests passed).
+   - Marked PR #23 ready for review (`gh pr ready 23`).
+   - Awaiting owner's formal acceptance to merge PR #23 to `main` (Release `0.13.0`) and begin Phase 12 (Progressive disclosure).
+
+
 
