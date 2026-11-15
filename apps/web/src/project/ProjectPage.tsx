@@ -532,7 +532,7 @@ function ReadyProject({
               flow={flows.flow}
               onSelectNode={select}
               onOpenNode={(node) => {
-                const place = node.type === 'stub' ? null : node.data.place;
+                const place = node.type === 'stub' || node.type === 'lane' ? null : node.data.place;
                 if (place != null) openPlace(place);
               }}
             />
