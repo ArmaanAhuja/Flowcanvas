@@ -190,6 +190,9 @@ Step 9.2 in `docs/build-steps.md` records it all.
    - Updated `docs/RUN-AND-FEATURES.md`, `ARCHITECTURE.md`, `README.md`, and `docs/upgrade-later.md` with the new milestone.
    - Added Step 12.0 to `docs/build-steps.md`.
    - Verified that `pnpm docs:check` and `pnpm docs:milestone` pass green.
+   - Committed Step 12.0 as `2093243` (`docs: phases 12 and 13's plan (step 12.0: ADR 0032, release 0.14.0)`).
+   - Pushed branch `phase/12-progressive-disclosure` to origin and created Draft PR #24 (https://github.com/ArmaanAhuja/Flowcanvas/pull/24).
+
 
 
 
