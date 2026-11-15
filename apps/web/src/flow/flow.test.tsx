@@ -75,7 +75,7 @@ const FLOW: NonNullable<FlowResult['flow']> = {
       place: null,
       unit: null,
       change: 'unchanged',
-      handoff: { kind: 'queue', library: 'twenty-queue', name: 'clean', complete: true, why: null },
+      handoff: { kind: 'queue', library: 'message-queue', name: 'clean', complete: true, why: null },
     },
   ],
   edges: [
@@ -292,12 +292,12 @@ describe('FlowInspector', () => {
       node('flow', {
         id: '(handoff queue:clean)',
         title: 'clean',
-        location: 'queue · twenty-queue',
+        location: 'queue · message-queue',
       }),
     );
     expect(screen.getByText('Async hand-off')).toBeTruthy();
     expect(screen.getAllByText('clean').length).toBe(2);
     expect(screen.getByText('Queue')).toBeTruthy();
-    expect(screen.getByText('twenty-queue')).toBeTruthy();
+    expect(screen.getByText('message-queue')).toBeTruthy();
   });
 });

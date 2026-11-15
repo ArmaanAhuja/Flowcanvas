@@ -1,9 +1,9 @@
 {
-  "about": "Phases 9 to 11 hand labels (owner, 15 Nov 2026): every connector site in Rallly and Documenso (packages/ee aside, which is never enabled), and in the same fixed modules of LibreChat and Twenty as phase 8: a database read or write and its table, an outside service, an async hand-off, and a UI-to-API link. 100% precision; at least 95% recall per fork; every miss explained.",
+  "about": "Phases 9 to 11's hand labels (owner, 15 Nov 2026): every connector site (a read or write and its table, an outside service, a hand-off, a link to the app's API or a mutation run through a hook) in Rallly and Documenso, and in phase 8's fixed modules of LibreChat and Twenty, at the pins. Built by comparing the engine with an independent text scan of the same files, and reading every difference in the code: where the engine was wrong it was fixed (about 20 fixes, each with a test); where the scan was wrong it's noted; what the engine still misses is labelled with why. A site is at its method's line (`.selectFrom`, not the chain's first line). The bar: 100% precision, at least 95% recall per fork, every miss explained.",
   "rallly": {
     "scope": ["*"],
     "notes": [
-      "Every database read and write (Prisma and raw SQL), external service (Stripe, nodemailer, S3 presigner, Zoom/Webex/Microsoft HTTP APIs), async timer and UI->API link."
+      "Every file at the pin, tests aside. The independent scan's other differences, read in the code: setInterval in apps/landing pricing-controls.tsx is a React state setter, not the timer."
     ],
     "sites": [
       {
@@ -3420,12 +3420,22 @@
         "kind": "handoff",
         "to": "timer setInterval"
       }
+    ],
+    "chains": [
+      {
+        "name": "Phase 9: the Create poll form's submit (CreatePoll, makePoll.mutateAsync) into the tRPC procedure polls.make and its handler",
+        "path": [
+          "apps/web/src/features/poll/components/create-poll.tsx#CreatePoll",
+          "apps/web/src/trpc/routers/polls.ts#(entry mutation polls.make)",
+          "apps/web/src/trpc/routers/polls.ts#(handler mutation make)"
+        ]
+      }
     ]
   },
   "documenso": {
     "scope": ["*"],
     "notes": [
-      "Every database read and write (Prisma, Kysely, raw SQL), external service (nodemailer, Stripe, S3), job hand-off (triggerJob, BullMQ), and UI->API link (React Router actions/loaders and fetch/axios). Packages/ee excluded."
+      "Every file at the pin, tests and packages/ee aside. The independent scan's other differences, read in the code: authClient.account.delete (security.linked-accounts.tsx) is better-auth's client, not Prisma; trpc.admin.stripe.createCustomer (organisations.$id.tsx) is a tRPC procedure named stripe; setInterval in billing-plans.tsx is a state setter; setTimeout(() => resolve(null), …) in utils/timeout.ts only waits."
     ],
     "sites": [
       {
@@ -13015,6 +13025,39 @@
         "line": 61,
         "kind": "handoff",
         "to": "timer setTimeout"
+      },
+      {
+        "file": "packages/email/preview/app/components/playground.tsx",
+        "line": 71,
+        "kind": "link",
+        "to": "action /api/render",
+        "missed": "The email preview app's route (packages/email/preview/app/routes/api.render.tsx) isn't detected as an entry point, so the call has no route to join."
+      }
+    ],
+    "chains": [
+      {
+        "name": "Phase 9: the document edit form's send (sendDocumentWithSubject) into the tRPC procedure document.distribute and its handler",
+        "path": [
+          "apps/remix/app/components/general/document/document-edit-form.tsx#DocumentEditForm.sendDocumentWithSubject",
+          "packages/trpc/server/document-router/distribute-document.ts#(entry mutation document.distribute)",
+          "packages/trpc/server/document-router/distribute-document.ts#(handler mutation distributeDocumentRoute)"
+        ]
+      },
+      {
+        "name": "Phase 10: sendDocument writes the Envelope table",
+        "path": [
+          "packages/lib/server-only/document/send-document.ts#sendDocument",
+          "(data prisma Envelope write)"
+        ]
+      },
+      {
+        "name": "Phase 10: sendDocument hands the signing email to its job, whose handler sends it through nodemailer",
+        "path": [
+          "packages/lib/server-only/document/send-document.ts#sendDocument",
+          "(handoff job:send.signing.requested.email)",
+          "packages/lib/jobs/definitions/emails/send-signing-email.ts#(handler send.signing.requested.email)",
+          "(service email nodemailer)"
+        ]
       }
     ]
   },
@@ -13027,280 +13070,16 @@
       "api/server/routes/agents/",
       "api/server/routes/files/",
       "client/src/routes/",
-      "client/src/components/"
+      "client/src/components/Chat/Messages/MessageNav.tsx",
+      "client/src/components/Conversations/ChatFilterMenu.tsx",
+      "client/src/components/Nav/KeyboardShortcutsDialog.tsx",
+      "client/src/components/Chat/Input/ChatForm.tsx",
+      "client/src/components/Nav/SettingsTabs/Account/Avatar.tsx"
     ],
-    "notes": ["Fixed modules covering routes, Mongoose models, external services and timers."],
+    "notes": [
+      "Phase 8's fixed modules (its routes, its client routes, its 5 chosen screens): they hand most work to services outside them, so few connector sites are here."
+    ],
     "sites": [
-      {
-        "file": "api/server/routes/convos.js",
-        "line": 511,
-        "kind": "service",
-        "to": "ai openai"
-      },
-      {
-        "file": "client/src/components/Agents/CategoryTabs.tsx",
-        "line": 98,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Agents/CopyLink.tsx",
-        "line": 71,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Agents/DescriptionWords.tsx",
-        "line": 161,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Agents/Marketplace.tsx",
-        "line": 119,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Agents/SmartLoader.tsx",
-        "line": 43,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Agents/VirtualizedAgentGrid.tsx",
-        "line": 333,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Artifacts/Artifacts.tsx",
-        "line": 114,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Artifacts/Artifacts.tsx",
-        "line": 211,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Artifacts/Artifacts.tsx",
-        "line": 353,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Artifacts/Artifacts.tsx",
-        "line": 424,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Artifacts/UndockedArtifacts.tsx",
-        "line": 76,
-        "kind": "handoff",
-        "to": "timer setInterval"
-      },
-      {
-        "file": "client/src/components/Auth/Registration.tsx",
-        "line": 56,
-        "kind": "handoff",
-        "to": "timer setInterval"
-      },
-      {
-        "file": "client/src/components/Auth/VerifyEmail.tsx",
-        "line": 29,
-        "kind": "handoff",
-        "to": "timer setInterval"
-      },
-      {
-        "file": "client/src/components/Bookmarks/BookmarkEditDialog.tsx",
-        "line": 61,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/BackgroundTasks/Button.tsx",
-        "line": 41,
-        "kind": "handoff",
-        "to": "timer setInterval"
-      },
-      {
-        "file": "client/src/components/Chat/BackgroundTasks/Button.tsx",
-        "line": 57,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Input/Composer/Palette.tsx",
-        "line": 659,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Input/Mention.tsx",
-        "line": 232,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Input/PromptsCommand.tsx",
-        "line": 265,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Input/QuoteButton.tsx",
-        "line": 471,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Input/SkillsCommand.tsx",
-        "line": 335,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Input/StreamAudio.tsx",
-        "line": 26,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Input/StreamAudio.tsx",
-        "line": 93,
-        "kind": "link",
-        "to": "POST /api/files/speech/tts"
-      },
-      {
-        "file": "client/src/components/Chat/Input/TokenUsage/Popover.tsx",
-        "line": 78,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Input/TokenUsage/Popover.tsx",
-        "line": 89,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Menus/OpenSidebar.tsx",
-        "line": 33,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Menus/PresetsMenu.tsx",
-        "line": 57,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Messages/Content/AgentHandoff.tsx",
-        "line": 162,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Messages/Content/FilePreviewDialog.tsx",
-        "line": 240,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Messages/Content/Parts/Attachment.tsx",
-        "line": 119,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Messages/Content/Parts/Attachment.tsx",
-        "line": 315,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Messages/Content/Parts/Attachment.tsx",
-        "line": 406,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Messages/Content/Parts/BashCall.tsx",
-        "line": 165,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Messages/Content/Parts/CodeWindowHeader.tsx",
-        "line": 29,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Messages/Content/Parts/OpenAIImageGen/OpenAIImageGen.tsx",
-        "line": 188,
-        "kind": "handoff",
-        "to": "timer setInterval"
-      },
-      {
-        "file": "client/src/components/Chat/Messages/Content/Parts/Reasoning.tsx",
-        "line": 351,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Messages/Content/Parts/SubagentCall.tsx",
-        "line": 143,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Messages/Content/Parts/Thinking.tsx",
-        "line": 137,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Messages/Content/Parts/Thinking.tsx",
-        "line": 266,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Messages/Content/Parts/useLazyHighlight.ts",
-        "line": 167,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Messages/Content/ToolOutput/OutputRenderer.tsx",
-        "line": 168,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Messages/Elapsed.tsx",
-        "line": 68,
-        "kind": "handoff",
-        "to": "timer setInterval"
-      },
-      {
-        "file": "client/src/components/Chat/Messages/Fork.tsx",
-        "line": 74,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Messages/Fork.tsx",
-        "line": 89,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
       {
         "file": "client/src/components/Chat/Messages/MessageNav.tsx",
         "line": 593,
@@ -13320,246 +13099,6 @@
         "to": "timer setTimeout"
       },
       {
-        "file": "client/src/components/Chat/Messages/ScrollButton.tsx",
-        "line": 61,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/PullRequest/useRowHover.ts",
-        "line": 69,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Rename.tsx",
-        "line": 126,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Chat/Trace/Inspector.tsx",
-        "line": 186,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Conversations/ConvoOptions/SharedLinkButton.tsx",
-        "line": 120,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Conversations/ConvoOptions/SharedLinkButton.tsx",
-        "line": 172,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Conversations/facets.ts",
-        "line": 66,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Insights/InsightsView.tsx",
-        "line": 636,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Insights/InsightsView.tsx",
-        "line": 688,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Lia/index.tsx",
-        "line": 58,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Messages/Content/Error/LimitError.tsx",
-        "line": 92,
-        "kind": "handoff",
-        "to": "timer setInterval"
-      },
-      {
-        "file": "client/src/components/Messages/Content/Mermaid/Export.tsx",
-        "line": 102,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Messages/Content/Mermaid/Export.tsx",
-        "line": 105,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Messages/Content/Mermaid/MermaidDialog.tsx",
-        "line": 77,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Messages/Content/Mermaid/MermaidHeader.tsx",
-        "line": 60,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Messages/Content/Mermaid/ZoomControls.tsx",
-        "line": 39,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Messages/Content/RunCode.tsx",
-        "line": 83,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Messages/Content/useCopyCode.ts",
-        "line": 28,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Messages/Content/useDownloadCode.ts",
-        "line": 32,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Nav/Settings/CodeEnvironments.tsx",
-        "line": 222,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Nav/Settings/ConnectedAccounts.tsx",
-        "line": 83,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Nav/Settings/ConnectedAccounts.tsx",
-        "line": 216,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Nav/SettingsTabs/About/About.tsx",
-        "line": 80,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Nav/SettingsTabs/General/UiScaleSelector.tsx",
-        "line": 65,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/OAuth/OAuthSuccess.tsx",
-        "line": 19,
-        "kind": "handoff",
-        "to": "timer setInterval"
-      },
-      {
-        "file": "client/src/components/Prompts/display/PromptTextCard.tsx",
-        "line": 43,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Prompts/fields/PromptName.tsx",
-        "line": 85,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Prompts/forms/CreatePromptForm.tsx",
-        "line": 60,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/SidePanel/Agents/Advanced/AdvancedPanel.tsx",
-        "line": 29,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/SidePanel/Agents/AgentSelect.tsx",
-        "line": 285,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/SidePanel/Agents/Search/Action.tsx",
-        "line": 42,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/SidePanel/Agents/Search/Action.tsx",
-        "line": 46,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/SidePanel/Builder/AssistantConversationStarters.tsx",
-        "line": 43,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/SidePanel/Builder/AssistantSelect.tsx",
-        "line": 231,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/SidePanel/MCPBuilder/MCPServerDialog/index.tsx",
-        "line": 65,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/SidePanel/MCPBuilder/MCPServerDialog/index.tsx",
-        "line": 72,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/SidePanel/Memories/MemoryCreateDialog.tsx",
-        "line": 51,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/SidePanel/Memories/MemoryEditDialog.tsx",
-        "line": 64,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Skills/display/SkillFileViewer.tsx",
-        "line": 72,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
-        "file": "client/src/components/Tools/AssistantToolsDialog.tsx",
-        "line": 68,
-        "kind": "handoff",
-        "to": "timer setTimeout"
-      },
-      {
         "file": "client/src/routes/Layouts/Login.tsx",
         "line": 14,
         "kind": "handoff",
@@ -13571,27 +13110,37 @@
         "kind": "handoff",
         "to": "timer setTimeout"
       }
+    ],
+    "chains": [
+      {
+        "name": "Phase 9: the login form's submit (the auth context's login, a callback in AuthContextProvider whose calls are the provider's, passed to LoginForm as its onSubmit: a prop the code alone can't follow) into POST /api/auth/login and its controller",
+        "path": [
+          "client/src/hooks/AuthContext.tsx#AuthContextProvider",
+          "api/server/routes/auth.js#(entry POST /api/auth/login)",
+          "api/server/controllers/auth/LoginController.js#loginController"
+        ]
+      }
     ]
   },
   "twenty": {
     "scope": [
-      "packages/twenty-server/src/engine/core-modules/auth/",
+      "packages/twenty-server/src/engine/core-modules/auth/controllers/",
       "packages/twenty-server/src/engine/api/rest/core/controllers/rest-api-core.controller.ts",
-      "packages/twenty-server/src/engine/core-modules/api-key/",
-      "packages/twenty-server/src/engine/core-modules/workspace/",
+      "packages/twenty-server/src/engine/core-modules/api-key/controllers/",
+      "packages/twenty-server/src/engine/core-modules/auth/auth.resolver.ts",
+      "packages/twenty-server/src/engine/core-modules/workspace/workspace.resolver.ts",
+      "packages/twenty-website/src/app/",
       "packages/twenty-front/src/modules/app/components/SettingsRoutes.tsx",
-      "packages/twenty-website/src/app/"
+      "packages/twenty-front/src/modules/activities/calendar/components/CalendarEventComposerFields.tsx",
+      "packages/twenty-front/src/modules/object-record/object-options-dropdown/components/ObjectOptionsDropdownLayoutContent.tsx",
+      "packages/twenty-front/src/modules/page-layout/widgets/call-recording-transcript/components/CallRecordingAudioPlayer.tsx",
+      "packages/twenty-front/src/modules/workflow/workflow-trigger/components/WorkflowEditTriggerCronForm.tsx",
+      "packages/twenty-front/src/modules/settings/accounts/components/SettingsAccountsConnectionForm.tsx"
     ],
     "notes": [
-      "TypeORM repositories and entities in auth, API key and workspace modules; NestJS controllers and GraphQL resolvers; BullMQ message queues."
+      "Phase 8's fixed modules (its auth and API-key controllers, its REST controller, its auth and workspace resolvers, its website app, its settings routes, its 5 chosen screens)."
     ],
     "sites": [
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/api-key/commands/generate-api-key.command.ts",
-        "line": 99,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
       {
         "file": "packages/twenty-server/src/engine/core-modules/auth/auth.resolver.ts",
         "line": 332,
@@ -13635,718 +13184,101 @@
         "to": "typeorm workspaceSSOIdentityProvider read"
       },
       {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/guards/google-apis-oauth-exchange-code-for-token.guard.ts",
-        "line": 106,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/guards/google-apis-oauth-request-code.guard.ts",
-        "line": 46,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/guards/google-oauth.guard.ts",
-        "line": 39,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/guards/microsoft-apis-oauth-request-code.guard.ts",
-        "line": 59,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/guards/microsoft-oauth.guard.ts",
-        "line": 44,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/auth-sso.service.ts",
-        "line": 44,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/auth-sso.service.ts",
-        "line": 63,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/auth.service.ts",
-        "line": 115,
-        "kind": "data",
-        "to": "typeorm user read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/auth.service.ts",
-        "line": 512,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/auth.service.ts",
-        "line": 654,
-        "kind": "data",
-        "to": "typeorm appToken write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/auth.service.ts",
-        "line": 689,
-        "kind": "data",
-        "to": "typeorm user read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/auth.service.ts",
-        "line": 724,
-        "kind": "data",
-        "to": "typeorm user write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/auth.service.ts",
-        "line": 728,
-        "kind": "data",
-        "to": "typeorm appToken write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/auth.service.ts",
-        "line": 774,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/auth.service.ts",
-        "line": 864,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/auth.service.ts",
-        "line": 886,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/connected-account-oauth.service.ts",
-        "line": 38,
-        "kind": "data",
-        "to": "typeorm userWorkspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/create-calendar-channel.service.ts",
-        "line": 45,
-        "kind": "data",
-        "to": "typeorm ? write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/create-connected-account.service.ts",
-        "line": 78,
-        "kind": "data",
-        "to": "typeorm userWorkspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/create-connected-account.service.ts",
-        "line": 102,
-        "kind": "data",
-        "to": "typeorm ? write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/create-message-channel.service.ts",
-        "line": 49,
-        "kind": "data",
-        "to": "typeorm ? write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/create-sso-connected-account.service.ts",
+        "file": "packages/twenty-website/src/app/api/enterprise/activate/route.ts",
         "line": 36,
-        "kind": "data",
-        "to": "typeorm userWorkspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/create-sso-connected-account.service.ts",
-        "line": 49,
-        "kind": "data",
-        "to": "typeorm connectedAccount read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/create-sso-connected-account.service.ts",
-        "line": 61,
-        "kind": "data",
-        "to": "typeorm connectedAccount write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/create-sso-connected-account.service.ts",
-        "line": 73,
-        "kind": "data",
-        "to": "typeorm connectedAccount write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/google-apis-scopes.ts",
-        "line": 37,
         "kind": "service",
-        "to": "http axios https://www.googleapis.com/oauth2/v3/tokeninfo?access_token="
+        "to": "payments stripe"
       },
       {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/google-apis.service.ts",
-        "line": 150,
-        "kind": "data",
-        "to": "typeorm userWorkspace read"
+        "file": "packages/twenty-website/src/app/api/enterprise/checkout/route.ts",
+        "line": 77,
+        "kind": "service",
+        "to": "payments stripe"
       },
       {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/google-apis.service.ts",
-        "line": 163,
-        "kind": "data",
-        "to": "typeorm connectedAccount read"
+        "file": "packages/twenty-website/src/app/api/enterprise/portal/route.ts",
+        "line": 45,
+        "kind": "service",
+        "to": "payments stripe"
       },
       {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/google-apis.service.ts",
-        "line": 176,
-        "kind": "data",
-        "to": "typeorm messageChannel read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/google-apis.service.ts",
-        "line": 184,
-        "kind": "data",
-        "to": "typeorm calendarChannel read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/google-apis.service.ts",
-        "line": 260,
-        "kind": "data",
-        "to": "typeorm ? write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/google-apis.service.ts",
-        "line": 277,
-        "kind": "data",
-        "to": "typeorm ? write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/google-apis.service.ts",
-        "line": 290,
-        "kind": "data",
-        "to": "typeorm connectedAccount read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/google-apis.service.ts",
-        "line": 307,
-        "kind": "data",
-        "to": "typeorm messageChannel read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/google-apis.service.ts",
-        "line": 324,
-        "kind": "data",
-        "to": "typeorm messageChannel read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/google-apis.service.ts",
-        "line": 349,
-        "kind": "handoff",
-        "to": "queue:messaging-queue/MessagingMessageListFetchJob"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/google-apis.service.ts",
-        "line": 371,
-        "kind": "data",
-        "to": "typeorm calendarChannel read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/google-apis.service.ts",
-        "line": 395,
-        "kind": "handoff",
-        "to": "queue:calendar-queue/CalendarEventListFetchJob"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/google-apis.service.ts",
-        "line": 435,
-        "kind": "handoff",
-        "to": "queue:webhook-queue/CreateWebhookSubscriptionJob"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/microsoft-apis.service.ts",
-        "line": 116,
-        "kind": "data",
-        "to": "typeorm userWorkspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/microsoft-apis.service.ts",
-        "line": 129,
-        "kind": "data",
-        "to": "typeorm connectedAccount read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/microsoft-apis.service.ts",
-        "line": 142,
-        "kind": "data",
-        "to": "typeorm messageChannel read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/microsoft-apis.service.ts",
-        "line": 150,
-        "kind": "data",
-        "to": "typeorm calendarChannel read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/microsoft-apis.service.ts",
-        "line": 233,
-        "kind": "data",
-        "to": "typeorm ? write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/microsoft-apis.service.ts",
-        "line": 245,
-        "kind": "data",
-        "to": "typeorm ? write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/microsoft-apis.service.ts",
-        "line": 260,
-        "kind": "data",
-        "to": "typeorm connectedAccount read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/microsoft-apis.service.ts",
-        "line": 276,
-        "kind": "data",
-        "to": "typeorm messageChannel read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/microsoft-apis.service.ts",
-        "line": 295,
-        "kind": "data",
-        "to": "typeorm messageChannel read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/microsoft-apis.service.ts",
-        "line": 307,
-        "kind": "handoff",
-        "to": "queue:messaging-queue/MessagingMessageListFetchJob"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/microsoft-apis.service.ts",
-        "line": 331,
-        "kind": "data",
-        "to": "typeorm calendarChannel read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/microsoft-apis.service.ts",
-        "line": 345,
-        "kind": "handoff",
-        "to": "queue:calendar-queue/CalendarEventListFetchJob"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/microsoft-apis.service.ts",
-        "line": 386,
-        "kind": "handoff",
-        "to": "queue:webhook-queue/CreateWebhookSubscriptionJob"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/reset-password.service.ts",
-        "line": 148,
-        "kind": "data",
-        "to": "typeorm ? write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/reset-password.service.ts",
-        "line": 158,
-        "kind": "data",
-        "to": "typeorm ? write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/reset-password.service.ts",
-        "line": 176,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/reset-password.service.ts",
-        "line": 262,
-        "kind": "data",
-        "to": "typeorm appToken read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/reset-password.service.ts",
-        "line": 298,
-        "kind": "data",
-        "to": "typeorm appToken write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/reset-password.service.ts",
-        "line": 314,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/sign-in-up.service.ts",
-        "line": 389,
-        "kind": "data",
-        "to": "typeorm user write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/sign-in-up.service.ts",
-        "line": 425,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/sign-in-up.service.ts",
-        "line": 453,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/sign-in-up.service.ts",
-        "line": 489,
-        "kind": "data",
-        "to": "typeorm user read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/sign-in-up.service.ts",
-        "line": 501,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/sign-in-up.service.ts",
-        "line": 604,
-        "kind": "data",
-        "to": "typeorm workspace write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/services/update-connected-account-on-reconnect.service.ts",
-        "line": 53,
-        "kind": "data",
-        "to": "typeorm ? write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/strategies/jwt.auth.strategy.ts",
-        "line": 278,
-        "kind": "data",
-        "to": "typeorm userWorkspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/strategies/jwt.auth.strategy.ts",
-        "line": 284,
-        "kind": "data",
-        "to": "typeorm userWorkspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/strategies/jwt.auth.strategy.ts",
-        "line": 436,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/access-token.service.ts",
-        "line": 64,
-        "kind": "data",
-        "to": "typeorm user read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/access-token.service.ts",
-        "line": 65,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/access-token.service.ts",
+        "file": "packages/twenty-website/src/app/api/enterprise/portal/route.ts",
         "line": 66,
-        "kind": "data",
-        "to": "typeorm userWorkspace read"
+        "kind": "service",
+        "to": "payments stripe"
       },
       {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/application-token.service.ts",
-        "line": 81,
-        "kind": "data",
-        "to": "typeorm workspace read"
+        "file": "packages/twenty-website/src/app/api/enterprise/reissue/route.ts",
+        "line": 74,
+        "kind": "service",
+        "to": "payments stripe"
       },
       {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/application-token.service.ts",
-        "line": 303,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/email-verification-token.service.ts",
-        "line": 53,
-        "kind": "data",
-        "to": "typeorm appToken write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/email-verification-token.service.ts",
-        "line": 68,
-        "kind": "data",
-        "to": "typeorm user read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/email-verification-token.service.ts",
-        "line": 87,
-        "kind": "data",
-        "to": "typeorm appToken read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/refresh-token.service.ts",
-        "line": 58,
-        "kind": "data",
-        "to": "typeorm appToken read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/refresh-token.service.ts",
-        "line": 69,
-        "kind": "data",
-        "to": "typeorm user read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/refresh-token.service.ts",
-        "line": 141,
-        "kind": "data",
-        "to": "typeorm ? write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/renew-token.service.ts",
-        "line": 68,
-        "kind": "data",
-        "to": "typeorm ? read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/renew-token.service.ts",
-        "line": 84,
-        "kind": "data",
-        "to": "typeorm ? write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/sso-exchange-token.service.ts",
+        "file": "packages/twenty-website/src/app/api/enterprise/release/route.ts",
         "line": 57,
-        "kind": "data",
-        "to": "typeorm appToken write"
+        "kind": "service",
+        "to": "payments stripe"
       },
       {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/sso-exchange-token.service.ts",
-        "line": 76,
-        "kind": "data",
-        "to": "typeorm appToken read"
+        "file": "packages/twenty-website/src/app/api/enterprise/release/route.ts",
+        "line": 87,
+        "kind": "service",
+        "to": "payments stripe"
       },
       {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/sso-exchange-token.service.ts",
-        "line": 88,
-        "kind": "data",
-        "to": "typeorm appToken write"
+        "file": "packages/twenty-website/src/app/api/enterprise/seats/route.ts",
+        "line": 58,
+        "kind": "service",
+        "to": "payments stripe"
       },
       {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/workspace-agnostic-token.service.ts",
+        "file": "packages/twenty-website/src/app/api/enterprise/seats/route.ts",
+        "line": 97,
+        "kind": "service",
+        "to": "payments stripe"
+      },
+      {
+        "file": "packages/twenty-website/src/app/api/enterprise/status/route.ts",
         "line": 44,
-        "kind": "data",
-        "to": "typeorm user read"
+        "kind": "service",
+        "to": "payments stripe"
       },
       {
-        "file": "packages/twenty-server/src/engine/core-modules/auth/token/services/workspace-agnostic-token.service.ts",
-        "line": 82,
-        "kind": "data",
-        "to": "typeorm user read"
+        "file": "packages/twenty-website/src/app/api/enterprise/stripe-webhook/route.ts",
+        "line": 34,
+        "kind": "service",
+        "to": "payments stripe"
       },
       {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/crons/commands/check-custom-domain-valid-records.cron.command.ts",
-        "line": 25,
-        "kind": "handoff",
-        "to": "queue:cron-queue/CheckCustomDomainValidRecordsCronJob"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/crons/jobs/check-custom-domain-valid-records.cron.job.ts",
-        "line": 29,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/jobs/workspace-deletion-application-uninstall.job.ts",
-        "line": 39,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace-entity-cache-provider.service.ts",
-        "line": 23,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 294,
-        "kind": "data",
-        "to": "typeorm ? read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 314,
-        "kind": "data",
-        "to": "typeorm ? write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 337,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 456,
-        "kind": "data",
-        "to": "typeorm workspace write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 463,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 495,
-        "kind": "data",
-        "to": "typeorm workspace write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 504,
-        "kind": "data",
-        "to": "typeorm workspace write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 518,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 563,
-        "kind": "data",
-        "to": "typeorm workspace write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 591,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 646,
-        "kind": "data",
-        "to": "typeorm workspace write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 661,
-        "kind": "handoff",
-        "to": "event:workspace.suspended"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 672,
-        "kind": "data",
-        "to": "typeorm workspace write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 690,
-        "kind": "handoff",
-        "to": "event:workspace.reactivated"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 701,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 712,
-        "kind": "data",
-        "to": "typeorm userWorkspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 730,
-        "kind": "data",
-        "to": "typeorm workspace write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 733,
-        "kind": "handoff",
-        "to": "event:workspace.softDeleted"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 751,
-        "kind": "data",
-        "to": "typeorm userWorkspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 790,
-        "kind": "handoff",
-        "to": "queue:delete-cascade-queue/FileWorkspaceFolderDeletionJob"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 797,
-        "kind": "data",
-        "to": "typeorm ? read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 799,
-        "kind": "handoff",
-        "to": "queue:delete-cascade-queue/EmailingDomainWorkspaceCleanupJob"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 816,
-        "kind": "data",
-        "to": "typeorm workspace write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 841,
-        "kind": "handoff",
-        "to": "queue:application-lifecycle-hook-queue/WorkspaceDeletionApplicationUninstallJob"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 1009,
-        "kind": "data",
-        "to": "typeorm userWorkspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 1039,
-        "kind": "data",
-        "to": "typeorm user write"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/services/workspace.service.ts",
-        "line": 1258,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/workspace-gauge.service.ts",
-        "line": 50,
-        "kind": "data",
-        "to": "typeorm workspace read"
-      },
-      {
-        "file": "packages/twenty-server/src/engine/core-modules/workspace/workspace-gauge.service.ts",
+        "file": "packages/twenty-website/src/app/api/enterprise/validate/route.ts",
         "line": 68,
-        "kind": "data",
-        "to": "typeorm workspace read"
+        "kind": "service",
+        "to": "payments stripe"
+      },
+      {
+        "file": "packages/twenty-website/src/app/api/enterprise/validate/route.ts",
+        "line": 133,
+        "kind": "service",
+        "to": "payments stripe"
+      }
+    ],
+    "chains": [
+      {
+        "name": "Phase 9: the credit grant form's submit into the GraphQL mutation grantWorkspaceCredits and its resolver",
+        "path": [
+          "packages/twenty-front/src/modules/settings/admin-panel/components/SettingsAdminWorkspaceCreditGrantModal.tsx#SettingsAdminWorkspaceCreditGrantModal.handleSubmit",
+          "packages/twenty-server/src/engine/core-modules/admin-panel/admin-panel.resolver.ts#(entry mutation grantWorkspaceCredits)",
+          "packages/twenty-server/src/engine/core-modules/admin-panel/admin-panel.resolver.ts#AdminPanelResolver.grantWorkspaceCredits"
+        ]
+      },
+      {
+        "name": "Phase 11: a send email flow, enqueue (EmailService.send) → queue (email-queue, EmailSenderJob) → worker (EmailSenderJob.handle) → result (EmailSenderService.send; the driver it sends through is chosen at run time)",
+        "path": [
+          "packages/twenty-server/src/engine/core-modules/email/email.service.ts#EmailService.send",
+          "(handoff queue:email-queue/EmailSenderJob)",
+          "packages/twenty-server/src/engine/core-modules/email/email-sender.job.ts#EmailSenderJob.handle",
+          "packages/twenty-server/src/engine/core-modules/email/email-sender.service.ts#EmailSenderService.send"
+        ]
       }
     ]
   }

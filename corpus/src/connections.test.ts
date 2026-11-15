@@ -143,9 +143,25 @@ describe('labels/connections.json', () => {
   ) as Record<string, ForkConnections | string>;
 
   it('labels the four forks, each site in its scope and kind, none twice and none in packages/ee', () => {
+    // The owner's scope (15 Nov 2026): all of Rallly and Documenso; phase 8's fixed modules of LibreChat and Twenty.
+    const entryScopes = JSON.parse(
+      readFileSync(new URL('../labels/entry-points.json', import.meta.url), 'utf8'),
+    ) as Record<string, { scope: Record<string, string[]> }>;
     for (const fork of ['rallly', 'documenso', 'librechat', 'twenty']) {
       const labelled = file[fork] as ForkConnections;
-      expect(labelled.sites.length).toBeGreaterThan(50);
+      const phase8 = [
+        ...new Set(
+          Object.values(entryScopes[fork]?.scope ?? {})
+            .flat()
+            .filter((p) => p !== '*'),
+        ),
+      ].sort();
+      expect([...labelled.scope].sort()).toEqual(
+        fork === 'rallly' || fork === 'documenso' ? ['*'] : phase8,
+      );
+      expect(labelled.sites.length).toBeGreaterThan(0);
+      // Each fork holds phase 9's crossing; Documenso and Twenty phases 10 and 11's chains too.
+      expect(labelled.chains?.some((c) => c.name.startsWith('Phase 9'))).toBe(true);
       const keys = new Set<string>();
       for (const s of labelled.sites) {
         expect(inConnectionScope(labelled.scope, s.file), `${fork} ${s.file}`).toBe(true);
