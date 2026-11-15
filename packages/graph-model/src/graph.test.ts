@@ -1,13 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { diffGraphs, withChanges } from './diff.js';
 import { decodeGraph, encodeGraph } from './encoding.js';
-import {
-  edgeKey,
-  type Graph,
-  type GraphEdge,
-  type GraphNode,
-  type ServiceDetails,
-} from './model.js';
+import { edgeKey, type Graph, type GraphEdge, type GraphNode } from './model.js';
 import { ARRIVES_IN, graphStats } from './stats.js';
 import { elementsByScreen, listEntryPoints } from './entries.js';
 import { indexGraph } from './flow.js';
@@ -512,7 +506,7 @@ describe('data, services and hand-offs (phases 10 and 11, ADR 0031)', () => {
   });
 
   it('needs each kind’s details, only on it, and a reason when not fully detected', () => {
-    const [code, data, service] = GRAPH.nodes as [GraphNode, GraphNode, GraphNode];
+    const [code, data] = GRAPH.nodes as [GraphNode, GraphNode];
     const without = { ...data };
     delete (without as { data?: unknown }).data;
     expect(validateGraph({ nodes: [without], edges: [] })).toEqual([
@@ -520,7 +514,12 @@ describe('data, services and hand-offs (phases 10 and 11, ADR 0031)', () => {
     ]);
     expect(
       validateGraph({
-        nodes: [{ ...code, service: service.service as ServiceDetails }],
+        nodes: [
+          {
+            ...code,
+            service: { kind: 'email', library: 'nodemailer', url: null, complete: true, why: null },
+          },
+        ],
         edges: [],
       }),
     ).toEqual(['node src/poll.ts#createPoll: only an external-boundary node has service details']);

@@ -166,7 +166,7 @@ export function validateGraph(graph: Graph, limit = 50): string[] {
       say(`${name}: its lines must be 1-based, ascending, each once`);
     }
     if (edge.guarded !== undefined) {
-      if (edge.kind !== 'call') say(`${name}: only a call has guarded lines`);
+      if (edge.kind === 'branch') say(`${name}: a branch has no guarded lines`);
       const lines = new Set(edge.lines);
       if (
         edge.guarded.length === 0 ||

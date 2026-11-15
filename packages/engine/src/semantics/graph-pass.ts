@@ -18,6 +18,7 @@ import {
   type CodePosition,
   type Relation as CallRelation,
 } from '../protocol.js';
+import type { FileConnector } from './connection-pass.js';
 import type { StoredCallee } from './details.js';
 import type { TypeScript } from './projects.js';
 
@@ -376,6 +377,7 @@ export function walkFile(
   program: TS.Program,
   source: TS.SourceFile,
   handlers: ReadonlyMap<TS.Node, HandlerUnit> = new Map(),
+  connector?: FileConnector,
 ): WalkedFile {
   const { ts } = ctx;
   const checker = program.getTypeChecker();
@@ -528,7 +530,12 @@ export function walkFile(
         const line = source.getLineAndCharacterOfPosition(callee.getStart(source)).line + 1;
         const declaredIn = declaration?.getSourceFile().fileName;
         const start = callee.getStart(source);
-        if (declaredIn !== undefined && ctx.builtIn(declaredIn)) {
+        // A built-in the connectors recognise (`fetch` to a URL, a timer) is a connection; other built-ins are counted.
+        if (
+          declaredIn !== undefined &&
+          ctx.builtIn(declaredIn) &&
+          !(connector !== undefined && !jsx && connector.claims(node))
+        ) {
           builtInCalls += 1;
           // Built-ins: named as the compiler names them (`split`, `Promise`), one row per name.
           const named = cut(symbol?.getName() ?? calleeText(ts, callee, source));
@@ -567,7 +574,9 @@ export function walkFile(
               change: 'unchanged',
             });
           }
-          const reaches =
+          let reaches:
+            | { to: string; target: null; provenance: 'resolved' | 'convention' }
+            | { to: null; target: string; provenance: 'unknown' } =
             target !== undefined && targetId !== undefined
               ? { to: targetId, target: null, provenance: 'resolved' as const }
               : {
@@ -575,6 +584,35 @@ export function walkFile(
                   target: cut(calleeText(ts, callee, source)),
                   provenance: 'unknown' as const,
                 };
+          // Not the project's code: what the connectors say it reaches (phases 9 to 11, ADR 0031): a table, an outside
+          // service, work handed off; or a call to the app's own API, joined once every file's entry points are known.
+          let kind: GraphEdge['kind'] = 'call';
+          let edgeRelation: Relation | null = relation;
+          if (reaches.to === null && connector !== undefined && !jsx) {
+            const reached = connector.reached(node, line);
+            if (reached !== null) {
+              targets.set(reached.node.id, reached.node);
+              reaches = { to: reached.node.id, target: null, provenance: 'convention' };
+              kind = reached.edge;
+              edgeRelation = null;
+              if (reached.runs !== undefined) {
+                add(
+                  {
+                    from: reached.node.id,
+                    to: reached.runs,
+                    target: null,
+                    kind: 'handoff',
+                    relation: null,
+                    label: null,
+                    provenance: 'resolved',
+                  },
+                  line,
+                );
+              }
+            } else if (ts.isCallExpression(node)) {
+              connector.link(node, current, reaches.target, line);
+            }
+          }
           if (target !== undefined && targetId !== undefined) {
             // Every target's node, so an edge never reaches a node the graph lacks (its own file's wins).
             targets.set(targetId, nodeOf(ctx, target, targetId));
@@ -583,7 +621,7 @@ export function walkFile(
           // guards it is said per line, for the flow.
           const guards = guardsOf(ts, source, node, currentNode);
           add(
-            { from: current, kind: 'call', relation, label: null, ...reaches },
+            { from: current, kind, relation: edgeRelation, label: null, ...reaches },
             line,
             guards.length > 0,
           );
@@ -668,6 +706,36 @@ export function walkFile(
         }
       }
     }
+    // Raw SQL in a tagged template (`sql\`…\``, `$queryRaw\`…\``): a data access, not a call.
+    if (connector !== undefined && ts.isTaggedTemplateExpression(node)) {
+      const reached = connector.reachedByTemplate(node);
+      if (reached !== null) {
+        if (current === top && !nodes.has(top)) {
+          nodes.set(top, {
+            id: top,
+            kind: 'code-unit',
+            name: `${basename(path)} (top level)`,
+            place: { path, line: 1, column: 1 },
+            unit: 'module',
+            change: 'unchanged',
+          });
+        }
+        targets.set(reached.node.id, reached.node);
+        add(
+          {
+            from: current,
+            to: reached.node.id,
+            target: null,
+            kind: reached.edge,
+            relation: null,
+            label: null,
+            provenance: 'convention',
+          },
+          lineOf(node),
+          guardsOf(ts, source, node, currentNode).length > 0,
+        );
+      }
+    }
     ts.forEachChild(node, (child) => {
       visit(child, current, currentNode, calling);
     });
@@ -691,7 +759,7 @@ export function walkFile(
     edges: [...edges.values()].map(({ edge, lines, direct }) => {
       const sorted = [...lines].sort((a, b) => a - b);
       const guarded = sorted.filter((line) => !direct.has(line));
-      return edge.kind === 'call' && guarded.length > 0
+      return edge.kind !== 'branch' && guarded.length > 0
         ? { ...edge, lines: sorted, guarded }
         : { ...edge, lines: sorted };
     }),

@@ -150,10 +150,14 @@ export interface GraphEdge {
    */
   readonly label: string | null;
   readonly provenance: Provenance;
-  /** Lines in the `from` node's file where it happens, ascending. */
+  /**
+   * Lines in the `from` node's file where it happens, ascending. From a hand-off's node (which has no file) to what
+   * takes the work: the receiver's own line.
+   */
   readonly lines: readonly number[];
   /**
-   * On a call: those of its lines where every call sits under a decision of its unit (a flow draws them through the
+   * On a call, a read or write, a boundary or a hand-off (phases 10 and 11): those of its lines where every one sits
+   * under a decision of its unit (a flow draws them through the
    * decision, not straight). Absent when there are none. Said per line by the pass, since `hasId(a) && hasId(b)` has
    * one call that always happens and one that's guarded on the same line (phase 7's labels found it).
    */

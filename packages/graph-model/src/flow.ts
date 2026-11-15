@@ -2,6 +2,7 @@
 // that guard those calls, up to a cap, from one version of the graph. Pure: the engine runs it on the latest snapshot.
 import {
   PROVENANCES,
+  type EdgeKind,
   type Graph,
   type GraphEdge,
   type GraphNode,
@@ -54,7 +55,7 @@ export function indexGraph(graph: Graph): GraphIndex {
 export interface FlowEdge {
   readonly from: string;
   readonly to: string;
-  readonly kind: 'call' | 'branch';
+  readonly kind: EdgeKind;
   readonly relation: Relation | null;
   /** The outcome, on a branch out of a decision ("yes", "case 'DRAFT'", "error"). */
   readonly label: string | null;
@@ -114,7 +115,8 @@ function outgoing(index: GraphIndex, id: string): GraphEdge[] {
     (edge) => edge.kind === 'branch' && edge.to !== null && isDecision(index, edge.to),
   );
   for (const edge of edges) {
-    if (edge.kind !== 'call') continue;
+    // Calls, and (phases 10 and 11) reads and writes, outside services and hand-offs: each to where it leads.
+    if (edge.kind === 'branch') continue;
     const guarded = new Set(edge.guarded ?? []);
     const lines = edge.lines.filter((line) => !guarded.has(line));
     if (lines.length > 0)
@@ -180,7 +182,7 @@ export function buildFlow(
       edges.push({
         from,
         to: to.id,
-        kind: edge.kind === 'branch' ? 'branch' : 'call',
+        kind: edge.kind,
         relation: edge.relation,
         label: edge.label,
         provenance: edge.provenance,
