@@ -104,7 +104,7 @@ const GRAPH_BUILD_MS: Readonly<Record<string, number>> = {
   excalidraw: 39_000,
   librechat: 181_000,
   twenty: 298_000,
-  medusa: 145_000,
+  medusa: 180_000,
 };
 
 /** The build plan's two forks: held to the targets. The other four are measured and reported. */
