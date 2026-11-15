@@ -1,6 +1,13 @@
 import type * as TS from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { graphqlKeys, linkOf, LINK_MESSAGES, type FoundLink } from './links.js';
+import {
+  graphqlKeys,
+  linkOf,
+  linksWithin,
+  LINK_MESSAGES,
+  mutationFunction,
+  type FoundLink,
+} from './links.js';
 import { programOf } from './test-program.js';
 
 function found(files: Record<string, string>, path: string): [number, FoundLink][] {
@@ -111,5 +118,52 @@ describe('linkOf', () => {
       'query currentUser',
       'query workspaces',
     ]);
+  });
+});
+
+describe('mutationFunction and linksWithin', () => {
+  const files = {
+    '/actions.ts': "'use server';\nexport async function cancelInvite(id: string) { return id; }",
+    '/request.ts': [
+      "import axios from 'axios';",
+      'async function _post(url: string, data?: unknown) { return (await axios.post(url, data)).data; }',
+      'export default { post: _post };',
+    ].join('\n'),
+    '/service.ts': [
+      "import request from './request';",
+      "export const login = (p: unknown) => request.post('/api/auth/login', p);",
+    ].join('\n'),
+    '/form.tsx': [
+      "import { useMutation } from '@tanstack/react-query';",
+      "import { mutationOptions } from '@next-safe-action/adapter-tanstack-query';",
+      "import { cancelInvite } from './actions';",
+      "import * as dataService from './service';",
+      'export function Form() {',
+      '  const cancel = useMutation(mutationOptions(cancelInvite, {}));',
+      '  const { mutateAsync: logIn } = useMutation({ mutationFn: (p: unknown) => dataService.login(p) });',
+      '  return async () => { cancel.mutate({}); await logIn({}); };',
+      '}',
+    ].join('\n'),
+  };
+
+  it('finds the function a mutation runs, and the API links an inline one makes', () => {
+    const context = programOf(files)('/form.tsx');
+    const { ts, source } = context;
+    const runs: string[] = [];
+    const links: string[] = [];
+    const visit = (node: TS.Node): void => {
+      if (ts.isCallExpression(node)) {
+        const fn = mutationFunction(context, node);
+        if (fn !== null) {
+          runs.push(fn.getText().slice(0, 30));
+          if (ts.isArrowFunction(fn))
+            links.push(...linksWithin(context, fn).flatMap((l) => l.keys));
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    expect(runs).toEqual(['cancelInvite', '(p: unknown) => dataService.lo']);
+    expect(links).toEqual(['POST /api/auth/login']);
   });
 });

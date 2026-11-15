@@ -5,6 +5,8 @@ import {
   dataOf,
   handoffOf,
   linkOf,
+  linksWithin,
+  mutationFunction,
   receiversOf,
   serviceOf,
   socketOf,
@@ -190,9 +192,40 @@ export class FileConnector {
 
   /** A call to the app's own API: recorded, to join once every file's entry points are known. */
   link(node: TS.CallExpression, from: string, target: string, line: number): void {
+    const { ts } = this.#ctx;
     const found = linkOf(this.#context, node);
-    if (found === null || found.keys.length === 0) return;
-    this.links.push({ from, target, line, protocol: found.protocol, keys: found.keys });
+    if (found !== null && found.keys.length > 0) {
+      this.links.push({ from, target, line, protocol: found.protocol, keys: found.keys });
+      return;
+    }
+    // `mutation.mutate(…)` on a mutation whose function is written inline: the links that function makes.
+    const fn = mutationFunction(this.#context, node);
+    if (fn === null || !(ts.isArrowFunction(fn) || ts.isFunctionExpression(fn))) return;
+    for (const inner of linksWithin(this.#context, fn)) {
+      this.links.push({ from, target, line, protocol: inner.protocol, keys: inner.keys });
+    }
+  }
+
+  /**
+   * The project's function a call runs through a hook (`mutation.mutate(…)` on `useMutation(mutationOptions(action))`):
+   * its declaration, for the walk to reach as it reaches a resolved call.
+   */
+  through(node: TS.CallExpression): TS.Declaration | undefined {
+    const { ts } = this.#ctx;
+    const checker = this.#context.checker;
+    const fn = mutationFunction(this.#context, node);
+    if (fn === null || checker === undefined) return undefined;
+    // Written right there (`mutationFn: async (data) => …`): no unit to reach; its calls are already its holder's.
+    if (ts.isArrowFunction(fn) || ts.isFunctionExpression(fn)) return undefined;
+    const at = ts.isPropertyAccessExpression(fn) ? fn.name : fn;
+    let symbol = checker.getSymbolAtLocation(at);
+    if (symbol !== undefined && symbol.flags & ts.SymbolFlags.Alias) {
+      symbol = checker.getAliasedSymbol(symbol);
+    }
+    const declaration = symbol?.valueDeclaration;
+    return declaration !== undefined && this.#ctx.inProject(declaration.getSourceFile().fileName)
+      ? declaration
+      : undefined;
   }
 
   /** A timer's function, when it's a named unit of the project's. */

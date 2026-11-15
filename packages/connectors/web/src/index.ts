@@ -52,7 +52,15 @@ export {
   type FoundData,
 } from './data.js';
 export { SERVICE_MESSAGES, serviceOf, type FoundService } from './services.js';
-export { LINK_MESSAGES, graphqlKeys, linkOf, type FoundLink, type LinkProtocol } from './links.js';
+export {
+  LINK_MESSAGES,
+  graphqlKeys,
+  linkOf,
+  linksWithin,
+  mutationFunction,
+  type FoundLink,
+  type LinkProtocol,
+} from './links.js';
 export {
   HANDOFF_MESSAGES,
   handoffOf,

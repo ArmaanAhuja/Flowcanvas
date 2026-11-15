@@ -465,3 +465,103 @@ function generatedKeys(ts: typeof TS, document: TS.ObjectLiteralExpression): str
   }
   return null;
 }
+
+// Mutations run through a hook: `mutation.mutate(…)` runs the function the hook was given.
+
+const RUNS_MUTATION = new Set(['mutate', 'mutateAsync', 'execute', 'executeAsync']);
+
+/**
+ * For `x.mutate(…)` (or a `mutateAsync` taken from it) on a mutation built from a function (React Query's
+ * `useMutation({ mutationFn: f })` or `useMutation(mutationOptions(f, …))`, next-safe-action's `useAction(f)`): that
+ * function, as written where it's given. Null otherwise.
+ */
+export function mutationFunction(
+  context: FileContext,
+  call: TS.CallExpression,
+): TS.Expression | null {
+  const { ts, checker } = context;
+  if (checker === undefined) return null;
+  const callee = call.expression;
+  // `mutation.mutate(…)`, or `mutateAsync(…)` from `const { mutateAsync } = useMutation(…)`.
+  let made: TS.Expression | undefined;
+  if (ts.isPropertyAccessExpression(callee) && RUNS_MUTATION.has(callee.name.text)) {
+    made = initializerOf(context, callee.expression);
+  } else if (ts.isIdentifier(callee)) {
+    const declaration = checker.getSymbolAtLocation(callee)?.valueDeclaration;
+    if (
+      declaration !== undefined &&
+      ts.isBindingElement(declaration) &&
+      ts.isObjectBindingPattern(declaration.parent) &&
+      RUNS_MUTATION.has(
+        (declaration.propertyName !== undefined && ts.isIdentifier(declaration.propertyName)
+          ? declaration.propertyName
+          : declaration.name
+        ).getText(),
+      ) &&
+      ts.isVariableDeclaration(declaration.parent.parent)
+    ) {
+      made = declaration.parent.parent.initializer;
+    }
+  }
+  if (made === undefined || !ts.isCallExpression(made)) return null;
+  const hook = originOf(context, made.expression);
+  if (hook === null || hook.steps.length > 0) return null;
+  const [first] = made.arguments;
+  if (first === undefined) return null;
+  if (
+    hook.name === 'useAction' &&
+    /^next-safe-action(\/|$)/.test(hook.module ?? '') // next-safe-action/hooks
+  ) {
+    return first;
+  }
+  if (
+    hook.name !== 'useMutation' ||
+    !/^@tanstack\/(react|vue|solid|svelte)-query$/.test(hook.module ?? '')
+  ) {
+    return null;
+  }
+  if (ts.isObjectLiteralExpression(first)) return optionValue(ts, first, 'mutationFn') ?? null;
+  // React Query 4's `useMutation(fn, options)`.
+  if (ts.isArrowFunction(first) || ts.isFunctionExpression(first) || ts.isIdentifier(first)) {
+    return first;
+  }
+  // `mutationOptions(action, …)` (next-safe-action's adapter, or the project's own helper of that shape).
+  if (ts.isCallExpression(first)) {
+    const options = originOf(context, first.expression);
+    if (options?.name === 'mutationOptions' && options.steps.length === 0)
+      return first.arguments[0] ?? null;
+  }
+  return null;
+}
+
+/** What a variable holding a value was set to (`const mutation = useMutation(…)`). */
+function initializerOf(context: FileContext, expression: TS.Expression): TS.Expression | undefined {
+  const { ts, checker } = context;
+  if (!ts.isIdentifier(expression) || checker === undefined) return undefined;
+  const declaration = checker.getSymbolAtLocation(expression)?.valueDeclaration;
+  return declaration !== undefined && ts.isVariableDeclaration(declaration)
+    ? declaration.initializer
+    : undefined;
+}
+
+/**
+ * The API links made inside a function (a mutation's inline `mutationFn`): its calls' links, and those of the project
+ * functions it calls, two levels down (`(p) => dataService.login(p)` → `request.post(endpoints.login(), p)`).
+ */
+export function linksWithin(context: FileContext, fn: TS.Node, depth = 0): FoundLink[] {
+  const { ts } = context;
+  const found: FoundLink[] = [];
+  const visit = (node: TS.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const link = linkOf(context, node);
+      if (link !== null && link.keys.length > 0) found.push(link);
+      else if (depth < 2) {
+        const callee = projectFunction(context, node.expression);
+        if (callee?.body !== undefined) found.push(...linksWithin(context, callee.body, depth + 1));
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(fn);
+  return found;
+}

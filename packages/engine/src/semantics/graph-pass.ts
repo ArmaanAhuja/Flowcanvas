@@ -588,6 +588,17 @@ export function walkFile(
           // service, work handed off; or a call to the app's own API, joined once every file's entry points are known.
           let kind: GraphEdge['kind'] = 'call';
           let edgeRelation: Relation | null = relation;
+          // A mutation run through a hook: the function it was given (a server action, a mutationFn).
+          if (reaches.to === null && connector !== undefined && ts.isCallExpression(node)) {
+            const through = connector.through(node);
+            const runs = through === undefined ? undefined : targetOf(ctx, through);
+            const runsId =
+              runs === undefined ? undefined : idsOf(ctx, runs.getSourceFile()).get(runs);
+            if (runs !== undefined && runsId !== undefined) {
+              targets.set(runsId, nodeOf(ctx, runs, runsId));
+              reaches = { to: runsId, target: null, provenance: 'convention' };
+            }
+          }
           if (reaches.to === null && connector !== undefined && !jsx) {
             const reached = connector.reached(node, line);
             if (reached !== null) {
