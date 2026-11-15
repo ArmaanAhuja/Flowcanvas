@@ -99,11 +99,29 @@ export function packagePaths(
         .find((candidate) => has(candidate)) ?? file
     );
   };
+  /**
+   * A built file the project lacks, followed to source through the export's other targets too: its JavaScript entry
+   * first (`./dist/index.mjs` from `src/index.ts`), whose source is the module, then its declarations (LibreChat's
+   * data provider declares `./dist/types/index.d.ts`, and has a `src/types/index.ts` of its types alone).
+   */
+  const resolved = (value: unknown, file: string): string => {
+    if (has === undefined || has(posix.normalize(file))) return file;
+    const mapped = sourceOf(file);
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return mapped;
+    const conditions = value as Record<string, unknown>;
+    for (const other of [conditions.import, conditions.default, conditions.require]) {
+      const js = target(other);
+      if (js === undefined) continue;
+      const source = sourceOf(js);
+      if (source !== js) return source;
+    }
+    return mapped;
+  };
   if (subpaths.length > 0) {
     for (const [key, value] of subpaths) {
       const file = target(value);
       if (file === undefined || !(SOURCE.test(file) || file.includes('*'))) continue;
-      paths[key === '.' ? name : `${name}${key.slice(1)}`] = [join(folder, sourceOf(file))];
+      paths[key === '.' ? name : `${name}${key.slice(1)}`] = [join(folder, resolved(value, file))];
     }
   } else {
     const main = [manifest.types, manifest.typings, manifest.main].find(

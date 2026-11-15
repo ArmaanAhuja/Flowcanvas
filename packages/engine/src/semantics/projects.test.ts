@@ -31,6 +31,14 @@ describe('packagePaths', () => {
     expect(
       packagePaths('shared', folder, exports, (file) => file === 'src/index.ts').shared,
     ).toEqual([join(folder, 'src/index.ts')]);
+    // Its JavaScript entry's source first: src/types/index.ts is its types alone (LibreChat's data provider).
+    const both = {
+      exports: { '.': { types: './dist/types/index.d.ts', import: './dist/index.mjs' } },
+    };
+    const files = new Set(['src/index.ts', 'src/types/index.ts']);
+    expect(packagePaths('shared', folder, both, (file) => files.has(file)).shared).toEqual([
+      join(folder, 'src/index.ts'),
+    ]);
   });
 
   it('keeps a built file the project has (committed declarations)', () => {
