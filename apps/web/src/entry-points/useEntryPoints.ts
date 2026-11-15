@@ -1,4 +1,5 @@
-// The project's entry points for the left panel (phase 8): every screen, API route and command, loaded a page at a
+// The project's entry points for the left panel (phase 8): every screen, API route, job, cron, event (phase 11) and
+// command, loaded a page at a
 // time once the graph has them, and a screen's elements when it's opened. Asked for again when the graph has a new
 // version. None of it counts as activity (the control plane), so it never keeps a workspace awake.
 import type { EntryGroup, EntryRow } from '@flowcanvas/ui';
@@ -18,20 +19,26 @@ export const ENTRY_POLL = {
 /** A page of the API's most; and at most this many pages of a kind (Twenty's largest kind is under 4). */
 const PAGE = 200;
 const MOST_PAGES = 50;
-const LISTED: readonly EntryKind[] = ['screen', 'api-route', 'cli-command'];
+const LISTED = ['screen', 'api-route', 'job', 'cron', 'event', 'cli-command'] as const;
+type Listed = (typeof LISTED)[number];
 
 export interface EntryPointsState {
   readonly status: 'idle' | 'loading' | 'ready';
   /** Said in the panel: the graph still being built, a failure. */
   readonly message: string | null;
-  readonly lists: Readonly<
-    Record<'screen' | 'api-route' | 'cli-command', readonly EntryPointItem[]>
-  >;
+  readonly lists: Readonly<Record<Listed, readonly EntryPointItem[]>>;
   /** Each opened screen's elements, by its id. */
   readonly elements: ReadonlyMap<string, readonly EntryPointItem[]>;
 }
 
-const EMPTY_LISTS: EntryPointsState['lists'] = { screen: [], 'api-route': [], 'cli-command': [] };
+const EMPTY_LISTS: EntryPointsState['lists'] = {
+  screen: [],
+  'api-route': [],
+  job: [],
+  cron: [],
+  event: [],
+  'cli-command': [],
+};
 
 export function useEntryPoints(projectId: string, running: boolean, fetcher: typeof fetch) {
   const [state, setState] = useState<EntryPointsState>({
@@ -159,13 +166,17 @@ export function entryGroups(state: EntryPointsState, filter: string): EntryGroup
       ...(elements === undefined ? {} : { children: elements.map(rowOf) }),
     };
   });
-  const rows = (kind: 'api-route' | 'cli-command') => state.lists[kind].filter(matches).map(rowOf);
+  const rows = (kind: Exclude<Listed, 'screen'>) => state.lists[kind].filter(matches).map(rowOf);
+  // Jobs and cron are one group (design brief §23), in name order as each list is.
+  const jobs = [...state.lists.job, ...state.lists.cron].sort((a, b) =>
+    a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+  );
   return [
     { id: 'screens', count: state.lists.screen.length, rows: screens },
     { id: 'api', count: state.lists['api-route'].length, rows: rows('api-route') },
-    // Jobs, cron and events come with background work (build plan, phase 11).
-    { id: 'jobs', count: 0, rows: [], arrivesIn: 11 },
-    { id: 'events', count: 0, rows: [], arrivesIn: 11 },
+    // What takes handed-off work (phase 11): queue workers, job handlers, cron, event listeners.
+    { id: 'jobs', count: jobs.length, rows: jobs.filter(matches).map(rowOf) },
+    { id: 'events', count: state.lists.event.length, rows: rows('event') },
     { id: 'cli', count: state.lists['cli-command'].length, rows: rows('cli-command') },
   ];
 }

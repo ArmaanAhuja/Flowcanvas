@@ -776,7 +776,15 @@ describe('entry points (phase 8)', () => {
   it('says so before there’s a graph', async () => {
     start();
     expect(await ask(0, 50)).toMatchObject({
-      counts: { screen: 0, element: 0, 'api-route': 0, 'cli-command': 0 },
+      counts: {
+        screen: 0,
+        element: 0,
+        'api-route': 0,
+        job: 0,
+        cron: 0,
+        event: 0,
+        'cli-command': 0,
+      },
       entries: [],
       next: null,
       message: NO_GRAPH,

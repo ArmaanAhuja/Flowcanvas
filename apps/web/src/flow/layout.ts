@@ -181,7 +181,9 @@ export function cardOf(node: Flow['nodes'][number]): { kind: FlowNodeKind; locat
           ? 'route'
           : node.entry.kind === 'cli-command'
             ? 'function'
-            : 'ui',
+            : node.entry.kind === 'job' || node.entry.kind === 'cron' || node.entry.kind === 'event'
+              ? 'queue'
+              : 'ui',
       location: place,
     };
   }

@@ -395,12 +395,21 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
         const membersCallersMs: number[] = [];
         if (graph.state === 'ready') await checkCalls(storedDiffering, storedMs, membersCallersMs);
 
-        // Phase 8: every entry point the engine lists, a kind and a page at a time, against the labels.
+        // Phase 8: every entry point the engine lists, a kind and a page at a time, against the labels; with phase 11's
+        // jobs, cron and events (what takes handed-off work).
         const forkEntryLabels = entryLabels[repo.id];
         const entryPoints: EntryPointsResult['entries'][number][] = [];
         let entryPointsMs = 0;
         if (graph.state === 'ready' && forkEntryLabels !== undefined) {
-          for (const kind of ['screen', 'element', 'api-route', 'cli-command'] as const) {
+          for (const kind of [
+            'screen',
+            'element',
+            'api-route',
+            'job',
+            'cron',
+            'event',
+            'cli-command',
+          ] as const) {
             for (let after: number | null = 0; after !== null;) {
               const started = performance.now();
               const answer = await host.index(ref, { op: 'entryPoints', kind, after, limit: 200 });

@@ -151,8 +151,10 @@ describe('labels/connections.json', () => {
       const labelled = file[fork] as ForkConnections;
       const phase8 = [
         ...new Set(
-          Object.values(entryScopes[fork]?.scope ?? {})
-            .flat()
+          // Phase 8's own kinds: phase 11's jobs, cron and events add Twenty's email module, for its worker.
+          Object.entries(entryScopes[fork]?.scope ?? {})
+            .filter(([kind]) => !['job', 'cron', 'event'].includes(kind))
+            .flatMap(([, files]) => files)
             .filter((p) => p !== '*'),
         ),
       ].sort();

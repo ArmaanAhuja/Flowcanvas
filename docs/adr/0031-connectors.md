@@ -64,3 +64,14 @@ Comparing the engine with an independent text scan of each fork's connector site
 - **Not fixed by these:** a value the code hands through a prop (LibreChat's login form's `onSubmit`), and a file over the engine's 1 MB read limit (Twenty's 1.5 MB generated GraphQL documents): both stay unknown.
 
 **An installed package's types (owner, 15 Nov 2026).** In a user's workspace the packages are installed, so TypeScript can say what a value is however the code wraps it. Where following the code reaches nothing, the type TypeScript gives the value, when an installed package declares it, names the package and type (`node_modules/stripe`, `@types/nodemailer` for `nodemailer`). Following the code still goes first: it knows a Prisma model's accessor and a Mongoose model's name, which a type doesn't. The corpus forks don't install their packages, so this is proven by unit tests until the workspaces install (phase 37).
+
+## Addendum (15 Nov 2026): what takes handed-off work is an entry point
+
+**Owner, on the report's first question:** list jobs, cron and events in the entry points panel now, before acceptance. Phase 8's panel said "Arrives in phase 11" for both groups.
+
+- **Where:** after the join, each receiver the pass found becomes an `entry-point` node, kind `job`, `cron` or `event` (three new `ENTRY_KINDS`), with a `convention` edge to its handler, so `listEntryPoints`, the `entryPoints` request, the panel and Show flow work as for every other entry point. Its id is `(entry <key>)` (`~2` and on for several receivers of one key); its name is the key as a person reads it (`email-queue · EmailSenderJob`, `send.signing.requested.email`, `user.created`); its place is its handler's.
+- **Cron:** a job is cron when the code schedules it: its definition has a schedule (Documenso's `trigger.cron`), or a cron hand-off (Twenty's `addCron`) has its key. Otherwise a job.
+- **Not listed:** a receiver in a test or story file (owner, 14 Nov 2026, as phase 8's entry points); it still takes its hand-off. A receiver whose handler isn't in the graph lists nothing, rather than an entry point going nowhere.
+- **Graph format 6,** so a stored graph without them is rebuilt rather than read as having none.
+- **Proof:** the labels in `corpus/labels/entry-points.json` (Rallly and Documenso whole, phase 8's modules of LibreChat and Twenty, and Twenty's email module for the phase 11 worker), from an independent text scan read in the code, held by the Docker corpus test with every other entry point (every one found, no false finds).
+

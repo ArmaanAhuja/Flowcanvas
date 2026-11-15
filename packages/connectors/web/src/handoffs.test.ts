@@ -64,6 +64,8 @@ describe('handoffOf and receiversOf', () => {
       '/definition.ts': [
         "const ID = 'send.signing.requested.email';",
         'export const DEF = { id: ID, trigger: { name: ID }, handler: async () => {} };',
+        // Scheduled by its definition: a cron job.
+        "export const SWEEP = { trigger: { name: 'internal.sweep', cron: '*/15 * * * *' }, handler: async () => {} };",
       ].join('\n'),
       '/send.ts': [
         'declare const jobs: { triggerJob(o: unknown): Promise<void> };',
@@ -76,8 +78,11 @@ describe('handoffOf and receiversOf', () => {
       ['job', 'job:send.signing.requested.email', 'send.signing.requested.email', null],
       ['job', null, null, HANDOFF_MESSAGES.name],
     ]);
-    expect(receiversOf(programOf(files)('/definition.ts')).map((r) => r.key)).toEqual([
-      'job:send.signing.requested.email',
+    expect(
+      receiversOf(programOf(files)('/definition.ts')).map((r) => [r.key, r.scheduled ?? false]),
+    ).toEqual([
+      ['job:send.signing.requested.email', false],
+      ['job:internal.sweep', true],
     ]);
   });
 

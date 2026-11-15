@@ -49,6 +49,9 @@ function fakeWorkspace(page: Page) {
             screen: FIXTURE.lists.screen?.length ?? 0,
             element: FIXTURE.elements.length,
             'api-route': FIXTURE.lists['api-route']?.length ?? 0,
+            job: FIXTURE.lists.job?.length ?? 0,
+            cron: FIXTURE.lists.cron?.length ?? 0,
+            event: FIXTURE.lists.event?.length ?? 0,
             'cli-command': FIXTURE.lists['cli-command']?.length ?? 0,
           },
           kind,
@@ -100,7 +103,7 @@ test('phase 8 · Try it: the left panel lists screens, routes, jobs and events; 
   await page.goto(`/p/${PROJECT.id}`);
   await expect(page.getByText('Rallly', { exact: true })).toBeVisible();
 
-  await test.step('The left panel: the design brief’s groups with their counts; jobs and events say which phase brings them', async () => {
+  await test.step('The left panel: the design brief’s groups with their counts; Rallly has no jobs or events', async () => {
     // Only the rows in view are in the page: each group is closed (arrow left) to reach the next.
     await expect(row(page, /^Screens and elements/)).toContainText('65');
     await row(page, /^Screens and elements/).focus();
@@ -108,8 +111,11 @@ test('phase 8 · Try it: the left panel lists screens, routes, jobs and events; 
     await expect(row(page, /^API routes/)).toContainText('152');
     await row(page, /^API routes/).focus();
     await page.keyboard.press('ArrowLeft');
+    // Phase 11 lists what takes handed-off work; Rallly's code has none (the engine and the labels agree).
     await expect(row(page, /^Jobs and cron/)).toContainText('0');
-    await expect(left(page).getByRole('row', { name: 'Arrives in phase 11.' })).toHaveCount(2);
+    await expect(left(page).getByRole('row', { name: 'None found in this project.' })).toHaveCount(
+      2,
+    );
     await expect(row(page, /^CLI commands/)).toContainText('92');
     const firstCommand = FIXTURE.lists['cli-command']?.[0]?.name ?? '';
     await expect(

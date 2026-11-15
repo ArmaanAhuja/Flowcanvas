@@ -6,7 +6,13 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import * as ts from 'typescript';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildFlow, indexGraph, validateGraph } from '@flowcanvas/graph-model';
+import {
+  buildFlow,
+  indexGraph,
+  listEntryPoints,
+  validateGraph,
+  type GraphNode,
+} from '@flowcanvas/graph-model';
 import { SemanticService } from './semantic-service.js';
 
 vi.setConfig({ testTimeout: 20_000 });
@@ -146,6 +152,23 @@ describe('the connectors in the graph pass', () => {
     const handler = graph.edges.find((e) => e.from === job)?.to ?? '';
     expect(handler).toMatch(/^src\/jobs\.ts#.*\(handler poll\.created\.email\)$/);
     expect(edge(handler, '(service email nodemailer)')?.kind).toBe('boundary');
+    // What takes the job is an entry point (owner, 15 Nov 2026): named by the job, at its handler, reaching it.
+    const jobEntry = node('(entry job:poll.created.email)');
+    expect(jobEntry).toMatchObject({
+      kind: 'entry-point',
+      name: 'poll.created.email',
+      place: { path: 'src/jobs.ts', line: 4 },
+      entry: { kind: 'job', framework: 'job-client', complete: true, why: null, within: null },
+    });
+    expect(edge('(entry job:poll.created.email)', handler)).toMatchObject({
+      kind: 'call',
+      provenance: 'convention',
+    });
+    // Listed for the panel, which opens its flow from the handler.
+    // poll.closed has no definition here, so nothing takes it and it lists nothing.
+    expect(listEntryPoints(indexGraph(graph)).job.map((e) => [e.name, e.handler?.id])).toEqual([
+      ['poll.created.email', handler],
+    ]);
     // A timer runs a named function: through its hand-off node.
     const timer = graph.nodes.find((n) => n.handoff?.kind === 'timer');
     expect(graph.edges.find((e) => e.from === timer?.id)?.to).toBe('src/server.ts#remind');
@@ -205,5 +228,125 @@ describe('bundled output', () => {
     const { isBundled } = await import('./connection-pass.js');
     expect(isBundled(`const a = 1;\n${'x'.repeat(10_001)}\n`)).toBe(true);
     expect(isBundled(`const a = 1;\n${'x'.repeat(9_999)}\n`)).toBe(false);
+  });
+});
+
+describe('what takes handed-off work, as entry points', () => {
+  it('is a job, cron when the code schedules it, or an event; each receiver one; none without its handler', async () => {
+    const { joinConnections } = await import('./connection-pass.js');
+    const { HANDOFF_KINDS } = await import('@flowcanvas/graph-model');
+    const unit = (id: string, line: number): GraphNode => ({
+      id,
+      kind: 'code-unit',
+      name: id.slice(id.indexOf('#') + 1),
+      place: { path: id.slice(0, id.indexOf('#')), line, column: 3 },
+      unit: 'method',
+      change: 'unchanged',
+    });
+    const handoff = (key: string, kind: (typeof HANDOFF_KINDS)[number]): GraphNode => ({
+      id: `(handoff ${key})`,
+      kind: 'async-handoff',
+      name: key,
+      place: null,
+      unit: null,
+      change: 'unchanged',
+      handoff: { kind, library: 'message-queue', name: key, complete: true, why: null },
+    });
+    const nodes = new Map(
+      [
+        unit('src/email.job.ts#EmailSenderJob.handle', 12),
+        unit('src/clean.job.ts#CleanJob.handle', 8),
+        unit('src/a.listener.ts#A.onCreated', 5),
+        unit('src/b.listener.ts#B.onCreated', 9),
+        unit('src/sweep.ts#(handler internal.sweep)', 6),
+        unit('src/__tests__/bus.test.ts#(handler user.created)', 4),
+        handoff('queue:email-queue/EmailSenderJob', 'queue'),
+        handoff('queue:cron-queue/CleanJob', 'cron'),
+      ].map((n) => [n.id, n]),
+    );
+    const { edges, entries } = joinConnections(
+      [
+        {
+          links: [],
+          receivers: [
+            {
+              key: 'queue:email-queue/EmailSenderJob',
+              library: 'message-queue',
+              to: 'src/email.job.ts#EmailSenderJob.handle',
+            },
+            {
+              key: 'queue:cron-queue/CleanJob',
+              library: 'message-queue',
+              to: 'src/clean.job.ts#CleanJob.handle',
+            },
+            {
+              key: 'event:user.created',
+              library: 'nest-events',
+              to: 'src/a.listener.ts#A.onCreated',
+            },
+            // Scheduled by its definition (Documenso's `trigger.cron`): cron, with no hand-off to say so.
+            {
+              key: 'job:internal.sweep',
+              library: 'job-client',
+              to: 'src/sweep.ts#(handler internal.sweep)',
+              scheduled: true,
+            },
+            // A test's listener takes its event, but isn't an entry point (owner, 14 Nov 2026).
+            {
+              key: 'event:user.created',
+              library: 'events',
+              to: 'src/__tests__/bus.test.ts#(handler user.created)',
+            },
+            // Its handler isn't in the graph (its file in no program): no entry point, rather than one going nowhere.
+            { key: 'job:gone', library: 'job-client', to: 'src/gone.ts#run' },
+          ],
+        },
+        {
+          links: [],
+          receivers: [
+            {
+              key: 'event:user.created',
+              library: 'nest-events',
+              to: 'src/b.listener.ts#B.onCreated',
+            },
+          ],
+        },
+      ],
+      [],
+      [],
+      (id) => nodes.get(id),
+    );
+    expect(
+      entries.map((e) => [e.id, e.name, e.entry?.kind, e.entry?.framework, e.place?.line]),
+    ).toEqual([
+      [
+        '(entry queue:email-queue/EmailSenderJob)',
+        'email-queue · EmailSenderJob',
+        'job',
+        'message-queue',
+        12,
+      ],
+      ['(entry queue:cron-queue/CleanJob)', 'cron-queue · CleanJob', 'cron', 'message-queue', 8],
+      ['(entry event:user.created)', 'user.created', 'event', 'nest-events', 5],
+      ['(entry job:internal.sweep)', 'internal.sweep', 'cron', 'job-client', 6],
+      ['(entry event:user.created)~2', 'user.created', 'event', 'nest-events', 9],
+    ]);
+    expect(validateGraph({ nodes: [...nodes.values(), ...entries], edges })).toEqual([]);
+    expect(
+      edges
+        .filter((e) => e.from.startsWith('(entry'))
+        .map((e) => [e.from, e.to, e.provenance, e.lines]),
+    ).toEqual([
+      [
+        '(entry queue:email-queue/EmailSenderJob)',
+        'src/email.job.ts#EmailSenderJob.handle',
+        'convention',
+        [12],
+      ],
+      ['(entry queue:cron-queue/CleanJob)', 'src/clean.job.ts#CleanJob.handle', 'convention', [8]],
+      ['(entry event:user.created)', 'src/a.listener.ts#A.onCreated', 'convention', [5]],
+      ['(entry job:internal.sweep)', 'src/sweep.ts#(handler internal.sweep)', 'convention', [6]],
+      ['(entry event:user.created)~2', 'src/b.listener.ts#B.onCreated', 'convention', [9]],
+    ]);
   });
 });

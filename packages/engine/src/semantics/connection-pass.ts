@@ -20,6 +20,7 @@ import {
 import type { GraphEdge, GraphNode } from '@flowcanvas/graph-model';
 import type * as TS from 'typescript';
 import { cut, findNode } from './callables.js';
+import { NOT_ENTRY_FILES } from './entry-pass.js';
 import {
   namedUnitId,
   projectPath,
@@ -41,10 +42,13 @@ export interface PendingLink {
   readonly keys: readonly string[];
 }
 
-/** What takes handed-off work in a file: its key, and the unit that handles it. */
+/** What takes handed-off work in a file: its key, whose rules found it, and the unit that handles it. */
 export interface PendingReceiver {
   readonly key: string;
+  readonly library: string;
   readonly to: string;
+  /** Its definition schedules it: a cron job. */
+  readonly scheduled?: boolean;
 }
 
 /** A file's halves to join (held with its part of the graph). */
@@ -317,7 +321,12 @@ export function receiversOfFile(
     if (node === undefined) continue;
     const own = namedUnitId(ctx, node) ?? handlers.get(node)?.id;
     if (own !== undefined) {
-      receivers.push({ key: found.key, to: own });
+      receivers.push({
+        key: found.key,
+        library: found.library,
+        to: own,
+        ...(found.scheduled === true ? { scheduled: true } : {}),
+      });
       continue;
     }
     const label = found.key.slice(found.key.indexOf(':') + 1);
@@ -327,7 +336,12 @@ export function receiversOfFile(
     used.set(base, n);
     const id = n === 1 ? base : `${base}~${String(n)}`;
     handlers.set(node, { id, name: cut(label) });
-    receivers.push({ key: found.key, to: id });
+    receivers.push({
+      key: found.key,
+      library: found.library,
+      to: id,
+      ...(found.scheduled === true ? { scheduled: true } : {}),
+    });
   }
   return receivers;
 }
@@ -370,6 +384,68 @@ function serves(route: readonly string[], call: readonly string[]): boolean {
 export interface JoinedConnections {
   /** Every file's edges, with each joined link's unknown edge replaced, and the joins added. */
   readonly edges: readonly GraphEdge[];
+  /** What takes handed-off work, as entry points (jobs, cron, events): a flow opens from each. */
+  readonly entries: readonly GraphNode[];
+}
+
+/**
+ * A receiver's key as a person reads it: `queue:email-queue/EmailSenderJob` → `email-queue · EmailSenderJob`,
+ * `job:send.signing.requested.email` → `send.signing.requested.email`, `event:user.created` → `user.created`.
+ */
+export function receiverName(key: string): string {
+  const rest = key.slice(key.indexOf(':') + 1);
+  return key.startsWith('queue:') ? rest.replace('/', ' · ') : rest;
+}
+
+/**
+ * Each receiver as an entry point (phase 11; owner, 15 Nov 2026): an event's listener is an event; a job is cron
+ * when the code schedules it (its definition has a schedule, or a cron hand-off has its key), otherwise a job. Placed at its handler, and reaching it by
+ * the library's rule (convention). Several receivers of one key are each one. A receiver in a test or story file isn't
+ * one (owner, 14 Nov 2026): it still takes its hand-off, but isn't how the product is entered.
+ */
+function receiverEntries(
+  parts: readonly FileConnections[],
+  nodeOf: (id: string) => GraphNode | undefined,
+): { readonly nodes: GraphNode[]; readonly edges: GraphEdge[] } {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+  const used = new Map<string, number>();
+  for (const part of parts) {
+    for (const receiver of part.receivers) {
+      const handler = nodeOf(receiver.to);
+      if (handler === undefined || NOT_ENTRY_FILES.test(handler.place?.path ?? '')) continue;
+      const kind = receiver.key.startsWith('event:')
+        ? 'event'
+        : receiver.scheduled === true ||
+            nodeOf(`(handoff ${receiver.key})`)?.handoff?.kind === 'cron'
+          ? 'cron'
+          : 'job';
+      const base = `(entry ${receiver.key})`;
+      const n = (used.get(base) ?? 0) + 1;
+      used.set(base, n);
+      const id = n === 1 ? base : `${base}~${String(n)}`;
+      nodes.push({
+        id,
+        kind: 'entry-point',
+        name: cut(receiverName(receiver.key)),
+        place: handler.place,
+        unit: null,
+        change: 'unchanged',
+        entry: { kind, framework: receiver.library, complete: true, why: null, within: null },
+      });
+      edges.push({
+        from: id,
+        to: receiver.to,
+        target: null,
+        kind: 'call',
+        relation: 'calls',
+        label: null,
+        provenance: 'convention',
+        lines: [handler.place?.line ?? 1],
+      });
+    }
+  }
+  return { nodes, edges };
 }
 
 /**
@@ -539,5 +615,7 @@ export function joinConnections(
       });
     }
   }
-  return { edges: [...out.values()] };
+  const receivers = receiverEntries(parts, nodeOf);
+  for (const edge of receivers.edges) put(edge);
+  return { edges: [...out.values()], entries: receivers.nodes };
 }

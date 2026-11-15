@@ -27,6 +27,8 @@ export interface FoundReceiver {
   readonly library: string;
   /** The function or method that takes the work. */
   readonly handler: Span;
+  /** True when its definition schedules it (a cron expression in Documenso's `trigger.cron`): a cron job. */
+  readonly scheduled?: boolean;
 }
 
 export const HANDOFF_MESSAGES = {
@@ -316,7 +318,12 @@ export function receiversOf(context: FileContext): FoundReceiver[] {
         handler !== undefined &&
         (ts.isArrowFunction(handler) || ts.isFunctionExpression(handler))
       ) {
-        found.push({ key: `job:${name}`, library: 'job-client', handler: spanOf(source, handler) });
+        found.push({
+          key: `job:${name}`,
+          library: 'job-client',
+          handler: spanOf(source, handler),
+          ...(property(ts, trigger, 'cron') === undefined ? {} : { scheduled: true }),
+        });
       }
     }
     // BullMQ: `new Worker('queue', processor)`.

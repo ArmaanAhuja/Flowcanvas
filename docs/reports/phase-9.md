@@ -38,6 +38,7 @@ Grouped into one branch, report and acceptance (owner, 15 Nov 2026), each phase'
 | **Phase 9 · Done when:** a form submit crosses into the right handler, all 4 forks | ✅ | Chains in `corpus/labels/connections.json`, held in real workspaces by the Docker corpus test: Rallly's Create poll (`CreatePoll`) → tRPC `polls.make` → its handler; Documenso's document edit form (`sendDocumentWithSubject`) → `document.distribute` → its handler; LibreChat's login (the auth context's `login`, given to `LoginForm` as its `onSubmit`) → `POST /api/auth/login` → `loginController`; Twenty's credit grant form (`handleSubmit`) → GraphQL `grantWorkspaceCredits` → its resolver |
 | **Phase 10 · Done when:** reads and writes show table names; email and payment calls are boundaries | ✅ | Every data site labelled with its table and read or write (Rallly 393, Documenso 1,115, Twenty 7); email and payment calls as boundaries (Rallly 52, Documenso 53, Twenty 13); Documenso's chain: `sendDocument` writes `Envelope`, and its signing email reaches `Email · nodemailer` through its job |
 | **Phase 11 · Done when:** a send email flow shows enqueue → queue → worker → result | ✅ | Twenty's chain: `EmailService.send` → the `email-queue · EmailSenderJob` hand-off → `EmailSenderJob.handle` → `EmailSenderService.send` (the driver it sends through is chosen at run time, so the flow stops honestly there) |
+| **Jobs, cron and events as entry points** (owner's answer 1) | ✅ | The left panel's Jobs and cron and Events groups list every worker, job handler, scheduled job and event listener, Show flow opening its handler; labelled from an independent scan (Rallly 0, Documenso 36: 28 jobs, 7 cron, its BullMQ worker; LibreChat 0 in its modules; Twenty's `email-queue · EmailSenderJob`), all found, no false finds; `connection-pass.test.ts`, `entry-points.test.tsx`, `EntryPointsPanel.test.tsx`, the Docker corpus test |
 | **The bar** | ✅ **met on all 4 forks** (see below) | Every label read against an independent scan; 0 false finds; the one miss explained |
 | **Phase 9 · Try it** | ✅ recorded | `e2e/try-it/phase-9.spec.ts`: Rallly's `CreatePoll` by ⌘K, its flow crossing into `mutation polls.make` and its handler, badged tRPC |
 | **Phase 10 · Try it** | ✅ recorded | `e2e/try-it/phase-10.spec.ts`: Documenso's `sendDocument` with its Prisma writes (`Envelope`, `Recipient`, `DocumentMeta`, `DocumentAuditLog`, `Field`), one inspected; the signing email's runner with `Email · nodemailer` |
@@ -73,7 +74,7 @@ The walkthroughs answer with the engine's own flows, cut from each fork's graph 
 
 | Suite | Count | Command |
 | --- | --- | --- |
-| Unit and component | 1,274 | `pnpm test` |
+| Unit and component | 1,275 | `pnpm test` |
 | Walkthroughs (recorded, production CSP) | 26 (3 new, on the engine's own flows) | `pnpm test:e2e` |
 | Visual and accessibility (both themes) | 198 (4 new: the connectors' two screens, both themes) | `pnpm test:visual` |
 | Docker (real containers) | 49 (the corpus test holds each fork to the bar and its chains) | `pnpm test:docker` |
@@ -103,11 +104,12 @@ The walkthroughs answer with the engine's own flows, cut from each fork's graph 
 
 **Upgrade-later review:** re-read; no item's trigger was reached in these phases.
 
-## Questions for the owner
+## The owner's answers (15 Nov 2026)
 
-1. **Jobs, cron and events in the entry points panel.** Phase 8's panel says "Arrives in phase 11" for both groups. Phase 11 detects every queue worker, job handler, cron and event handler (they're what hand-offs join to), but doesn't list them in the panel yet. Recommended: list them now, as entry points of those kinds, so a person can open a job's flow from the panel (about an hour, before acceptance); the alternative is to name a later phase in the panel's text.
-2. **The graph time the connectors add** (about double on most forks; Twenty 199 s on CI). Recommended: accept for now, held by the Docker test's limits, and cut it in phase 12, which reworks what a flow shows; the alternative is profiling and trimming now.
-3. **LibreChat's and Twenty's labels:** keep phase 8's modules (5 and 20 sites, as decided), or widen them to the services those modules call, so more of those forks' connectors are held by hand labels? Recommended: widen in phase 12, where flows are grouped and expanded, rather than delay this acceptance.
+"Yes to all 3" (decisions log):
+1. **Jobs, cron and events in the entry points panel, now:** done (the row above; ADR 0031's second addendum). Twenty lists 125 (83 jobs, 35 cron, 7 events), LibreChat 3 event listeners outside its labelled modules.
+2. **The graph time the connectors add:** accepted for now, held by the Docker test's limits; cut in phase 12.
+3. **LibreChat's and Twenty's labels:** widened in phase 12, to the services phase 8's modules call.
 
 ## CI
 

@@ -479,7 +479,7 @@ describe('entry points (phase 8)', () => {
     },
   };
   const result = {
-    counts: { screen: 3, element: 0, 'api-route': 0, 'cli-command': 0 },
+    counts: { screen: 3, element: 0, 'api-route': 0, job: 0, cron: 0, event: 0, 'cli-command': 0 },
     kind: 'screen',
     entries: [
       entry,
@@ -505,7 +505,7 @@ describe('entry points (phase 8)', () => {
     expect(parseEngineRequest({ ...request })).toEqual(request);
     expect(ENGINE_LIMITS.entries).toBe(200);
     for (const bad of [
-      { op: 'entryPoints', kind: 'job', after: 0, limit: 1 },
+      { op: 'entryPoints', kind: 'queue', after: 0, limit: 1 },
       { op: 'entryPoints', kind: 'screen', after: -1, limit: 1 },
       { op: 'entryPoints', kind: 'screen', after: 0, limit: 0 },
       { op: 'entryPoints', kind: 'screen', after: 0, limit: 201 },

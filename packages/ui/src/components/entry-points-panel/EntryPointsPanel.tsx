@@ -1,4 +1,5 @@
 import {
+  CalendarClock,
   ChevronRight,
   CircleDashed,
   Clock,
@@ -24,13 +25,17 @@ import { classNames } from '../../class-names';
 import { Input } from '../input/Input';
 import styles from './EntryPointsPanel.module.css';
 
-export type EntryRowKind = 'screen' | 'element' | 'api-route' | 'cli-command';
+export type EntryRowKind =
+  'screen' | 'element' | 'api-route' | 'job' | 'cron' | 'event' | 'cli-command';
 
 /** One entry point (phase 8, ADR 0030), as the panel lists it. */
 export interface EntryRow {
   readonly id: string;
   readonly kind: EntryRowKind;
-  /** As the code names it: `/settings/profile`, `POST /api/polls`, `<button> onClick`, `web: dev`. */
+  /**
+   * As the code names it: `/settings/profile`, `POST /api/polls`, `<button> onClick`, `email-queue · EmailSenderJob`,
+   * `web: dev`.
+   */
   readonly label: string;
   /** Said muted beside the name: a screen's component. */
   readonly suffix?: string | null | undefined;
@@ -52,8 +57,6 @@ export interface EntryGroup {
   readonly rows: readonly EntryRow[];
   /** Rows not loaded yet: a "Show more" row asks for them. */
   readonly more?: number | undefined;
-  /** For a group whose kind comes later: the phase that brings it (11). */
-  readonly arrivesIn?: number | null | undefined;
 }
 
 export interface EntryPointsPanelProps {
@@ -95,6 +98,9 @@ const ICONS: Readonly<Record<EntryRowKind, ReactNode>> = {
   screen: <Monitor size={14} aria-hidden />,
   element: <MousePointerClick size={14} aria-hidden />,
   'api-route': <Route size={14} aria-hidden />,
+  job: <Clock size={14} aria-hidden />,
+  cron: <CalendarClock size={14} aria-hidden />,
+  event: <Zap size={14} aria-hidden />,
   'cli-command': <SquareTerminal size={14} aria-hidden />,
 };
 const GROUP_ICONS: Readonly<Record<EntryGroupId, ReactNode>> = {
@@ -182,17 +188,12 @@ export function EntryPointsPanel({
             },
           ]
         : []),
-      ...(group.rows.length === 0 && (listed || group.arrivesIn != null)
+      ...(group.rows.length === 0 && listed
         ? [
             {
               type: 'empty' as const,
               id: `empty:${group.id}`,
-              text:
-                group.arrivesIn != null
-                  ? `Arrives in phase ${String(group.arrivesIn)}.`
-                  : filter === ''
-                    ? 'None found in this project.'
-                    : 'None match the filter.',
+              text: filter === '' ? 'None found in this project.' : 'None match the filter.',
               children: [],
             },
           ]
@@ -317,9 +318,7 @@ function Row({
         {chevron}
         <span className={styles.icon}>{GROUP_ICONS[item.group.id]}</span>
         <span className={styles.groupTitle}>{GROUP_TITLES[item.group.id]}</span>
-        {(listed || item.group.arrivesIn != null) && (
-          <span className={styles.groupCount}>{item.group.count}</span>
-        )}
+        {listed && <span className={styles.groupCount}>{item.group.count}</span>}
       </div>
     );
   }

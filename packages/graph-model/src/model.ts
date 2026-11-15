@@ -119,8 +119,19 @@ export interface HandoffDetails {
   readonly why: string | null;
 }
 
-/** The design brief's groups of entry points (§23); jobs, cron and events are phase 11's. */
-export const ENTRY_KINDS = ['screen', 'element', 'api-route', 'cli-command'] as const;
+/**
+ * The design brief's groups of entry points (§23). Jobs, cron and events (phase 11) are what takes handed-off work:
+ * a queue's worker, a job's handler, an event's listener; a job is cron when the code schedules it.
+ */
+export const ENTRY_KINDS = [
+  'screen',
+  'element',
+  'api-route',
+  'job',
+  'cron',
+  'event',
+  'cli-command',
+] as const;
 export type EntryKind = (typeof ENTRY_KINDS)[number];
 
 export interface EntryDetails {

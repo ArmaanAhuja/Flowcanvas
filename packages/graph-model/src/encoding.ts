@@ -25,8 +25,9 @@ import { validateGraph } from './validate.js';
  * 3 (phase 7): a call edge says which of its lines are guarded (`GraphEdge.guarded`); a version 2 graph can't say.
  * 4 (phase 8, ADR 0030): an entry point's node carries its details (`GraphNode.entry`); a version 3 graph has none.
  * 5 (phases 9 to 11, ADR 0031): data-access, external-boundary and async hand-off nodes carry their details.
+ * 6 (phase 11): what takes handed-off work is an entry point (job, cron, event); a version 5 graph lists none.
  */
-export const GRAPH_FORMAT = 5;
+export const GRAPH_FORMAT = 6;
 
 type EncodedNode = [
   /** The id's file, as an index into `paths`; -1 when the id has no `#` (then `idRest` is the whole id). */

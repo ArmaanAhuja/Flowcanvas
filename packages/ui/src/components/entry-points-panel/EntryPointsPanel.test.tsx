@@ -44,8 +44,15 @@ const GROUPS: readonly EntryGroup[] = [
     ],
     more: 201,
   },
-  { id: 'jobs', count: 0, rows: [], arrivesIn: 11 },
-  { id: 'events', count: 0, rows: [], arrivesIn: 11 },
+  {
+    id: 'jobs',
+    count: 2,
+    rows: [
+      { id: 'k1', kind: 'cron', label: 'cron-queue · CleanInactiveWorkspacesJob', complete: true },
+      { id: 'j1', kind: 'job', label: 'email-queue · EmailSenderJob', complete: true },
+    ],
+  },
+  { id: 'events', count: 0, rows: [] },
   {
     id: 'cli',
     count: 1,
@@ -75,12 +82,14 @@ describe('EntryPointsPanel', () => {
     const panel = screen.getByRole('region', { name: 'Entry points' });
     expect(
       within(panel).getByRole('heading', { name: 'Entry points' }).nextSibling?.textContent,
-    ).toBe('206');
+    ).toBe('208');
     expect(row('Screens and elements').textContent).toContain('2');
     expect(row('API routes').getAttribute('aria-expanded')).toBe('true');
     expect(row('/polls/:urlId').textContent).toContain('PollPage');
-    // Later kinds say which phase brings them.
-    expect(screen.getAllByRole('row', { name: 'Arrives in phase 11.' })).toHaveLength(2);
+    // Jobs and cron (phase 11), and an empty group saying none were found.
+    expect(row('Jobs and cron').textContent).toContain('2');
+    expect(row('email-queue · EmailSenderJob')).toBeDefined();
+    expect(screen.getAllByRole('row', { name: 'None found in this project.' })).toHaveLength(1);
   });
 
   it('marks what isn’t fully detected with its reason, never by colour alone', () => {
@@ -122,12 +131,11 @@ describe('EntryPointsPanel', () => {
     expect(props.onShowMore).toHaveBeenCalledWith('api');
   });
 
-  it('says nothing of an empty group before the entry points are listed, but still when a kind comes later', () => {
+  it('says nothing of an empty group before the entry points are listed', () => {
     renderPanel({ groups: GROUPS.map((g) => ({ ...g, rows: [] })), listed: false });
     expect(screen.queryByRole('row', { name: 'None found in this project.' })).toBeNull();
     // Nor a count it doesn't know yet.
     expect(row('API routes').textContent).toBe('API routes');
-    expect(screen.getAllByRole('row', { name: 'Arrives in phase 11.' })).toHaveLength(2);
   });
 
   it('filters through the page, and says when nothing matches', async () => {
@@ -138,6 +146,7 @@ describe('EntryPointsPanel', () => {
     });
     await user.type(screen.getByRole('textbox', { name: 'Filter entry points' }), 'x');
     expect(props.onFilterChange).toHaveBeenCalledWith('zzzx');
-    expect(screen.getByRole('row', { name: 'None match the filter.' })).toBeDefined();
+    // The commands, emptied here, and the events, which have none.
+    expect(screen.getAllByRole('row', { name: 'None match the filter.' })).toHaveLength(2);
   });
 });

@@ -696,3 +696,16 @@ CLAUDE.md's "Working pace" says the same.
 - **Added in phases 9 to 11:** where following a value through the project's code doesn't reach its package, the type TypeScript gives it, from an installed package's declarations, does (ADR 0031 addendum).
 
 **Owner, on the pace:** "let's go with option c": phases 9 to 11 are finished at the bar set (every connector site labelled and every difference read), however long it takes.
+
+## 15 Nov 2026: phases 9 to 11's questions, and CI cycles (owner)
+
+**Owner, on the report's three questions:** "yes to all 3".
+1. **Jobs, cron and events in the entry points panel** now, before acceptance: the workers, job handlers, cron and event handlers phase 11 detects are listed as entry points of those kinds, so a job's flow opens from the panel.
+2. **The graph time the connectors add** is accepted for now, held by the Docker test's limits (each fork's recorded CI figure plus half), and cut in phase 12.
+3. **LibreChat's and Twenty's labels** are widened in phase 12, to the services phase 8's modules call.
+
+**Owner, on CI time:** "since these CI's are taking so long, we need to figure something out". Claude measured: every run on the branch took 4 to 11 minutes (the last, 5 min 14 s); the time went to red runs (5 of 8: Twenty's Docker job three times, LibreChat's and the rest once, a visual flake once), each investigated and pushed again, and to Claude's own repeated graph builds on the laptop. **Owner:** "all 4 accepted".
+1. **Push at milestones,** 2 to 3 times per phase, once a substantial working piece is done, not after every fix. Every push still runs the whole CI; nothing merges without green.
+2. **Never wait on CI mid-phase:** work continues while a run goes; only the run before the report must be green.
+3. **Before a push, the one heavy suite matching the change, once, on the laptop:** visual when screens change, the changed fork's Docker shard when the engine changes (amends 11 Nov: heavy suites otherwise on CI).
+4. **Graphs reused across Claude's own repeated runs** (scratch tools only, not the product).

@@ -62,6 +62,7 @@ export function assemble(
     [...files.values()].flatMap((part) => part.edges),
     (id) => nodes.get(id),
   );
+  for (const node of joined.entries) nodes.set(node.id, node);
   return {
     graph: {
       nodes: [...nodes.values()],

@@ -14009,3 +14009,29 @@ pnpm test:visual
 **Risks and laptop:** none new. Laptop: each fork's graph built here one at a time (Twenty 179 s, LibreChat 149 s).
 
 **Commits:** `e11e093` the connectors skip bundled output; `6560fda` the walkthroughs on the engine's flows; `44476d0` the chains, and mutations through the project's own hooks; `19fa14c` and `db6882d` built exports' source; `59de3f5` ADR 0031's addendum; `067f0d8` the labels; `f9865d7` formatting; `aece166` test counts; `7b2666f` the connectors' screens, search typed once it listens (3 of 10 repeats had timed out), every fork's graph time held to its recorded CI figure plus half; `fd28512` the record of it and the report; `12c960c` the connectors' screens with the mouse moved off the canvas (CI had caught a hovered node) and Documenso's on its 13-node admin-user email runner (the 60-node signing email, fitted at 9%, differed by 7 pixels between runs); this commit, naming it.
+
+### Step 9.3 — Jobs, cron and events in the entry points panel (done by Claude)
+
+**Goal:** the owner's answer to the report's first question (15 Nov 2026): list what takes handed-off work as entry points now, so a job's flow opens from the left panel, in place of phase 8's "Arrives in phase 11".
+
+**What a person can do now:** with a fork's workspace running, open the left panel's **Jobs and cron** and **Events** groups: each queue worker, job handler, scheduled job and event listener, named by its queue, job or event (`email-queue · EmailSenderJob`, `send.signing.requested.email`), with its count and Show flow (or Enter), which opens the flow from its handler. Documenso lists 36 (28 jobs, 7 cron, its BullMQ worker), Twenty 125 (83 jobs, 35 cron, 7 events), LibreChat 3 events, Rallly none.
+
+**Files:** `packages/graph-model/src/model.ts` (`ENTRY_KINDS` with `job`, `cron`, `event`), `encoding.ts` (graph format 6); `packages/connectors/web/src/handoffs.ts` (`FoundReceiver.scheduled`, from a definition's `trigger.cron`) and its test; `packages/engine/src/semantics/connection-pass.ts` (`receiverName`, `receiverEntries`; receivers carry their library), `graph.ts` (the entries added to the graph) and `connection-pass.test.ts`; `packages/ui/src/components/entry-points-panel/` (row kinds and icons; "Arrives in phase N" removed, as no group arrives later now) with its test and stories; `apps/web/src/entry-points/useEntryPoints.ts` (the new kinds asked for, jobs and cron one group in name order), `apps/web/src/flow/layout.ts` (their card is a queue's) and `entry-points.test.tsx`; `corpus/labels/entry-points.json` (scopes and labels for the new kinds) and `corpus/src/connections.test.ts`; `workspace/host/src/corpus.docker.test.ts` (asks for every kind); `e2e/try-it/phase-8.spec.ts`, `e2e/try-it/fixtures/phase-8-rallly.json`, `phase-8-documenso-entry-points.json` (the engine's lists for the new kinds), `e2e/visual/screens.spec.ts`; tests naming `job` as an unknown kind now name `queue`; ADR 0031's second addendum, the report, CHANGELOG and the living docs.
+
+**Concepts:** none new: an entry point is a graph node with a `convention` edge to its handler (phase 8, ADR 0030), so the panel, the `entryPoints` request and Show flow needed no new path, only the kinds.
+
+**Found and fixed on the way:**
+- **Documenso's scheduled jobs** were first listed as jobs: its definitions schedule with `trigger.cron`, which no hand-off says. The connector now marks a definition with a schedule, and 7 are cron.
+- **LibreChat's first list had 23 listeners from test files** (`__tests__`, `.test.ts`); the owner's 14 Nov rule for entry points (test and story files aren't how the product is entered) now applies to receivers too.
+- **A cron example in a doc comment** (`*/15`) closed the comment and broke the connectors' build; reworded.
+- **The catalogue's panel story** was 560 px tall: with two more groups its last command fell below the frame (the panel draws only the rows in view). It's 640 px now.
+- **Screens:** 26 baselines changed, each read: the panel's two "Arrives in phase 11." rows gone, and its total with Documenso's jobs. `project-indexing` (dark) once timed out waiting for the canvas while the laptop also ran the docs checks; 6 of 6 repeats pass alone.
+- **A web build on its own** (`pnpm --filter @flowcanvas/web build`) reported four chunks over budget; the full build (`pnpm build`, as CI runs it) is within every budget. Only the full build is used before a push.
+
+**Tests:** the screens (26 baselines regenerated, every difference read, all pass); the join (job, cron by schedule and by hand-off, event, two receivers of one key, a test file's, a handler missing from the graph); the whole pass (the job's entry point, at its handler, listed with it); the connector (a scheduled definition); the panel (groups, counts, empty groups saying none were found); the page (the new kinds asked for, jobs and cron in name order, a job's Show flow opening its handler). Labels, from an independent text scan read in the code and compared on the saved graphs with the Docker test's own comparison: Rallly 0 of 0, Documenso 36 of 36, LibreChat 0 of 0, Twenty 1 of 1; no false finds. Unit tests: every package passes.
+
+**Run and check it:** `pnpm dev`, Documenso's or Twenty's corpus project with its workspace running; once the graph is built, open Jobs and cron in the left panel and Show flow on `email-queue · EmailSenderJob` (Twenty) or `send.signing.requested.email` (Documenso). `pnpm --filter @flowcanvas/engine exec vitest run src/semantics/connection-pass.test.ts`; `pnpm --filter @flowcanvas/web exec vitest run src/entry-points`; `pnpm test:docker` (the labels in real workspaces).
+
+**Risks and laptop:** stored graphs are rebuilt once (format 6). Laptop: each fork's graph built once and saved for every comparison (owner's CI answer 4), Twenty 5 min; the screenshot suite run once before the push (answer 3).
+
+**Commits:** this commit.

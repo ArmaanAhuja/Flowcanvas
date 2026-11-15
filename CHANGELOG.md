@@ -13,18 +13,20 @@ Flows now cross from a form into the API that serves it, show each read and writ
 1. Open Rallly's corpus project with its workspace running; ⌘K `CreatePoll` and **Show the flow**: the form's submit continues into `mutation polls.make` and its handler.
 2. In Documenso, ⌘K `sendDocument`: its writes (`Envelope`, `Recipient`…); click one to read its table. Then `run` (the signing email's runner): `Email · nodemailer`.
 3. In Twenty, ⌘K `send` (EmailService): the email queue's hand-off, with a clock, and its worker in the Background lane.
+4. In the left panel, open **Jobs and cron** or **Events**: each worker, job handler, scheduled job and event listener, with Show flow (Documenso's 36, Twenty's 125).
 
 ### Added
 
 - **UI → API links (phase 9):** tRPC, `fetch` and axios (through the project's wrappers), Apollo GraphQL, and mutations run through hooks, joined to the API's entry points.
 - **Reads, writes and outside services (phase 10):** Prisma, Kysely, raw SQL, Mongoose and TypeORM with their tables; nodemailer, Resend, SendGrid, Postmark, Stripe, S3, OpenAI, Anthropic and fixed outside URLs.
 - **Hand-offs (phase 11):** BullMQ, Twenty's message queue, Documenso's job client, NestJS and Node events, timers, WebSockets; the framed Background lane; a clock on each hand-off; a framework badge on each convention edge.
+- **Jobs, cron and events in the entry points panel (phase 11; owner):** every queue worker, job handler and event listener, named by its queue, job or event; a job is cron when the code schedules it. Test files' listeners aren't listed.
 - **The inspector** for tables, services and hand-offs.
 - **An installed package's types** name a value's package where following the code doesn't (owner).
 
 ### Changed
 
-- **Graph format 5:** data, service and hand-off nodes carry their details; stored graphs are rebuilt once.
+- **Graph format 6:** data, service and hand-off nodes carry their details, and what takes handed-off work is an entry point; stored graphs are rebuilt once.
 - **The project page's chunk** stays within its budget; the canvas lays out the Background lane on its own, below the main flow.
 
 ### Fixed
