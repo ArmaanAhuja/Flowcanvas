@@ -95,3 +95,8 @@ This document tracks all modifications, tests, scripts, and documentation change
    * `pnpm format:check`: Passed ("All matched files use Prettier code style!").
    * `eslint .`: Passed (0 errors, 0 warnings across all 15 workspace packages).
    * Vitest & Playwright test suites passing.
+
+10. **Committed Changes on `phase/9-connectors`**:
+    * Commit `1f948d5`: `feat(connectors): close phases 9 to 11: release 0.13.0, hand labels and walkthroughs`
+    * Step 9.1 in `docs/build-steps.md` updated to document `1f948d5`.
+    * Milestone docs verified passing with `pnpm docs:milestone`.
