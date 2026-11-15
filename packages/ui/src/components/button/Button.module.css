@@ -31,7 +31,7 @@
   color: var(--color-text-on-accent);
 }
 
-.button[data-kind='primary']:hover:not(:disabled) {
+.button[data-kind='primary']:hover:not(:disabled, [aria-disabled='true']) {
   background: color-mix(in srgb, var(--color-surface-inverse) 88%, var(--color-surface-canvas));
 }
 
@@ -41,7 +41,7 @@
   color: var(--color-text-primary);
 }
 
-.button[data-kind='secondary']:hover:not(:disabled) {
+.button[data-kind='secondary']:hover:not(:disabled, [aria-disabled='true']) {
   background: var(--color-surface-hover);
   border-color: var(--color-border-strong);
 }
@@ -51,7 +51,7 @@
   color: var(--color-text-secondary);
 }
 
-.button[data-kind='ghost']:hover:not(:disabled) {
+.button[data-kind='ghost']:hover:not(:disabled, [aria-disabled='true']) {
   background: var(--color-surface-hover);
   color: var(--color-text-primary);
 }
@@ -61,7 +61,7 @@
   color: var(--color-state-removed-text);
 }
 
-.button[data-kind='danger']:hover:not(:disabled) {
+.button[data-kind='danger']:hover:not(:disabled, [aria-disabled='true']) {
   background: color-mix(
     in srgb,
     var(--color-state-removed-tint) 80%,
@@ -69,7 +69,9 @@
   );
 }
 
-.button:disabled {
+/* aria-disabled: unavailable for now but still focusable, so focus isn't lost while a request runs. */
+.button:disabled,
+.button[aria-disabled='true'] {
   cursor: not-allowed;
   opacity: var(--opacity-disabled);
 }

@@ -1,15 +1,21 @@
 import {
   CHANGE_STATES,
   CODE_UNIT_KINDS,
+  DATA_LIBRARIES,
+  DATA_OPERATIONS,
   EDGE_KINDS,
   ENTRY_KINDS,
+  HANDOFF_KINDS,
   NODE_KINDS,
   PROVENANCES,
   RELATIONS,
+  SERVICE_KINDS,
   edgeKey,
   type Graph,
 } from './model.js';
 
+/** `a data-access`, `an external-boundary`. */
+const an = (kind: string) => `${/^[aeiou]/.test(kind) ? 'an' : 'a'} ${kind}`;
 const isPositiveInteger = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 1;
 const has = (list: readonly string[], value: unknown) =>
   typeof value === 'string' && list.includes(value);
@@ -51,6 +57,56 @@ export function validateGraph(graph: Graph, limit = 50): string[] {
       }
     } else if (node.entry !== undefined) {
       say(`node ${node.id}: only an entry point has entry details`);
+    }
+    // Data, services and hand-offs (phases 10 and 11, ADR 0031): each kind carries its own details, and only it.
+    const details = [
+      ['data-access', node.data, 'data'],
+      ['external-boundary', node.service, 'service'],
+      ['async-handoff', node.handoff, 'hand-off'],
+    ] as const;
+    for (const [kind, value, what] of details) {
+      if (node.kind !== kind) {
+        if (value !== undefined) say(`node ${node.id}: only ${an(kind)} node has ${what} details`);
+        continue;
+      }
+      if (value === undefined || typeof value.complete !== 'boolean') {
+        say(`node ${node.id}: ${an(kind)} node needs its ${what} details`);
+        continue;
+      }
+      if (value.why !== null && (typeof value.why !== 'string' || value.why === '')) {
+        say(`node ${node.id}: its why is a sentence or null`);
+      }
+      if (!value.complete && value.why === null) {
+        say(`node ${node.id}: ${an(kind)} node not fully detected says why`);
+      }
+    }
+    if (
+      node.data !== undefined &&
+      (!has(DATA_LIBRARIES, node.data.library) ||
+        !has(DATA_OPERATIONS, node.data.operation) ||
+        (node.data.table !== null &&
+          (typeof node.data.table !== 'string' || node.data.table === '')))
+    ) {
+      say(`node ${node.id}: data needs its library, operation, and table or null`);
+    }
+    if (
+      node.service !== undefined &&
+      (!has(SERVICE_KINDS, node.service.kind) ||
+        typeof node.service.library !== 'string' ||
+        node.service.library === '' ||
+        (node.service.url !== null && typeof node.service.url !== 'string'))
+    ) {
+      say(`node ${node.id}: a service needs its kind and library, and a URL or null`);
+    }
+    if (
+      node.handoff !== undefined &&
+      (!has(HANDOFF_KINDS, node.handoff.kind) ||
+        typeof node.handoff.library !== 'string' ||
+        node.handoff.library === '' ||
+        (node.handoff.name !== null &&
+          (typeof node.handoff.name !== 'string' || node.handoff.name === '')))
+    ) {
+      say(`node ${node.id}: a hand-off needs its kind and library, and a name or null`);
     }
     if (
       node.place !== null &&
@@ -110,7 +166,7 @@ export function validateGraph(graph: Graph, limit = 50): string[] {
       say(`${name}: its lines must be 1-based, ascending, each once`);
     }
     if (edge.guarded !== undefined) {
-      if (edge.kind !== 'call') say(`${name}: only a call has guarded lines`);
+      if (edge.kind === 'branch') say(`${name}: a branch has no guarded lines`);
       const lines = new Set(edge.lines);
       if (
         edge.guarded.length === 0 ||

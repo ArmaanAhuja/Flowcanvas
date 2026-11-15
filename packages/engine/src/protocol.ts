@@ -5,13 +5,17 @@
 import {
   CHANGE_STATES,
   CODE_UNIT_KINDS,
+  DATA_LIBRARIES,
+  DATA_OPERATIONS,
   EDGE_KINDS,
   ENTRY_KINDS,
   FLOW_LIMITS,
   FLOW_MAX_NODES,
+  HANDOFF_KINDS,
   NODE_KINDS,
   PROVENANCES as GRAPH_PROVENANCES,
   RELATIONS as GRAPH_RELATIONS,
+  SERVICE_KINDS,
   type CodeUnitKind,
   type EntryKind,
   type EntryPointItem,
@@ -546,8 +550,53 @@ function isFlowNode(value: unknown): boolean {
         isCount(place.column) &&
         place.column >= 1)) &&
     (n.unit === null || (CODE_UNIT_KINDS as readonly unknown[]).includes(n.unit)) &&
-    (CHANGE_STATES as readonly unknown[]).includes(n.change)
+    (CHANGE_STATES as readonly unknown[]).includes(n.change) &&
+    hasOwnDetails(n)
   );
+}
+
+const isTextOrNull = (value: unknown) => value === null || isText(value);
+const among = (list: readonly string[], value: unknown) =>
+  (list as readonly unknown[]).includes(value);
+
+/** A data, service or hand-off node's details (phases 10 and 11, ADR 0031): its own kind's, well formed, or none. */
+function hasOwnDetails(n: Record<string, unknown>): boolean {
+  const data = n.data === undefined ? undefined : record(n.data);
+  const service = n.service === undefined ? undefined : record(n.service);
+  const handoff = n.handoff === undefined ? undefined : record(n.handoff);
+  const explained = (d: Record<string, unknown>) =>
+    typeof d.complete === 'boolean' && isTextOrNull(d.why) && (d.complete || d.why !== null);
+  if (n.kind !== 'data-access' && n.data !== undefined) return false;
+  if (n.kind !== 'external-boundary' && n.service !== undefined) return false;
+  if (n.kind !== 'async-handoff' && n.handoff !== undefined) return false;
+  if (n.kind === 'data-access') {
+    return (
+      data !== undefined &&
+      among(DATA_LIBRARIES, data.library) &&
+      isTextOrNull(data.table) &&
+      among(DATA_OPERATIONS, data.operation) &&
+      explained(data)
+    );
+  }
+  if (n.kind === 'external-boundary') {
+    return (
+      service !== undefined &&
+      among(SERVICE_KINDS, service.kind) &&
+      isText(service.library) &&
+      isTextOrNull(service.url) &&
+      explained(service)
+    );
+  }
+  if (n.kind === 'async-handoff') {
+    return (
+      handoff !== undefined &&
+      among(HANDOFF_KINDS, handoff.kind) &&
+      isText(handoff.library) &&
+      isTextOrNull(handoff.name) &&
+      explained(handoff)
+    );
+  }
+  return true;
 }
 
 /** A flow: bounded, and every edge, group and cut between nodes it has. */
@@ -576,7 +625,7 @@ function isFlow(value: unknown): value is Flow {
         e !== undefined &&
         has(e.from) &&
         has(e.to) &&
-        (e.kind === 'call' || e.kind === 'branch') &&
+        (EDGE_KINDS as readonly unknown[]).includes(e.kind) &&
         isRelation(e.relation) &&
         isLabel(e.label) &&
         (GRAPH_PROVENANCES as readonly unknown[]).includes(e.provenance) &&

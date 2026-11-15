@@ -31,6 +31,14 @@ import { dockerCli } from './docker-cli.js';
 import { WorkspaceHost } from './workspaces.js';
 import { checkGraph, compareCalls, type CallsLabel } from '../../../corpus/src/calls.js';
 import {
+  chainProblems,
+  compareConnections,
+  connectionBarProblems,
+  CONNECTION_KINDS,
+  type ConnectionResult,
+  type ForkConnections,
+} from '../../../corpus/src/connections.js';
+import {
   barProblems,
   compareEntryPoints,
   recall,
@@ -66,6 +74,11 @@ const callLabels = corpus('labels/calls.json') as Record<string, CallsLabel[] | 
 const graphLabels = corpus('labels/graph.json') as Record<string, CallsLabel[] | undefined>;
 /** Phase 8's Done when: each fork's hand-labelled entry points (labels/entry-points.json). */
 const entryLabels = corpus('labels/entry-points.json') as Record<string, ForkLabels | undefined>;
+/** Phases 9 to 11's bar (owner, 15 Nov 2026): each fork's hand-labelled connections (labels/connections.json). */
+const connectionLabels = corpus('labels/connections.json') as Record<
+  string,
+  ForkConnections | undefined
+>;
 /** Phase 7's Done when: 10 Documenso flows, labelled by reading the code (labels/flows.json). */
 const flowLabels = corpus('labels/flows.json') as Record<string, FlowLabel[] | undefined>;
 /** Phase 6's four forks (owner, 12 Nov 2026): held to the Done when; Excalidraw and Medusa are reported. */
@@ -79,6 +92,20 @@ const SNAPSHOT_MS = 1000;
 const ANSWER_MS = 1000;
 /** A whole-project graph on CI's two CPUs: minutes for the largest; a pass that never ends is still a failure. */
 const GRAPH_GIVE_UP_MS = 420_000;
+/**
+ * Each fork's graph build on CI, held to its recorded time plus half (owner, 15 Nov 2026: "every fork's graph time held
+ * to a recorded figure"): a regression fails here rather than only slowing the pass. Recorded on run 43712385746
+ * (`aece166`, phases 9 to 11, connectors in the pass): Rallly 28.7 s, Documenso 46.3 s, Excalidraw 26.1 s, LibreChat
+ * 120.6 s, Twenty 198.9 s, Medusa 96.6 s.
+ */
+const GRAPH_BUILD_MS: Readonly<Record<string, number>> = {
+  rallly: 43_000,
+  documenso: 70_000,
+  excalidraw: 39_000,
+  librechat: 181_000,
+  twenty: 298_000,
+  medusa: 180_000,
+};
 
 /** The build plan's two forks: held to the targets. The other four are measured and reported. */
 const HELD = new Set(['rallly', 'documenso']);
@@ -252,6 +279,10 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
         // The stored version, copied out (with its write-ahead log) and loaded: loading decodes it and checks it
         // against the schema, then the labelled functions are found in it.
         const graphDiffering: string[] = [];
+        let connectionResult: ConnectionResult | null = null;
+        // The Done whens' chains (phase 9: a form's submit into its API's handler, in all 4 forks; 10: writes and the
+        // email; 11: enqueue → queue → worker → result): each step reached from the one before, in the stored graph.
+        let chainsBroken: string[] | null = null;
         const roots: { readonly label: CallsLabel; readonly id: string }[] = [];
         const sampled = [...(callLabels[repo.id] ?? []), ...(graphLabels[repo.id] ?? [])];
         if (graph.state === 'ready' && graph.snapshot !== null && sampled.length > 0) {
@@ -268,6 +299,11 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
             const loaded = store.load(graph.snapshot.version);
             store.close();
             if (loaded === undefined) throw new Error('the reported version isn’t stored');
+            const forConnections = connectionLabels[repo.id];
+            if (forConnections !== undefined) {
+              connectionResult = compareConnections(forConnections, loaded.graph);
+              chainsBroken = chainProblems(forConnections, loaded.graph);
+            }
             for (const label of sampled) {
               const found = checkGraph(loaded.graph, label);
               if (found.node !== null) roots.push({ label, id: found.node });
@@ -359,12 +395,21 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
         const membersCallersMs: number[] = [];
         if (graph.state === 'ready') await checkCalls(storedDiffering, storedMs, membersCallersMs);
 
-        // Phase 8: every entry point the engine lists, a kind and a page at a time, against the labels.
+        // Phase 8: every entry point the engine lists, a kind and a page at a time, against the labels; with phase 11's
+        // jobs, cron and events (what takes handed-off work).
         const forkEntryLabels = entryLabels[repo.id];
         const entryPoints: EntryPointsResult['entries'][number][] = [];
         let entryPointsMs = 0;
         if (graph.state === 'ready' && forkEntryLabels !== undefined) {
-          for (const kind of ['screen', 'element', 'api-route', 'cli-command'] as const) {
+          for (const kind of [
+            'screen',
+            'element',
+            'api-route',
+            'job',
+            'cron',
+            'event',
+            'cli-command',
+          ] as const) {
             for (let after: number | null = 0; after !== null;) {
               const started = performance.now();
               const answer = await host.index(ref, { op: 'entryPoints', kind, after, limit: 200 });
@@ -432,6 +477,7 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
           graphNodes: graph.snapshot?.stats.nodes ?? null,
           graphEdges: graph.snapshot?.stats.edges ?? null,
           graphBuildMs: graph.snapshot?.buildMs ?? null,
+          graphBuildLimitMs: GRAPH_BUILD_MS[repo.id] ?? null,
           snapshotSaveMs: graph.snapshot?.saveMs ?? null,
           snapshotLoadMs: graph.snapshot?.loadMs ?? null,
           ...(sampled.length > 0
@@ -473,6 +519,20 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
                   membersCallersMs.length > 0 ? Math.round(Math.max(...membersCallersMs)) : null,
               }
             : {}),
+          ...(connectionResult !== null
+            ? {
+                connections: Object.values(connectionResult.kinds).reduce(
+                  (s, k) => s + k.labelled,
+                  0,
+                ),
+                connectionsFound: Object.values(connectionResult.kinds).reduce(
+                  (s, k) => s + k.found,
+                  0,
+                ),
+                connectionsFalseFinds: connectionResult.falseFinds.length,
+                connectionChains: `${String((connectionLabels[repo.id]?.chains?.length ?? 0) - (chainsBroken?.length ?? 0))} of ${String(connectionLabels[repo.id]?.chains?.length ?? 0)}`,
+              }
+            : {}),
         };
         report.push(row);
         console.log(JSON.stringify(row));
@@ -481,6 +541,11 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
         expect(callsDiffering).toEqual([]);
         expect(storedDiffering).toEqual([]);
         if (storedMs.length > 0) expect(Math.max(...storedMs)).toBeLessThan(ANSWER_MS);
+        // Every fork's graph time, held to its recorded figure (GRAPH_BUILD_MS).
+        const buildLimit = GRAPH_BUILD_MS[repo.id];
+        if (buildLimit !== undefined && graph.snapshot !== null) {
+          expect(graph.snapshot.buildMs, `${repo.id}'s graph build`).toBeLessThan(buildLimit);
+        }
         if (GRAPH_HELD.has(repo.id)) {
           expect(graph.state, graph.message ?? '').toBe('ready');
           expect(graph.snapshot?.complete).toBe(true);
@@ -502,6 +567,16 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
             expect(entryFlowsMissing).toEqual([]);
             expect(entryFlowMaxMs).toBeLessThan(ANSWER_MS);
             expect(entryPointsMs).toBeLessThan(ANSWER_MS);
+          }
+          // Phases 9 to 11's bar (owner, 15 Nov 2026: 100% precision, >= 95% recall, all misses explained).
+          if (connectionResult !== null) {
+            for (const kind of CONNECTION_KINDS) {
+              for (const missed of connectionResult.kinds[kind].missed) {
+                console.log(`${repo.id}: missed ${kind}: ${missed}`);
+              }
+            }
+            expect(connectionBarProblems(connectionResult)).toEqual([]);
+            expect(chainsBroken).toEqual([]);
           }
           expect(Math.max(...flowMs, ...detailsMs)).toBeLessThan(ANSWER_MS);
         }

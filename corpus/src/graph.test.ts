@@ -216,7 +216,12 @@ describe('labels/graph.json', () => {
         expect(l.case.length).toBeGreaterThan(0);
         expect(l.callers.length + l.callees.length).toBeGreaterThan(0);
         for (const c of l.callees) {
-          if (c.provenance === 'unresolved' || c.builtIn) expect(c.place).toBeNull();
+          // An unknown call, a built-in, or (phases 10 and 11) a table, service or hand-off: no place in the project.
+          const placeless =
+            c.provenance === 'unresolved' ||
+            c.builtIn ||
+            ['data', 'boundary', 'handoff'].includes(c.relation);
+          if (placeless) expect(c.place).toBeNull();
           else expect(c.place).toMatch(/^[^:]+:\d+$/);
         }
       }

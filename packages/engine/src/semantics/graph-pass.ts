@@ -18,6 +18,7 @@ import {
   type CodePosition,
   type Relation as CallRelation,
 } from '../protocol.js';
+import type { FileConnector } from './connection-pass.js';
 import type { StoredCallee } from './details.js';
 import type { TypeScript } from './projects.js';
 
@@ -376,6 +377,7 @@ export function walkFile(
   program: TS.Program,
   source: TS.SourceFile,
   handlers: ReadonlyMap<TS.Node, HandlerUnit> = new Map(),
+  connector?: FileConnector,
 ): WalkedFile {
   const { ts } = ctx;
   const checker = program.getTypeChecker();
@@ -526,9 +528,15 @@ export function walkFile(
         }
         const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
         const line = source.getLineAndCharacterOfPosition(callee.getStart(source)).line + 1;
+        // A connection's line is its method's (`.selectFrom('Envelope')` in a chain written over lines), not the chain's.
+        const nameLine = ts.isPropertyAccessExpression(callee) ? lineOf(callee.name) : line;
         const declaredIn = declaration?.getSourceFile().fileName;
         const start = callee.getStart(source);
-        if (declaredIn !== undefined && ctx.builtIn(declaredIn)) {
+        // Built-ins are counted and listed as before; one the connectors recognise (`fetch` to a URL, a timer) is
+        // also a connection in the graph.
+        const isBuiltIn = declaredIn !== undefined && ctx.builtIn(declaredIn);
+        const claimed = isBuiltIn && connector !== undefined && !jsx && connector.claims(node);
+        if (isBuiltIn) {
           builtInCalls += 1;
           // Built-ins: named as the compiler names them (`split`, `Promise`), one row per name.
           const named = cut(symbol?.getName() ?? calleeText(ts, callee, source));
@@ -550,7 +558,10 @@ export function walkFile(
             true,
             start,
           );
-        } else {
+        }
+        if (!isBuiltIn || claimed) {
+          // The Calls tab lists a built-in once, as a built-in (above).
+          const note: typeof record = isBuiltIn ? () => undefined : record;
           const target =
             declaration !== undefined && declaredIn !== undefined && ctx.inProject(declaredIn)
               ? targetOf(ctx, declaration)
@@ -567,7 +578,9 @@ export function walkFile(
               change: 'unchanged',
             });
           }
-          const reaches =
+          let reaches:
+            | { to: string; target: null; provenance: 'resolved' | 'convention' }
+            | { to: null; target: string; provenance: 'unknown' } =
             target !== undefined && targetId !== undefined
               ? { to: targetId, target: null, provenance: 'resolved' as const }
               : {
@@ -575,6 +588,48 @@ export function walkFile(
                   target: cut(calleeText(ts, callee, source)),
                   provenance: 'unknown' as const,
                 };
+          // Not the project's code: what the connectors say it reaches (phases 9 to 11, ADR 0031): a table, an outside
+          // service, work handed off; or a call to the app's own API, joined once every file's entry points are known.
+          let kind: GraphEdge['kind'] = 'call';
+          let edgeRelation: Relation | null = relation;
+          // A mutation run through a hook: the function it was given (a server action, a mutationFn).
+          if (reaches.to === null && connector !== undefined && ts.isCallExpression(node)) {
+            const through = connector.through(node);
+            const runs = through === undefined ? undefined : targetOf(ctx, through);
+            const runsId =
+              runs === undefined ? undefined : idsOf(ctx, runs.getSourceFile()).get(runs);
+            if (runs !== undefined && runsId !== undefined) {
+              targets.set(runsId, nodeOf(ctx, runs, runsId));
+              reaches = { to: runsId, target: null, provenance: 'convention' };
+            }
+          }
+          let edgeLine = line;
+          if (reaches.to === null && connector !== undefined && !jsx) {
+            const reached = connector.reached(node, line);
+            if (reached !== null) {
+              edgeLine = nameLine;
+              targets.set(reached.node.id, reached.node);
+              reaches = { to: reached.node.id, target: null, provenance: 'convention' };
+              kind = reached.edge;
+              edgeRelation = null;
+              if (reached.runs !== undefined) {
+                add(
+                  {
+                    from: reached.node.id,
+                    to: reached.runs,
+                    target: null,
+                    kind: 'handoff',
+                    relation: null,
+                    label: null,
+                    provenance: 'resolved',
+                  },
+                  nameLine,
+                );
+              }
+            } else if (ts.isCallExpression(node)) {
+              connector.link(node, current, reaches.target, line, nameLine);
+            }
+          }
           if (target !== undefined && targetId !== undefined) {
             // Every target's node, so an edge never reaches a node the graph lacks (its own file's wins).
             targets.set(targetId, nodeOf(ctx, target, targetId));
@@ -583,13 +638,39 @@ export function walkFile(
           // guards it is said per line, for the flow.
           const guards = guardsOf(ts, source, node, currentNode);
           add(
-            { from: current, kind: 'call', relation, label: null, ...reaches },
-            line,
+            { from: current, kind, relation: edgeRelation, label: null, ...reaches },
+            edgeLine,
             guards.length > 0,
           );
+          // A call into the project's own code that also hands work off (`jobs.triggerJob(…)` on the project's job
+          // client) or reaches the app's API through a wrapper (`request.post(url)`): beside the call (ADR 0031).
+          if (
+            reaches.provenance === 'resolved' &&
+            connector !== undefined &&
+            ts.isCallExpression(node)
+          ) {
+            const handed = connector.alongside(node, nameLine);
+            if (handed !== null) {
+              targets.set(handed.node.id, handed.node);
+              add(
+                {
+                  from: current,
+                  to: handed.node.id,
+                  target: null,
+                  kind: 'handoff',
+                  relation: null,
+                  label: null,
+                  provenance: 'convention',
+                },
+                nameLine,
+                guards.length > 0,
+              );
+            }
+            connector.link(node, current, null, line, nameLine);
+          }
           if (target !== undefined && targetId !== undefined) {
             const reached = nodeOf(ctx, target, targetId);
-            record(
+            note(
               calling,
               `${targetId}:${relation}`,
               {
@@ -613,7 +694,7 @@ export function walkFile(
             // graph keeps it unknown, as it's not the project's code).
             const named = cut(symbol?.getName() ?? calleeText(ts, callee, source));
             const owner = declaration.parent;
-            record(
+            note(
               calling,
               `package:${declaredIn}:${String(declaration.getStart())}:${relation}`,
               {
@@ -633,7 +714,7 @@ export function walkFile(
             );
           } else {
             const written = cut(calleeText(ts, callee, source));
-            record(
+            note(
               calling,
               `unresolved:${written}:${relation}`,
               { name: written, kind: null, container: null, place: null, builtIn: false },
@@ -663,9 +744,39 @@ export function walkFile(
             outcome = guard.outcome;
           }
           if (outcome !== null) {
-            add({ from, kind: 'branch', relation, label: outcome, ...reaches }, line);
+            add({ from, kind: 'branch', relation, label: outcome, ...reaches }, edgeLine);
           }
         }
+      }
+    }
+    // Raw SQL in a tagged template (`sql\`…\``, `$queryRaw\`…\``): a data access, not a call.
+    if (connector !== undefined && ts.isTaggedTemplateExpression(node)) {
+      const reached = connector.reachedByTemplate(node);
+      if (reached !== null) {
+        if (current === top && !nodes.has(top)) {
+          nodes.set(top, {
+            id: top,
+            kind: 'code-unit',
+            name: `${basename(path)} (top level)`,
+            place: { path, line: 1, column: 1 },
+            unit: 'module',
+            change: 'unchanged',
+          });
+        }
+        targets.set(reached.node.id, reached.node);
+        add(
+          {
+            from: current,
+            to: reached.node.id,
+            target: null,
+            kind: reached.edge,
+            relation: null,
+            label: null,
+            provenance: 'convention',
+          },
+          lineOf(node),
+          guardsOf(ts, source, node, currentNode).length > 0,
+        );
       }
     }
     ts.forEachChild(node, (child) => {
@@ -691,7 +802,7 @@ export function walkFile(
     edges: [...edges.values()].map(({ edge, lines, direct }) => {
       const sorted = [...lines].sort((a, b) => a - b);
       const guarded = sorted.filter((line) => !direct.has(line));
-      return edge.kind === 'call' && guarded.length > 0
+      return edge.kind !== 'branch' && guarded.length > 0
         ? { ...edge, lines: sorted, guarded }
         : { ...edge, lines: sorted };
     }),

@@ -61,6 +61,39 @@ const LISTS: Record<string, readonly EntryPointItem[]> = {
       handler: { id: null, name: 'handler', place: null },
     }),
   ],
+  // What takes handed-off work (phase 11): a queue's worker, a scheduled job, an event's listener.
+  job: [
+    item({
+      id: 'j1',
+      kind: 'job',
+      framework: 'message-queue',
+      name: 'email-queue · EmailSenderJob',
+      place: at('src/email-sender.job.ts', 20, 3),
+      handler: {
+        id: 'src/email-sender.job.ts#EmailSenderJob.handle',
+        name: 'EmailSenderJob.handle',
+        place: at('src/email-sender.job.ts', 20, 3),
+      },
+    }),
+  ],
+  cron: [
+    item({
+      id: 'k1',
+      kind: 'cron',
+      framework: 'message-queue',
+      name: 'cron-queue · CleanInactiveWorkspacesJob',
+      place: at('src/clean.job.ts', 8, 3),
+    }),
+  ],
+  event: [
+    item({
+      id: 'v1',
+      kind: 'event',
+      framework: 'nest-events',
+      name: 'workspace.created',
+      place: at('src/workspace.listener.ts', 14, 3),
+    }),
+  ],
   'cli-command': [
     item({ id: 'c1', kind: 'cli-command', framework: 'package-json', name: '@rallly/web: dev' }),
   ],
@@ -83,7 +116,7 @@ const answer = (
   entries: readonly EntryPointItem[],
   message: string | null = null,
 ): EntryPointsResult => ({
-  counts: { screen: 1, element: 1, 'api-route': 2, 'cli-command': 1 },
+  counts: { screen: 1, element: 1, 'api-route': 2, job: 1, cron: 1, event: 1, 'cli-command': 1 },
   kind: kind as EntryPointsResult['kind'],
   entries,
   next: null,
@@ -173,8 +206,26 @@ describe('entry points on the page', () => {
     const user = userEvent.setup();
     renderPage();
     expect(await screen.findByRole('row', { name: /^POST \/api\/private\/polls/ })).toBeTruthy();
-    expect(asked.slice(0, 3)).toEqual(['screen', 'api-route', 'cli-command']);
+    expect(asked.slice(0, 6)).toEqual([
+      'screen',
+      'api-route',
+      'job',
+      'cron',
+      'event',
+      'cli-command',
+    ]);
     expect(row('API routes').textContent).toContain('2');
+    // Jobs and cron are one group, in name order; events their own (phase 11).
+    expect(row('Jobs and cron').textContent).toContain('2');
+    expect(row('Events').textContent).toContain('1');
+    const names = screen
+      .getAllByRole('row')
+      .map((r) => r.getAttribute('aria-label') ?? r.textContent);
+    expect(names.findIndex((n) => n.startsWith('cron-queue'))).toBeLessThan(
+      names.findIndex((n) => n.startsWith('email-queue')),
+    );
+    expect(row('workspace.created')).toBeTruthy();
+    expect(screen.queryByText(/^Arrives in phase/)).toBeNull();
     expect(row('/polls/:urlId').textContent).toContain('PollPage');
     row('/polls/:urlId').focus();
     await user.keyboard('{ArrowRight}');
@@ -192,6 +243,13 @@ describe('entry points on the page', () => {
       }),
     );
     expect(asked).toContain('flow apps/web/src/app/api/private/route.ts:230');
+    // A job's flow opens from the worker that takes it.
+    await user.click(
+      within(row('email-queue · EmailSenderJob')).getByRole('button', {
+        name: 'Show the flow from email-queue · EmailSenderJob',
+      }),
+    );
+    expect(asked).toContain('flow src/email-sender.job.ts:20');
     row('GET /api/integrations/*').focus();
     await user.keyboard('{Enter}');
     expect(

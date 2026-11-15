@@ -41,3 +41,31 @@ export {
   type TrpcRouter,
   type TrpcValue,
 } from './trpc.js';
+// Phases 9 to 11 (ADR 0031): where values come from, and the connections they make.
+export { originOf, type Origin } from './origin.js';
+export {
+  DATA_MESSAGES,
+  dataOf,
+  prismaTables,
+  sqlTables,
+  taggedDataOf,
+  type FoundData,
+} from './data.js';
+export { SERVICE_MESSAGES, serviceOf, type FoundService } from './services.js';
+export {
+  LINK_MESSAGES,
+  graphqlKeys,
+  linkOf,
+  linksWithin,
+  mutationFunction,
+  type FoundLink,
+  type LinkProtocol,
+} from './links.js';
+export {
+  HANDOFF_MESSAGES,
+  handoffOf,
+  receiversOf,
+  socketOf,
+  type FoundHandoff,
+  type FoundReceiver,
+} from './handoffs.js';

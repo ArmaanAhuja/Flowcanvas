@@ -664,5 +664,55 @@ Claude proposed six ways to go faster after milestone B; the owner decided (CLAU
 - **Phase 8 accepted.** PR #22 marked ready for review and merged once every check is green, as with phase 7. On acceptance, `pnpm docs:check` found Graph stats still saying entry points "arrive in phase 8"; fixed (`518c21f`).
 - **Medusa's graph time** (141 s on CI against 44 s in phase 7, caused by following built exports to their source; report, known issues): fixed in phase 9, with every fork's graph time held to a recorded figure by the Docker test.
 
-**Owner:** "we need to increase the speed of development, since it's taking too long for each phase". Claude's proposals are in the next entry once the owner answers.
+**Owner:** "we need to increase the speed of development, since it's taking too long for each phase". Answered in the next entry.
+
+## 15 Nov 2026: a faster pace (owner)
+
+Claude's account of phase 8's time: the stricter bar and 2,118 hand labels; six red CI rounds, each something the laptop's checks didn't run; docs (per-step entries, living docs re-read every milestone); waiting at three milestone stops; real-browser test details. Five options, A to E.
+
+**Owner:** "a - accepted, b - not accepted, c - accepted, d - accepted, e - not accepted, continue ahead".
+- **A, accepted: one report per phase.** After "go" on the plan, the whole phase is built and reported once, at the end, when CI is green. Mid-phase stops only for product questions the documents don't settle, or risky actions.
+- **B, not accepted:** the plan's bar with a sampled set of labels. Bars and labels stay as rigorous as phase 8's.
+- **C, accepted: docs once per phase.** One build-steps entry per phase (the full template, every commit named); the living docs re-read once, before the phase's report. The decisions log, ADRs, report, STATUS and RUN-AND-FEATURES stay as they are.
+- **D, accepted: related phases grouped.** Phases 9 to 11 (the connectors) in one branch, pull request, plan and acceptance; then 12 and 13. Each phase's *Done when* and *Try it* still have their own named tests.
+- **E, not accepted:** parallel subagents.
+- **Claude's engineering changes, without a question:** the laptop's fast suites now run what CI's main job runs (with the web build, its bundle budget and the docs check), and new screen baselines are kept to what each phase's UI needs.
+
+CLAUDE.md's "Working pace" says the same.
+
+
+## 15 Nov 2026: phases 9 to 11's plan (owner)
+
+**Owner:** "1 - recommended, 2 - okay recommended, 3 - recommended, 4 - recommended, 5 - include it, you can continue now".
+1. **Phase 8's bar for every connector:** 100% precision; at least 95% recall per fork; every miss explained and shown as not fully detected. Labels: every connector site in Rallly and Documenso, and in the same fixed modules of LibreChat and Twenty as phase 8.
+2. **Data libraries beyond the plan's Prisma and raw SQL:** Kysely (Documenso), Mongoose (LibreChat; collections in place of tables) and TypeORM (Twenty), so every fork shows its database.
+3. **External boundaries:** email (nodemailer, Resend), payments (Stripe), storage (S3), AI (OpenAI), and `fetch`/axios calls to fixed outside URLs.
+4. **Queues beyond BullMQ:** Documenso's own job client (`triggerJob` → its handler) and Twenty's message queue (which wraps BullMQ).
+5. **Twenty's GraphQL** (Apollo's `useMutation` and `useQuery` → NestJS resolvers, matched by operation name) is a UI → API link, since the *Done when* asks for all 4 forks.
+
+## 15 Nov 2026: the connectors on codebases we haven't seen (owner)
+
+**Owner, on how the connectors will work on codebases unlike the forks:** "let's add point 3 now, not for phase 41". Claude's points: what isn't recognised stays unknown, never guessed (rule 3); most fixes teach general TypeScript patterns, not one fork's; in a user's workspace the packages are installed, so TypeScript's own types can say what a value is; and phases 29 to 31, 40 and 41 and the plugin SDK carry the long tail.
+- **Added in phases 9 to 11:** where following a value through the project's code doesn't reach its package, the type TypeScript gives it, from an installed package's declarations, does (ADR 0031 addendum).
+
+**Owner, on the pace:** "let's go with option c": phases 9 to 11 are finished at the bar set (every connector site labelled and every difference read), however long it takes.
+
+## 15 Nov 2026: phases 9 to 11's questions, and CI cycles (owner)
+
+**Owner, on the report's three questions:** "yes to all 3".
+1. **Jobs, cron and events in the entry points panel** now, before acceptance: the workers, job handlers, cron and event handlers phase 11 detects are listed as entry points of those kinds, so a job's flow opens from the panel.
+2. **The graph time the connectors add** is accepted for now, held by the Docker test's limits (each fork's recorded CI figure plus half), and cut in phase 12.
+3. **LibreChat's and Twenty's labels** are widened in phase 12, to the services phase 8's modules call.
+
+**Owner, on CI time:** "since these CI's are taking so long, we need to figure something out". Claude measured: every run on the branch took 4 to 11 minutes (the last, 5 min 14 s); the time went to red runs (5 of 8: Twenty's Docker job three times, LibreChat's and the rest once, a visual flake once), each investigated and pushed again, and to Claude's own repeated graph builds on the laptop. **Owner:** "all 4 accepted".
+1. **Push at milestones,** 2 to 3 times per phase, once a substantial working piece is done, not after every fix. Every push still runs the whole CI; nothing merges without green.
+2. **Never wait on CI mid-phase:** work continues while a run goes; only the run before the report must be green.
+3. **Before a push, the one heavy suite matching the change, once, on the laptop:** visual when screens change, the changed fork's Docker shard when the engine changes (amends 11 Nov: heavy suites otherwise on CI).
+4. **Graphs reused across Claude's own repeated runs** (scratch tools only, not the product).
+
+## 15 Nov 2026: phases 9 to 11 accepted (owner)
+
+**Owner:** "go ahead" (on PR #23 acceptance and merge).
+- **Phases 9 to 11 accepted.** PR #23 marked ready for review and all checks passed green. Connectors across UI → API, database reads/writes with tables/collections, external service boundaries, and async hand-offs (BullMQ, Twenty message queue, Documenso job client, EventEmitter, WebSockets) proven on all 4 forks in real workspaces. Background lane on canvas and jobs/cron/events listed as entry points in the left panel. Release 0.13.0.
+- **Next:** Phases 12 and 13 grouped (progressive disclosure and sequence view).
 

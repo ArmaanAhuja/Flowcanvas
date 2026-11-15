@@ -3,10 +3,13 @@
 import type { Graph, GraphNode } from '@flowcanvas/graph-model';
 import { joinEntries, type FileEntries, type Located } from './entry-pass.js';
 import type { FileGraph } from './graph-pass.js';
+import { joinConnections, type FileConnections } from './connection-pass.js';
 
 /** A file's part as the pass holds it: its graph, and its entry points to join (phase 8). */
 export interface PassFile extends FileGraph {
   readonly entries?: FileEntries;
+  /** Its links to the app's API and its hand-offs' receivers, to join (phases 9 to 11). */
+  readonly connections?: FileConnections;
 }
 
 /** Questions get a turn this often during a pass. */
@@ -50,10 +53,20 @@ export function assemble(
   for (const node of entries.nodes) nodes.set(node.id, node);
   let builtInCalls = 0;
   for (const part of files.values()) builtInCalls += part.builtInCalls;
+  // Links to the app's API and hand-offs to their receivers, joined across files (ADR 0031).
+  const joined = joinConnections(
+    [...files.values()].flatMap((part) =>
+      part.connections === undefined ? [] : [part.connections],
+    ),
+    entries.nodes,
+    [...files.values()].flatMap((part) => part.edges),
+    (id) => nodes.get(id),
+  );
+  for (const node of joined.entries) nodes.set(node.id, node);
   return {
     graph: {
       nodes: [...nodes.values()],
-      edges: [...[...files.values()].flatMap((part) => part.edges), ...entries.edges],
+      edges: [...joined.edges, ...entries.edges],
     },
     files: files.size,
     builtInCalls,

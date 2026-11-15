@@ -278,7 +278,15 @@ describe('entry points (phase 8)', () => {
 
   it('asks for a page of one kind, the first 200 unless told, or a screen’s elements, never as activity', async () => {
     const answer = {
-      counts: { screen: 1, element: 0, 'api-route': 0, 'cli-command': 0 },
+      counts: {
+        screen: 1,
+        element: 0,
+        'api-route': 0,
+        job: 0,
+        cron: 0,
+        event: 0,
+        'cli-command': 0,
+      },
       kind: 'screen' as const,
       entries: [],
       next: null,
@@ -312,7 +320,7 @@ describe('entry points (phase 8)', () => {
   });
 
   it('refuses a kind it doesn’t know, or too many, without asking the workspace', async () => {
-    expect((await call('GET', '/index/entry-points?kind=job')).status).toBe(400);
+    expect((await call('GET', '/index/entry-points?kind=queue')).status).toBe(400);
     expect((await call('GET', '/index/entry-points?kind=screen&limit=500')).status).toBe(400);
     expect(provider.indexRequests).toEqual([]);
   });

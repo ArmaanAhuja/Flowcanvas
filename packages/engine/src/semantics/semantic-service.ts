@@ -24,6 +24,8 @@ import {
   type PassFile,
 } from './graph.js';
 import { entriesOfFile, routeFileOf, scriptsOf } from './entry-pass.js';
+import { FileConnector, receiversOfFile } from './connection-pass.js';
+import { prismaTables } from '@flowcanvas/connectors-web';
 import { contentHash, type FileFacts } from '../facts.js';
 import { detailsAt, fileFacts } from './details.js';
 import { projectPath, unitNodeAt, walkFile, type GraphContext } from './graph-pass.js';
@@ -194,6 +196,12 @@ export class SemanticService {
       ? this.#model.allConfigs
       : [...(todo ?? [])].flatMap((file) => this.#model.configsFor(file).slice(0, 1));
     const seen = new Set<string>();
+    // Prisma's models and their tables, from the project's schemas (read every pass: few, and never secret).
+    const tables = this.#prismaTables();
+    // The last program built for the pass, held until the next is built: the files they share (a workspace package's
+    // source, imported by every package around it) are parsed and bound again only when they've left both, not once
+    // per program. Medusa's 203 configs: 118 s against 169 s (phase 9). Holding more measured no faster.
+    const held: ProjectConfig[] = [];
     for (const config of new Set(configs)) {
       const parsed = this.#model.parse(config);
       if (parsed === null) continue;
@@ -211,6 +219,7 @@ export class SemanticService {
       // them until memory runs high took Twenty past the worker's cap (found on the fork, phase 6 step 3).
       const warm = this.#live.has(config.path);
       const program = this.#service(config)?.getProgram();
+      for (const done of held.splice(0)) this.#release(done);
       if (program === undefined) continue;
       for (const file of mine) {
         const source = program.getSourceFile(file);
@@ -223,7 +232,11 @@ export class SemanticService {
           source,
           routeFileOf(projectPath(context, file), this.#model.packages.values()),
         );
-        const part = walkFile(context, program, source, handlers);
+        // What takes handed-off work here, its anonymous handlers made units as entry points' are (ADR 0031).
+        const units = new Map(handlers);
+        const receivers = receiversOfFile(context, program, source, units);
+        const connector = new FileConnector(context, program, source, tables);
+        const part = walkFile(context, program, source, units, connector);
         // The graph's part is held for the next pass; the calls go to the store with the rest of the facts.
         files.set(file, {
           nodes: part.nodes,
@@ -231,11 +244,12 @@ export class SemanticService {
           edges: part.edges,
           builtInCalls: part.builtInCalls,
           entries,
+          connections: { links: connector.links, receivers },
         });
         // Worked out now, while the program is here, and stored rather than held (owner, 13 Nov 2026).
         this.#facts?.put(projectPath(context, file), {
           hash: contentHash(source.text),
-          units: fileFacts(context, program, source, part, handlers),
+          units: fileFacts(context, program, source, part, units),
         });
         walked += 1;
         if (walked % filesBetweenPauses === 0) {
@@ -245,12 +259,15 @@ export class SemanticService {
             // The structure changed: start again from everything.
             for (const file of changed) this.#graphPending.add(file);
             this.#graphBuilt = false;
+            for (const done of held) this.#release(done);
+            if (!warm) this.#release(config);
             return null;
           }
         }
       }
-      if (!warm) this.#release(config);
+      if (!warm) held.push(config);
     }
+    for (const config of held) this.#release(config);
     // Files changed but not walked again are gone (deleted, or in no program): so are their facts. After a
     // whole-project pass, only the files it walked keep theirs.
     if (full) {
@@ -269,6 +286,18 @@ export class SemanticService {
       return text === undefined ? [] : scriptsOf(pkg, text);
     });
     return assemble(files, complete, scripts);
+  }
+
+  /** Each Prisma model's accessor → its table, from every `.prisma` file in the project. */
+  #prismaTables(): Map<string, string> {
+    const tables = new Map<string, string>();
+    for (const file of this.#files) {
+      if (!file.endsWith('.prisma')) continue;
+      const text = this.#host.readFile(join(this.#root, file));
+      if (text === undefined) continue;
+      for (const [accessor, table] of prismaTables(text)) tables.set(accessor, table);
+    }
+    return tables;
   }
 
   /** How many language services are held (for tests and diagnostics). */

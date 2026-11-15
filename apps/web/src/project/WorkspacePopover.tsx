@@ -73,6 +73,14 @@ function WorkspaceDetails({
     };
   }, [fetcher]);
   const since = SINCE[workspace.state];
+  const main: { readonly label: string; readonly action: 'open' | 'resume' | 'sleep' } | null =
+    shown === 'not_created' || shown === 'stopped' || shown === 'failed'
+      ? { label: shown === 'failed' ? 'Try again' : 'Open', action: 'open' }
+      : shown === 'sleeping'
+        ? { label: 'Resume', action: 'resume' }
+        : shown === 'running'
+          ? { label: pending === 'sleep' ? 'Putting to sleep…' : 'Sleep now', action: 'sleep' }
+          : null;
 
   return (
     <div className={styles.details}>
@@ -97,23 +105,30 @@ function WorkspaceDetails({
         </p>
       )}
       <div className={styles.actions}>
-        {(shown === 'not_created' || shown === 'stopped' || shown === 'failed') && (
-          <Button size="sm" disabled={busy} onClick={() => void act('open')}>
-            {shown === 'failed' ? 'Try again' : 'Open'}
-          </Button>
-        )}
-        {shown === 'sleeping' && (
-          <Button size="sm" disabled={busy} onClick={() => void act('resume')}>
-            Resume
-          </Button>
-        )}
-        {shown === 'running' && (
-          <Button size="sm" disabled={busy} onClick={() => void act('sleep')}>
-            {pending === 'sleep' ? 'Putting to sleep…' : 'Sleep now'}
+        {/* One button for the main action, whatever the state: when Sleep now turns into Resume it's the same
+            element, so keyboard focus stays in the popover and Escape still closes it. While a request runs it's
+            aria-disabled, not disabled: a browser takes focus away from a disabled button (phase 9, found by the
+            phase 2 walkthrough on main). */}
+        {main !== null && (
+          <Button
+            size="sm"
+            aria-disabled={busy}
+            onClick={() => {
+              if (!busy) void act(main.action);
+            }}
+          >
+            {main.label}
           </Button>
         )}
         {(shown === 'running' || shown === 'sleeping') && (
-          <Button size="sm" kind="ghost" disabled={busy} onClick={() => void act('stop')}>
+          <Button
+            size="sm"
+            kind="ghost"
+            aria-disabled={busy}
+            onClick={() => {
+              if (!busy) void act('stop');
+            }}
+          >
             {pending === 'stop' ? 'Stopping…' : 'Stop'}
           </Button>
         )}

@@ -11,6 +11,10 @@ export interface FlowLike {
     readonly kind: string;
     readonly name: string;
     readonly place: { readonly path: string; readonly line: number } | null;
+    /** Phases 10 and 11 (ADR 0031): a table's, a service's or a hand-off's details. */
+    readonly data?: { readonly library: string; readonly operation: string };
+    readonly service?: { readonly kind: string; readonly library: string };
+    readonly handoff?: { readonly kind: string; readonly library: string };
   }[];
   readonly edges: readonly {
     readonly from: string;
@@ -42,6 +46,12 @@ const fileOf = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 
 /** A node as the lines name it: a function by its name, a decision by its condition, with file and line. */
 function keyOf(node: FlowLike['nodes'][number]): string {
+  // A table, service or hand-off has no place: it's named by what it is (`Folder (prisma write)`).
+  if (node.data !== undefined) return `${node.name} (${node.data.library} ${node.data.operation})`;
+  if (node.service !== undefined)
+    return `${node.name} (${node.service.kind} ${node.service.library})`;
+  if (node.handoff !== undefined)
+    return `${node.name} (${node.handoff.kind} ${node.handoff.library})`;
   const at = node.place === null ? '?' : `${fileOf(node.place.path)}:${String(node.place.line)}`;
   return node.kind === 'decision' ? `if ${node.name} (${at})` : `${node.name} (${at})`;
 }

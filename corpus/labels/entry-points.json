@@ -1,5 +1,5 @@
 {
-  "about": "Phase 8's hand labels (owner, 14 Nov 2026: option B): every entry point in Rallly and Documenso (packages/ee aside, which is never enabled), a fixed set of modules in LibreChat and Twenty covering each framework they use, and the event props in 5 chosen screens per fork. Built without the detectors: each fork's files read with text scans and hand-written readers of its routers (tRPC objects, Express mounts, <Route> trees, NestJS decorators), and every difference with the engine read in the code and settled, at the pins below. Each entry is where the engine places it: a route at its registering call or object, a file's page at its default export, a decorated method at its name, a script at its key. 'convention' and 'code' are the bar's groups (100% recall for convention; at least 95% per fork for code; 100% precision).",
+  "about": "Phase 8's hand labels (owner, 14 Nov 2026: option B): every entry point in Rallly and Documenso (packages/ee aside, which is never enabled), a fixed set of modules in LibreChat and Twenty covering each framework they use, and the event props in 5 chosen screens per fork. Built without the detectors: each fork's files read with text scans and hand-written readers of its routers (tRPC objects, Express mounts, <Route> trees, NestJS decorators), and every difference with the engine read in the code and settled, at the pins below. Each entry is where the engine places it: a route at its registering call or object, a file's page at its default export, a decorated method at its name, a script at its key. 'convention' and 'code' are the bar's groups (100% recall for convention; at least 95% per fork for code; 100% precision). Phase 11 (owner, 15 Nov 2026): jobs, cron and events, what takes handed-off work, labelled from an independent text scan of job definitions (cron when they set trigger.cron), @Processor/@Process, @OnEvent, BullMQ's new Worker and Node emitters' on, each read in the code; in the same scopes as the connectors' labels.",
   "rallly": {
     "scope": {
       "screen": ["*"],
@@ -11,11 +11,15 @@
         "apps/web/src/features/poll/components/participant-dropdown.tsx",
         "apps/web/src/features/event-types/components/event-type-form.tsx",
         "apps/web/src/app/[locale]/(space)/settings/billing/components/manage-seats-dialog.tsx"
-      ]
+      ],
+      "job": ["*"],
+      "cron": ["*"],
+      "event": ["*"]
     },
     "notes": [
       "The OAuth integration's three routes are made by a factory whose base path is its argument ('/api/integrations' at its one call): labelled with their real paths; the engine lists them under /:unknown, not fully detected.",
-      "Route handlers handing every request to a Hono app (handle(app), directly or through OAuthIntegration's returned handler) aren't entry points; the v1 API's handler rewrites the path and is one (decisions log, 14 Nov 2026)."
+      "Route handlers handing every request to a Hono app (handle(app), directly or through OAuthIntegration's returned handler) aren't entry points; the v1 API's handler rewrites the path and is one (decisions log, 14 Nov 2026).",
+      "Jobs, cron and events (phase 11): Rallly's code has none."
     ],
     "entries": [
       {
@@ -2636,11 +2640,15 @@
         "apps/remix/app/components/general/envelope-editor/envelope-editor-settings-dialog.tsx",
         "apps/remix/app/routes/embed+/playground.tsx"
       ],
-      "exclude": ["packages/ee/"]
+      "exclude": ["packages/ee/"],
+      "job": ["*"],
+      "cron": ["*"],
+      "event": ["*"]
     },
     "notes": [
       "The app's base path is NEXT_PUBLIC_BASE_PATH's value, written {NEXT_PUBLIC_BASE_PATH} (owner, 14 Nov 2026).",
-      "packages/ee isn't labelled. ts-rest's v1 routes and the jobs board are mounted at run time: they aren't Hono routes."
+      "packages/ee isn't labelled. ts-rest's v1 routes and the jobs board are mounted at run time: they aren't Hono routes.",
+      "Jobs and cron (phase 11): the job definitions (trigger.name, cron when trigger.cron is set) and the BullMQ worker on queue documenso-jobs, labelled at their handlers. packages/lib/jobs/client/_internal/job.ts's trigger is the JobDefinition type, not a definition."
     ],
     "entries": [
       {
@@ -7899,6 +7907,258 @@
         "file": "packages/ui/package.json",
         "line": 15,
         "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.admin.recipient.removed.emails",
+        "file": "packages/lib/jobs/definitions/emails/send-admin-recipient-removed-emails.ts",
+        "line": 29,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.admin.user.created.email",
+        "file": "packages/lib/jobs/definitions/emails/send-admin-user-created-email.ts",
+        "line": 23,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.signup.confirmation.email",
+        "file": "packages/lib/jobs/definitions/emails/send-confirmation-email.ts",
+        "line": 23,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.document.cancelled.emails",
+        "file": "packages/lib/jobs/definitions/emails/send-document-cancelled-emails.ts",
+        "line": 25,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.document.completed.emails",
+        "file": "packages/lib/jobs/definitions/emails/send-document-completed-emails.ts",
+        "line": 25,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.document.created.from.direct.template.email",
+        "file": "packages/lib/jobs/definitions/emails/send-document-created-from-direct-template-email.ts",
+        "line": 25,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.document.deleted.emails",
+        "file": "packages/lib/jobs/definitions/emails/send-document-deleted-emails.ts",
+        "line": 44,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.document.pending.email",
+        "file": "packages/lib/jobs/definitions/emails/send-document-pending-email.ts",
+        "line": 22,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.organisation-limit-alert.email",
+        "file": "packages/lib/jobs/definitions/emails/send-organisation-limit-alert-email.ts",
+        "line": 26,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.organisation-limits-updated.email",
+        "file": "packages/lib/jobs/definitions/emails/send-organisation-limits-updated-email.ts",
+        "line": 23,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.organisation-member-joined.email",
+        "file": "packages/lib/jobs/definitions/emails/send-organisation-member-joined-email.ts",
+        "line": 24,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.organisation-member-left.email",
+        "file": "packages/lib/jobs/definitions/emails/send-organisation-member-left-email.ts",
+        "line": 24,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.owner.recipient.expired.email",
+        "file": "packages/lib/jobs/definitions/emails/send-owner-recipient-expired-email.ts",
+        "line": 24,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.password.reset.success.email",
+        "file": "packages/lib/jobs/definitions/emails/send-password-reset-success-email.ts",
+        "line": 35,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.recipient.removed.email",
+        "file": "packages/lib/jobs/definitions/emails/send-recipient-removed-email.ts",
+        "line": 26,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.recipient.signed.email",
+        "file": "packages/lib/jobs/definitions/emails/send-recipient-signed-email.ts",
+        "line": 22,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.signing.rejected.emails",
+        "file": "packages/lib/jobs/definitions/emails/send-rejection-emails.ts",
+        "line": 24,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.signing.requested.email",
+        "file": "packages/lib/jobs/definitions/emails/send-signing-email.ts",
+        "line": 25,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "send.team-deleted.email",
+        "file": "packages/lib/jobs/definitions/emails/send-team-deleted-email.ts",
+        "line": 32,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "internal.admin-delete-organisation",
+        "file": "packages/lib/jobs/definitions/internal/admin-delete-organisation.ts",
+        "line": 29,
+        "group": "convention"
+      },
+      {
+        "kind": "cron",
+        "name": "internal.alert-organisation-seat-drift",
+        "file": "packages/lib/jobs/definitions/internal/alert-organisation-seat-drift.ts",
+        "line": 22,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "internal.backport-subscription-claims",
+        "file": "packages/lib/jobs/definitions/internal/backport-subscription-claims.ts",
+        "line": 40,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "internal.bulk-send-template",
+        "file": "packages/lib/jobs/definitions/internal/bulk-send-template.ts",
+        "line": 27,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "internal.cancel-organisation-subscription",
+        "file": "packages/lib/jobs/definitions/internal/cancel-organisation-subscription.ts",
+        "line": 35,
+        "group": "convention"
+      },
+      {
+        "kind": "cron",
+        "name": "internal.cleanup-auth-handoffs",
+        "file": "packages/lib/jobs/definitions/internal/cleanup-auth-handoffs.ts",
+        "line": 20,
+        "group": "convention"
+      },
+      {
+        "kind": "cron",
+        "name": "internal.cleanup-rate-limits",
+        "file": "packages/lib/jobs/definitions/internal/cleanup-rate-limits.ts",
+        "line": 20,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "internal.execute-webhook",
+        "file": "packages/lib/jobs/definitions/internal/execute-webhook.ts",
+        "line": 26,
+        "group": "convention"
+      },
+      {
+        "kind": "cron",
+        "name": "internal.expire-recipients-sweep",
+        "file": "packages/lib/jobs/definitions/internal/expire-recipients-sweep.ts",
+        "line": 20,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "internal.process-recipient-expired",
+        "file": "packages/lib/jobs/definitions/internal/process-recipient-expired.ts",
+        "line": 21,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "internal.process-signing-reminder",
+        "file": "packages/lib/jobs/definitions/internal/process-signing-reminder.ts",
+        "line": 21,
+        "group": "convention"
+      },
+      {
+        "kind": "cron",
+        "name": "internal.seal-document-sweep",
+        "file": "packages/lib/jobs/definitions/internal/seal-document-sweep.ts",
+        "line": 20,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "internal.seal-document",
+        "file": "packages/lib/jobs/definitions/internal/seal-document.ts",
+        "line": 26,
+        "group": "convention"
+      },
+      {
+        "kind": "cron",
+        "name": "internal.send-signing-reminders-sweep",
+        "file": "packages/lib/jobs/definitions/internal/send-signing-reminders-sweep.ts",
+        "line": 22,
+        "group": "convention"
+      },
+      {
+        "kind": "cron",
+        "name": "internal.sync-email-domains",
+        "file": "packages/lib/jobs/definitions/internal/sync-email-domains.ts",
+        "line": 20,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "internal.sync-organisation-seats",
+        "file": "packages/lib/jobs/definitions/internal/sync-organisation-seats.ts",
+        "line": 21,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "documenso-jobs",
+        "file": "packages/lib/jobs/client/bullmq.ts",
+        "line": 62,
+        "group": "convention"
       }
     ]
   },
@@ -7920,10 +8180,53 @@
         "client/src/components/Nav/KeyboardShortcutsDialog.tsx",
         "client/src/components/Chat/Input/ChatForm.tsx",
         "client/src/components/Nav/SettingsTabs/Account/Avatar.tsx"
+      ],
+      "job": [
+        "api/server/routes/auth.js",
+        "api/server/routes/oauth.js",
+        "api/server/routes/convos.js",
+        "api/server/routes/messages.js",
+        "api/server/routes/agents/",
+        "api/server/routes/files/",
+        "client/src/routes/",
+        "client/src/components/Chat/Messages/MessageNav.tsx",
+        "client/src/components/Conversations/ChatFilterMenu.tsx",
+        "client/src/components/Nav/KeyboardShortcutsDialog.tsx",
+        "client/src/components/Chat/Input/ChatForm.tsx",
+        "client/src/components/Nav/SettingsTabs/Account/Avatar.tsx"
+      ],
+      "cron": [
+        "api/server/routes/auth.js",
+        "api/server/routes/oauth.js",
+        "api/server/routes/convos.js",
+        "api/server/routes/messages.js",
+        "api/server/routes/agents/",
+        "api/server/routes/files/",
+        "client/src/routes/",
+        "client/src/components/Chat/Messages/MessageNav.tsx",
+        "client/src/components/Conversations/ChatFilterMenu.tsx",
+        "client/src/components/Nav/KeyboardShortcutsDialog.tsx",
+        "client/src/components/Chat/Input/ChatForm.tsx",
+        "client/src/components/Nav/SettingsTabs/Account/Avatar.tsx"
+      ],
+      "event": [
+        "api/server/routes/auth.js",
+        "api/server/routes/oauth.js",
+        "api/server/routes/convos.js",
+        "api/server/routes/messages.js",
+        "api/server/routes/agents/",
+        "api/server/routes/files/",
+        "client/src/routes/",
+        "client/src/components/Chat/Messages/MessageNav.tsx",
+        "client/src/components/Conversations/ChatFilterMenu.tsx",
+        "client/src/components/Nav/KeyboardShortcutsDialog.tsx",
+        "client/src/components/Chat/Input/ChatForm.tsx",
+        "client/src/components/Nav/SettingsTabs/Account/Avatar.tsx"
       ]
     },
     "notes": [
-      "Express modules: auth, oauth, convos, messages, agents/ and files/ (files' router is made by initialize() when the server starts; its sub-routers include agents' avatar router). React Router: client/src/routes (its /d/* routes redirect, so aren't screens)."
+      "Express modules: auth, oauth, convos, messages, agents/ and files/ (files' router is made by initialize() when the server starts; its sub-routers include agents' avatar router). React Router: client/src/routes (its /d/* routes redirect, so aren't screens).",
+      "Jobs, cron and events (phase 11), in phase 8's modules: none there. Outside them the engine lists 3 emitter listeners (keyvMongo's error, ConnectionsRepository's toolsChanged, MCPConnectionFactory's oauthRequired), unlabelled as the scope is."
     ],
     "entries": [
       {
@@ -11491,10 +11794,56 @@
         "packages/twenty-front/src/modules/page-layout/widgets/call-recording-transcript/components/CallRecordingAudioPlayer.tsx",
         "packages/twenty-front/src/modules/workflow/workflow-trigger/components/WorkflowEditTriggerCronForm.tsx",
         "packages/twenty-front/src/modules/settings/accounts/components/SettingsAccountsConnectionForm.tsx"
+      ],
+      "job": [
+        "packages/twenty-server/src/engine/core-modules/auth/controllers/",
+        "packages/twenty-server/src/engine/api/rest/core/controllers/rest-api-core.controller.ts",
+        "packages/twenty-server/src/engine/core-modules/api-key/controllers/",
+        "packages/twenty-server/src/engine/core-modules/auth/auth.resolver.ts",
+        "packages/twenty-server/src/engine/core-modules/workspace/workspace.resolver.ts",
+        "packages/twenty-website/src/app/",
+        "packages/twenty-front/src/modules/app/components/SettingsRoutes.tsx",
+        "packages/twenty-front/src/modules/activities/calendar/components/CalendarEventComposerFields.tsx",
+        "packages/twenty-front/src/modules/object-record/object-options-dropdown/components/ObjectOptionsDropdownLayoutContent.tsx",
+        "packages/twenty-front/src/modules/page-layout/widgets/call-recording-transcript/components/CallRecordingAudioPlayer.tsx",
+        "packages/twenty-front/src/modules/workflow/workflow-trigger/components/WorkflowEditTriggerCronForm.tsx",
+        "packages/twenty-front/src/modules/settings/accounts/components/SettingsAccountsConnectionForm.tsx",
+        "packages/twenty-server/src/engine/core-modules/email/"
+      ],
+      "cron": [
+        "packages/twenty-server/src/engine/core-modules/auth/controllers/",
+        "packages/twenty-server/src/engine/api/rest/core/controllers/rest-api-core.controller.ts",
+        "packages/twenty-server/src/engine/core-modules/api-key/controllers/",
+        "packages/twenty-server/src/engine/core-modules/auth/auth.resolver.ts",
+        "packages/twenty-server/src/engine/core-modules/workspace/workspace.resolver.ts",
+        "packages/twenty-website/src/app/",
+        "packages/twenty-front/src/modules/app/components/SettingsRoutes.tsx",
+        "packages/twenty-front/src/modules/activities/calendar/components/CalendarEventComposerFields.tsx",
+        "packages/twenty-front/src/modules/object-record/object-options-dropdown/components/ObjectOptionsDropdownLayoutContent.tsx",
+        "packages/twenty-front/src/modules/page-layout/widgets/call-recording-transcript/components/CallRecordingAudioPlayer.tsx",
+        "packages/twenty-front/src/modules/workflow/workflow-trigger/components/WorkflowEditTriggerCronForm.tsx",
+        "packages/twenty-front/src/modules/settings/accounts/components/SettingsAccountsConnectionForm.tsx",
+        "packages/twenty-server/src/engine/core-modules/email/"
+      ],
+      "event": [
+        "packages/twenty-server/src/engine/core-modules/auth/controllers/",
+        "packages/twenty-server/src/engine/api/rest/core/controllers/rest-api-core.controller.ts",
+        "packages/twenty-server/src/engine/core-modules/api-key/controllers/",
+        "packages/twenty-server/src/engine/core-modules/auth/auth.resolver.ts",
+        "packages/twenty-server/src/engine/core-modules/workspace/workspace.resolver.ts",
+        "packages/twenty-website/src/app/",
+        "packages/twenty-front/src/modules/app/components/SettingsRoutes.tsx",
+        "packages/twenty-front/src/modules/activities/calendar/components/CalendarEventComposerFields.tsx",
+        "packages/twenty-front/src/modules/object-record/object-options-dropdown/components/ObjectOptionsDropdownLayoutContent.tsx",
+        "packages/twenty-front/src/modules/page-layout/widgets/call-recording-transcript/components/CallRecordingAudioPlayer.tsx",
+        "packages/twenty-front/src/modules/workflow/workflow-trigger/components/WorkflowEditTriggerCronForm.tsx",
+        "packages/twenty-front/src/modules/settings/accounts/components/SettingsAccountsConnectionForm.tsx",
+        "packages/twenty-server/src/engine/core-modules/email/"
       ]
     },
     "notes": [
-      "NestJS: the auth controllers, the core REST controller and the API-key controller (both of its paths); GraphQL: the auth and workspace resolvers; React Router: SettingsRoutes.tsx, mounted at /settings (its legacy paths redirect); Next.js: the website."
+      "NestJS: the auth controllers, the core REST controller and the API-key controller (both of its paths); GraphQL: the auth and workspace resolvers; React Router: SettingsRoutes.tsx, mounted at /settings (its legacy paths redirect); Next.js: the website.",
+      "Jobs, cron and events (phase 11), in phase 8's modules (none there) and the email module, for the phase 11 Done when's worker: EmailSenderJob's handle, on MessageQueue.emailQueue ('email-queue'). The engine lists 125 across the fork (83 jobs, 35 cron, 7 events); widening the labels to them is phase 12's (owner, 15 Nov 2026)."
     ],
     "entries": [
       {
@@ -14918,6 +15267,13 @@
         "name": "POST /api/partner-application",
         "file": "packages/twenty-website/src/app/api/partner-application/route.ts",
         "line": 5,
+        "group": "convention"
+      },
+      {
+        "kind": "job",
+        "name": "email-queue · EmailSenderJob",
+        "file": "packages/twenty-server/src/engine/core-modules/email/email-sender.job.ts",
+        "line": 13,
         "group": "convention"
       }
     ]

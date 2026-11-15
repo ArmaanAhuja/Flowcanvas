@@ -57,8 +57,19 @@ const GROUPS: readonly EntryGroup[] = [
     ],
     more: 5,
   },
-  { id: 'jobs', count: 0, rows: [], arrivesIn: 11 },
-  { id: 'events', count: 0, rows: [], arrivesIn: 11 },
+  {
+    id: 'jobs',
+    count: 2,
+    rows: [
+      { id: 'k-digest', kind: 'cron', label: 'cron-queue · DailyDigestJob', complete: true },
+      { id: 'j-email', kind: 'job', label: 'email-queue · SendEmailJob', complete: true },
+    ],
+  },
+  {
+    id: 'events',
+    count: 1,
+    rows: [{ id: 'v-created', kind: 'event', label: 'item.created', complete: true }],
+  },
   {
     id: 'cli',
     count: 2,
@@ -81,7 +92,7 @@ function Interactive({
   const matches = (row: EntryRow) => row.label.toLowerCase().includes(filter.toLowerCase());
   const shown = groups.map((group) => ({ ...group, rows: group.rows.filter(matches) }));
   return (
-    <div style={{ width: 248, height: 560 }}>
+    <div style={{ width: 248, height: 640 }}>
       <EntryPointsPanel
         groups={shown}
         filter={filter}

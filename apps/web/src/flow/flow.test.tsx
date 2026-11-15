@@ -50,6 +50,39 @@ const FLOW: NonNullable<FlowResult['flow']> = {
       change: 'unchanged',
     },
     unit('save', 20),
+    {
+      id: '(data prisma polls write)',
+      kind: 'data-access',
+      name: 'polls',
+      place: null,
+      unit: null,
+      change: 'unchanged',
+      data: { library: 'prisma', table: 'polls', operation: 'write', complete: true, why: null },
+    },
+    {
+      id: '(service email nodemailer)',
+      kind: 'external-boundary',
+      name: 'Email · nodemailer',
+      place: null,
+      unit: null,
+      change: 'unchanged',
+      service: { kind: 'email', library: 'nodemailer', url: null, complete: true, why: null },
+    },
+    {
+      id: '(handoff queue:clean)',
+      kind: 'async-handoff',
+      name: 'clean',
+      place: null,
+      unit: null,
+      change: 'unchanged',
+      handoff: {
+        kind: 'queue',
+        library: 'message-queue',
+        name: 'clean',
+        complete: true,
+        why: null,
+      },
+    },
   ],
   edges: [
     {
@@ -229,5 +262,48 @@ describe('FlowInspector', () => {
       }),
     );
     expect(screen.getByRole('status').textContent).toBe('Reading the code…');
+  });
+
+  it('shows data access connection details in the inspector', () => {
+    show(
+      node('flow', {
+        id: '(data prisma polls write)',
+        title: 'polls',
+        location: 'write · Prisma',
+      }),
+    );
+    expect(screen.getByText('Data access')).toBeTruthy();
+    expect(screen.getAllByText('polls').length).toBe(2);
+    expect(screen.getByText('Write')).toBeTruthy();
+    expect(screen.getByText('Prisma')).toBeTruthy();
+    expect(screen.getByText(/Known by a library’s rule/)).toBeTruthy();
+  });
+
+  it('shows external service connection details in the inspector', () => {
+    show(
+      node('flow', {
+        id: '(service email nodemailer)',
+        title: 'Email · nodemailer',
+        location: 'nodemailer',
+      }),
+    );
+    expect(screen.getByText('External service')).toBeTruthy();
+    expect(screen.getByText('Email · nodemailer')).toBeTruthy();
+    expect(screen.getByText('Email')).toBeTruthy();
+    expect(screen.getByText('nodemailer')).toBeTruthy();
+  });
+
+  it('shows async hand-off connection details in the inspector', () => {
+    show(
+      node('flow', {
+        id: '(handoff queue:clean)',
+        title: 'clean',
+        location: 'queue · message-queue',
+      }),
+    );
+    expect(screen.getByText('Async hand-off')).toBeTruthy();
+    expect(screen.getAllByText('clean').length).toBe(2);
+    expect(screen.getByText('Queue')).toBeTruthy();
+    expect(screen.getByText('message-queue')).toBeTruthy();
   });
 });

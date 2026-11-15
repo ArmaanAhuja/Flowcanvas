@@ -114,7 +114,7 @@
     },
     {
       "name": "deleteFolder",
-      "case": "Prisma's generated client (unknown: packages aren't installed), the same error class thrown under two decisions, and a second level of calls (getTeamById to getTeam).",
+      "case": "Prisma's generated client (unknown: packages aren't installed), the same error class thrown under two decisions, and a second level of calls (getTeamById to getTeam). Phase 10 (ADR 0031), read at the pin: prisma.folder.findFirst and prisma.folder.delete are a read and a write of the Folder table, and getTeam's prisma.team.findFirst a read of Team: data edges where the unknown calls were.",
       "path": "packages/lib/server-only/folder/delete-folder.ts",
       "line": 14,
       "column": 14,
@@ -132,7 +132,13 @@
         "call getTeam (get-team.ts:38) -> extractDerivedTeamSettings (teams.ts:222)",
         "call getTeam (get-team.ts:38) -> getHighestTeamRoleInGroup (teams.ts:80)",
         "call getTeamById (get-team.ts:11) -> getTeam (get-team.ts:38)",
+        "data deleteFolder (delete-folder.ts:14) -> Folder (prisma read)",
+        "data deleteFolder (delete-folder.ts:14) -> Folder (prisma write)",
+        "data getTeam (get-team.ts:38) -> Team (prisma read)",
         "node AppError (app-error.ts:184)",
+        "node Folder (prisma read)",
+        "node Folder (prisma write)",
+        "node Team (prisma read)",
         "node buildTeamWhereQuery (teams.ts:129)",
         "node canAccessTeamDocument (teams.ts:61)",
         "node deleteFolder (delete-folder.ts:14)",
@@ -142,9 +148,7 @@
         "node getTeamById (get-team.ts:11)",
         "node if !folder (delete-folder.ts:30)",
         "node if !hasPermission (delete-folder.ts:38)",
-        "node if !team (get-team.ts:69)",
-        "unknown from deleteFolder (delete-folder.ts:14): 2: prisma.folder.delete, prisma.folder.findFirst",
-        "unknown from getTeam (get-team.ts:38): 1: prisma.team.findFirst"
+        "node if !team (get-team.ts:69)"
       ]
     },
     {
@@ -217,7 +221,7 @@
     },
     {
       "name": "checkOrganisationRateLimits",
-      "case": "A method of an object literal called through a variable (`limiter.check`), a catch's outcome (error), nested ifs, and guarded unknown calls under each decision.",
+      "case": "A method of an object literal called through a variable (`limiter.check`), a catch's outcome (error), nested ifs, and guarded unknown calls under each decision. Phase 10 (ADR 0031), read at the pin: prisma.rateLimit.upsert (in check, and under if params.identifier) is a write of the RateLimit table: data edges where the unknown calls were.",
       "path": "packages/lib/server-only/rate-limit/check-organisation-rate-limits.ts",
       "line": 19,
       "column": 14,
@@ -226,13 +230,16 @@
         "branch check (rate-limit.ts:67) -> if on error (rate-limit.ts:82)",
         "branch check (rate-limit.ts:67) -> if params.identifier (rate-limit.ts:129)",
         "branch checkOrganisationRateLimits (check-organisation-rate-limits.ts:19) -> if result.isLimited (check-organisation-rate-limits.ts:34)",
+        "branch if params.identifier (rate-limit.ts:129) -> RateLimit (prisma write) [yes]",
         "branch if params.identifier (rate-limit.ts:129) -> if identifierResult.count > config.max (rate-limit.ts:149) [yes]",
         "branch if result.isLimited (check-organisation-rate-limits.ts:34) -> AppError (app-error.ts:184) [yes]",
         "call check (rate-limit.ts:67) -> getBucket (rate-limit.ts:50)",
         "call checkOrganisationRateLimits (check-organisation-rate-limits.ts:19) -> check (rate-limit.ts:67)",
         "call checkOrganisationRateLimits (check-organisation-rate-limits.ts:19) -> createRateLimit (rate-limit.ts:63)",
         "call createRateLimit (rate-limit.ts:63) -> parseWindow (rate-limit.ts:32)",
+        "data check (rate-limit.ts:67) -> RateLimit (prisma write)",
         "node AppError (app-error.ts:184)",
+        "node RateLimit (prisma write)",
         "node check (rate-limit.ts:67)",
         "node checkOrganisationRateLimits (check-organisation-rate-limits.ts:19)",
         "node createRateLimit (rate-limit.ts:63)",
@@ -243,11 +250,9 @@
         "node if params.identifier (rate-limit.ts:129)",
         "node if result.isLimited (check-organisation-rate-limits.ts:34)",
         "node parseWindow (rate-limit.ts:32)",
-        "unknown from check (rate-limit.ts:67): 1: prisma.rateLimit.upsert",
         "unknown from if identifierResult.count > config.max (rate-limit.ts:149): 1: logger.warn [yes]",
         "unknown from if ipCheckLimit && ipResult.count > ipCheckLimit (rate-limit.ts:110): 1: logger.warn [yes]",
-        "unknown from if on error (rate-limit.ts:82): 1: logger.error [error]",
-        "unknown from if params.identifier (rate-limit.ts:129): 1: prisma.rateLimit.upsert [yes]"
+        "unknown from if on error (rate-limit.ts:82): 1: logger.error [error]"
       ]
     },
     {
@@ -282,7 +287,7 @@
     },
     {
       "name": "convertDocxToPdfViaGotenberg",
-      "case": "A try whose catch holds a decision (error, then yes), calls in a finally (built-ins only), an inner try with no calls (no decision), and functions held in constants.",
+      "case": "A try whose catch holds a decision (error, then yes), calls in a finally (built-ins only), an inner try with no calls (no decision), and functions held in constants. Phase 11 (ADR 0031), read at the pin: setTimeout(() => controller.abort(), …) at line 77 hands the abort to a timer: a hand-off node.",
       "path": "packages/lib/server-only/document-conversion/gotenberg.ts",
       "line": 34,
       "column": 14,
@@ -302,6 +307,7 @@
         "call convertDocxToPdfViaGotenberg (gotenberg.ts:34) -> DOCUMENT_CONVERSION_AUTH (document-conversion.ts:40)",
         "call convertDocxToPdfViaGotenberg (gotenberg.ts:34) -> DOCUMENT_CONVERSION_TIMEOUT_MS (document-conversion.ts:57)",
         "call convertDocxToPdfViaGotenberg (gotenberg.ts:34) -> DOCUMENT_CONVERSION_URL (document-conversion.ts:29)",
+        "handoff convertDocxToPdfViaGotenberg (gotenberg.ts:34) -> setTimeout (timer timers)",
         "node AppError (app-error.ts:184)",
         "node DOCUMENT_CONVERSION_AUTH (document-conversion.ts:40)",
         "node DOCUMENT_CONVERSION_TIMEOUT_MS (document-conversion.ts:57)",
@@ -313,6 +319,7 @@
         "node if auth (gotenberg.ts:71)",
         "node if isAbortError (gotenberg.ts:117)",
         "node if on error (gotenberg.ts:81)",
+        "node setTimeout (timer timers)",
         "unknown from convertDocxToPdfViaGotenberg (gotenberg.ts:34): 1: Buffer.from",
         "unknown from if auth (gotenberg.ts:71): 2: Buffer.from [yes], Buffer.from(…).toString [yes]"
       ]

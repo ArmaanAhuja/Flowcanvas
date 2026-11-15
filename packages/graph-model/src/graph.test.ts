@@ -88,6 +88,7 @@ describe('validateGraph', () => {
       'node a.ts#g: a code unit needs what it is, and only a code unit has one',
       "node a.ts#h: its place isn't a path with a 1-based line and column",
       'node a.ts#e: a code unit needs what it is, and only a code unit has one',
+      'node a.ts#e: an external-boundary node needs its service details',
       "edge a.ts#f → a.ts#missing: to a node that isn't in the graph",
       "edge a.ts#f → ?: an unknown edge needs the call's text",
       "edge a.ts#f → a.ts#g: an unknown edge can't reach a node",
@@ -254,17 +255,13 @@ describe('graphStats', () => {
       unknown: 1,
     });
     expect(stats.byEdgeKind.call).toBe(4);
-    // Every kind not filled yet names its phase (build plan, stage 1); code units, decisions (phase 7) and entry
-    // points (phase 8) are filled.
+    // Every kind is filled since phases 7, 8, 10 and 11: code units, decisions, entry points, data access,
+    // async hand-offs and external boundaries.
     for (const [kind, count] of Object.entries(stats.byNodeKind)) {
       if (kind === 'code-unit') expect(count).toBe(4);
-      else if (kind !== 'decision' && kind !== 'entry-point') {
-        expect(ARRIVES_IN[kind as keyof typeof ARRIVES_IN], kind).toBeGreaterThan(8);
-      }
+      else expect(count).toBe(0);
     }
-    expect(ARRIVES_IN).not.toHaveProperty('decision');
-    expect(ARRIVES_IN).not.toHaveProperty('entry-point');
-    expect(ARRIVES_IN).not.toHaveProperty('branch');
+    expect(ARRIVES_IN).toEqual({});
   });
 });
 
@@ -432,6 +429,109 @@ describe('entry points (phase 8, ADR 0030)', () => {
       ),
     };
     expect(diffGraphs(GRAPH, after).modified).toEqual(['src/route.ts#(entry POST /api/polls)']);
+  });
+});
+
+describe('data, services and hand-offs (phases 10 and 11, ADR 0031)', () => {
+  const other = (id: string, extra: Partial<GraphNode>): GraphNode => ({
+    id,
+    kind: 'data-access',
+    name: id,
+    place: null,
+    unit: null,
+    change: 'unchanged',
+    ...extra,
+  });
+  const GRAPH: Graph = {
+    nodes: [
+      unit('src/poll.ts#createPoll', 98),
+      other('(data prisma Poll write)', {
+        name: 'Poll',
+        data: { library: 'prisma', table: 'Poll', operation: 'write', complete: true, why: null },
+      }),
+      other('(service email nodemailer)', {
+        kind: 'external-boundary',
+        name: 'Email',
+        service: { kind: 'email', library: 'nodemailer', url: null, complete: true, why: null },
+      }),
+      other('(handoff job send.email)', {
+        kind: 'async-handoff',
+        name: 'send.email',
+        handoff: {
+          kind: 'job',
+          library: 'documenso-jobs',
+          name: null,
+          complete: false,
+          why: 'Its name isn’t a constant the code fixes.',
+        },
+      }),
+    ],
+    edges: [
+      {
+        ...call('src/poll.ts#createPoll', '(data prisma Poll write)', [120]),
+        kind: 'data',
+        relation: null,
+        provenance: 'convention',
+      },
+      {
+        ...call('src/poll.ts#createPoll', '(service email nodemailer)', [130]),
+        kind: 'boundary',
+        relation: null,
+        provenance: 'convention',
+      },
+      {
+        ...call('src/poll.ts#createPoll', '(handoff job send.email)', [140]),
+        kind: 'handoff',
+        relation: null,
+        provenance: 'convention',
+      },
+    ],
+  };
+
+  it('keeps each kind’s details through encoding, and the graph valid', () => {
+    expect(validateGraph(GRAPH)).toEqual([]);
+    const decoded = decodeGraph(encodeGraph(GRAPH));
+    expect(decoded.nodes.find((n) => n.kind === 'data-access')?.data).toEqual(GRAPH.nodes[1]?.data);
+    expect(decoded.nodes.find((n) => n.kind === 'external-boundary')?.service).toEqual(
+      GRAPH.nodes[2]?.service,
+    );
+    expect(decoded.nodes.find((n) => n.kind === 'async-handoff')?.handoff).toEqual(
+      GRAPH.nodes[3]?.handoff,
+    );
+    expect(encodeGraph(decoded)).toBe(encodeGraph(GRAPH));
+  });
+
+  it('needs each kind’s details, only on it, and a reason when not fully detected', () => {
+    const [code, data] = GRAPH.nodes as [GraphNode, GraphNode];
+    const without = { ...data };
+    delete (without as { data?: unknown }).data;
+    expect(validateGraph({ nodes: [without], edges: [] })).toEqual([
+      'node (data prisma Poll write): a data-access node needs its data details',
+    ]);
+    expect(
+      validateGraph({
+        nodes: [
+          {
+            ...code,
+            service: { kind: 'email', library: 'nodemailer', url: null, complete: true, why: null },
+          },
+        ],
+        edges: [],
+      }),
+    ).toEqual(['node src/poll.ts#createPoll: only an external-boundary node has service details']);
+    const unexplained = {
+      ...data,
+      data: {
+        library: 'prisma' as const,
+        table: null,
+        operation: 'read' as const,
+        complete: false,
+        why: null,
+      },
+    };
+    expect(validateGraph({ nodes: [unexplained], edges: [] })).toEqual([
+      'node (data prisma Poll write): a data-access node not fully detected says why',
+    ]);
   });
 });
 

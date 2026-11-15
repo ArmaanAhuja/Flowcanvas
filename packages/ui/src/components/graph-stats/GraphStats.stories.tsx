@@ -27,14 +27,7 @@ const rallly: GraphStatsSnapshot = {
   saveMs: 20,
   loadMs: 10,
 };
-const ARRIVES_IN = {
-  'data-access': 10,
-  'external-boundary': 10,
-  'async-handoff': 11,
-  data: 10,
-  boundary: 10,
-  handoff: 11,
-};
+const ARRIVES_IN = {};
 
 const meta = {
   title: 'Shell/GraphStats',

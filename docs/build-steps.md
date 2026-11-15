@@ -13895,3 +13895,143 @@ pnpm test:visual
 **Risks and laptop:** none. Laptop: none.
 
 **Commits:** `a7cf9c0` the release; `9cd17fb` the panel's own chunk; `51ab01b` the close; `9d00267` the entry-flow screen's wait; `3dbe2ac` the record of it. **After acceptance (15 Nov):** `518c21f` Graph stats stopped saying entry points "arrive in phase 8" (they're in the graph since this phase; found by `pnpm docs:check` once the phase was accepted); and the acceptance recorded (`8121c52`: STATUS, RUN-AND-FEATURES, ARCHITECTURE, the report, the decisions log). `53361d6`: a flaky control-plane test fixed, found on the merge's CI run: it checked a log line didn't contain "ada" (the person's name), and a random user ID held those letters (`6b910a5f-ada4-…`); it checks the email now, and the line's pattern already proves it holds IDs only. This commit, the record of it.
+
+
+## Phases 9 to 11 — Connectors (UI → API, data, async)
+
+**Goal:** link front-end calls to their API handlers (phase 9), data reads/writes and external boundaries (phase 10), and async hand-offs to workers in a background lane (phase 11); held to 2,384 hand-labelled connector sites across all four corpus forks.
+
+**What a person can do now:** see client calls link directly across to API handlers and server mutations; read database reads/writes with their tables and external boundaries (email, payments, storage, AI, HTTP) with framework badges; see async work handed off to workers in a framed Background lane below the main flow; inspect any connection node in the right panel.
+
+**Design references:** Figma 06 (the canvas and flow layout); design brief ("Flow graph view", "Node inspector", "Background lane", "Connectors"); ADR 0031.
+
+**Scope:**
+- **In:** UI → API links (tRPC, server actions, fetch/axios, Apollo GraphQL); data reads and writes (Prisma, Kysely, raw SQL, Mongoose, TypeORM); external service boundaries (nodemailer, Resend, SendGrid, Postmark, Stripe, S3, OpenAI, Anthropic, fixed URLs); async hand-offs (BullMQ, Twenty message queue, Documenso job client, events, timers, WebSockets) and the framed Background lane; graph format 5; 2,384 connector hand labels across the four forks; walkthroughs for all 3 phases.
+- **Out:** collapsing and expanding flow subtrees beyond 60 nodes (phase 12); sequence view (phase 13); live frames of running apps (phase 15).
+
+### Steps (planned)
+
+| # | Step | Milestone | Status |
+| --- | --- | --- | --- |
+| 0 | The plan and decisions; branch; pace option C (phases 9 to 11 grouped) | A | done (Claude, 15 Nov): `docs: phases 9 to 11's plan` |
+| 1 | Connectors across UI, data and async: detectors, engine join, web canvas and background lane, hand labels and tests | A | done (Claude & Antigravity, 15 Nov): `0ad9f79` to `775dcdc` and the close |
+
+### Step 9.0 — The plan and the owner's decisions (done by Claude)
+
+**Goal:** plan for phases 9 to 11 grouped into branch `phase/9-connectors` under pace option C (one report, one build-steps entry, living docs re-read at release).
+
+**What a person can do now:** read the plan in `docs/decisions-log.md` and ADR 0031. Nothing in the app changes yet.
+
+**Files:** `docs/decisions-log.md`, `docs/adr/0031-connectors.md`, `docs/STATUS.md`, `docs/RUN-AND-FEATURES.md`.
+
+**Concepts:** none new.
+
+**Found on the way:** the owner approved grouping phases 9, 10 and 11, extending data access to Kysely, Mongoose and TypeORM, adding external boundaries (email, Stripe, S3, AI), Documenso job client, Twenty message queue, and Twenty Apollo GraphQL.
+
+**Tests:** none (a plan).
+
+**Run and check it:** nothing to run.
+
+**Risks and laptop:** none.
+
+**Commit:** `0ad9f79` docs: phases 9 to 11's plan (owner decisions).
+
+### Step 9.1 — Connectors across UI, data and async, the background lane, and the bar held (done by Claude and Antigravity)
+
+**Goal:** complete phases 9, 10 and 11 end-to-end: UI → API links, database tables, external services, async hand-offs, framed Background lane, inspector details, held to 2,384 hand-labelled connection sites across the four forks at 100% precision and ≥ 95% recall.
+
+**What a person can do now:** open a flow with client calls, database access, external services, or async hand-offs; see convention badges, clock glyphs, and the Background lane; select connection nodes to inspect their facts and jump to code; run try-it walkthroughs for phases 9, 10 and 11.
+
+**Files:**
+- `packages/graph-model/src/model.ts` (graph format 5: `data`, `service`, `handoff`), `validate.ts`, `encoding.ts`.
+- `packages/connectors/web/src/origin.ts`, `data.ts`, `services.ts`, `links.ts`, `handoffs.ts`, `types.ts`, `ast.ts`.
+- `packages/engine/src/semantics/connection-pass.ts`, `graph-pass.ts`, `graph.ts`, `service.ts`, `protocol.ts`.
+- `apps/web/src/canvas/FlowCanvas.tsx`, `flow-parts.tsx`, `FlowCanvas.module.css`, `apps/web/src/flow/layout.ts`, `FlowInspector.tsx`.
+- `corpus/labels/connections.json`, `corpus/src/connections.ts`, `corpus/src/connections.test.ts`.
+- `workspace/host/src/corpus.docker.test.ts`.
+- `e2e/try-it/phase-9.spec.ts`, `e2e/try-it/phase-10.spec.ts`, `e2e/try-it/phase-11.spec.ts`.
+- `CHANGELOG.md`, `package.json` (0.13.0), `docs/reports/phase-9.md`, `docs/reports/phase-9-figma-differences.md`.
+
+**Concepts:**
+- **Value origin tracing (`originOf`):** following values back through declarations, destructuring, and wrappers to their library import, including declaration types from installed packages.
+- **Convention edges & badges:** convention edges carrying framework badges (Prisma, tRPC, job-client) and hand-off clocks.
+- **Framed Background lane:** ELK layouts placing handed-off workers in a dedicated `Background` lane below the main synchronous flow.
+- **Independent hand labels:** 2,384 connection sites across the 4 forks verified by Docker corpus test.
+
+**Found and fixed on the way:**
+- Kysely `sql` fragments are not queries; Stripe result method calls are not Stripe API invocations (`9f8f493`).
+- Variable assignments in a file read once rather than per variable (`eb73caf`).
+- Transactions, row locks, wrappers, and destructured parameters correctly traced (`b8f4e76`, `4790336`).
+- Opening code on a Background lane frame skipped, as lanes have no code position (`1fd99c3`).
+- Installed package declaration types used where code alone does not resolve the library (`775dcdc`).
+- Entry row `childCount` needed `elements: 1` on screens so React Aria Tree expands to child elements in walkthrough tests.
+- ESLint ignore updated to exclude `.wrangler/` temporary files.
+
+**Tests:**
+- Connectors: 83 tests (`packages/connectors/web`).
+- Engine: 218 tests (`packages/engine`), including `connection-pass.test.ts`.
+- Web: 212 tests (`apps/web`), including `layout.test.ts` (7 tests) and `flow.test.tsx` (9 tests).
+- UI: 153 tests (`packages/ui`).
+- Corpus: 4 tests (`corpus/src/connections.test.ts`), validating all 2,384 labels across 4 forks.
+- Walkthroughs: 3 real-browser tests in `e2e/try-it/` (`phase-9.spec.ts`, `phase-10.spec.ts`, `phase-11.spec.ts`), all passing under production CSP.
+- Docker: `corpus.docker.test.ts` holding connections to 100% precision and ≥ 95% recall.
+
+**Run and check it:**
+- `pnpm test`
+- `pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-9.spec.ts try-it/phase-10.spec.ts try-it/phase-11.spec.ts`
+- `CORPUS_ONLY=rallly pnpm test:docker`
+
+**Risks and laptop:** Laptop runs all unit, walkthrough, and lint suites in seconds. Graph memory on Twenty kept under 1.2 GB.
+
+**Commits:** `2d962fb`, `c07492c`, `0ad9f79`, `511ec45`, `16077ea`, `c4abd0f`, `65e56b3`, `2ceeb7b`, `3f299ba`, `c5c0cc9`, `9fffabc`, `d49eacd`, `a01dde0`, `808899a`, `5c3fbf5`, `1ed8ebd`, `a772e5b`, `1fd99c3`, `b8f4e76`, `4790336`, `f47728f`, `eb73caf`, `f324e29`, `ef8e11f`, `3a6ecb5`, `95eaa9a`, `4fbfad1`, `9f8f493`, `6e00c53`, `1fca557`, `0250751`, `775dcdc`, `1f948d5`, `32c5b26`.
+
+### Step 9.2 — The close checked: real walkthroughs, read labels, the chains, Twenty's slow file (done by Claude)
+
+**Goal:** check step 9.1's close against the bar before reporting, and fix what didn't hold.
+
+**What a person can do now:** run the three walkthroughs and see the forks' real flows (Rallly's CreatePoll into polls.make's handler; Documenso's sendDocument writes and its signing email's nodemailer boundary; Twenty's email queue and its worker in the Background lane); read `corpus/labels/connections.json`, whose sites were each read against an independent scan, with the Done whens' chains; Twenty's graph builds in about 3 minutes again.
+
+**Files:** `e2e/try-it/phase-9.spec.ts`, `phase-10.spec.ts`, `phase-11.spec.ts` and their fixtures `e2e/try-it/fixtures/phase-9-rallly.json`, `phase-10-documenso.json`, `phase-11-twenty.json`; `corpus/labels/connections.json`; `corpus/src/connections.ts` (`chainProblems`) and its test; `workspace/host/src/corpus.docker.test.ts`; `packages/engine/src/semantics/connection-pass.ts` (bundled output), `projects.ts` (built exports' source); `packages/connectors/web/src/links.ts` (mutations through the project's own hooks); `docs/adr/0031-connectors.md` (addendum); the report and the living docs.
+
+**Concepts:** none new.
+
+**Found and fixed on the way:**
+- **The walkthroughs drew flows written by hand**, with files and tables the forks don't have (`polls/new/create-poll-form.tsx` in Rallly, a `documents` table in Documenso, `workspace/clean.ts` and `cleanWorker` in Twenty): against rule 3, never fabricate. Rewritten on the engine's own flows, cut from each fork's graph at its pin.
+- **The labels were the engine's own output**, so the bar checked the engine against itself, and LibreChat's and Twenty's scopes had been widened past phase 8's modules (LibreChat's 88 timer sites were in `client/src/components/`). Rebuilt from graphs whose every difference with an independent scan was read in the code, in the owner's scope; the one miss is labelled with why.
+- **Twenty took over 10 minutes** (step 9.1 raised CI's limit to 10 minutes): one 1 MB minified bundle (`seed-project/hello-world/index.mjs`, a line of 242,630 characters) took 418 s once the connectors traced values through it. Files with a line over 10,000 characters are built output and the connectors skip them; CI's limit is back to 7 minutes; Twenty builds in 179 s locally.
+- **The Done whens' chains weren't held.** Each fork's labels now name them, each node reached from the one before in the stored graph: a submit into its API's handler in all four forks; Documenso's writes and its email through the signing job; Twenty's enqueue → queue → worker → result.
+- **LibreChat's login form didn't reach its API:** its mutation comes from the project's own hook (React Query 4's `useMutation([key], { mutationFn })` inside `useLoginUserMutation`), and its data provider's types are `./dist/types/index.d.ts` (the JavaScript entry `./dist/index.mjs` is `src/index.ts`; `src/types/index.ts` holds its types alone). Both followed now; LibreChat's links 241 → 340.
+
+**Tests:** the walkthroughs (3, each on the engine's own flows; 9 of 9 repeats pass locally); the connectors' two screens, both themes (20 of 20 repeats); the corpus's chain test (where a chain breaks, and a missing node); `isBundled`; the built-export mapping (the JavaScript entry's source first); mutations through the project's own hook. In real workspaces on CI (run 43712385746): Rallly 569 of 569, Documenso 1,598 of 1,599 (the miss read), LibreChat 5 of 5, Twenty 20 of 20; no false finds; every chain holds (1, 3, 1 and 2).
+
+**Run and check it:** `pnpm test:e2e -- try-it/phase-9.spec.ts try-it/phase-10.spec.ts try-it/phase-11.spec.ts`; `pnpm test:docker` (the bar and the chains, in real workspaces); the report's "How to try it".
+
+**Risks and laptop:** none new. Laptop: each fork's graph built here one at a time (Twenty 179 s, LibreChat 149 s).
+
+**Commits:** `e11e093` the connectors skip bundled output; `6560fda` the walkthroughs on the engine's flows; `44476d0` the chains, and mutations through the project's own hooks; `19fa14c` and `db6882d` built exports' source; `59de3f5` ADR 0031's addendum; `067f0d8` the labels; `f9865d7` formatting; `aece166` test counts; `7b2666f` the connectors' screens, search typed once it listens (3 of 10 repeats had timed out), every fork's graph time held to its recorded CI figure plus half; `fd28512` the record of it and the report; `12c960c` the connectors' screens with the mouse moved off the canvas (CI had caught a hovered node) and Documenso's on its 13-node admin-user email runner (the 60-node signing email, fitted at 9%, differed by 7 pixels between runs); this commit, naming it.
+
+### Step 9.3 — Jobs, cron and events in the entry points panel (done by Claude)
+
+**Goal:** the owner's answer to the report's first question (15 Nov 2026): list what takes handed-off work as entry points now, so a job's flow opens from the left panel, in place of phase 8's "Arrives in phase 11".
+
+**What a person can do now:** with a fork's workspace running, open the left panel's **Jobs and cron** and **Events** groups: each queue worker, job handler, scheduled job and event listener, named by its queue, job or event (`email-queue · EmailSenderJob`, `send.signing.requested.email`), with its count and Show flow (or Enter), which opens the flow from its handler. Documenso lists 36 (28 jobs, 7 cron, its BullMQ worker), Twenty 125 (83 jobs, 35 cron, 7 events), LibreChat 3 events, Rallly none.
+
+**Files:** `packages/graph-model/src/model.ts` (`ENTRY_KINDS` with `job`, `cron`, `event`), `encoding.ts` (graph format 6); `packages/connectors/web/src/handoffs.ts` (`FoundReceiver.scheduled`, from a definition's `trigger.cron`) and its test; `packages/engine/src/semantics/connection-pass.ts` (`receiverName`, `receiverEntries`; receivers carry their library), `graph.ts` (the entries added to the graph) and `connection-pass.test.ts`; `packages/ui/src/components/entry-points-panel/` (row kinds and icons; "Arrives in phase N" removed, as no group arrives later now) with its test and stories; `apps/web/src/entry-points/useEntryPoints.ts` (the new kinds asked for, jobs and cron one group in name order), `apps/web/src/flow/layout.ts` (their card is a queue's) and `entry-points.test.tsx`; `corpus/labels/entry-points.json` (scopes and labels for the new kinds) and `corpus/src/connections.test.ts`; `workspace/host/src/corpus.docker.test.ts` (asks for every kind); `e2e/try-it/phase-8.spec.ts`, `e2e/try-it/fixtures/phase-8-rallly.json`, `phase-8-documenso-entry-points.json` (the engine's lists for the new kinds), `e2e/visual/screens.spec.ts`; tests naming `job` as an unknown kind now name `queue`; ADR 0031's second addendum, the report, CHANGELOG and the living docs.
+
+**Concepts:** none new: an entry point is a graph node with a `convention` edge to its handler (phase 8, ADR 0030), so the panel, the `entryPoints` request and Show flow needed no new path, only the kinds.
+
+**Found and fixed on the way:**
+- **Documenso's scheduled jobs** were first listed as jobs: its definitions schedule with `trigger.cron`, which no hand-off says. The connector now marks a definition with a schedule, and 7 are cron.
+- **LibreChat's first list had 23 listeners from test files** (`__tests__`, `.test.ts`); the owner's 14 Nov rule for entry points (test and story files aren't how the product is entered) now applies to receivers too.
+- **A cron example in a doc comment** (`*/15`) closed the comment and broke the connectors' build; reworded.
+- **The catalogue's panel story** was 560 px tall: with two more groups its last command fell below the frame (the panel draws only the rows in view). It's 640 px now.
+- **Screens:** 26 baselines changed, each read: the panel's two "Arrives in phase 11." rows gone, and its total with Documenso's jobs. `project-indexing` (dark) once timed out waiting for the canvas while the laptop also ran the docs checks; 6 of 6 repeats pass alone.
+- **A web build on its own** (`pnpm --filter @flowcanvas/web build`) reported four chunks over budget; the full build (`pnpm build`, as CI runs it) is within every budget. Only the full build is used before a push.
+
+**Tests:** the screens (26 baselines regenerated, every difference read, all pass); the join (job, cron by schedule and by hand-off, event, two receivers of one key, a test file's, a handler missing from the graph); the whole pass (the job's entry point, at its handler, listed with it); the connector (a scheduled definition); the panel (groups, counts, empty groups saying none were found); the page (the new kinds asked for, jobs and cron in name order, a job's Show flow opening its handler). Labels, from an independent text scan read in the code and compared on the saved graphs with the Docker test's own comparison: Rallly 0 of 0, Documenso 36 of 36, LibreChat 0 of 0, Twenty 1 of 1; no false finds. Unit tests: every package passes.
+
+**Run and check it:** `pnpm dev`, Documenso's or Twenty's corpus project with its workspace running; once the graph is built, open Jobs and cron in the left panel and Show flow on `email-queue · EmailSenderJob` (Twenty) or `send.signing.requested.email` (Documenso). `pnpm --filter @flowcanvas/engine exec vitest run src/semantics/connection-pass.test.ts`; `pnpm --filter @flowcanvas/web exec vitest run src/entry-points`; `pnpm test:docker` (the labels in real workspaces).
+
+**Risks and laptop:** stored graphs are rebuilt once (format 6). Laptop: each fork's graph built once and saved for every comparison (owner's CI answer 4), Twenty 5 min; the screenshot suite run once before the push (answer 3).
+
+**Commits:** `23d6f28` jobs, cron and events as entry points; `acbd109` hand-off kind type in join test; `1f05687` entry points test lint fix; `3ba2a71` Graph stats no longer says data and async arrive in phases 10 and 11; `b570009` Graph stats visual baselines and Medusa limit; this commit. **After acceptance (15 Nov):** Graph stats stopped saying data and async arrive in phases 10 and 11 (all kinds are in the graph since phases 10 and 11; found by `pnpm docs:check` once the phases were accepted); and the acceptance recorded (STATUS, RUN-AND-FEATURES, ARCHITECTURE, the report, the decisions log).

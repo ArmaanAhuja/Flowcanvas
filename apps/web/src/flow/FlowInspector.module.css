@@ -97,3 +97,21 @@
 .link:hover {
   color: var(--color-text-primary);
 }
+
+/* A table's, service's or hand-off's facts (phases 9 to 11): a caption over each value. */
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: 0;
+}
+
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.fact dd {
+  margin: 0;
+}

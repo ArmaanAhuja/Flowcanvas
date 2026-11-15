@@ -13778,6 +13778,831 @@
         "within": null,
         "handler": null
       }
-    ]
+    ],
+    "job": [
+      {
+        "id": "(entry bullmq:documenso-jobs)",
+        "kind": "job",
+        "framework": "bullmq",
+        "name": "documenso-jobs",
+        "place": { "path": "packages/lib/jobs/client/bullmq.ts", "line": 62, "column": 7 },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/client/bullmq.ts#BullMQJobProvider.(handler documenso-jobs)",
+          "name": "documenso-jobs",
+          "place": { "path": "packages/lib/jobs/client/bullmq.ts", "line": 62, "column": 7 }
+        }
+      },
+      {
+        "id": "(entry job:internal.admin-delete-organisation)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "internal.admin-delete-organisation",
+        "place": {
+          "path": "packages/lib/jobs/definitions/internal/admin-delete-organisation.ts",
+          "line": 29,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/internal/admin-delete-organisation.ts#(handler internal.admin-delete-organisation)",
+          "name": "internal.admin-delete-organisation",
+          "place": {
+            "path": "packages/lib/jobs/definitions/internal/admin-delete-organisation.ts",
+            "line": 29,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:internal.backport-subscription-claims)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "internal.backport-subscription-claims",
+        "place": {
+          "path": "packages/lib/jobs/definitions/internal/backport-subscription-claims.ts",
+          "line": 40,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/internal/backport-subscription-claims.ts#(handler internal.backport-subscription-claims)",
+          "name": "internal.backport-subscription-claims",
+          "place": {
+            "path": "packages/lib/jobs/definitions/internal/backport-subscription-claims.ts",
+            "line": 40,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:internal.bulk-send-template)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "internal.bulk-send-template",
+        "place": {
+          "path": "packages/lib/jobs/definitions/internal/bulk-send-template.ts",
+          "line": 27,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/internal/bulk-send-template.ts#(handler internal.bulk-send-template)",
+          "name": "internal.bulk-send-template",
+          "place": {
+            "path": "packages/lib/jobs/definitions/internal/bulk-send-template.ts",
+            "line": 27,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:internal.cancel-organisation-subscription)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "internal.cancel-organisation-subscription",
+        "place": {
+          "path": "packages/lib/jobs/definitions/internal/cancel-organisation-subscription.ts",
+          "line": 35,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/internal/cancel-organisation-subscription.ts#(handler internal.cancel-organisation-subscription)",
+          "name": "internal.cancel-organisation-subscription",
+          "place": {
+            "path": "packages/lib/jobs/definitions/internal/cancel-organisation-subscription.ts",
+            "line": 35,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:internal.execute-webhook)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "internal.execute-webhook",
+        "place": {
+          "path": "packages/lib/jobs/definitions/internal/execute-webhook.ts",
+          "line": 26,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/internal/execute-webhook.ts#(handler internal.execute-webhook)",
+          "name": "internal.execute-webhook",
+          "place": {
+            "path": "packages/lib/jobs/definitions/internal/execute-webhook.ts",
+            "line": 26,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:internal.process-recipient-expired)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "internal.process-recipient-expired",
+        "place": {
+          "path": "packages/lib/jobs/definitions/internal/process-recipient-expired.ts",
+          "line": 21,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/internal/process-recipient-expired.ts#(handler internal.process-recipient-expired)",
+          "name": "internal.process-recipient-expired",
+          "place": {
+            "path": "packages/lib/jobs/definitions/internal/process-recipient-expired.ts",
+            "line": 21,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:internal.process-signing-reminder)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "internal.process-signing-reminder",
+        "place": {
+          "path": "packages/lib/jobs/definitions/internal/process-signing-reminder.ts",
+          "line": 21,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/internal/process-signing-reminder.ts#(handler internal.process-signing-reminder)",
+          "name": "internal.process-signing-reminder",
+          "place": {
+            "path": "packages/lib/jobs/definitions/internal/process-signing-reminder.ts",
+            "line": 21,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:internal.seal-document)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "internal.seal-document",
+        "place": {
+          "path": "packages/lib/jobs/definitions/internal/seal-document.ts",
+          "line": 26,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/internal/seal-document.ts#(handler internal.seal-document)",
+          "name": "internal.seal-document",
+          "place": {
+            "path": "packages/lib/jobs/definitions/internal/seal-document.ts",
+            "line": 26,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:internal.sync-organisation-seats)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "internal.sync-organisation-seats",
+        "place": {
+          "path": "packages/lib/jobs/definitions/internal/sync-organisation-seats.ts",
+          "line": 21,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/internal/sync-organisation-seats.ts#(handler internal.sync-organisation-seats)",
+          "name": "internal.sync-organisation-seats",
+          "place": {
+            "path": "packages/lib/jobs/definitions/internal/sync-organisation-seats.ts",
+            "line": 21,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.admin.recipient.removed.emails)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.admin.recipient.removed.emails",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-admin-recipient-removed-emails.ts",
+          "line": 29,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-admin-recipient-removed-emails.ts#(handler send.admin.recipient.removed.emails)",
+          "name": "send.admin.recipient.removed.emails",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-admin-recipient-removed-emails.ts",
+            "line": 29,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.admin.user.created.email)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.admin.user.created.email",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-admin-user-created-email.ts",
+          "line": 23,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-admin-user-created-email.ts#(handler send.admin.user.created.email)",
+          "name": "send.admin.user.created.email",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-admin-user-created-email.ts",
+            "line": 23,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.document.cancelled.emails)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.document.cancelled.emails",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-document-cancelled-emails.ts",
+          "line": 25,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-document-cancelled-emails.ts#(handler send.document.cancelled.emails)",
+          "name": "send.document.cancelled.emails",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-document-cancelled-emails.ts",
+            "line": 25,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.document.completed.emails)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.document.completed.emails",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-document-completed-emails.ts",
+          "line": 25,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-document-completed-emails.ts#(handler send.document.completed.emails)",
+          "name": "send.document.completed.emails",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-document-completed-emails.ts",
+            "line": 25,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.document.created.from.direct.template.email)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.document.created.from.direct.template.email",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-document-created-from-direct-template-email.ts",
+          "line": 25,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-document-created-from-direct-template-email.ts#(handler send.document.created.from.direct.template.email)",
+          "name": "send.document.created.from.direct.template.email",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-document-created-from-direct-template-email.ts",
+            "line": 25,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.document.deleted.emails)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.document.deleted.emails",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-document-deleted-emails.ts",
+          "line": 44,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-document-deleted-emails.ts#(handler send.document.deleted.emails)",
+          "name": "send.document.deleted.emails",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-document-deleted-emails.ts",
+            "line": 44,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.document.pending.email)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.document.pending.email",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-document-pending-email.ts",
+          "line": 22,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-document-pending-email.ts#(handler send.document.pending.email)",
+          "name": "send.document.pending.email",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-document-pending-email.ts",
+            "line": 22,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.organisation-limit-alert.email)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.organisation-limit-alert.email",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-organisation-limit-alert-email.ts",
+          "line": 26,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-organisation-limit-alert-email.ts#(handler send.organisation-limit-alert.email)",
+          "name": "send.organisation-limit-alert.email",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-organisation-limit-alert-email.ts",
+            "line": 26,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.organisation-limits-updated.email)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.organisation-limits-updated.email",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-organisation-limits-updated-email.ts",
+          "line": 23,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-organisation-limits-updated-email.ts#(handler send.organisation-limits-updated.email)",
+          "name": "send.organisation-limits-updated.email",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-organisation-limits-updated-email.ts",
+            "line": 23,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.organisation-member-joined.email)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.organisation-member-joined.email",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-organisation-member-joined-email.ts",
+          "line": 24,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-organisation-member-joined-email.ts#(handler send.organisation-member-joined.email)",
+          "name": "send.organisation-member-joined.email",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-organisation-member-joined-email.ts",
+            "line": 24,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.organisation-member-left.email)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.organisation-member-left.email",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-organisation-member-left-email.ts",
+          "line": 24,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-organisation-member-left-email.ts#(handler send.organisation-member-left.email)",
+          "name": "send.organisation-member-left.email",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-organisation-member-left-email.ts",
+            "line": 24,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.owner.recipient.expired.email)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.owner.recipient.expired.email",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-owner-recipient-expired-email.ts",
+          "line": 24,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-owner-recipient-expired-email.ts#(handler send.owner.recipient.expired.email)",
+          "name": "send.owner.recipient.expired.email",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-owner-recipient-expired-email.ts",
+            "line": 24,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.password.reset.success.email)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.password.reset.success.email",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-password-reset-success-email.ts",
+          "line": 35,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-password-reset-success-email.ts#(handler send.password.reset.success.email)",
+          "name": "send.password.reset.success.email",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-password-reset-success-email.ts",
+            "line": 35,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.recipient.removed.email)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.recipient.removed.email",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-recipient-removed-email.ts",
+          "line": 26,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-recipient-removed-email.ts#(handler send.recipient.removed.email)",
+          "name": "send.recipient.removed.email",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-recipient-removed-email.ts",
+            "line": 26,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.recipient.signed.email)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.recipient.signed.email",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-recipient-signed-email.ts",
+          "line": 22,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-recipient-signed-email.ts#(handler send.recipient.signed.email)",
+          "name": "send.recipient.signed.email",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-recipient-signed-email.ts",
+            "line": 22,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.signing.rejected.emails)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.signing.rejected.emails",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-rejection-emails.ts",
+          "line": 24,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-rejection-emails.ts#(handler send.signing.rejected.emails)",
+          "name": "send.signing.rejected.emails",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-rejection-emails.ts",
+            "line": 24,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.signing.requested.email)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.signing.requested.email",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-signing-email.ts",
+          "line": 25,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-signing-email.ts#(handler send.signing.requested.email)",
+          "name": "send.signing.requested.email",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-signing-email.ts",
+            "line": 25,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.signup.confirmation.email)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.signup.confirmation.email",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-confirmation-email.ts",
+          "line": 23,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-confirmation-email.ts#(handler send.signup.confirmation.email)",
+          "name": "send.signup.confirmation.email",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-confirmation-email.ts",
+            "line": 23,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:send.team-deleted.email)",
+        "kind": "job",
+        "framework": "job-client",
+        "name": "send.team-deleted.email",
+        "place": {
+          "path": "packages/lib/jobs/definitions/emails/send-team-deleted-email.ts",
+          "line": 32,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/emails/send-team-deleted-email.ts#(handler send.team-deleted.email)",
+          "name": "send.team-deleted.email",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-team-deleted-email.ts",
+            "line": 32,
+            "column": 3
+          }
+        }
+      }
+    ],
+    "cron": [
+      {
+        "id": "(entry job:internal.alert-organisation-seat-drift)",
+        "kind": "cron",
+        "framework": "job-client",
+        "name": "internal.alert-organisation-seat-drift",
+        "place": {
+          "path": "packages/lib/jobs/definitions/internal/alert-organisation-seat-drift.ts",
+          "line": 22,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/internal/alert-organisation-seat-drift.ts#(handler internal.alert-organisation-seat-drift)",
+          "name": "internal.alert-organisation-seat-drift",
+          "place": {
+            "path": "packages/lib/jobs/definitions/internal/alert-organisation-seat-drift.ts",
+            "line": 22,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:internal.cleanup-auth-handoffs)",
+        "kind": "cron",
+        "framework": "job-client",
+        "name": "internal.cleanup-auth-handoffs",
+        "place": {
+          "path": "packages/lib/jobs/definitions/internal/cleanup-auth-handoffs.ts",
+          "line": 20,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/internal/cleanup-auth-handoffs.ts#(handler internal.cleanup-auth-handoffs)",
+          "name": "internal.cleanup-auth-handoffs",
+          "place": {
+            "path": "packages/lib/jobs/definitions/internal/cleanup-auth-handoffs.ts",
+            "line": 20,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:internal.cleanup-rate-limits)",
+        "kind": "cron",
+        "framework": "job-client",
+        "name": "internal.cleanup-rate-limits",
+        "place": {
+          "path": "packages/lib/jobs/definitions/internal/cleanup-rate-limits.ts",
+          "line": 20,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/internal/cleanup-rate-limits.ts#(handler internal.cleanup-rate-limits)",
+          "name": "internal.cleanup-rate-limits",
+          "place": {
+            "path": "packages/lib/jobs/definitions/internal/cleanup-rate-limits.ts",
+            "line": 20,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:internal.expire-recipients-sweep)",
+        "kind": "cron",
+        "framework": "job-client",
+        "name": "internal.expire-recipients-sweep",
+        "place": {
+          "path": "packages/lib/jobs/definitions/internal/expire-recipients-sweep.ts",
+          "line": 20,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/internal/expire-recipients-sweep.ts#(handler internal.expire-recipients-sweep)",
+          "name": "internal.expire-recipients-sweep",
+          "place": {
+            "path": "packages/lib/jobs/definitions/internal/expire-recipients-sweep.ts",
+            "line": 20,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:internal.seal-document-sweep)",
+        "kind": "cron",
+        "framework": "job-client",
+        "name": "internal.seal-document-sweep",
+        "place": {
+          "path": "packages/lib/jobs/definitions/internal/seal-document-sweep.ts",
+          "line": 20,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/internal/seal-document-sweep.ts#(handler internal.seal-document-sweep)",
+          "name": "internal.seal-document-sweep",
+          "place": {
+            "path": "packages/lib/jobs/definitions/internal/seal-document-sweep.ts",
+            "line": 20,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:internal.send-signing-reminders-sweep)",
+        "kind": "cron",
+        "framework": "job-client",
+        "name": "internal.send-signing-reminders-sweep",
+        "place": {
+          "path": "packages/lib/jobs/definitions/internal/send-signing-reminders-sweep.ts",
+          "line": 22,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/internal/send-signing-reminders-sweep.ts#(handler internal.send-signing-reminders-sweep)",
+          "name": "internal.send-signing-reminders-sweep",
+          "place": {
+            "path": "packages/lib/jobs/definitions/internal/send-signing-reminders-sweep.ts",
+            "line": 22,
+            "column": 3
+          }
+        }
+      },
+      {
+        "id": "(entry job:internal.sync-email-domains)",
+        "kind": "cron",
+        "framework": "job-client",
+        "name": "internal.sync-email-domains",
+        "place": {
+          "path": "packages/lib/jobs/definitions/internal/sync-email-domains.ts",
+          "line": 20,
+          "column": 3
+        },
+        "complete": true,
+        "why": null,
+        "within": null,
+        "handler": {
+          "id": "packages/lib/jobs/definitions/internal/sync-email-domains.ts#(handler internal.sync-email-domains)",
+          "name": "internal.sync-email-domains",
+          "place": {
+            "path": "packages/lib/jobs/definitions/internal/sync-email-domains.ts",
+            "line": 20,
+            "column": 3
+          }
+        }
+      }
+    ],
+    "event": []
   }
 }

@@ -191,16 +191,20 @@ export function checkGraph(graph: LabelGraph, label: CallsLabel): GraphCheck {
     place: place === null ? null : { path: place.path, line: place.line },
     sites: lines.map((line) => ({ path: sitesIn, line })),
   });
+  // Calls, and (phases 10 and 11, ADR 0031) what a call reaches outside the project's code: a table, an outside
+  // service or a hand-off, by its node's name, with the edge's kind as its relation. A decision's branches repeat them.
   const calls = graph.edges.filter(
-    (e) => (e.kind ?? 'call') === 'call' && byId.get(e.from)?.kind !== 'entry-point',
+    (e) => (e.kind ?? 'call') !== 'branch' && byId.get(e.from)?.kind !== 'entry-point',
   );
+  const relationOf = (e: (typeof calls)[number]) =>
+    (e.kind ?? 'call') === 'call' ? e.relation : (e.kind ?? null);
   const callees = calls
     .filter((e) => e.from === node.id)
     .map((e) => {
       const to = e.to === null ? undefined : byId.get(e.to);
       return entry(
         to?.name ?? e.target ?? '?',
-        e.relation,
+        relationOf(e),
         e.provenance,
         to?.place ?? null,
         label.path,
@@ -213,7 +217,7 @@ export function checkGraph(graph: LabelGraph, label: CallsLabel): GraphCheck {
       const from = byId.get(e.from);
       return entry(
         from?.name ?? '?',
-        e.relation,
+        relationOf(e),
         e.provenance,
         null,
         from?.place?.path ?? '?',

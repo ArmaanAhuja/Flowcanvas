@@ -34,9 +34,11 @@ import {
   DecisionCard,
   FlowEdge,
   StubCard,
+  LaneCard,
   type DecisionCanvasNode,
   type FlowCanvasEdge,
   type StubCanvasNode,
+  type LaneCanvasNode,
 } from './flow-parts';
 
 export interface FlowNodeData extends Record<string, unknown> {
@@ -51,7 +53,7 @@ export interface FlowNodeData extends Record<string, unknown> {
 
 /** A code unit (and the phase 2 examples); and, in a flow (phase 7), its decisions and open ends. */
 export type UnitCanvasNode = Node<FlowNodeData, 'flow'>;
-export type CanvasNode = UnitCanvasNode | DecisionCanvasNode | StubCanvasNode;
+export type CanvasNode = UnitCanvasNode | DecisionCanvasNode | StubCanvasNode | LaneCanvasNode;
 export type CanvasEdge = Edge | FlowCanvasEdge;
 
 /** Our FlowNode as React Flow's node type; the handles only anchor edges (nodes aren't connected by hand). */
@@ -84,7 +86,7 @@ const FlowNodeCard = memo(function FlowNodeCard({
   );
 });
 
-const NODE_TYPES = { flow: FlowNodeCard, decision: DecisionCard, stub: StubCard };
+const NODE_TYPES = { flow: FlowNodeCard, decision: DecisionCard, stub: StubCard, lane: LaneCard };
 const EDGE_TYPES = { flow: FlowEdge };
 const px = (token: keyof typeof baseValues) => Number.parseFloat(baseValues[token]);
 const MINIMAP = { width: px('--size-minimap-width'), height: px('--size-minimap-height') };

@@ -12,12 +12,23 @@ import {
   type NodeProps,
 } from '@xyflow/react';
 import { memo } from 'react';
-import type { DecisionData, FlowEdgeData, StubData } from '../flow/layout';
+import { Clock } from 'lucide-react';
+import type { DecisionData, FlowEdgeData, LaneData, StubData } from '../flow/layout';
 import { CORNER, pointAlong, routePath } from '../flow/route';
 import styles from './FlowCanvas.module.css';
 
 export type DecisionCanvasNode = Node<DecisionData, 'decision'>;
 export type StubCanvasNode = Node<StubData, 'stub'>;
+export type LaneCanvasNode = Node<LaneData, 'lane'>;
+
+/** The background lane (phase 11): a labelled frame behind what handed-off work runs. */
+export const LaneCard = memo(function LaneCard({ data }: NodeProps<LaneCanvasNode>) {
+  return (
+    <div className={styles.lane} role="group" aria-label={`${data.label} lane`}>
+      <span className={styles.laneLabel}>{data.label}</span>
+    </div>
+  );
+});
 export type FlowCanvasEdge = Edge<FlowEdgeData, 'flow'>;
 
 const Anchors = ({ target = true, source = true }: { target?: boolean; source?: boolean }) => (
@@ -105,6 +116,21 @@ export const FlowEdge = memo(function FlowEdge({
         data-selected={selected === true || undefined}
         {...(data?.stub === true ? {} : { markerEnd })}
       />
+      {data !== undefined &&
+        (data.badge !== undefined || data.handoff === true) &&
+        data.label === null && (
+          <EdgeLabelRenderer>
+            <span
+              className={`${styles.edgeBadge ?? ''} nodrag nopan`}
+              style={{
+                transform: `translate(-50%, -50%) translate(${String(labelX)}px, ${String(labelY)}px)`,
+              }}
+            >
+              {data.handoff === true && <Clock size={12} aria-label="Handed off" role="img" />}
+              {data.badge}
+            </span>
+          </EdgeLabelRenderer>
+        )}
       {data?.label != null && (
         <EdgeLabelRenderer>
           <span

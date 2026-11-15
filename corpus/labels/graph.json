@@ -121,14 +121,15 @@
           "lines": [62]
         },
         {
-          "name": "transporter.sendMail",
-          "relation": "calls",
-          "provenance": "unresolved",
+          "name": "Email · nodemailer",
+          "relation": "boundary",
+          "provenance": "convention",
           "builtIn": false,
           "place": null,
           "lines": [63]
         }
-      ]
+      ],
+      "why": "Phase 10 (ADR 0031): transporter comes from nodemailer's createTransport, so transporter.sendMail (line 63) is an email boundary, a boundary edge of convention provenance (was an unknown call)."
     }
   ],
   "twenty": [

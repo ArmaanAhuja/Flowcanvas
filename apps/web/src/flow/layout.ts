@@ -43,6 +43,17 @@ export interface FlowEdgeData extends Record<string, unknown> {
   readonly stub: boolean;
   /** ELK's route around the nodes, start to end; drawn as it is (route.ts). Absent before layout. */
   readonly route?: readonly Point[];
+  /**
+   * On a convention edge, the rule's framework or library, in words (Graphite: "Framework glyph (e.g. Prisma)"; the
+   * design brief: "small framework badge").
+   */
+  readonly badge?: string;
+  /** Work handed off (phase 11): the design brief's async hand-off arrow, with a clock. */
+  readonly handoff?: boolean;
+}
+export interface LaneData extends Record<string, unknown> {
+  /** "Background": where handed-off work runs (build plan phase 11). */
+  readonly label: string;
 }
 
 export type LaidOutNode =
@@ -69,6 +80,20 @@ export type LaidOutNode =
       /** Its size as ELK placed it (as it renders, at most). */
       readonly size: Size;
       readonly data: StubData;
+    }
+  | {
+      readonly id: string;
+      readonly type: 'lane';
+      readonly position: Point;
+      readonly size: Size;
+      /** React Flow's own size for it, and behind everything: a frame, never selected, moved or focused. */
+      readonly width: number;
+      readonly height: number;
+      readonly zIndex: number;
+      readonly selectable: false;
+      readonly draggable: false;
+      readonly focusable: false;
+      readonly data: LaneData;
     };
 export interface LaidOutEdge {
   readonly id: string;
@@ -116,65 +141,233 @@ export const shortPlace = (path: string, line: number) =>
 const unitKind = (unit: Flow['nodes'][number]['unit']): FlowNodeKind =>
   unit === 'component' ? 'ui' : unit === 'module' ? 'file' : 'function';
 
+const LIBRARIES: Readonly<Record<string, string>> = {
+  prisma: 'Prisma',
+  kysely: 'Kysely',
+  sql: 'SQL',
+  mongoose: 'Mongoose',
+  typeorm: 'TypeORM',
+};
+
+/**
+ * A node as its card shows it: Graphite's kind (its icon), and the line under its name: where a code unit is, or what
+ * a table, a service or a hand-off is (phases 9 to 11). What isn't fully detected says so; the inspector says why.
+ */
+export function cardOf(node: Flow['nodes'][number]): { kind: FlowNodeKind; location: string } {
+  const place = node.place === null ? '' : shortPlace(node.place.path, node.place.line);
+  const partly = (complete: boolean) => (complete ? '' : ' · not fully detected');
+  if (node.data !== undefined) {
+    return {
+      kind: 'data',
+      location: `${node.data.operation} · ${LIBRARIES[node.data.library] ?? node.data.library}${partly(node.data.complete)}`,
+    };
+  }
+  if (node.service !== undefined) {
+    return {
+      kind: node.service.kind === 'ai' ? 'ai' : 'external',
+      location: `${node.service.url ?? node.service.library}${partly(node.service.complete)}`,
+    };
+  }
+  if (node.handoff !== undefined) {
+    return {
+      kind: 'queue',
+      location: `${node.handoff.kind} · ${node.handoff.library}${partly(node.handoff.complete)}`,
+    };
+  }
+  if (node.entry !== undefined) {
+    return {
+      kind:
+        node.entry.kind === 'api-route'
+          ? 'route'
+          : node.entry.kind === 'cli-command'
+            ? 'function'
+            : node.entry.kind === 'job' || node.entry.kind === 'cron' || node.entry.kind === 'event'
+              ? 'queue'
+              : 'ui',
+      location: place,
+    };
+  }
+  return { kind: unitKind(node.unit), location: place };
+}
+
 const stubText = (variant: StubData['variant'], count: number) =>
   variant === 'unknown'
     ? `${String(count)} unknown calls`
     : `${String(count)} more calls not shown`;
 
+/** The background lane's frame: padding around its nodes, room for its label, and the gap above it. */
+export const LANE = { padding: 24, header: 28, gap: 48 } as const;
+
+const FRAMEWORKS: Readonly<Record<string, string>> = {
+  trpc: 'tRPC',
+  next: 'Next.js',
+  express: 'Express',
+  hono: 'Hono',
+  graphql: 'GraphQL',
+  nestjs: 'NestJS',
+  react: 'React',
+  'react-router': 'React Router',
+  'package-json': 'package.json',
+};
+
+/** A convention edge's badge: the framework or library whose rule matched it, from what it reaches or comes from. */
+function badgeOf(flow: Flow, edge: Flow['edges'][number]): string | undefined {
+  if (edge.provenance !== 'convention') return undefined;
+  const to = flow.nodes.find((n) => n.id === edge.to);
+  const from = flow.nodes.find((n) => n.id === edge.from);
+  if (to?.data !== undefined) return LIBRARIES[to.data.library] ?? to.data.library;
+  if (to?.service !== undefined) return to.service.library;
+  if (to?.handoff !== undefined) return to.handoff.library;
+  if (from?.handoff !== undefined) return from.handoff.library;
+  const entry = to?.entry ?? from?.entry;
+  return entry === undefined ? undefined : (FRAMEWORKS[entry.framework] ?? entry.framework);
+}
+
+/**
+ * What runs in the background (phase 11): what a hand-off leads to that the flow doesn't reach any other way. The
+ * hand-off itself stays where the work is handed off.
+ */
+export function backgroundOf(flow: Flow): Set<string> {
+  const out = new Map<string, string[]>();
+  const handoffs = new Set(flow.nodes.filter((n) => n.kind === 'async-handoff').map((n) => n.id));
+  for (const edge of flow.edges) out.set(edge.from, [...(out.get(edge.from) ?? []), edge.to]);
+  const reach = (starts: readonly string[], through: (id: string) => boolean) => {
+    const seen = new Set<string>(starts);
+    const queue = [...starts];
+    for (const id of queue) {
+      if (!through(id)) continue;
+      for (const next of out.get(id) ?? []) {
+        if (!seen.has(next)) {
+          seen.add(next);
+          queue.push(next);
+        }
+      }
+    }
+    return seen;
+  };
+  // Reached without passing through a hand-off: the main lane.
+  const main = reach([flow.root], (id) => !handoffs.has(id));
+  const handed = [...handoffs].flatMap((id) => out.get(id) ?? []).filter((id) => !main.has(id));
+  return new Set([...reach(handed, () => true)].filter((id) => !main.has(id)));
+}
+
+interface Part {
+  readonly children: ElkNode[];
+  readonly nodes: Omit<LaidOutNode, 'position' | 'size'>[];
+  readonly edges: LaidOutEdge[];
+}
+
+async function layoutPart(part: Part, elk: ElkLike, dy: number) {
+  const laid = await elk.layout({
+    id: 'flow',
+    layoutOptions: ELK_OPTIONS,
+    children: part.children,
+    edges: part.edges.map((edge) => ({
+      id: edge.id,
+      sources: [edge.source],
+      targets: [edge.target],
+    })),
+  });
+  const placed = new Map((laid.children ?? []).map((child) => [child.id, child]));
+  // Each edge's route, in the same coordinates as the nodes (the flow's own: no offset).
+  const routes = new Map(
+    (laid.edges ?? []).map((edge) => {
+      const section = edge.sections?.[0];
+      return [
+        edge.id,
+        section === undefined
+          ? undefined
+          : [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map((p) => ({
+              x: p.x,
+              y: p.y + dy,
+            })),
+      ] as const;
+    }),
+  );
+  return {
+    nodes: part.nodes.map((node) => {
+      const at = placed.get(node.id);
+      return {
+        ...node,
+        position: { x: at?.x ?? 0, y: (at?.y ?? 0) + dy },
+        size: { width: at?.width ?? 0, height: at?.height ?? 0 },
+      } as LaidOutNode;
+    }),
+    edges: part.edges.map((edge) => {
+      const route = routes.get(edge.id);
+      return route === undefined ? edge : { ...edge, data: { ...edge.data, route } };
+    }),
+    height: laid.height ?? 0,
+    width: laid.width ?? 0,
+  };
+}
+
 export async function layoutFlow(
   flow: Flow,
   elk: ElkLike,
 ): Promise<{ readonly nodes: LaidOutNode[]; readonly edges: LaidOutEdge[] }> {
-  const children: ElkNode[] = [];
-  const nodes: Omit<LaidOutNode, 'position' | 'size'>[] = [];
+  const background = backgroundOf(flow);
+  const main: Part = { children: [], nodes: [], edges: [] };
+  const back: Part = { children: [], nodes: [], edges: [] };
+  const partOf = (id: string) => (background.has(id) ? back : main);
   for (const node of flow.nodes) {
+    const part = partOf(node.id);
     if (node.kind === 'decision') {
       const textWidth = node.name.length * SIZES.char;
       const width = Math.min(SIZES.node.width, SIZES.decisionChrome.width + textWidth);
       const lines = textWidth > SIZES.node.width - SIZES.decisionChrome.width ? 2 : 1;
-      children.push({
+      part.children.push({
         id: node.id,
         width,
         height: SIZES.decisionChrome.height + lines * SIZES.decisionLine,
       });
-      nodes.push({
+      part.nodes.push({
         id: node.id,
         type: 'decision',
         data: { condition: node.name, id: node.id, place: node.place },
       });
     } else {
-      const location = node.place === null ? '' : shortPlace(node.place.path, node.place.line);
+      const { kind, location } = cardOf(node);
       // Its height as it renders, wrapped (a long name takes two lines): ELK routes edges around what it's told.
-      children.push({
+      part.children.push({
         id: node.id,
         width: SIZES.node.width,
         height: nodeHeight(node.name, location),
       });
-      nodes.push({
+      part.nodes.push({
         id: node.id,
         type: 'flow',
         data: {
           title: node.name,
           location,
-          kind: unitKind(node.unit),
+          kind,
           place: node.place,
           id: node.id,
         },
       });
     }
   }
-  const edges: LaidOutEdge[] = flow.edges.map((edge, index) => ({
-    id: `e${String(index)}`,
-    source: edge.from,
-    target: edge.to,
-    type: 'flow',
-    data: {
-      provenance: edge.provenance,
-      label: edge.label,
-      failure: edge.label === 'error',
-      stub: false,
-    },
-  }));
+  // Edges within a lane are laid out with it; those crossing into the background (hand-offs) are drawn between them.
+  const crossing: LaidOutEdge[] = [];
+  flow.edges.forEach((edge, index) => {
+    const badge = badgeOf(flow, edge);
+    const laid: LaidOutEdge = {
+      id: `e${String(index)}`,
+      source: edge.from,
+      target: edge.to,
+      type: 'flow',
+      data: {
+        provenance: edge.provenance,
+        label: edge.label,
+        failure: edge.label === 'error',
+        stub: false,
+        ...(badge === undefined ? {} : { badge }),
+        ...(edge.kind === 'handoff' ? { handoff: true } : {}),
+      },
+    };
+    if (partOf(edge.from) === partOf(edge.to)) partOf(edge.from).edges.push(laid);
+    else crossing.push(laid);
+  });
   // The open ends, each hanging off its node.
   const stubs = [
     ...flow.unknown.map((group) => ({
@@ -186,13 +379,14 @@ export async function layoutFlow(
   ];
   for (const stub of stubs) {
     const id = `${stub.from}::${stub.variant}`;
-    children.push({
+    const part = partOf(stub.from);
+    part.children.push({
       id,
       width: SIZES.stub.chrome + stubText(stub.variant, stub.count).length * SIZES.char,
       height: SIZES.stub.height,
     });
-    nodes.push({ id, type: 'stub', data: stub });
-    edges.push({
+    part.nodes.push({ id, type: 'stub', data: stub });
+    part.edges.push({
       id: `${id}:edge`,
       source: stub.from,
       target: id,
@@ -205,37 +399,30 @@ export async function layoutFlow(
       },
     });
   }
-  const laid = await elk.layout({
-    id: 'flow',
-    layoutOptions: ELK_OPTIONS,
-    children,
-    edges: edges.map((edge) => ({ id: edge.id, sources: [edge.source], targets: [edge.target] })),
-  });
-  const placed = new Map((laid.children ?? []).map((child) => [child.id, child]));
-  // Each edge's route, in the same coordinates as the nodes (the flow's own: no offset).
-  const routes = new Map(
-    (laid.edges ?? []).map((edge) => {
-      const section = edge.sections?.[0];
-      return [
-        edge.id,
-        section === undefined
-          ? undefined
-          : [section.startPoint, ...(section.bendPoints ?? []), section.endPoint],
-      ] as const;
-    }),
-  );
+  const top = await layoutPart(main, elk, 0);
+  if (back.nodes.length === 0) return { nodes: top.nodes, edges: [...top.edges, ...crossing] };
+  // The background lane below the main flow, framed and labelled.
+  const laneTop = top.height + LANE.gap;
+  const below = await layoutPart(back, elk, laneTop + LANE.header + LANE.padding);
+  const size = {
+    width: below.width + 2 * LANE.padding,
+    height: below.height + LANE.header + 2 * LANE.padding,
+  };
+  const lane: LaidOutNode = {
+    id: 'lane:background',
+    type: 'lane',
+    position: { x: -LANE.padding, y: laneTop },
+    size,
+    width: size.width,
+    height: size.height,
+    zIndex: -1,
+    selectable: false,
+    draggable: false,
+    focusable: false,
+    data: { label: 'Background' },
+  };
   return {
-    nodes: nodes.map((node) => {
-      const at = placed.get(node.id);
-      return {
-        ...node,
-        position: { x: at?.x ?? 0, y: at?.y ?? 0 },
-        size: { width: at?.width ?? 0, height: at?.height ?? 0 },
-      } as LaidOutNode;
-    }),
-    edges: edges.map((edge) => {
-      const route = routes.get(edge.id);
-      return route === undefined ? edge : { ...edge, data: { ...edge.data, route } };
-    }),
+    nodes: [lane, ...top.nodes, ...below.nodes],
+    edges: [...top.edges, ...below.edges, ...crossing],
   };
 }
