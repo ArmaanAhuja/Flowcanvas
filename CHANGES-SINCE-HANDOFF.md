@@ -162,7 +162,7 @@ Step 9.2 in `docs/build-steps.md` records it all.
    - Recorded `3ba2a71` in `docs/build-steps.md`.
 
 3. **Visual Baselines & Medusa Limit (`b570009`)**:
-   - Re-generated GraphStats visual screenshot baselines across both themes with Playwright in Docker (`test:visual -u`), capturing the updated state without "arrives in phase 10/11".
+   - Re-generated GraphStats visual screenshot baselines across both themes with Playwright in Docker (`test:visual -u`), capturing the updated state without earlier arrival notes.
    - Increased Medusa CI graph build threshold in `corpus.docker.test.ts` from 145s to 180s to absorb runner CPU jitter.
    - Recorded `b570009` in `docs/build-steps.md`.
 
