@@ -3709,6 +3709,382 @@
         "suggested": 0,
         "unknown": 38
       }
+    },
+    "packages/lib/jobs/definitions/emails/send-admin-user-created-email.handler.ts#run": {
+      "root": "packages/lib/jobs/definitions/emails/send-admin-user-created-email.handler.ts#run",
+      "nodes": [
+        {
+          "id": "packages/lib/jobs/definitions/emails/send-admin-user-created-email.handler.ts#run",
+          "kind": "code-unit",
+          "name": "run",
+          "place": {
+            "path": "packages/lib/jobs/definitions/emails/send-admin-user-created-email.handler.ts",
+            "line": 23,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "(data prisma User read)",
+          "kind": "data-access",
+          "name": "User",
+          "place": null,
+          "unit": null,
+          "change": "unchanged",
+          "data": {
+            "library": "prisma",
+            "table": "User",
+            "operation": "read",
+            "complete": true,
+            "why": null
+          }
+        },
+        {
+          "id": "packages/lib/jobs/client/_internal/job.ts#JobRunIO.runTask",
+          "kind": "code-unit",
+          "name": "runTask",
+          "place": { "path": "packages/lib/jobs/client/_internal/job.ts", "line": 50, "column": 3 },
+          "unit": "method",
+          "change": "unchanged"
+        },
+        {
+          "id": "(data prisma PasswordResetToken write)",
+          "kind": "data-access",
+          "name": "PasswordResetToken",
+          "place": null,
+          "unit": null,
+          "change": "unchanged",
+          "data": {
+            "library": "prisma",
+            "table": "PasswordResetToken",
+            "operation": "write",
+            "complete": true,
+            "why": null
+          }
+        },
+        {
+          "id": "packages/lib/constants/app.ts#NEXT_PUBLIC_WEBAPP_URL",
+          "kind": "code-unit",
+          "name": "NEXT_PUBLIC_WEBAPP_URL",
+          "place": { "path": "packages/lib/constants/app.ts", "line": 7, "column": 14 },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/lib/utils/render-email-with-i18n.tsx#renderEmailWithI18N",
+          "kind": "code-unit",
+          "name": "renderEmailWithI18N",
+          "place": {
+            "path": "packages/lib/utils/render-email-with-i18n.tsx",
+            "line": 7,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/lib/client-only/providers/i18n-server.tsx#getI18nInstance",
+          "kind": "code-unit",
+          "name": "getI18nInstance",
+          "place": {
+            "path": "packages/lib/client-only/providers/i18n-server.tsx",
+            "line": 56,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "(service email nodemailer)",
+          "kind": "external-boundary",
+          "name": "Email · nodemailer",
+          "place": null,
+          "unit": null,
+          "change": "unchanged",
+          "service": {
+            "kind": "email",
+            "library": "nodemailer",
+            "url": null,
+            "complete": true,
+            "why": null
+          }
+        },
+        {
+          "id": "packages/lib/utils/env.ts#env",
+          "kind": "code-unit",
+          "name": "env",
+          "place": { "path": "packages/lib/utils/env.ts", "line": 15, "column": 14 },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/lib/constants/i18n.ts#isValidLanguageCode",
+          "kind": "code-unit",
+          "name": "isValidLanguageCode",
+          "place": { "path": "packages/lib/constants/i18n.ts", "line": 72, "column": 14 },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/email/render.tsx#renderWithI18N",
+          "kind": "code-unit",
+          "name": "renderWithI18N",
+          "place": { "path": "packages/email/render.tsx", "line": 83, "column": 14 },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/email/render.tsx#buildEmailColors",
+          "kind": "code-unit",
+          "name": "buildEmailColors",
+          "place": { "path": "packages/email/render.tsx", "line": 39, "column": 7 },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/email/providers/branding.tsx#BrandingProvider",
+          "kind": "code-unit",
+          "name": "BrandingProvider",
+          "place": { "path": "packages/email/providers/branding.tsx", "line": 23, "column": 14 },
+          "unit": "component",
+          "change": "unchanged"
+        }
+      ],
+      "edges": [
+        {
+          "from": "packages/lib/jobs/definitions/emails/send-admin-user-created-email.handler.ts#run",
+          "to": "(data prisma User read)",
+          "kind": "data",
+          "relation": null,
+          "label": null,
+          "provenance": "convention",
+          "lines": [24],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/jobs/definitions/emails/send-admin-user-created-email.handler.ts#run",
+          "to": "packages/lib/jobs/client/_internal/job.ts#JobRunIO.runTask",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [30],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/jobs/definitions/emails/send-admin-user-created-email.handler.ts#run",
+          "to": "(data prisma PasswordResetToken write)",
+          "kind": "data",
+          "relation": null,
+          "label": null,
+          "provenance": "convention",
+          "lines": [31],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/jobs/definitions/emails/send-admin-user-created-email.handler.ts#run",
+          "to": "packages/lib/constants/app.ts#NEXT_PUBLIC_WEBAPP_URL",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [42],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/jobs/definitions/emails/send-admin-user-created-email.handler.ts#run",
+          "to": "packages/lib/utils/render-email-with-i18n.tsx#renderEmailWithI18N",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [51, 52],
+          "sites": 2
+        },
+        {
+          "from": "packages/lib/jobs/definitions/emails/send-admin-user-created-email.handler.ts#run",
+          "to": "packages/lib/client-only/providers/i18n-server.tsx#getI18nInstance",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [55],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/jobs/definitions/emails/send-admin-user-created-email.handler.ts#run",
+          "to": "(service email nodemailer)",
+          "kind": "boundary",
+          "relation": null,
+          "label": null,
+          "provenance": "convention",
+          "lines": [57],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/constants/app.ts#NEXT_PUBLIC_WEBAPP_URL",
+          "to": "packages/lib/utils/env.ts#env",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [7],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/utils/render-email-with-i18n.tsx#renderEmailWithI18N",
+          "to": "packages/lib/constants/i18n.ts#isValidLanguageCode",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [17],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/utils/render-email-with-i18n.tsx#renderEmailWithI18N",
+          "to": "packages/lib/client-only/providers/i18n-server.tsx#getI18nInstance",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [19],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/utils/render-email-with-i18n.tsx#renderEmailWithI18N",
+          "to": "packages/email/render.tsx#renderWithI18N",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [23],
+          "sites": 1
+        },
+        {
+          "from": "packages/lib/client-only/providers/i18n-server.tsx#getI18nInstance",
+          "to": "packages/lib/constants/i18n.ts#isValidLanguageCode",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [59],
+          "sites": 1
+        },
+        {
+          "from": "packages/email/render.tsx#renderWithI18N",
+          "to": "packages/email/render.tsx#buildEmailColors",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [90],
+          "sites": 1
+        },
+        {
+          "from": "packages/email/render.tsx#renderWithI18N",
+          "to": "packages/email/providers/branding.tsx#BrandingProvider",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [94],
+          "sites": 1
+        }
+      ],
+      "unknown": [
+        {
+          "from": "packages/lib/jobs/definitions/emails/send-admin-user-created-email.handler.ts#run",
+          "total": 4,
+          "calls": [
+            {
+              "target": "crypto.randomBytes(…).toString",
+              "relation": "calls",
+              "label": null,
+              "lines": [33],
+              "sites": 1
+            },
+            {
+              "target": "crypto.randomBytes",
+              "relation": "calls",
+              "label": null,
+              "lines": [33],
+              "sites": 1
+            },
+            {
+              "target": "createElement",
+              "relation": "calls",
+              "label": null,
+              "lines": [45],
+              "sites": 1
+            },
+            { "target": "i18n._", "relation": "calls", "label": null, "lines": [63], "sites": 1 }
+          ]
+        },
+        {
+          "from": "packages/lib/utils/render-email-with-i18n.tsx#renderEmailWithI18N",
+          "total": 1,
+          "calls": [
+            {
+              "target": "i18n.activate",
+              "relation": "calls",
+              "label": null,
+              "lines": [21],
+              "sites": 1
+            }
+          ]
+        },
+        {
+          "from": "packages/email/render.tsx#renderWithI18N",
+          "total": 3,
+          "calls": [
+            {
+              "target": "ReactEmail.render",
+              "relation": "calls",
+              "label": null,
+              "lines": [92],
+              "sites": 1
+            },
+            {
+              "target": "I18nProvider",
+              "relation": "renders",
+              "label": null,
+              "lines": [93],
+              "sites": 1
+            },
+            {
+              "target": "Tailwind",
+              "relation": "renders",
+              "label": null,
+              "lines": [95],
+              "sites": 1
+            }
+          ]
+        },
+        {
+          "from": "packages/email/providers/branding.tsx#BrandingProvider",
+          "total": 1,
+          "calls": [
+            {
+              "target": "BrandingContext.Provider",
+              "relation": "renders",
+              "label": null,
+              "lines": [25],
+              "sites": 1
+            }
+          ]
+        }
+      ],
+      "cut": [],
+      "hidden": 0,
+      "byProvenance": {
+        "observed": 0,
+        "resolved": 11,
+        "convention": 3,
+        "suggested": 0,
+        "unknown": 9
+      }
     }
   }
 }

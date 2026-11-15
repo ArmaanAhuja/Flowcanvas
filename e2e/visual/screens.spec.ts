@@ -49,14 +49,15 @@ interface ApiOptions {
 const CONNECTION_FLOWS = {
   'documenso-email': {
     fixture: '../try-it/fixtures/phase-10-documenso.json',
-    root: 'packages/lib/jobs/definitions/emails/send-signing-email.handler.ts#run',
+    // The admin's new-user email (13 nodes, readable when fitted): a read, a write, and the email.
+    root: 'packages/lib/jobs/definitions/emails/send-admin-user-created-email.handler.ts#run',
     symbol: {
       name: 'run',
       kind: 'function',
       container: null,
       exported: true,
-      path: 'packages/lib/jobs/definitions/emails/send-signing-email.handler.ts',
-      line: 31,
+      path: 'packages/lib/jobs/definitions/emails/send-admin-user-created-email.handler.ts',
+      line: 23,
       column: 14,
     },
   },
@@ -551,7 +552,7 @@ const SCREENS: readonly Screen[] = [
     api: { running: true, documenso: true },
     arrange: showDeleteFolder,
   },
-  // Phases 9 to 11: Documenso's signing email runner, its tables and its email; Twenty's email queue's hand-off and
+  // Phases 9 to 11: Documenso's new-user email runner, its tables and its email; Twenty's email queue's hand-off and
   // its worker in the Background lane. Each with a node in the inspector.
   {
     name: 'project-flow-data-and-email',
@@ -565,6 +566,8 @@ const SCREENS: readonly Screen[] = [
       await expect(page.getByRole('region', { name: 'Email · nodemailer' })).toContainText(
         'External service',
       );
+      // The pointer off the canvas, so no node is hovered in the picture.
+      await page.mouse.move(1200, 700);
     },
   },
   {
@@ -579,6 +582,8 @@ const SCREENS: readonly Screen[] = [
       await expect(
         page.getByRole('region', { name: 'email-queue · EmailSenderJob' }),
       ).toContainText('Async hand-off');
+      // The pointer off the canvas, so no node is hovered in the picture.
+      await page.mouse.move(1200, 700);
     },
   },
   {
