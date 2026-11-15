@@ -221,8 +221,8 @@ describe('entry points on the page', () => {
     const names = screen
       .getAllByRole('row')
       .map((r) => r.getAttribute('aria-label') ?? r.textContent);
-    expect(names.findIndex((n) => n?.startsWith('cron-queue') === true)).toBeLessThan(
-      names.findIndex((n) => n?.startsWith('email-queue') === true),
+    expect(names.findIndex((n) => n.startsWith('cron-queue'))).toBeLessThan(
+      names.findIndex((n) => n.startsWith('email-queue')),
     );
     expect(row('workspace.created')).toBeTruthy();
     expect(screen.queryByText('Arrives in phase 11.')).toBeNull();
