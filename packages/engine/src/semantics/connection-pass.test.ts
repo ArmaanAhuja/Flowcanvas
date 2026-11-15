@@ -12,6 +12,7 @@ import {
   listEntryPoints,
   validateGraph,
   type GraphNode,
+  type HandoffKind,
 } from '@flowcanvas/graph-model';
 import { SemanticService } from './semantic-service.js';
 
@@ -234,7 +235,6 @@ describe('bundled output', () => {
 describe('what takes handed-off work, as entry points', () => {
   it('is a job, cron when the code schedules it, or an event; each receiver one; none without its handler', async () => {
     const { joinConnections } = await import('./connection-pass.js');
-    const { HANDOFF_KINDS } = await import('@flowcanvas/graph-model');
     const unit = (id: string, line: number): GraphNode => ({
       id,
       kind: 'code-unit',
@@ -243,7 +243,7 @@ describe('what takes handed-off work, as entry points', () => {
       unit: 'method',
       change: 'unchanged',
     });
-    const handoff = (key: string, kind: (typeof HANDOFF_KINDS)[number]): GraphNode => ({
+    const handoff = (key: string, kind: HandoffKind): GraphNode => ({
       id: `(handoff ${key})`,
       kind: 'async-handoff',
       name: key,
