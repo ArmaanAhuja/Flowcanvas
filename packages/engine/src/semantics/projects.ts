@@ -90,7 +90,14 @@ export function packagePaths(
     if (has === undefined || file.includes('*') || has(posix.normalize(file)) || !BUILT.test(file))
       return file;
     const stem = file.replace(BUILT, 'src/').replace(BUILT_EXTENSION, '');
-    return ['.ts', '.tsx'].map((ext) => stem + ext).find((candidate) => has(candidate)) ?? file;
+    // Declarations built into their own folder mirroring src (`dist/types/index.d.ts` from `src/index.ts`, LibreChat's
+    // data provider): the same place without it, too.
+    const stems = [stem, stem.replace(/^src\/types\//, 'src/')];
+    return (
+      stems
+        .flatMap((s) => ['.ts', '.tsx'].map((ext) => s + ext))
+        .find((candidate) => has(candidate)) ?? file
+    );
   };
   if (subpaths.length > 0) {
     for (const [key, value] of subpaths) {

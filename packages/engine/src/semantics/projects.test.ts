@@ -26,6 +26,13 @@ describe('packagePaths', () => {
     });
   });
 
+  it('follows declarations built into a folder of their own to the source they mirror', () => {
+    const exports = { exports: { '.': { types: './dist/types/index.d.ts' } } };
+    expect(
+      packagePaths('shared', folder, exports, (file) => file === 'src/index.ts').shared,
+    ).toEqual([join(folder, 'src/index.ts')]);
+  });
+
   it('keeps a built file the project has (committed declarations)', () => {
     const files = new Set(['dist/index.d.ts', 'src/index.ts']);
     expect(packagePaths('shared', folder, manifest, (file) => files.has(file)).shared).toEqual([
