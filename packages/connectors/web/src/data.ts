@@ -273,7 +273,17 @@ export function taggedDataOf(
     return null;
   }
   const origin = originOf(context, tag);
-  if (origin?.module === 'kysely' && origin.name === 'sql' && origin.steps.length === 0) {
+  // Kysely's sql is a query when it's executed (`sql\`…\`.execute(db)`); in a builder it's part of one.
+  const executed =
+    ts.isPropertyAccessExpression(tagged.parent) &&
+    tagged.parent.expression === tagged &&
+    tagged.parent.name.text === 'execute';
+  if (
+    origin?.module === 'kysely' &&
+    origin.name === 'sql' &&
+    origin.steps.length === 0 &&
+    executed
+  ) {
     return rawSql(context, tagged.template);
   }
   return null;

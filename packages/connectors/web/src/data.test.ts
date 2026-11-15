@@ -150,8 +150,9 @@ describe('dataOf', () => {
           "import { sql } from 'kysely';",
           "db.selectFrom('Envelope as e').where((eb) => eb.exists(eb.selectFrom('Recipient')));",
           "db.updateTable('Envelope').set({});",
-          'sql`DELETE FROM "Session" WHERE expires < now()`;',
-          'sql`SELECT pg_advisory_xact_lock(1)`;',
+          'await sql`DELETE FROM "Session" WHERE expires < now()`.execute(db);',
+          'await sql`SELECT pg_advisory_xact_lock(1)`.execute(db);',
+          "db.selectFrom('Poll').select(sql`count(id)`.as('n'));",
         ].join('\n'),
       },
       '/q.ts',
@@ -162,6 +163,7 @@ describe('dataOf', () => {
       ['kysely', 'Envelope', 'write'],
       ['sql', 'Session', 'write'],
       ['sql', null, 'read'],
+      ['kysely', 'Poll', 'read'],
     ]);
   });
 

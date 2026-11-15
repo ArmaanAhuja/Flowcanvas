@@ -4,7 +4,7 @@
 import type * as TS from 'typescript';
 import type { ServiceKind } from '@flowcanvas/graph-model';
 import { stringValue, type FileContext } from './ast.js';
-import { NEW, isCall, originOf, type Origin } from './origin.js';
+import { NEW, PARAM, isCall, originOf, type Origin } from './origin.js';
 
 export interface FoundService {
   readonly kind: ServiceKind;
@@ -82,9 +82,17 @@ export function serviceOf(context: FileContext, call: TS.CallExpression): FoundS
   return null;
 }
 
-/** An instance of the package's client (`new Stripe(…)`, `createTransport(…)`), or something reached from one. */
+/**
+ * The package's client (`new Stripe(…)`, `createTransport(…)`) or one of its resources (`stripe.customers`), reached
+ * without calling anything since: a method on a result (`(await stripe.prices.list()).data.map`, `promise.then`) isn't
+ * a call to the service.
+ */
 function isInstance(origin: Origin): boolean {
-  return origin.steps.some((step) => step === NEW || isCall(step));
+  const made = origin.steps.findIndex((step) => step === NEW || isCall(step));
+  if (made === -1) return false;
+  return origin.steps
+    .slice(made + 1)
+    .every((step) => step !== PARAM && !isCall(step) && step !== NEW);
 }
 
 /**

@@ -40,6 +40,9 @@ describe('serviceOf', () => {
           '  await s3.send(new PutObjectCommand({}));',
           '  await getSignedUrl(s3, new PutObjectCommand({}));',
           '  await openai.chat.completions.create({});',
+          '  const list = await stripe.prices.list();',
+          '  list.data.map((p) => p);',
+          '  await stripe.customers.create({}).then((c) => c.id);',
           '}',
         ].join('\n'),
       },
@@ -51,6 +54,9 @@ describe('serviceOf', () => {
       [12, 'storage', '@aws-sdk/client-s3'],
       [13, 'storage', '@aws-sdk/s3-request-presigner'],
       [14, 'ai', 'openai'],
+      // A result's .map and a promise's .then aren't calls to Stripe (lines 16 and 17's then).
+      [15, 'payments', 'stripe'],
+      [17, 'payments', 'stripe'],
     ]);
   });
 
