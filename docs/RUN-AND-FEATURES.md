@@ -2,10 +2,10 @@
 
 The one place to see how to run Flowcanvas, how to test it, and which features exist so far. It's updated at every build step. Details for each step live in `docs/build-steps.md`; phase status in `docs/STATUS.md`; how it's put together in `ARCHITECTURE.md`.
 
-- **Last updated:** 15 Nov 2026: phase 8 closed for review, 0.12.0 (entry points in the left panel and ⌘K, each opening its flow; held to 2,118 hand-labelled entry points), branch `phase/8-entry-points`, PR #22
-- **Reviewed:** phase 8, milestone C (15 Nov 2026): re-read in full against the code; phase 8's section and Coming next brought up to date. At every milestone this doc is re-read in full, and this line names the milestone (`pnpm docs:milestone` checks it).
+- **Last updated:** 15 Nov 2026: phases 9 to 11 closed for review, 0.13.0 (connectors across UI → API, database operations, external boundaries, and async hand-offs with a framed Background lane; held to 2,384 hand-labelled connector sites), branch `phase/9-connectors`, PR #23
+- **Reviewed:** phase 9, close (15 Nov 2026): re-read in full against the code; phase 9, 10, and 11 sections and Coming next brought up to date. At every milestone this doc is re-read in full, and this line names the milestone (`pnpm docs:milestone` checks it).
 - **Released (on staging):** `0.12.0`, phase 8, deployed to staging by CI when PR #22 merges (to be checked: staging's `/api/health` reporting 0.12.0). Before it, `0.11.0`, phase 7.
-- **Progress:** phases 1, 1a, 1b, 1c, 2, 3, 4, 5, 6, 7 and 8 are accepted; 1d is in review (until a cloud provider). That's 11 of the build plan's 96 phases accepted. Stage 1's goal: see a project's real flows, from code, honestly.
+- **Progress:** phases 1, 1a, 1b, 1c, 2, 3, 4, 5, 6, 7 and 8 are accepted; 1d, 9, 10 and 11 are in review. That's 11 of the build plan's 96 phases accepted. Stage 1's goal: see a project's real flows, from code, honestly.
 
 ## Where it runs
 
@@ -46,10 +46,10 @@ If the host can't start, its log line says why: the token, Docker, or another `p
 
 | Command | What it checks | Time |
 | --- | --- | --- |
-| `pnpm test` | <!-- count:unit -->1,258<!-- /count --> unit and component tests, with no Docker or network | about 30 s |
+| `pnpm test` | <!-- count:unit -->1,271<!-- /count --> unit and component tests, with no Docker or network | about 30 s |
 | `pnpm lint`, `pnpm typecheck`, `pnpm format:check` | Lint (with the design-token rules), strict TypeScript, formatting | — |
 | `pnpm test:docker` | <!-- count:docker -->49<!-- /count --> tests against real containers: isolation, the network allowlist, clone time, sleep and resume, the guard, no secret kept anywhere; (phase 3) the file list, a save refused after a terminal edit, the journal surviving a restart, a terminal edit reaching the page's events socket in about 160 ms; (phase 4) Rallly indexed in a real workspace with an edit searchable in about 300 ms, and the corpus: all six forks at their pins indexed in real workspaces, Rallly and Documenso held to under 30 s and 100 ms, 21 hand-labelled symbols checked; (phase 5) 20 labelled functions' callers and callees; (phase 6) four forks' graphs, saved and loaded under 1 s; (phase 7) each labelled function's flow and details, at its own node, each answered in under 1 s, 10 hand-labelled Documenso flows drawn exactly as labelled, and callers and callees again from the store, held to the same labels; (phase 8) each fork's entry points against 2,118 hand labels, held to the owner's bar. Needs Docker 28+ and the internet. On CI as four parallel jobs (Twenty, Medusa, LibreChat, the rest); `CORPUS_ONLY=documenso` runs one project | about 4 min (CI, in parallel) |
-| `pnpm test:e2e` | <!-- count:walkthroughs -->23<!-- /count --> recorded walkthroughs of each phase's *Try it*, under the production security policy (1 needs a real API: CI, or a running `pnpm dev`) | about 40 s |
+| `pnpm test:e2e` | <!-- count:walkthroughs -->26<!-- /count --> recorded walkthroughs of each phase's *Try it*, under the production security policy (1 needs a real API: CI, or a running `pnpm dev`) | about 40 s |
 | `pnpm test:perf` | The canvas with 500 nodes, panned and zoomed: frame times, long tasks, input to paint. Headless (as on CI) only catches large regressions; `PERF_REAL=1 pnpm test:perf` opens a real window on your GPU for about 30 s, which is what decides. Then (phase 4) symbol search on 100,000 names, run alone: p95 under 100 ms (13.6 ms); and (phase 7) a 60-node flow laid out by ELK, run alone: median under 1 s (56 ms) | about 50 s |
 | `pnpm test:visual` | <!-- count:screenshots -->194<!-- /count --> screenshots in both themes against approved baselines, plus accessibility checks (axe): every catalogue story, and the project page's screens (empty, 1280 × 800, 500 nodes, review open, full screen, workspace popover; the Code view, a conflict, quick-open; the index's progress, the command palette; the right-click menu, Callers, Callees; Graph stats; a flow on the canvas, and a function's details) | about 4 min |
 | `pnpm --filter @flowcanvas/control-plane test:idle-real` | The 10-minute idle sleep in real time, nothing faked | about 12 min |
@@ -178,6 +178,16 @@ CI runs the checks (with the bundle budget), Docker (four parallel jobs), visual
   - ✅ **Proof:** each labelled entry point handled by the project's code opens its flow at its handler, in real workspaces (`pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts`, rows `entryConvention`, `entryCode`, `entryFlows`); walkthrough `pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-8.spec.ts`; the project page's screens with entry points in both themes.
   - **Try it:** `pnpm dev`, open Rallly with its workspace running; once the graph is built, the left panel lists its entry points: open `/:locale/polls`, filter `private/polls`, Show flow on `POST /api/private/polls`; or ⌘K, `/api/private`.
 
+### Connectors across UI, data and async (phases 9 to 11, in review, 0.13.0)
+- **What it does:**
+  - 🟡 **UI → API links (phase 9):** a client-side call (`fetch`, `axios`, `tRPC`, React Server Actions, Apollo GraphQL) continues directly across network boundaries into its route handler on the canvas, showing the full cross-tier execution path.
+  - 🟡 **Data and external boundaries (phase 10):** database reads and writes with target tables or collections (Prisma, Kysely, raw SQL template strings, Mongoose, TypeORM); external service boundaries (email providers `nodemailer`, Resend, SendGrid, Postmark; payments Stripe; object storage S3; AI providers OpenAI, Anthropic; and fixed external URLs).
+  - 🟡 **Async hand-offs and Background lane (phase 11):** dispatches to message queues and job clients (BullMQ, Twenty message queue, Documenso job client, EventEmitter, WebSockets) transition to a dedicated visually framed **Background** lane beneath the main synchronous flow, containing background workers and queue handlers.
+  - 🟡 **Inspector details for connectors:** dedicated inspector views for Data access (operation, tables, query patterns), External services (service kind, targets), and Async hand-offs (queue name, handler worker).
+  - ✅ **Held to 2,384 hand-labelled connector sites** across all four test forks (`rallly`, `documenso`, `librechat`, `twenty`) with 100% precision, ≥ 95% recall per fork, and zero false finds.
+  - ✅ **Proof:** `pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts` (row `connectionLabels`); real-browser walkthroughs `phase-9.spec.ts`, `phase-10.spec.ts`, and `phase-11.spec.ts`.
+  - **Try it:** `pnpm dev`, open Rallly with its workspace running: `/:locale/polls/new`, Show flow, follow to `POST /api/private/polls`; open Documenso `sendDocument`, follow Prisma write and nodemailer external node; open Twenty `cleanWorkspace`, follow queue dispatch to framed Background lane.
+
 ### Coming next
-- **Phase 9, front-end calls linked to their handlers:** a screen's or element's call to an API route linked to that route's handler in the flow.
-- **After that:** stage 1 goes on with the links from the UI to the API (phase 9), data and external services (phase 10) and background work (phase 11); stage 2 adds live frames of the running app.
+- **Phase 12, Progressive disclosure:** collapsible groups, zoom-dependent detail, and navigation across large graphs.
+- **After that:** stage 1 concludes with grouped flows (phase 12) and sequence view (phase 13); stage 2 adds live frames of the running app.

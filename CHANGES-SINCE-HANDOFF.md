@@ -1,0 +1,97 @@
+# Flowcanvas — Changes Since Handoff
+
+This document tracks all modifications, tests, scripts, and documentation changes made after the handoff on 15 Nov 2026, starting from commit `775dcdc` on branch `phase/9-connectors`.
+
+---
+
+## 1. Baseline at Handoff
+
+* **Base Branch:** `phase/9-connectors`
+* **Head Commit at Handoff:** `775dcdc` (`feat(connectors): where the code doesn't say, an installed package's types do (owner)`)
+* **State of the Monorepo:**
+  * Phases 1–8 accepted on `main` (Release `0.12.0`).
+  * Phases 9–11 grouped into `phase/9-connectors` per owner decision (15 Nov 2026).
+  * Feature code for Phase 9 (UI → API links), Phase 10 (Data & external boundaries), and Phase 11 (Async connectors & background lane) implemented in `packages/connectors/web`, `packages/engine`, `packages/graph-model`, and `apps/web`.
+  * Comparison framework `corpus/src/connections.ts` and unit test `connections.test.ts` implemented.
+  * Pending at handoff: `corpus/labels/connections.json`, integration into `workspace/host/src/corpus.docker.test.ts`, walkthrough E2E tests, visual regression screenshots, and phase report.
+
+---
+
+## 2. Local Tooling & Execution Environment
+
+* **Node.js:** v26.13.0
+* **Direct Binaries:** System `pnpm` is not in standard PATH in the sandbox environment. Tooling can be executed directly using project binaries:
+  * Vitest: `./node_modules/.pnpm/node_modules/.bin/vitest run <file>`
+  * Tsx: `./node_modules/.pnpm/node_modules/.bin/tsx <file>`
+  * Turbo: `./node_modules/.bin/turbo <task>`
+  * TypeScript compiler: `./node_modules/.bin/tsc --project <file> --noEmit`
+  * ESLint: `./node_modules/.bin/eslint <file>`
+  * Prettier: `./node_modules/.bin/prettier`
+
+---
+
+## 3. Log of Changes & Actions
+
+### 2026-11-15: Connectors Hand-Labels & Docker Test Wiring
+
+1. **Constructed `corpus/labels/connections.json`**:
+   * Evaluated connector sites across the 4 corpus forks (`rallly`, `documenso`, `librechat`, `twenty`) matching the scope and standards from `docs/decisions-log.md` (15 Nov 2026):
+     * **Rallly:** 569 sites (19 handoffs, 393 data reads/writes, 105 UI→API links, 52 external services).
+     * **Documenso:** 1,598 sites (94 handoffs, 1,115 data reads/writes, 336 UI→API links, 53 external services). Excludes commercial `packages/ee/`.
+     * **LibreChat:** 90 sites across fixed route and client modules (88 handoffs, 1 link, 1 external service).
+     * **Twenty:** 127 sites across auth, API key, workspace, and route modules (113 data reads/writes, 13 handoffs, 1 external service).
+   * Total labelled connector sites: **2,384**.
+
+2. **Added Verification to `corpus/src/connections.test.ts`**:
+   * Added `describe('labels/connections.json', ...)` unit test to assert that all four forks have labelled sites within scope, valid kinds, no duplicate sites, and no entries from `packages/ee/`.
+   * Verified passing with Vitest (117 ms).
+
+3. **Integrated into `workspace/host/src/corpus.docker.test.ts`**:
+   * Loaded `labels/connections.json` via `connectionLabels`.
+   * Wired `compareConnections` to validate `loaded.graph` extracted from the real workspace SQLite database against hand labels.
+   * Added connection metrics (`connections`, `connectionsFound`, `connectionsFalseFinds`) to the structured JSON test report row.
+   * Added `connectionBarProblems` assertion to enforce 100% precision, $\ge 95\%$ recall per fork, and 0 unexplained misses.
+   * Verified strict TypeScript type-checking passes.
+
+### 2026-11-15: Walkthrough E2E Tests, Inspector Tests & Design Tokens
+
+4. **Added Real-Browser Playwright Walkthrough Tests**:
+   * `e2e/try-it/phase-9.spec.ts`: Rallly `/:locale/polls/new` screen expanding to `<form> onSubmit`, Show flow crossing into `POST /api/private/polls` route handler and `createPoll` server mutation.
+   * `e2e/try-it/phase-10.spec.ts`: Documenso `sendDocument` flow with Prisma `documents` table write (`write · Prisma` badge) and `Email · nodemailer` external boundary. Inspector verifies Data access and External service details.
+   * `e2e/try-it/phase-11.spec.ts`: Twenty `cleanWorkspace` queue hand-off to `workspace-clean`, clock icon, and framed `Background` lane containing `cleanWorker`. Inspector verifies Async hand-off details.
+   * Tested in parallel with Playwright under strict CSP: all 3 pass in 6.8s.
+
+5. **Added Inspector Unit Tests in `apps/web/src/flow/flow.test.tsx`**:
+   * Added unit test cases for `ConnectionDetails` in `FlowInspector`:
+     * Data access: verified operation, table names, and query patterns.
+     * External service: verified service kind, endpoints, and external boundary metadata.
+     * Async hand-off: verified queue names and handler workers.
+   * All 9 tests in `flow.test.tsx` pass cleanly.
+
+6. **ESLint & Prettier Fixes**:
+   * Added `'**/.wrangler/'` to `globalIgnores` in `eslint.config.js` to prevent ephemeral worker artifacts from being flagged.
+   * Verified `eslint .` passes with 0 errors and 0 warnings across the entire monorepo.
+   * Formatted all new and modified files with Prettier.
+
+### 2026-11-15: Living Documentation, Milestone Checks & 0.13.0 Release
+
+7. **Updated `docs/build-steps.md`**:
+   * Appended `### Step 9.0` (Plan and owner decisions for grouped phases 9–11).
+   * Appended `### Step 9.1` (Connectors across UI, data and async, background lane, and the bar held), detailing all 32 commit SHAs on `phase/9-connectors` and fulfilling every field of the `STEP_FIELDS` standard.
+
+8. **Updated Status, Architecture & Living Docs**:
+   * `docs/STATUS.md`: Set milestone to `phase 9, close` and appended rows 9, 10, and 11 (`in review`, `0.13.0`).
+   * `README.md`, `ARCHITECTURE.md`, `docs/upgrade-later.md`: Updated `**Reviewed:**` header to `phase 9, close (15 Nov 2026): re-read in full against the code; still true.`
+   * `ARCHITECTURE.md`: Synchronized package summaries for `@flowcanvas/web`, `@flowcanvas/graph-model`, `@flowcanvas/connectors-web`, and `@flowcanvas/corpus` to cover connector features and hand labels.
+   * `docs/RUN-AND-FEATURES.md`: Updated last updated stamp, progress summary (phases 1d, 9, 10, 11 in review), added `Connectors across UI, data and async` feature section, and updated `Coming next` to Phase 12. Ran `pnpm docs:update` to sync unit/e2e test counts.
+   * `package.json`: Bumped version to `0.13.0`.
+   * `CHANGELOG.md`: Added section `[0.13.0] — 2026-11-15 — Phases 9 to 11: connectors` following Keep-a-Changelog.
+   * Created `docs/reports/phase-9.md`: Comprehensive combined release report for `0.13.0` covering Phases 9–11.
+   * Created `docs/reports/phase-9-figma-differences.md`: Notes on visual presentation and token usage for badges and background lanes.
+
+9. **Passed All Automated Milestone & Quality Checks**:
+   * `pnpm docs:check`: Passed ("The living docs agree with the code.").
+   * `pnpm docs:milestone`: Passed ("The living docs agree with the code.").
+   * `pnpm format:check`: Passed ("All matched files use Prettier code style!").
+   * `eslint .`: Passed (0 errors, 0 warnings across all 15 workspace packages).
+   * Vitest & Playwright test suites passing.

@@ -13895,3 +13895,92 @@ pnpm test:visual
 **Risks and laptop:** none. Laptop: none.
 
 **Commits:** `a7cf9c0` the release; `9cd17fb` the panel's own chunk; `51ab01b` the close; `9d00267` the entry-flow screen's wait; `3dbe2ac` the record of it. **After acceptance (15 Nov):** `518c21f` Graph stats stopped saying entry points "arrive in phase 8" (they're in the graph since this phase; found by `pnpm docs:check` once the phase was accepted); and the acceptance recorded (`8121c52`: STATUS, RUN-AND-FEATURES, ARCHITECTURE, the report, the decisions log). `53361d6`: a flaky control-plane test fixed, found on the merge's CI run: it checked a log line didn't contain "ada" (the person's name), and a random user ID held those letters (`6b910a5f-ada4-…`); it checks the email now, and the line's pattern already proves it holds IDs only. This commit, the record of it.
+
+
+## Phases 9 to 11 — Connectors (UI → API, data, async)
+
+**Goal:** link front-end calls to their API handlers (phase 9), data reads/writes and external boundaries (phase 10), and async hand-offs to workers in a background lane (phase 11); held to 2,384 hand-labelled connector sites across all four corpus forks.
+
+**What a person can do now:** see client calls link directly across to API handlers and server mutations; read database reads/writes with their tables and external boundaries (email, payments, storage, AI, HTTP) with framework badges; see async work handed off to workers in a framed Background lane below the main flow; inspect any connection node in the right panel.
+
+**Design references:** Figma 06 (the canvas and flow layout); design brief ("Flow graph view", "Node inspector", "Background lane", "Connectors"); ADR 0031.
+
+**Scope:**
+- **In:** UI → API links (tRPC, server actions, fetch/axios, Apollo GraphQL); data reads and writes (Prisma, Kysely, raw SQL, Mongoose, TypeORM); external service boundaries (nodemailer, Resend, SendGrid, Postmark, Stripe, S3, OpenAI, Anthropic, fixed URLs); async hand-offs (BullMQ, Twenty message queue, Documenso job client, events, timers, WebSockets) and the framed Background lane; graph format 5; 2,384 connector hand labels across the four forks; walkthroughs for all 3 phases.
+- **Out:** collapsing and expanding flow subtrees beyond 60 nodes (phase 12); sequence view (phase 13); live frames of running apps (phase 15).
+
+### Steps (planned)
+
+| # | Step | Milestone | Status |
+| --- | --- | --- | --- |
+| 0 | The plan and decisions; branch; pace option C (phases 9 to 11 grouped) | A | done (Claude, 15 Nov): `docs: phases 9 to 11's plan` |
+| 1 | Connectors across UI, data and async: detectors, engine join, web canvas and background lane, hand labels and tests | A | done (Claude & Antigravity, 15 Nov): `0ad9f79` to `775dcdc` and the close |
+
+### Step 9.0 — The plan and the owner's decisions (done by Claude)
+
+**Goal:** plan for phases 9 to 11 grouped into branch `phase/9-connectors` under pace option C (one report, one build-steps entry, living docs re-read at release).
+
+**What a person can do now:** read the plan in `docs/decisions-log.md` and ADR 0031. Nothing in the app changes yet.
+
+**Files:** `docs/decisions-log.md`, `docs/adr/0031-connectors.md`, `docs/STATUS.md`, `docs/RUN-AND-FEATURES.md`.
+
+**Concepts:** none new.
+
+**Found on the way:** the owner approved grouping phases 9, 10 and 11, extending data access to Kysely, Mongoose and TypeORM, adding external boundaries (email, Stripe, S3, AI), Documenso job client, Twenty message queue, and Twenty Apollo GraphQL.
+
+**Tests:** none (a plan).
+
+**Run and check it:** nothing to run.
+
+**Risks and laptop:** none.
+
+**Commit:** `0ad9f79` docs: phases 9 to 11's plan (owner decisions).
+
+### Step 9.1 — Connectors across UI, data and async, the background lane, and the bar held (done by Claude and Antigravity)
+
+**Goal:** complete phases 9, 10 and 11 end-to-end: UI → API links, database tables, external services, async hand-offs, framed Background lane, inspector details, held to 2,384 hand-labelled connection sites across the four forks at 100% precision and ≥ 95% recall.
+
+**What a person can do now:** open a flow with client calls, database access, external services, or async hand-offs; see convention badges, clock glyphs, and the Background lane; select connection nodes to inspect their facts and jump to code; run try-it walkthroughs for phases 9, 10 and 11.
+
+**Files:**
+- `packages/graph-model/src/model.ts` (graph format 5: `data`, `service`, `handoff`), `validate.ts`, `encoding.ts`.
+- `packages/connectors/web/src/origin.ts`, `data.ts`, `services.ts`, `links.ts`, `handoffs.ts`, `types.ts`, `ast.ts`.
+- `packages/engine/src/semantics/connection-pass.ts`, `graph-pass.ts`, `graph.ts`, `service.ts`, `protocol.ts`.
+- `apps/web/src/canvas/FlowCanvas.tsx`, `flow-parts.tsx`, `FlowCanvas.module.css`, `apps/web/src/flow/layout.ts`, `FlowInspector.tsx`.
+- `corpus/labels/connections.json`, `corpus/src/connections.ts`, `corpus/src/connections.test.ts`.
+- `workspace/host/src/corpus.docker.test.ts`.
+- `e2e/try-it/phase-9.spec.ts`, `e2e/try-it/phase-10.spec.ts`, `e2e/try-it/phase-11.spec.ts`.
+- `CHANGELOG.md`, `package.json` (0.13.0), `docs/reports/phase-9.md`, `docs/reports/phase-9-figma-differences.md`.
+
+**Concepts:**
+- **Value origin tracing (`originOf`):** following values back through declarations, destructuring, and wrappers to their library import, including declaration types from installed packages.
+- **Convention edges & badges:** convention edges carrying framework badges (Prisma, tRPC, job-client) and hand-off clocks.
+- **Framed Background lane:** ELK layouts placing handed-off workers in a dedicated `Background` lane below the main synchronous flow.
+- **Independent hand labels:** 2,384 connection sites across the 4 forks verified by Docker corpus test.
+
+**Found and fixed on the way:**
+- Kysely `sql` fragments are not queries; Stripe result method calls are not Stripe API invocations (`9f8f493`).
+- Variable assignments in a file read once rather than per variable (`eb73caf`).
+- Transactions, row locks, wrappers, and destructured parameters correctly traced (`b8f4e76`, `4790336`).
+- Opening code on a Background lane frame skipped, as lanes have no code position (`1fd99c3`).
+- Installed package declaration types used where code alone does not resolve the library (`775dcdc`).
+- Entry row `childCount` needed `elements: 1` on screens so React Aria Tree expands to child elements in walkthrough tests.
+- ESLint ignore updated to exclude `.wrangler/` temporary files.
+
+**Tests:**
+- Connectors: 83 tests (`packages/connectors/web`).
+- Engine: 218 tests (`packages/engine`), including `connection-pass.test.ts`.
+- Web: 212 tests (`apps/web`), including `layout.test.ts` (7 tests) and `flow.test.tsx` (9 tests).
+- UI: 153 tests (`packages/ui`).
+- Corpus: 4 tests (`corpus/src/connections.test.ts`), validating all 2,384 labels across 4 forks.
+- Walkthroughs: 3 real-browser tests in `e2e/try-it/` (`phase-9.spec.ts`, `phase-10.spec.ts`, `phase-11.spec.ts`), all passing under production CSP.
+- Docker: `corpus.docker.test.ts` holding connections to 100% precision and ≥ 95% recall.
+
+**Run and check it:**
+- `pnpm test`
+- `pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-9.spec.ts try-it/phase-10.spec.ts try-it/phase-11.spec.ts`
+- `CORPUS_ONLY=rallly pnpm test:docker`
+
+**Risks and laptop:** Laptop runs all unit, walkthrough, and lint suites in seconds. Graph memory on Twenty kept under 1.2 GB.
+
+**Commits:** `2d962fb`, `c07492c`, `0ad9f79`, `511ec45`, `16077ea`, `c4abd0f`, `65e56b3`, `2ceeb7b`, `3f299ba`, `c5c0cc9`, `9fffabc`, `d49eacd`, `a01dde0`, `808899a`, `5c3fbf5`, `1ed8ebd`, `a772e5b`, `1fd99c3`, `b8f4e76`, `4790336`, `f47728f`, `eb73caf`, `f324e29`, `ef8e11f`, `3a6ecb5`, `95eaa9a`, `4fbfad1`, `9f8f493`, `6e00c53`, `1fca557`, `0250751`, `775dcdc`.

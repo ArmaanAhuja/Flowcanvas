@@ -4,6 +4,31 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-11-15 — Phases 9 to 11: connectors
+
+Follow execution across architectural boundaries: client UI calls to backend API handlers (Phase 9), database queries and external services (Phase 10), and asynchronous job queues and background workers laid out in a framed Background lane (Phase 11). Every connector site is read directly from the code, with database tables and collections surfaced, external services categorised, and async hand-offs traced to their processing workers. Workspaces still run on your own computer (`pnpm dev`).
+
+### Try it
+
+1. Open a project with its workspace running; open an entry point with client-to-API communication (e.g. Rallly `/:locale/polls/new`) and **Show flow**.
+2. **Follow UI to API:** observe the client caller transition to the corresponding API handler (e.g. `POST /api/private/polls` or tRPC mutation) across file and network boundaries.
+3. **Inspect Data and External Services:** click database read/write nodes (Prisma, Kysely, raw SQL, Mongoose, TypeORM) to see table and operation badges; click external service nodes (e.g. `Email · nodemailer`, Stripe, OpenAI, Anthropic, S3) to view endpoint details and configuration in the inspector.
+4. **Follow Async Work to the Background Lane:** trace queue dispatches (BullMQ, Twenty message queue, Documenso job client, EventEmitter, WebSockets) to the framed **Background** lane beneath the main flow canvas, showing the asynchronous worker that handles the job.
+
+### Added
+
+- **UI to API connectors (Phase 9):** detection of client-side `fetch`, `axios`, `tRPC`, React Server Actions, and Apollo GraphQL calls linked directly to their server-side route handlers.
+- **Data access & external service connectors (Phase 10):** extraction of database operations (reads, writes, queries) across Prisma, Kysely, SQL template strings, Mongoose, and TypeORM with target tables/collections; identification of external services (`nodemailer`, Resend, SendGrid, Postmark, Stripe, S3, OpenAI, Anthropic, and fixed URLs).
+- **Async hand-offs & Background lane (Phase 11):** detection of asynchronous message queues, job triggers, and event emitters, rendered into a dedicated visually distinct framed lane (`Background`) containing background workers and queue handlers.
+- **Inspector details for connectors:** dedicated inspector tabs and property cards for Data access, External services, and Async hand-offs.
+- **Corpus hand labels:** 2,384 connector hand labels across all four test forks (`rallly`, `documenso`, `librechat`, `twenty`) verified at 100% precision and $\ge 95\%$ recall with zero false finds.
+- **Walkthrough E2E tests:** automated try-it specs for Phase 9 (`e2e/try-it/phase-9.spec.ts`), Phase 10 (`e2e/try-it/phase-10.spec.ts`), and Phase 11 (`e2e/try-it/phase-11.spec.ts`).
+
+### Changed
+
+- **Flow canvas layout:** supports framed lanes with dedicated ELK hierarchical layout separating interactive synchronous flow from background processing.
+- **Connection badges & design tokens:** standardized badge colors and cards matching Graphite signal palette and design tokens.
+
 ## [0.12.0] — 2026-11-15 — Phase 8: entry points
 
 See where a project can be entered: its pages, its API routes, the event handlers on its screens and its commands, found in the code, listed in the left panel, each opening the flow from what handles it. Every framework the test projects use is read (Next.js, React Router, Express, Hono, tRPC, NestJS and GraphQL, React's event props, package.json scripts), and anything the code doesn't fix is shown as not fully detected, with why, never guessed. Workspaces still run on your own computer (`pnpm dev`).

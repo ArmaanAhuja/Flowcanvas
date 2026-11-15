@@ -31,6 +31,13 @@ import { dockerCli } from './docker-cli.js';
 import { WorkspaceHost } from './workspaces.js';
 import { checkGraph, compareCalls, type CallsLabel } from '../../../corpus/src/calls.js';
 import {
+  compareConnections,
+  connectionBarProblems,
+  CONNECTION_KINDS,
+  type ConnectionResult,
+  type ForkConnections,
+} from '../../../corpus/src/connections.js';
+import {
   barProblems,
   compareEntryPoints,
   recall,
@@ -66,6 +73,11 @@ const callLabels = corpus('labels/calls.json') as Record<string, CallsLabel[] | 
 const graphLabels = corpus('labels/graph.json') as Record<string, CallsLabel[] | undefined>;
 /** Phase 8's Done when: each fork's hand-labelled entry points (labels/entry-points.json). */
 const entryLabels = corpus('labels/entry-points.json') as Record<string, ForkLabels | undefined>;
+/** Phases 9 to 11's bar (owner, 15 Nov 2026): each fork's hand-labelled connections (labels/connections.json). */
+const connectionLabels = corpus('labels/connections.json') as Record<
+  string,
+  ForkConnections | undefined
+>;
 /** Phase 7's Done when: 10 Documenso flows, labelled by reading the code (labels/flows.json). */
 const flowLabels = corpus('labels/flows.json') as Record<string, FlowLabel[] | undefined>;
 /** Phase 6's four forks (owner, 12 Nov 2026): held to the Done when; Excalidraw and Medusa are reported. */
@@ -252,6 +264,7 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
         // The stored version, copied out (with its write-ahead log) and loaded: loading decodes it and checks it
         // against the schema, then the labelled functions are found in it.
         const graphDiffering: string[] = [];
+        let connectionResult: ConnectionResult | null = null;
         const roots: { readonly label: CallsLabel; readonly id: string }[] = [];
         const sampled = [...(callLabels[repo.id] ?? []), ...(graphLabels[repo.id] ?? [])];
         if (graph.state === 'ready' && graph.snapshot !== null && sampled.length > 0) {
@@ -268,6 +281,10 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
             const loaded = store.load(graph.snapshot.version);
             store.close();
             if (loaded === undefined) throw new Error('the reported version isn’t stored');
+            const forConnections = connectionLabels[repo.id];
+            if (forConnections !== undefined) {
+              connectionResult = compareConnections(forConnections, loaded.graph);
+            }
             for (const label of sampled) {
               const found = checkGraph(loaded.graph, label);
               if (found.node !== null) roots.push({ label, id: found.node });
@@ -473,6 +490,19 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
                   membersCallersMs.length > 0 ? Math.round(Math.max(...membersCallersMs)) : null,
               }
             : {}),
+          ...(connectionResult !== null
+            ? {
+                connections: Object.values(connectionResult.kinds).reduce(
+                  (s, k) => s + k.labelled,
+                  0,
+                ),
+                connectionsFound: Object.values(connectionResult.kinds).reduce(
+                  (s, k) => s + k.found,
+                  0,
+                ),
+                connectionsFalseFinds: connectionResult.falseFinds.length,
+              }
+            : {}),
         };
         report.push(row);
         console.log(JSON.stringify(row));
@@ -502,6 +532,15 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
             expect(entryFlowsMissing).toEqual([]);
             expect(entryFlowMaxMs).toBeLessThan(ANSWER_MS);
             expect(entryPointsMs).toBeLessThan(ANSWER_MS);
+          }
+          // Phases 9 to 11's bar (owner, 15 Nov 2026: 100% precision, >= 95% recall, all misses explained).
+          if (connectionResult !== null) {
+            for (const kind of CONNECTION_KINDS) {
+              for (const missed of connectionResult.kinds[kind].missed) {
+                console.log(`${repo.id}: missed ${kind}: ${missed}`);
+              }
+            }
+            expect(connectionBarProblems(connectionResult)).toEqual([]);
           }
           expect(Math.max(...flowMs, ...detailsMs)).toBeLessThan(ANSWER_MS);
         }

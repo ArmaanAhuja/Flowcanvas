@@ -9,7 +9,7 @@
 
 Entries keep their numbers, because the docs and code refer to them. Removed numbers are listed at the end, with where each one went.
 
-**Reviewed:** phase 8, milestone C (15 Nov 2026): re-read in full; no change. At every milestone this doc is re-read in full against the code, and this line names the milestone (`pnpm docs:milestone` checks it).
+**Reviewed:** phase 9, close (15 Nov 2026): re-read in full against the code; no change. At every milestone this doc is re-read in full against the code, and this line names the milestone (`pnpm docs:milestone` checks it).
 
 **Policy (27 Oct 2026):** build with free tools and free tiers only. Anything that needs billing or a payment method is listed here with the free stand-in we use meanwhile, and we upgrade when its trigger is reached.
 

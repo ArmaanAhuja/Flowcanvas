@@ -10,6 +10,7 @@ export default defineConfig([
     '**/storybook-static/',
     '**/coverage/',
     '**/.turbo/',
+    '**/.wrangler/',
     // Playwright output: reports bundle the trace viewer's own JavaScript.
     '**/playwright-report/',
     '**/playwright-report-visual/',

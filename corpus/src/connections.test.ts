@@ -1,9 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   compareConnections,
   connectionBarProblems,
   connectionsOf,
   inConnectionScope,
+  CONNECTION_KINDS,
   type ForkConnections,
 } from './connections.js';
 
@@ -131,5 +133,28 @@ describe('connections against their labels', () => {
       'missed without a reason: src/poll.ts:00020:data:prisma options read',
       'labelled as missed, but found: src/poll.ts:00004:data:prisma polls write',
     ]);
+  });
+});
+
+describe('labels/connections.json', () => {
+  const file = JSON.parse(
+    readFileSync(new URL('../labels/connections.json', import.meta.url), 'utf8'),
+  ) as Record<string, ForkConnections | string>;
+
+  it('labels the four forks, each site in its scope and kind, none twice and none in packages/ee', () => {
+    for (const fork of ['rallly', 'documenso', 'librechat', 'twenty']) {
+      const labelled = file[fork] as ForkConnections;
+      expect(labelled.sites.length).toBeGreaterThan(50);
+      const keys = new Set<string>();
+      for (const s of labelled.sites) {
+        expect(inConnectionScope(labelled.scope, s.file), `${fork} ${s.file}`).toBe(true);
+        expect(CONNECTION_KINDS).toContain(s.kind);
+        expect(s.file.startsWith('packages/ee/')).toBe(false);
+        const key = `${s.file}:${String(s.line)}:${s.kind}:${s.to}`;
+        expect(keys.has(key), `${fork}: duplicate site ${key}`).toBe(false);
+        keys.add(key);
+      }
+    }
+    expect(typeof file.about).toBe('string');
   });
 });
