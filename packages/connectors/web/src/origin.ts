@@ -49,6 +49,38 @@ export function originOf(context: FileContext, expression: TS.Expression): Origi
   return trace(context, expression, 0, new Set());
 }
 
+/**
+ * Where the project's code doesn't say, the type TypeScript gives the value, when an installed package declares it
+ * (owner, 15 Nov 2026): in a user's workspace, where packages are installed, `prisma` is a `PrismaClient` however the
+ * code wraps it. The package is read from where its declarations are (`node_modules/stripe`, `@types/nodemailer`).
+ */
+function installedTypeOrigin(context: FileContext, expression: TS.Expression): Origin | null {
+  const { checker } = context;
+  if (checker === undefined) return null;
+  const type = checker.getTypeAtLocation(expression);
+  const symbol = type.aliasSymbol ?? type.getSymbol();
+  const declaration = symbol?.declarations?.[0];
+  if (symbol === undefined || declaration === undefined) return null;
+  const module = packageOf(declaration.getSourceFile().fileName);
+  return module === null ? null : { module, name: symbol.getName(), steps: [NEW] };
+}
+
+/** The package a file in `node_modules` belongs to, as code imports it; null outside one, or for TypeScript itself. */
+export function packageOf(file: string): string | null {
+  const at = file.lastIndexOf('/node_modules/');
+  if (at === -1) return null;
+  const parts = file.slice(at + '/node_modules/'.length).split('/');
+  const [first, second] = parts;
+  if (first === undefined) return null;
+  let name = first.startsWith('@') || first === '.prisma' ? `${first}/${second ?? ''}` : first;
+  // `@types/nodemailer` declares `nodemailer`; `@types/scope__name` declares `@scope/name`.
+  if (name.startsWith('@types/')) {
+    const typed = name.slice('@types/'.length);
+    name = typed.includes('__') ? `@${typed.replace('__', '/')}` : typed;
+  }
+  return name === 'typescript' || name === 'node' ? null : name;
+}
+
 function callStep(ts: typeof TS, call: TS.CallExpression): Step {
   if (call.arguments.length === 0) return CALL;
   return `(${call.arguments
@@ -92,6 +124,15 @@ const withSteps = (origin: Origin | null, ...steps: Step[]): Origin | null => {
 };
 
 function trace(
+  context: FileContext,
+  raw: TS.Expression,
+  depth: number,
+  seen: Set<TS.Node>,
+): Origin | null {
+  return traceCode(context, raw, depth, seen) ?? installedTypeOrigin(context, raw);
+}
+
+function traceCode(
   context: FileContext,
   raw: TS.Expression,
   depth: number,

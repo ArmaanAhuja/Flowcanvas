@@ -689,3 +689,10 @@ CLAUDE.md's "Working pace" says the same.
 3. **External boundaries:** email (nodemailer, Resend), payments (Stripe), storage (S3), AI (OpenAI), and `fetch`/axios calls to fixed outside URLs.
 4. **Queues beyond BullMQ:** Documenso's own job client (`triggerJob` → its handler) and Twenty's message queue (which wraps BullMQ).
 5. **Twenty's GraphQL** (Apollo's `useMutation` and `useQuery` → NestJS resolvers, matched by operation name) is a UI → API link, since the *Done when* asks for all 4 forks.
+
+## 15 Nov 2026: the connectors on codebases we haven't seen (owner)
+
+**Owner, on how the connectors will work on codebases unlike the forks:** "let's add point 3 now, not for phase 41". Claude's points: what isn't recognised stays unknown, never guessed (rule 3); most fixes teach general TypeScript patterns, not one fork's; in a user's workspace the packages are installed, so TypeScript's own types can say what a value is; and phases 29 to 31, 40 and 41 and the plugin SDK carry the long tail.
+- **Added in phases 9 to 11:** where following a value through the project's code doesn't reach its package, the type TypeScript gives it, from an installed package's declarations, does (ADR 0031 addendum).
+
+**Owner, on the pace:** "let's go with option c": phases 9 to 11 are finished at the bar set (every connector site labelled and every difference read), however long it takes.

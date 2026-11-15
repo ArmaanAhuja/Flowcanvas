@@ -14,6 +14,10 @@ export function programOf(files: Readonly<Record<string, string>>): (path: strin
   };
   const host = ts.createCompilerHost(options);
   host.fileExists = (path) => path in files;
+  host.directoryExists = (dir) => {
+    const prefix = dir.endsWith('/') ? dir : `${dir}/`;
+    return Object.keys(files).some((path) => path.startsWith(prefix));
+  };
   host.readFile = (path) => files[path];
   host.getSourceFile = (path, version) =>
     path in files ? ts.createSourceFile(path, files[path] ?? '', version, true) : undefined;

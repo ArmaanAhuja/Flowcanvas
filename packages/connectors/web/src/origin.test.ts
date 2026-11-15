@@ -1,6 +1,6 @@
 import type * as TS from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { originOf, type Origin } from './origin.js';
+import { originOf, packageOf, type Origin } from './origin.js';
 import { programOf } from './test-program.js';
 
 /** The origin of the receiver of the call on the file's line marked `// here`. */
@@ -280,5 +280,38 @@ describe('originOf through type re-exports, declared properties and destructured
         '/k.ts',
       ),
     ).toMatchObject({ module: 'kysely', name: 'Kysely' });
+  });
+});
+
+describe('originOf from an installed package’s types (owner, 15 Nov 2026)', () => {
+  it('reads the package from where a value’s type is declared, where the code doesn’t say', () => {
+    expect(packageOf('/w/node_modules/stripe/types/index.d.ts')).toBe('stripe');
+    expect(packageOf('/w/node_modules/@types/nodemailer/index.d.ts')).toBe('nodemailer');
+    expect(packageOf('/w/node_modules/@types/scope__name/index.d.ts')).toBe('@scope/name');
+    expect(packageOf('/w/node_modules/.pnpm/x/node_modules/@prisma/client/index.d.ts')).toBe(
+      '@prisma/client',
+    );
+    expect(packageOf('/w/node_modules/typescript/lib/lib.es5.d.ts')).toBeNull();
+    expect(packageOf('/w/src/db.ts')).toBeNull();
+    expect(
+      originAt(
+        {
+          '/node_modules/stripe/package.json': JSON.stringify({
+            name: 'stripe',
+            types: 'index.d.ts',
+          }),
+          '/node_modules/stripe/index.d.ts':
+            'declare class Stripe { prices: { list(): Promise<unknown> } }\nexport default Stripe;',
+          // A client handed over by something the project can't follow (a dependency-injection container).
+          '/c.ts': [
+            "import type Stripe from 'stripe';",
+            'declare const container: { get(name: string): unknown };',
+            "const stripe = container.get('stripe') as Stripe;",
+            'stripe.prices.list(); // here',
+          ].join('\n'),
+        },
+        '/c.ts',
+      ),
+    ).toEqual({ module: 'stripe', name: 'Stripe', steps: ['new', 'prices'] });
   });
 });
