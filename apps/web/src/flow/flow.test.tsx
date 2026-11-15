@@ -75,7 +75,13 @@ const FLOW: NonNullable<FlowResult['flow']> = {
       place: null,
       unit: null,
       change: 'unchanged',
-      handoff: { kind: 'queue', library: 'message-queue', name: 'clean', complete: true, why: null },
+      handoff: {
+        kind: 'queue',
+        library: 'message-queue',
+        name: 'clean',
+        complete: true,
+        why: null,
+      },
     },
   ],
   edges: [

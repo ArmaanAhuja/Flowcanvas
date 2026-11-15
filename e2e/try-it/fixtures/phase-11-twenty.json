@@ -1,1 +1,401 @@
-{"about":"The engine’s own flows from this fork at its pin (buildFlow on its graph), for the walkthrough’s fake workspace.","flows":{"packages/twenty-server/src/engine/core-modules/email/email.service.ts#EmailService.send":{"root":"packages/twenty-server/src/engine/core-modules/email/email.service.ts#EmailService.send","nodes":[{"id":"packages/twenty-server/src/engine/core-modules/email/email.service.ts#EmailService.send","kind":"code-unit","name":"send","place":{"path":"packages/twenty-server/src/engine/core-modules/email/email.service.ts","line":18,"column":9},"unit":"method","change":"unchanged"},{"id":"packages/twenty-server/src/engine/core-modules/message-queue/services/message-queue.service.ts#MessageQueueService.add","kind":"code-unit","name":"add","place":{"path":"packages/twenty-server/src/engine/core-modules/message-queue/services/message-queue.service.ts","line":35,"column":3},"unit":"method","change":"unchanged"},{"id":"(handoff queue:email-queue/EmailSenderJob)","kind":"async-handoff","name":"email-queue · EmailSenderJob","place":null,"unit":null,"change":"unchanged","handoff":{"kind":"queue","library":"message-queue","name":"email-queue · EmailSenderJob","complete":true,"why":null}},{"id":"packages/twenty-server/src/engine/core-modules/message-queue/drivers/interfaces/message-queue-driver.interface.ts#MessageQueueDriver.add","kind":"code-unit","name":"add","place":{"path":"packages/twenty-server/src/engine/core-modules/message-queue/drivers/interfaces/message-queue-driver.interface.ts","line":17,"column":3},"unit":"method","change":"unchanged"},{"id":"packages/twenty-server/src/engine/core-modules/email/email-sender.job.ts#EmailSenderJob.handle","kind":"code-unit","name":"handle","place":{"path":"packages/twenty-server/src/engine/core-modules/email/email-sender.job.ts","line":13,"column":9},"unit":"method","change":"unchanged"},{"id":"packages/twenty-server/src/engine/core-modules/message-queue/decorators/process.decorator.ts#Process","kind":"code-unit","name":"Process","place":{"path":"packages/twenty-server/src/engine/core-modules/message-queue/decorators/process.decorator.ts","line":9,"column":17},"unit":"component","change":"unchanged"},{"id":"packages/twenty-server/src/engine/core-modules/email/email-sender.service.ts#EmailSenderService.send","kind":"code-unit","name":"send","place":{"path":"packages/twenty-server/src/engine/core-modules/email/email-sender.service.ts","line":13,"column":9},"unit":"method","change":"unchanged"},{"id":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.getCurrentDriver","kind":"code-unit","name":"getCurrentDriver","place":{"path":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts","line":17,"column":3},"unit":"method","change":"unchanged"},{"id":"packages/twenty-server/src/engine/core-modules/email/drivers/interfaces/email-driver.interface.ts#EmailDriverInterface.send","kind":"code-unit","name":"send","place":{"path":"packages/twenty-server/src/engine/core-modules/email/drivers/interfaces/email-driver.interface.ts","line":4,"column":3},"unit":"method","change":"unchanged"},{"id":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.getCurrentDriver?1","kind":"decision","name":"this.currentConfigKey !== configKey","place":{"path":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts","line":28,"column":9},"unit":null,"change":"unchanged"},{"id":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.buildConfigKey","kind":"code-unit","name":"buildConfigKey","place":{"path":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts","line":69,"column":22},"unit":"method","change":"unchanged"},{"id":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.createDriver","kind":"code-unit","name":"createDriver","place":{"path":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts","line":70,"column":22},"unit":"method","change":"unchanged"},{"id":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.releaseCurrentDriver","kind":"code-unit","name":"releaseCurrentDriver","place":{"path":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts","line":60,"column":11},"unit":"method","change":"unchanged"},{"id":"packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined","kind":"code-unit","name":"isDefined","place":{"path":"packages/twenty-shared/src/utils/validation/isDefined.ts","line":3,"column":14},"unit":"function","change":"unchanged"},{"id":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.disposeDriver","kind":"code-unit","name":"disposeDriver","place":{"path":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts","line":71,"column":13},"unit":"method","change":"unchanged"},{"id":"packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined?1","kind":"decision","name":"!isUndefined(value)","place":{"path":"packages/twenty-shared/src/utils/validation/isDefined.ts","line":5,"column":31},"unit":null,"change":"unchanged"}],"edges":[{"from":"packages/twenty-server/src/engine/core-modules/email/email.service.ts#EmailService.send","to":"packages/twenty-server/src/engine/core-modules/message-queue/services/message-queue.service.ts#MessageQueueService.add","kind":"call","relation":"calls","label":null,"provenance":"resolved","lines":[19],"sites":1},{"from":"packages/twenty-server/src/engine/core-modules/email/email.service.ts#EmailService.send","to":"(handoff queue:email-queue/EmailSenderJob)","kind":"handoff","relation":null,"label":null,"provenance":"convention","lines":[19],"sites":1},{"from":"packages/twenty-server/src/engine/core-modules/message-queue/services/message-queue.service.ts#MessageQueueService.add","to":"packages/twenty-server/src/engine/core-modules/message-queue/drivers/interfaces/message-queue-driver.interface.ts#MessageQueueDriver.add","kind":"call","relation":"calls","label":null,"provenance":"resolved","lines":[40],"sites":1},{"from":"(handoff queue:email-queue/EmailSenderJob)","to":"packages/twenty-server/src/engine/core-modules/email/email-sender.job.ts#EmailSenderJob.handle","kind":"handoff","relation":null,"label":null,"provenance":"convention","lines":[13],"sites":1},{"from":"packages/twenty-server/src/engine/core-modules/email/email-sender.job.ts#EmailSenderJob.handle","to":"packages/twenty-server/src/engine/core-modules/message-queue/decorators/process.decorator.ts#Process","kind":"call","relation":"calls","label":null,"provenance":"resolved","lines":[12],"sites":1},{"from":"packages/twenty-server/src/engine/core-modules/email/email-sender.job.ts#EmailSenderJob.handle","to":"packages/twenty-server/src/engine/core-modules/email/email-sender.service.ts#EmailSenderService.send","kind":"call","relation":"calls","label":null,"provenance":"resolved","lines":[14],"sites":1},{"from":"packages/twenty-server/src/engine/core-modules/email/email-sender.service.ts#EmailSenderService.send","to":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.getCurrentDriver","kind":"call","relation":"calls","label":null,"provenance":"resolved","lines":[14],"sites":1},{"from":"packages/twenty-server/src/engine/core-modules/email/email-sender.service.ts#EmailSenderService.send","to":"packages/twenty-server/src/engine/core-modules/email/drivers/interfaces/email-driver.interface.ts#EmailDriverInterface.send","kind":"call","relation":"calls","label":null,"provenance":"resolved","lines":[16],"sites":1},{"from":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.getCurrentDriver","to":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.getCurrentDriver?1","kind":"branch","relation":null,"label":null,"provenance":"resolved","lines":[28],"sites":1},{"from":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.getCurrentDriver","to":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.buildConfigKey","kind":"call","relation":"calls","label":null,"provenance":"resolved","lines":[21],"sites":1},{"from":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.getCurrentDriver?1","to":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.createDriver","kind":"branch","relation":"calls","label":"yes","provenance":"resolved","lines":[32],"sites":1},{"from":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.getCurrentDriver?1","to":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.releaseCurrentDriver","kind":"branch","relation":"calls","label":"yes","provenance":"resolved","lines":[39],"sites":1},{"from":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.releaseCurrentDriver","to":"packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined","kind":"call","relation":"calls","label":null,"provenance":"resolved","lines":[61],"sites":1},{"from":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.releaseCurrentDriver","to":"packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.disposeDriver","kind":"call","relation":"calls","label":null,"provenance":"resolved","lines":[65],"sites":1},{"from":"packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined","to":"packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined?1","kind":"branch","relation":null,"label":null,"provenance":"resolved","lines":[5],"sites":1}],"unknown":[{"from":"packages/twenty-server/src/engine/core-modules/message-queue/decorators/process.decorator.ts#Process","total":1,"calls":[{"target":"SetMetadata","relation":"calls","label":null,"lines":[10],"sites":1}]},{"from":"packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined","total":1,"calls":[{"target":"isUndefined","relation":"calls","label":null,"lines":[5],"sites":1}]},{"from":"packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined?1","total":1,"calls":[{"target":"isNull","relation":"calls","label":"yes","lines":[5],"sites":1}]}],"cut":[],"hidden":0,"byProvenance":{"observed":0,"resolved":11,"convention":2,"suggested":0,"unknown":3}}}}
+{
+  "about": "The engine’s own flows from this fork at its pin (buildFlow on its graph), for the walkthrough’s fake workspace.",
+  "flows": {
+    "packages/twenty-server/src/engine/core-modules/email/email.service.ts#EmailService.send": {
+      "root": "packages/twenty-server/src/engine/core-modules/email/email.service.ts#EmailService.send",
+      "nodes": [
+        {
+          "id": "packages/twenty-server/src/engine/core-modules/email/email.service.ts#EmailService.send",
+          "kind": "code-unit",
+          "name": "send",
+          "place": {
+            "path": "packages/twenty-server/src/engine/core-modules/email/email.service.ts",
+            "line": 18,
+            "column": 9
+          },
+          "unit": "method",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-server/src/engine/core-modules/message-queue/services/message-queue.service.ts#MessageQueueService.add",
+          "kind": "code-unit",
+          "name": "add",
+          "place": {
+            "path": "packages/twenty-server/src/engine/core-modules/message-queue/services/message-queue.service.ts",
+            "line": 35,
+            "column": 3
+          },
+          "unit": "method",
+          "change": "unchanged"
+        },
+        {
+          "id": "(handoff queue:email-queue/EmailSenderJob)",
+          "kind": "async-handoff",
+          "name": "email-queue · EmailSenderJob",
+          "place": null,
+          "unit": null,
+          "change": "unchanged",
+          "handoff": {
+            "kind": "queue",
+            "library": "message-queue",
+            "name": "email-queue · EmailSenderJob",
+            "complete": true,
+            "why": null
+          }
+        },
+        {
+          "id": "packages/twenty-server/src/engine/core-modules/message-queue/drivers/interfaces/message-queue-driver.interface.ts#MessageQueueDriver.add",
+          "kind": "code-unit",
+          "name": "add",
+          "place": {
+            "path": "packages/twenty-server/src/engine/core-modules/message-queue/drivers/interfaces/message-queue-driver.interface.ts",
+            "line": 17,
+            "column": 3
+          },
+          "unit": "method",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-server/src/engine/core-modules/email/email-sender.job.ts#EmailSenderJob.handle",
+          "kind": "code-unit",
+          "name": "handle",
+          "place": {
+            "path": "packages/twenty-server/src/engine/core-modules/email/email-sender.job.ts",
+            "line": 13,
+            "column": 9
+          },
+          "unit": "method",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-server/src/engine/core-modules/message-queue/decorators/process.decorator.ts#Process",
+          "kind": "code-unit",
+          "name": "Process",
+          "place": {
+            "path": "packages/twenty-server/src/engine/core-modules/message-queue/decorators/process.decorator.ts",
+            "line": 9,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-server/src/engine/core-modules/email/email-sender.service.ts#EmailSenderService.send",
+          "kind": "code-unit",
+          "name": "send",
+          "place": {
+            "path": "packages/twenty-server/src/engine/core-modules/email/email-sender.service.ts",
+            "line": 13,
+            "column": 9
+          },
+          "unit": "method",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.getCurrentDriver",
+          "kind": "code-unit",
+          "name": "getCurrentDriver",
+          "place": {
+            "path": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts",
+            "line": 17,
+            "column": 3
+          },
+          "unit": "method",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-server/src/engine/core-modules/email/drivers/interfaces/email-driver.interface.ts#EmailDriverInterface.send",
+          "kind": "code-unit",
+          "name": "send",
+          "place": {
+            "path": "packages/twenty-server/src/engine/core-modules/email/drivers/interfaces/email-driver.interface.ts",
+            "line": 4,
+            "column": 3
+          },
+          "unit": "method",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.getCurrentDriver?1",
+          "kind": "decision",
+          "name": "this.currentConfigKey !== configKey",
+          "place": {
+            "path": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts",
+            "line": 28,
+            "column": 9
+          },
+          "unit": null,
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.buildConfigKey",
+          "kind": "code-unit",
+          "name": "buildConfigKey",
+          "place": {
+            "path": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts",
+            "line": 69,
+            "column": 22
+          },
+          "unit": "method",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.createDriver",
+          "kind": "code-unit",
+          "name": "createDriver",
+          "place": {
+            "path": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts",
+            "line": 70,
+            "column": 22
+          },
+          "unit": "method",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.releaseCurrentDriver",
+          "kind": "code-unit",
+          "name": "releaseCurrentDriver",
+          "place": {
+            "path": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts",
+            "line": 60,
+            "column": 11
+          },
+          "unit": "method",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined",
+          "kind": "code-unit",
+          "name": "isDefined",
+          "place": {
+            "path": "packages/twenty-shared/src/utils/validation/isDefined.ts",
+            "line": 3,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.disposeDriver",
+          "kind": "code-unit",
+          "name": "disposeDriver",
+          "place": {
+            "path": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts",
+            "line": 71,
+            "column": 13
+          },
+          "unit": "method",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined?1",
+          "kind": "decision",
+          "name": "!isUndefined(value)",
+          "place": {
+            "path": "packages/twenty-shared/src/utils/validation/isDefined.ts",
+            "line": 5,
+            "column": 31
+          },
+          "unit": null,
+          "change": "unchanged"
+        }
+      ],
+      "edges": [
+        {
+          "from": "packages/twenty-server/src/engine/core-modules/email/email.service.ts#EmailService.send",
+          "to": "packages/twenty-server/src/engine/core-modules/message-queue/services/message-queue.service.ts#MessageQueueService.add",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [19],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-server/src/engine/core-modules/email/email.service.ts#EmailService.send",
+          "to": "(handoff queue:email-queue/EmailSenderJob)",
+          "kind": "handoff",
+          "relation": null,
+          "label": null,
+          "provenance": "convention",
+          "lines": [19],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-server/src/engine/core-modules/message-queue/services/message-queue.service.ts#MessageQueueService.add",
+          "to": "packages/twenty-server/src/engine/core-modules/message-queue/drivers/interfaces/message-queue-driver.interface.ts#MessageQueueDriver.add",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [40],
+          "sites": 1
+        },
+        {
+          "from": "(handoff queue:email-queue/EmailSenderJob)",
+          "to": "packages/twenty-server/src/engine/core-modules/email/email-sender.job.ts#EmailSenderJob.handle",
+          "kind": "handoff",
+          "relation": null,
+          "label": null,
+          "provenance": "convention",
+          "lines": [13],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-server/src/engine/core-modules/email/email-sender.job.ts#EmailSenderJob.handle",
+          "to": "packages/twenty-server/src/engine/core-modules/message-queue/decorators/process.decorator.ts#Process",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [12],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-server/src/engine/core-modules/email/email-sender.job.ts#EmailSenderJob.handle",
+          "to": "packages/twenty-server/src/engine/core-modules/email/email-sender.service.ts#EmailSenderService.send",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [14],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-server/src/engine/core-modules/email/email-sender.service.ts#EmailSenderService.send",
+          "to": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.getCurrentDriver",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [14],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-server/src/engine/core-modules/email/email-sender.service.ts#EmailSenderService.send",
+          "to": "packages/twenty-server/src/engine/core-modules/email/drivers/interfaces/email-driver.interface.ts#EmailDriverInterface.send",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [16],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.getCurrentDriver",
+          "to": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.getCurrentDriver?1",
+          "kind": "branch",
+          "relation": null,
+          "label": null,
+          "provenance": "resolved",
+          "lines": [28],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.getCurrentDriver",
+          "to": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.buildConfigKey",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [21],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.getCurrentDriver?1",
+          "to": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.createDriver",
+          "kind": "branch",
+          "relation": "calls",
+          "label": "yes",
+          "provenance": "resolved",
+          "lines": [32],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.getCurrentDriver?1",
+          "to": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.releaseCurrentDriver",
+          "kind": "branch",
+          "relation": "calls",
+          "label": "yes",
+          "provenance": "resolved",
+          "lines": [39],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.releaseCurrentDriver",
+          "to": "packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [61],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.releaseCurrentDriver",
+          "to": "packages/twenty-server/src/engine/core-modules/twenty-config/dynamic-factory.base.ts#DriverFactoryBase.disposeDriver",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [65],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined",
+          "to": "packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined?1",
+          "kind": "branch",
+          "relation": null,
+          "label": null,
+          "provenance": "resolved",
+          "lines": [5],
+          "sites": 1
+        }
+      ],
+      "unknown": [
+        {
+          "from": "packages/twenty-server/src/engine/core-modules/message-queue/decorators/process.decorator.ts#Process",
+          "total": 1,
+          "calls": [
+            {
+              "target": "SetMetadata",
+              "relation": "calls",
+              "label": null,
+              "lines": [10],
+              "sites": 1
+            }
+          ]
+        },
+        {
+          "from": "packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined",
+          "total": 1,
+          "calls": [
+            {
+              "target": "isUndefined",
+              "relation": "calls",
+              "label": null,
+              "lines": [5],
+              "sites": 1
+            }
+          ]
+        },
+        {
+          "from": "packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined?1",
+          "total": 1,
+          "calls": [
+            { "target": "isNull", "relation": "calls", "label": "yes", "lines": [5], "sites": 1 }
+          ]
+        }
+      ],
+      "cut": [],
+      "hidden": 0,
+      "byProvenance": {
+        "observed": 0,
+        "resolved": 11,
+        "convention": 2,
+        "suggested": 0,
+        "unknown": 3
+      }
+    }
+  }
+}
