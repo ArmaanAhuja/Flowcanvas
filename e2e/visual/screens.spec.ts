@@ -41,7 +41,55 @@ interface ApiOptions {
   readonly indexing?: boolean;
   /** Documenso, with the engine's flow for deleteFolder and the details of its functions (phase 7). */
   readonly documenso?: boolean;
+  /** Phases 9 to 11: the engine's flow from a fork (the walkthroughs' fixtures), found by its symbol. */
+  readonly connections?: 'documenso-email' | 'twenty-queue';
 }
+
+/** The walkthroughs' fixtures: the engine's own flows from Documenso and Twenty at their pins (phases 10 and 11). */
+const CONNECTION_FLOWS = {
+  'documenso-email': {
+    fixture: '../try-it/fixtures/phase-10-documenso.json',
+    root: 'packages/lib/jobs/definitions/emails/send-signing-email.handler.ts#run',
+    symbol: {
+      name: 'run',
+      kind: 'function',
+      container: null,
+      exported: true,
+      path: 'packages/lib/jobs/definitions/emails/send-signing-email.handler.ts',
+      line: 31,
+      column: 14,
+    },
+  },
+  'twenty-queue': {
+    fixture: '../try-it/fixtures/phase-11-twenty.json',
+    root: 'packages/twenty-server/src/engine/core-modules/email/email.service.ts#EmailService.send',
+    symbol: {
+      name: 'send',
+      kind: 'method',
+      container: 'EmailService',
+      exported: true,
+      path: 'packages/twenty-server/src/engine/core-modules/email/email.service.ts',
+      line: 18,
+      column: 9,
+    },
+  },
+} as const;
+const connectionFlow = (which: keyof typeof CONNECTION_FLOWS) => {
+  const { fixture, root } = CONNECTION_FLOWS[which];
+  const flows = (
+    JSON.parse(readFileSync(new URL(fixture, import.meta.url), 'utf8')) as {
+      flows: Record<string, unknown>;
+    }
+  ).flows;
+  return {
+    flow: flows[root],
+    message: null,
+    version: 'd'.repeat(64),
+    takenAt: '2026-11-15T10:00:00.000Z',
+    current: true,
+    complete: true,
+  };
+};
 
 /** The engine's entry points (phase 8): Rallly's (the walkthrough's fixture, with a screen's elements and a route's
  * flow) and Documenso's, each answered for its project. */
@@ -71,33 +119,39 @@ const RALLLY_POST_AT = RALLLY_ENTRIES.lists['api-route']?.find(
 )?.handler?.place;
 const RALLLY_POST_KEY =
   RALLLY_POST_AT == null ? null : `${RALLLY_POST_AT.path}:${String(RALLLY_POST_AT.line)}`;
-const entryAnswer = (documenso: boolean) => (url: URL) => {
-  const lists = documenso ? DOCUMENSO_ENTRIES.lists : RALLLY_ENTRIES.lists;
-  const kind = url.searchParams.get('kind') ?? '';
-  const screen = url.searchParams.get('screen');
-  const entries =
-    screen === null
-      ? (lists[kind] ?? [])
-      : !documenso && screen === RALLLY_ENTRIES.screen
-        ? RALLLY_ENTRIES.elements
-        : [];
-  return {
-    counts: {
-      screen: lists.screen?.length ?? 0,
-      element: 0,
-      'api-route': lists['api-route']?.length ?? 0,
-      'cli-command': lists['cli-command']?.length ?? 0,
-    },
-    kind,
-    entries,
-    next: null,
-    message: null,
-    version: 'c'.repeat(64),
-    takenAt: '2026-11-14T10:00:00.000Z',
-    current: true,
-    complete: true,
+const entryAnswer =
+  (documenso: boolean, none = false) =>
+  (url: URL) => {
+    const lists: Record<string, readonly EntryItem[]> = none
+      ? {}
+      : documenso
+        ? DOCUMENSO_ENTRIES.lists
+        : RALLLY_ENTRIES.lists;
+    const kind = url.searchParams.get('kind') ?? '';
+    const screen = url.searchParams.get('screen');
+    const entries =
+      screen === null
+        ? (lists[kind] ?? [])
+        : !documenso && screen === RALLLY_ENTRIES.screen
+          ? RALLLY_ENTRIES.elements
+          : [];
+    return {
+      counts: {
+        screen: lists.screen?.length ?? 0,
+        element: 0,
+        'api-route': lists['api-route']?.length ?? 0,
+        'cli-command': lists['cli-command']?.length ?? 0,
+      },
+      kind,
+      entries,
+      next: null,
+      message: none ? "This screen's fixture has the fork's flow, not its entry points." : null,
+      version: 'c'.repeat(64),
+      takenAt: '2026-11-14T10:00:00.000Z',
+      current: true,
+      complete: true,
+    };
   };
-};
 
 /** The engine's own flow and details for Documenso's deleteFolder (the phase 7 walkthrough's fixture). */
 const DELETE_FOLDER = JSON.parse(
@@ -265,7 +319,11 @@ const GRAPH = {
 async function fakeApi(page: Page, options: ApiOptions = {}): Promise<void> {
   const project = {
     ...PROJECT,
-    ...(options.documenso === true ? { name: 'Documenso' } : {}),
+    ...(options.documenso === true || options.connections === 'documenso-email'
+      ? { name: 'Documenso' }
+      : options.connections === 'twenty-queue'
+        ? { name: 'Twenty' }
+        : {}),
     workspace: { ...PROJECT.workspace, ...(options.running === true ? { state: 'running' } : {}) },
   };
   const workspace = new FakeWorkspace(page, {
@@ -289,7 +347,12 @@ async function fakeApi(page: Page, options: ApiOptions = {}): Promise<void> {
       },
       '/workspace/index/search': (url) => {
         const words = (url.searchParams.get('q') ?? '').toLowerCase().split(/\s+/).filter(Boolean);
-        const symbols = options.documenso === true ? [...SYMBOLS, DELETE_FOLDER_SYMBOL] : SYMBOLS;
+        const symbols =
+          options.connections !== undefined
+            ? [CONNECTION_FLOWS[options.connections].symbol]
+            : options.documenso === true
+              ? [...SYMBOLS, DELETE_FOLDER_SYMBOL]
+              : SYMBOLS;
         return {
           symbols: symbols.filter((symbol) =>
             words.every((word) => String(symbol.name).toLowerCase().includes(word)),
@@ -300,21 +363,27 @@ async function fakeApi(page: Page, options: ApiOptions = {}): Promise<void> {
       '/workspace/index/graph': () => GRAPH,
       '/workspace/index/callers': () => CALLS.callers,
       '/workspace/index/callees': () => CALLS.callees,
-      '/workspace/index/entry-points': entryAnswer(options.documenso === true),
+      // The forks' entry points aren't in the connection screens' fixtures: an empty list, not another project's.
+      '/workspace/index/entry-points':
+        options.connections !== undefined
+          ? entryAnswer(false, true)
+          : entryAnswer(options.documenso === true),
       // Rallly's POST /api/private/polls from its handler (phase 8); deleteFolder's flow otherwise (phase 7).
       '/workspace/index/flow': (url) =>
-        options.documenso !== true &&
-        `${url.searchParams.get('path') ?? ''}:${url.searchParams.get('line') ?? ''}` ===
-          RALLLY_POST_KEY
-          ? {
-              flow: RALLLY_ENTRIES.flow,
-              message: null,
-              version: 'c'.repeat(64),
-              takenAt: '2026-11-14T10:00:00.000Z',
-              current: true,
-              complete: true,
-            }
-          : DELETE_FOLDER.flow,
+        options.connections !== undefined
+          ? connectionFlow(options.connections)
+          : options.documenso !== true &&
+              `${url.searchParams.get('path') ?? ''}:${url.searchParams.get('line') ?? ''}` ===
+                RALLLY_POST_KEY
+            ? {
+                flow: RALLLY_ENTRIES.flow,
+                message: null,
+                version: 'c'.repeat(64),
+                takenAt: '2026-11-14T10:00:00.000Z',
+                current: true,
+                complete: true,
+              }
+            : DELETE_FOLDER.flow,
       '/workspace/index/details': (url) =>
         Object.values(DELETE_FOLDER.details).find(
           (answer) =>
@@ -482,6 +551,36 @@ const SCREENS: readonly Screen[] = [
     api: { running: true, documenso: true },
     arrange: showDeleteFolder,
   },
+  // Phases 9 to 11: Documenso's signing email runner, its tables and its email; Twenty's email queue's hand-off and
+  // its worker in the Background lane. Each with a node in the inspector.
+  {
+    name: 'project-flow-data-and-email',
+    api: { running: true, connections: 'documenso-email' },
+    arrange: async (page) => {
+      await showFlowOf(page, 'run');
+      await page
+        .getByRole('main', { name: 'Canvas' })
+        .locator('[data-id="(service email nodemailer)"]')
+        .click();
+      await expect(page.getByRole('region', { name: 'Email · nodemailer' })).toContainText(
+        'External service',
+      );
+    },
+  },
+  {
+    name: 'project-flow-background-lane',
+    api: { running: true, connections: 'twenty-queue' },
+    arrange: async (page) => {
+      await showFlowOf(page, 'send');
+      await page
+        .getByRole('main', { name: 'Canvas' })
+        .locator('[data-id="(handoff queue:email-queue/EmailSenderJob)"]')
+        .click();
+      await expect(
+        page.getByRole('region', { name: 'email-queue · EmailSenderJob' }),
+      ).toContainText('Async hand-off');
+    },
+  },
   {
     name: 'project-flow-details',
     api: { running: true, documenso: true },
@@ -511,6 +610,19 @@ async function openPollsScreen(page: Page): Promise<void> {
   await polls.focus();
   await page.keyboard.press('ArrowRight');
   await expect(panel.getByRole('row', { name: /^<Link> onNavigate/ })).toBeVisible();
+}
+
+/** ⌘K → a function's flow, laid out and fitted, with its counts. */
+async function showFlowOf(page: Page, name: string): Promise<void> {
+  await page.getByRole('button', { name: 'Search' }).click();
+  // Typed once the box listens: a key pressed before is lost (as showDeleteFolder found).
+  await expect(page.getByRole('searchbox', { name: 'Search symbols and files' })).toBeFocused();
+  await page.keyboard.type(name);
+  await page.getByRole('option', { name: new RegExp(`^Show the flow from ${name}`) }).click();
+  await expect(page.getByRole('main', { name: 'Canvas' }).getByRole('status')).toContainText(
+    'edges',
+  );
+  await page.getByRole('button', { name: 'Fit (F)' }).click();
 }
 
 /** ⌘K → deleteFolder's flow, laid out on the canvas with its counts. */

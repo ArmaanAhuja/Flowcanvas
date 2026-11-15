@@ -71,6 +71,7 @@ test('phase 9 · Try it: in Rallly, the Create poll submit’s flow continues in
 
   await test.step('⌘K to CreatePoll, the component whose form submits the poll: Show its flow', async () => {
     await page.getByRole('button', { name: 'Search' }).click();
+    await expect(page.getByRole('searchbox', { name: 'Search symbols and files' })).toBeFocused();
     await page.keyboard.type('CreatePoll');
     await page.getByRole('option', { name: /^Show the flow from CreatePoll/ }).click();
   });

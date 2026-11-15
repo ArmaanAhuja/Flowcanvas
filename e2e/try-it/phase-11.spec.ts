@@ -76,6 +76,7 @@ test('phase 11 · Try it: in Twenty, a job flow’s hand-off and its background 
 
   await test.step('⌘K to EmailService.send: Show its flow', async () => {
     await page.getByRole('button', { name: 'Search' }).click();
+    await expect(page.getByRole('searchbox', { name: 'Search symbols and files' })).toBeFocused();
     await page.keyboard.type('send');
     await page.getByRole('option', { name: /^Show the flow from send/ }).click();
     await expect(canvas.getByRole('status')).toContainText('convention');

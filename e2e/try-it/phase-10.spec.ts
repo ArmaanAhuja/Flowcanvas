@@ -70,6 +70,7 @@ function fakeWorkspace(page: Page) {
 
 const showFlow = async (page: Page, name: string) => {
   await page.getByRole('button', { name: 'Search' }).click();
+  await expect(page.getByRole('searchbox', { name: 'Search symbols and files' })).toBeFocused();
   await page.keyboard.type(name);
   await page.getByRole('option', { name: new RegExp(`^Show the flow from ${name}`) }).click();
 };

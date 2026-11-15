@@ -92,6 +92,20 @@ const SNAPSHOT_MS = 1000;
 const ANSWER_MS = 1000;
 /** A whole-project graph on CI's two CPUs: minutes for the largest; a pass that never ends is still a failure. */
 const GRAPH_GIVE_UP_MS = 420_000;
+/**
+ * Each fork's graph build on CI, held to its recorded time plus half (owner, 15 Nov 2026: "every fork's graph time held
+ * to a recorded figure"): a regression fails here rather than only slowing the pass. Recorded on run 43712385746
+ * (`aece166`, phases 9 to 11, connectors in the pass): Rallly 28.7 s, Documenso 46.3 s, Excalidraw 26.1 s, LibreChat
+ * 120.6 s, Twenty 198.9 s, Medusa 96.6 s.
+ */
+const GRAPH_BUILD_MS: Readonly<Record<string, number>> = {
+  rallly: 43_000,
+  documenso: 70_000,
+  excalidraw: 39_000,
+  librechat: 181_000,
+  twenty: 298_000,
+  medusa: 145_000,
+};
 
 /** The build plan's two forks: held to the targets. The other four are measured and reported. */
 const HELD = new Set(['rallly', 'documenso']);
@@ -454,6 +468,7 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
           graphNodes: graph.snapshot?.stats.nodes ?? null,
           graphEdges: graph.snapshot?.stats.edges ?? null,
           graphBuildMs: graph.snapshot?.buildMs ?? null,
+          graphBuildLimitMs: GRAPH_BUILD_MS[repo.id] ?? null,
           snapshotSaveMs: graph.snapshot?.saveMs ?? null,
           snapshotLoadMs: graph.snapshot?.loadMs ?? null,
           ...(sampled.length > 0
@@ -517,6 +532,11 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
         expect(callsDiffering).toEqual([]);
         expect(storedDiffering).toEqual([]);
         if (storedMs.length > 0) expect(Math.max(...storedMs)).toBeLessThan(ANSWER_MS);
+        // Every fork's graph time, held to its recorded figure (GRAPH_BUILD_MS).
+        const buildLimit = GRAPH_BUILD_MS[repo.id];
+        if (buildLimit !== undefined && graph.snapshot !== null) {
+          expect(graph.snapshot.buildMs, `${repo.id}'s graph build`).toBeLessThan(buildLimit);
+        }
         if (GRAPH_HELD.has(repo.id)) {
           expect(graph.state, graph.message ?? '').toBe('ready');
           expect(graph.snapshot?.complete).toBe(true);
