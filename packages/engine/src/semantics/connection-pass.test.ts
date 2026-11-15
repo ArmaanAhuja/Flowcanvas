@@ -186,3 +186,16 @@ describe('the connectors in the graph pass', () => {
     expect(ids).toContain(job);
   });
 });
+
+describe('which route method serves a call', () => {
+  it('is the same method, ALL, or React Router’s loader for GET and action for the rest', async () => {
+    const { servesMethod } = await import('./connection-pass.js');
+    expect(servesMethod('POST', 'POST')).toBe(true);
+    expect(servesMethod('ALL', 'DELETE')).toBe(true);
+    expect(servesMethod('loader', 'GET')).toBe(true);
+    expect(servesMethod('loader', 'POST')).toBe(false);
+    expect(servesMethod('action', 'POST')).toBe(true);
+    expect(servesMethod('action', 'GET')).toBe(false);
+    expect(servesMethod('GET', 'POST')).toBe(false);
+  });
+});

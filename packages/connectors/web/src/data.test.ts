@@ -197,6 +197,20 @@ describe('dataOf', () => {
     expect(hits.map((h) => h.table)).toEqual(['Envelope', 'Recipient']);
   });
 
+  it('finds a Kysely builder typed by its function’s declared type (`const scope: Apply = (eb) => …`)', () => {
+    const hits = found(
+      {
+        '/k.ts': [
+          "import type { ExpressionBuilder } from 'kysely';",
+          'type Apply = (eb: ExpressionBuilder) => unknown;',
+          "export const scope: Apply = (eb) => eb.selectFrom('Team');",
+        ].join('\n'),
+      },
+      '/k.ts',
+    );
+    expect(hits.map((h) => h.table)).toEqual(['Team']);
+  });
+
   it('finds Mongoose models’ reads and writes, from a factory of models (CommonJS)', () => {
     const hits = found(
       {

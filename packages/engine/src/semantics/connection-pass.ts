@@ -324,6 +324,12 @@ const segmentsOf = (path: string): string[] =>
 
 const isValue = (segment: string) => segment.startsWith(':');
 
+/** A route's method serves a call's: the same, `ALL`, or React Router's `loader` (GET) and `action` (any other). */
+export const servesMethod = (route: string, call: string): boolean =>
+  route === call ||
+  route === 'ALL' ||
+  (route === 'loader' ? call === 'GET' : route === 'action' && call !== 'GET');
+
 /** Whether a route serves a call's path: segment by segment, a value matching any segment, `*` the rest. */
 function serves(route: readonly string[], call: readonly string[]): boolean {
   for (let i = 0; i < route.length; i += 1) {
@@ -382,7 +388,7 @@ export function joinConnections(
         const method = key.slice(0, space);
         const call = segmentsOf(key.slice(space + 1));
         for (const route of http) {
-          if ((route.method === method || route.method === 'ALL') && serves(route.segments, call)) {
+          if (servesMethod(route.method, method) && serves(route.segments, call)) {
             ids.add(route.id);
           }
         }

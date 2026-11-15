@@ -336,8 +336,22 @@ function declarationOrigin(
       const typed = typeOrigin(context, declaration.type, depth, seen);
       if (typed !== null) return typed;
     }
-    // A callback's parameter: what's passed to the function this callback is given to.
     const fn = declaration.parent;
+    // A parameter typed by its function's declared type (`const scope: ApplyScope = (eb) => …`).
+    if (
+      (ts.isArrowFunction(fn) || ts.isFunctionExpression(fn)) &&
+      ts.isVariableDeclaration(fn.parent) &&
+      fn.parent.type !== undefined
+    ) {
+      const index = fn.parameters.indexOf(declaration);
+      const declared = functionTypeOf(context, fn.parent.type);
+      const parameterType = declared?.parameters[index]?.type;
+      if (parameterType !== undefined) {
+        const typed = typeOrigin(context, parameterType, depth, seen);
+        if (typed !== null) return typed;
+      }
+    }
+    // A callback's parameter: what's passed to the function this callback is given to.
     if ((ts.isArrowFunction(fn) || ts.isFunctionExpression(fn)) && ts.isCallExpression(fn.parent)) {
       const call = fn.parent;
       if (call.arguments.includes(fn)) return withSteps(next(call.expression), PARAM);
@@ -653,4 +667,25 @@ function assignmentsOf(context: FileContext, declaration: TS.VariableDeclaration
     files.set(file, all);
   }
   return all.get(symbol) ?? [];
+}
+
+/** A function type written in the code, through type aliases (`type ApplyScope = (eb: Builder) => Expr`). */
+function functionTypeOf(context: FileContext, type: TS.TypeNode): TS.FunctionTypeNode | undefined {
+  const { ts, checker } = context;
+  for (
+    let current: TS.TypeNode | undefined = type, hops = 0;
+    current !== undefined && hops < 4;
+    hops += 1
+  ) {
+    if (ts.isFunctionTypeNode(current)) return current;
+    if (!ts.isTypeReferenceNode(current) || checker === undefined) return undefined;
+    let symbol = checker.getSymbolAtLocation(
+      ts.isIdentifier(current.typeName) ? current.typeName : current.typeName.right,
+    );
+    if (symbol !== undefined && symbol.flags & ts.SymbolFlags.Alias)
+      symbol = checker.getAliasedSymbol(symbol);
+    const alias = symbol?.declarations?.find(ts.isTypeAliasDeclaration);
+    current = alias?.type;
+  }
+  return undefined;
 }
