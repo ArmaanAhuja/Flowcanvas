@@ -328,6 +328,11 @@ function typeOrigin(
     return trace(context, name, depth + 1, seen);
   }
   if (!ts.isTypeReferenceNode(type)) return null;
+  // `Prisma.TransactionClient`: the namespace's origin, then the type's name, as an instance.
+  if (ts.isQualifiedName(type.typeName) && ts.isIdentifier(type.typeName.left)) {
+    const namespace = trace(context, type.typeName.left, depth + 1, seen);
+    if (namespace !== null) return withSteps(namespace, type.typeName.right.text, NEW);
+  }
   const name = ts.isIdentifier(type.typeName) ? type.typeName : type.typeName.right;
   const symbol = checker?.getSymbolAtLocation(name);
   const declaration = symbol?.declarations?.[0];

@@ -133,8 +133,12 @@ export function prismaTables(schema: string): Map<string, string> {
 /** The tables a SQL text names, and whether it writes. */
 export function sqlTables(text: string): { tables: string[]; operation: DataOperation } {
   const tables = new Set<string>();
-  for (const match of text.matchAll(/\b(?:from|join|into|update)\s+("?[A-Za-z_][\w."]*)/gi)) {
-    const name = (match[1] ?? '').replaceAll('"', '');
+  for (const match of text.matchAll(
+    /\b(for\s+)?(?:from|join|into|update)\s+("?[A-Za-z_][\w."]*)/gi,
+  )) {
+    // `FOR UPDATE SKIP LOCKED` locks rows; it names no table.
+    if (match[1] !== undefined) continue;
+    const name = (match[2] ?? '').replaceAll('"', '');
     if (name !== '' && !/^(select|set|lateral)$/i.test(name)) tables.add(name);
   }
   const operation: DataOperation =
@@ -147,9 +151,13 @@ export function sqlTables(text: string): { tables: string[]; operation: DataOper
 /** After `new PrismaClient()`, the steps that keep it a client (`$extends(…)`, a transaction's `tx`) taken out. */
 function prismaRest(origin: Origin): string[] | null {
   if (origin.module === null || !PRISMA_MODULE.test(origin.module)) return null;
-  if (origin.name !== 'PrismaClient' || origin.steps[0] !== NEW) return null;
+  // A client, or a transaction's (`tx: Prisma.TransactionClient`).
+  const client = origin.name === 'PrismaClient' && origin.steps[0] === NEW;
+  const transaction =
+    origin.name === 'Prisma' && origin.steps[0] === 'TransactionClient' && origin.steps[1] === NEW;
+  if (!client && !transaction) return null;
   const rest: string[] = [];
-  const steps = origin.steps.slice(1);
+  const steps = origin.steps.slice(client ? 1 : 2);
   for (let i = 0; i < steps.length; i += 1) {
     const step = steps[i] ?? '';
     const after = steps[i + 1];

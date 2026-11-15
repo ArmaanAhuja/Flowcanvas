@@ -51,6 +51,10 @@ describe('prismaTables and sqlTables', () => {
       tables: ['Poll'],
       operation: 'write',
     });
+    // A row lock names no table.
+    expect(sqlTables('SELECT id FROM queued_emails FOR UPDATE SKIP LOCKED').tables).toEqual([
+      'queued_emails',
+    ]);
   });
 });
 
@@ -81,6 +85,25 @@ describe('dataOf', () => {
         complete: false,
         why: DATA_MESSAGES.noModel,
       },
+    ]);
+  });
+
+  it('finds a transaction client’s reads and writes (`tx: Prisma.TransactionClient`)', () => {
+    const hits = found(
+      {
+        '/t.ts': [
+          "import { Prisma } from '@prisma/client';",
+          'export async function sync(tx: Prisma.TransactionClient, db?: Prisma.TransactionClient) {',
+          '  await tx.poll.findMany();',
+          '  await db?.option.deleteMany();',
+          '}',
+        ].join('\n'),
+      },
+      '/t.ts',
+    );
+    expect(hits.map((h) => [h.table, h.operation])).toEqual([
+      ['polls', 'read'],
+      ['Option', 'write'],
     ]);
   });
 
