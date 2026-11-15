@@ -67,7 +67,7 @@ function trpcLink(context: FileContext, call: TS.CallExpression): FoundLink | nu
     context,
     ts.isPropertyAccessExpression(callee) ? callee.expression : callee,
   );
-  if (origin === null || origin.module === null || !/^@trpc\//.test(origin.module)) return null;
+  if (!(origin?.module ?? '').startsWith('@trpc/') || origin === null) return null;
   const tokens = ts.isPropertyAccessExpression(callee)
     ? [...origin.steps, callee.name.text]
     : [...origin.steps];
@@ -321,7 +321,7 @@ function graphqlLink(context: FileContext, call: TS.CallExpression): FoundLink |
 }
 
 const isApollo = (origin: Origin | null): boolean =>
-  origin !== null && origin.module !== null && /^@apollo\/client(\/|$)/.test(origin.module);
+  /^@apollo\/client(\/|$)/.test(origin?.module ?? '');
 
 function apolloHook(context: FileContext, callee: TS.Expression): string | null {
   const origin = originOf(context, callee);

@@ -340,7 +340,7 @@ function repositoryTable(
   const type = 'type' in declaration ? (declaration.type as TS.TypeNode | undefined) : undefined;
   if (type !== undefined && ts.isTypeReferenceNode(type)) {
     const name = ts.isIdentifier(type.typeName) ? type.typeName.text : type.typeName.right.text;
-    if (/Repository$/.test(name)) {
+    if (name.endsWith('Repository')) {
       const [argument] = type.typeArguments ?? [];
       return argument !== undefined && ts.isTypeReferenceNode(argument)
         ? entityTable(

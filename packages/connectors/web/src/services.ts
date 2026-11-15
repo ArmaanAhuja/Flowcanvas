@@ -67,16 +67,17 @@ export function serviceOf(context: FileContext, call: TS.CallExpression): FoundS
     context,
     ts.isPropertyAccessExpression(callee) ? callee.expression : callee,
   );
-  if (origin === null || origin.module === null) return null;
+  const module = origin?.module ?? null;
+  if (origin === null || module === null) return null;
   for (const rule of RULES) {
-    if (!rule.module.test(origin.module)) continue;
+    if (!rule.module.test(module)) continue;
     if (rule.methods !== undefined) {
       if (method === null || !rule.methods.has(method) || !isInstance(origin)) continue;
     } else if (method === null ? origin.steps.length > 0 : !isInstance(origin)) {
       // A function of the package called directly (`getSignedUrl(…)`), or a method on one of its instances.
       continue;
     }
-    return { kind: rule.kind, library: origin.module, url: null, complete: true };
+    return { kind: rule.kind, library: module, url: null, complete: true };
   }
   return null;
 }

@@ -149,7 +149,7 @@ function identifierOrigin(
   depth: number,
   seen: Set<TS.Node>,
 ): Origin | null {
-  const { ts, checker } = context;
+  const { checker } = context;
   const symbol = checker?.getSymbolAtLocation(identifier);
   const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
   if (symbol === undefined || declaration === undefined) {
@@ -271,7 +271,7 @@ function declarationOrigin(
     ts.isPropertySignature(declaration) ||
     ts.isPropertyAssignment(declaration)
   ) {
-    if ('initializer' in declaration && declaration.initializer !== undefined) {
+    if (!ts.isPropertySignature(declaration) && declaration.initializer !== undefined) {
       const followed = next(declaration.initializer);
       if (followed !== null) return followed;
     }
