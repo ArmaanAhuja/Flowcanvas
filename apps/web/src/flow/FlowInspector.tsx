@@ -90,7 +90,13 @@ export function FlowInspector({ flow, selected, details, onOpen }: FlowInspector
       </section>
     );
   }
+  // The background lane is a frame: never selected (it isn't selectable).
+  if (selected.type === 'lane') return null;
   const { place, title } = selected.data;
+  const node = flow.nodes.find((n) => n.id === selected.data.id);
+  if (node !== undefined && (node.data ?? node.service ?? node.handoff) !== undefined) {
+    return <ConnectionDetails flow={flow} node={node} titleOf={titleOf} onOpen={onOpen} />;
+  }
   return (
     <section className={styles.inspector} aria-label={title}>
       <p className={styles.title}>{title}</p>
@@ -151,5 +157,128 @@ function Header({
         Open code
       </Button>
     </div>
+  );
+}
+
+const LIBRARY_NAMES: Readonly<Record<string, string>> = {
+  prisma: 'Prisma',
+  kysely: 'Kysely',
+  sql: 'SQL',
+  mongoose: 'Mongoose',
+  typeorm: 'TypeORM',
+};
+const SERVICE_KINDS = {
+  email: 'Email',
+  payments: 'Payments',
+  storage: 'Storage',
+  ai: 'AI',
+  http: 'HTTP',
+} as const;
+const HANDOFF_KINDS = {
+  queue: 'Queue',
+  job: 'Job',
+  cron: 'Schedule',
+  event: 'Event',
+  timer: 'Timer',
+  websocket: 'WebSocket',
+} as const;
+
+/**
+ * A table, an outside service or a hand-off (phases 9 to 11; design brief, "Node inspector": Data access, External
+ * service, Queue or job): what the code fixes of it, how it's known, why when it isn't fully, and where in this flow it's
+ * reached from, each opening its line.
+ */
+function ConnectionDetails({
+  flow,
+  node,
+  titleOf,
+  onOpen,
+}: {
+  readonly flow: Flow;
+  readonly node: Flow['nodes'][number];
+  readonly titleOf: (id: string) => string;
+  readonly onOpen: (place: CodePosition) => void;
+}) {
+  const facts: [string, string][] = [];
+  let caption = '';
+  let complete = true;
+  let why: string | null = null;
+  if (node.data !== undefined) {
+    caption = 'Data access';
+    facts.push(
+      [node.data.library === 'mongoose' ? 'Model' : 'Table', node.data.table ?? 'Not known'],
+      ['Access', node.data.operation === 'write' ? 'Write' : 'Read'],
+      ['Library', LIBRARY_NAMES[node.data.library] ?? node.data.library],
+    );
+    ({ complete, why } = node.data);
+  } else if (node.service !== undefined) {
+    caption = 'External service';
+    facts.push(['Service', SERVICE_KINDS[node.service.kind]], ['Package', node.service.library]);
+    if (node.service.url !== null) facts.push(['URL', node.service.url]);
+    ({ complete, why } = node.service);
+  } else if (node.handoff !== undefined) {
+    caption = 'Async hand-off';
+    facts.push(
+      ['Kind', HANDOFF_KINDS[node.handoff.kind]],
+      ['Name', node.handoff.name ?? 'Not known'],
+      ['Found by', node.handoff.library],
+    );
+    ({ complete, why } = node.handoff);
+  }
+  const into = flow.edges.filter((edge) => edge.to === node.id);
+  const onward = flow.edges.filter((edge) => edge.from === node.id);
+  return (
+    <section className={styles.inspector} aria-label={node.name}>
+      <p className={styles.caption}>{caption}</p>
+      <p className={styles.title}>{node.name}</p>
+      <dl className={styles.facts}>
+        {facts.map(([term, value]) => (
+          <div key={term} className={styles.fact}>
+            <dt className={styles.caption}>{term}</dt>
+            <dd className={styles.code}>{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className={styles.note}>
+        {complete
+          ? 'Known by a library’s rule (convention): matched from the code, not seen running.'
+          : `Not fully detected: ${why ?? ''}`}
+      </p>
+      {into.length > 0 && (
+        <>
+          <p className={styles.caption}>Reached from</p>
+          <ul className={styles.list} aria-label="Reached from">
+            {into.map((edge) => (
+              <li key={`${edge.from}:${edge.kind}`} className={styles.row}>
+                <span className={styles.code}>{titleOf(edge.from)}</span>
+                {edge.lines[0] !== undefined && edge.from.includes('#') && (
+                  <button
+                    type="button"
+                    className={styles.link}
+                    onClick={() => {
+                      onOpen({ path: pathOf(edge.from), line: edge.lines[0] ?? 1, column: 1 });
+                    }}
+                  >
+                    {String(edge.lines[0])}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {onward.length > 0 && (
+        <>
+          <p className={styles.caption}>Handled by</p>
+          <ul className={styles.list} aria-label="Handled by">
+            {onward.map((edge) => (
+              <li key={edge.to} className={styles.row}>
+                <span className={styles.code}>{titleOf(edge.to)}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
   );
 }
