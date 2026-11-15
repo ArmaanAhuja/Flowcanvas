@@ -108,3 +108,24 @@ describe('originOf', () => {
     ).toBeNull();
   });
 });
+
+describe('originOf through a function typed to hand back what it’s given', () => {
+  it('follows remember<T>(name, () => T): T to the value the factory makes', () => {
+    expect(
+      originAt(
+        {
+          '/remember.ts':
+            'export function remember<T>(name: string, getValue: () => T): T {\n  return (globalThis as any)[name] ?? getValue();\n}',
+          '/db.ts': [
+            "import { PrismaClient } from '@prisma/client';",
+            "import { remember } from './remember';",
+            "const client = remember('prisma', () => new PrismaClient());",
+            'export { client as prisma };',
+          ].join('\n'),
+          '/use.ts': "import { prisma } from './db';\nprisma.envelope.findMany(); // here",
+        },
+        '/use.ts',
+      ),
+    ).toEqual({ module: '@prisma/client', name: 'PrismaClient', steps: ['new', 'envelope'] });
+  });
+});

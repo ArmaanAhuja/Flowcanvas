@@ -123,6 +123,20 @@ function trace(
       const followed = next(returned);
       if (followed !== null) return followed;
     }
+    // A project function typed to hand back what it's given: `remember<T>(name, getValue: () => T): T`.
+    // Several values (`if (!replicas) return prisma; return prisma.$extends(…)`): when all come from one import.
+    const passed = passedThrough(context, expression);
+    if (passed !== undefined) {
+      const origins = passed.map(next);
+      const [first] = origins;
+      if (
+        first !== null &&
+        first !== undefined &&
+        origins.every((o) => o !== null && o.module === first.module && o.name === first.name)
+      ) {
+        return first;
+      }
+    }
     return withSteps(next(callee), callStep(ts, expression));
   }
   if (ts.isNewExpression(expression)) return withSteps(next(expression.expression), NEW);
@@ -399,4 +413,66 @@ function returnedValue(context: FileContext, callee: TS.Expression): TS.Expressi
   if (first === undefined) return undefined;
   const text = first.getText();
   return returns.every((r) => r.getText() === text) ? first : undefined;
+}
+
+/**
+ * For a call of a project function declared to return its type parameter `T`, with a parameter typed `T` or `() => T`:
+ * the value that argument gives (Documenso's `remember('prisma', () => new PrismaClient())`). Read from the declared
+ * types, so it holds whatever the body does with it.
+ */
+function passedThrough(
+  context: FileContext,
+  call: TS.CallExpression,
+): readonly TS.Expression[] | undefined {
+  const { ts, checker } = context;
+  if (checker === undefined) return undefined;
+  const callee = call.expression;
+  let symbol = checker.getSymbolAtLocation(
+    ts.isPropertyAccessExpression(callee) ? callee.name : callee,
+  );
+  if (symbol !== undefined && symbol.flags & ts.SymbolFlags.Alias)
+    symbol = checker.getAliasedSymbol(symbol);
+  const declaration = symbol?.valueDeclaration;
+  if (
+    declaration === undefined ||
+    declaration.getSourceFile().isDeclarationFile ||
+    !(ts.isFunctionDeclaration(declaration) || ts.isMethodDeclaration(declaration))
+  ) {
+    return undefined;
+  }
+  const returns = declaration.type;
+  if (
+    returns === undefined ||
+    !ts.isTypeReferenceNode(returns) ||
+    !ts.isIdentifier(returns.typeName)
+  ) {
+    return undefined;
+  }
+  const parameter = returns.typeName.text;
+  if (!(declaration.typeParameters ?? []).some((p) => p.name.text === parameter)) return undefined;
+  const isT = (type: TS.TypeNode | undefined) =>
+    type !== undefined &&
+    ts.isTypeReferenceNode(type) &&
+    ts.isIdentifier(type.typeName) &&
+    type.typeName.text === parameter;
+  for (const [index, p] of declaration.parameters.entries()) {
+    const argument = call.arguments[index];
+    if (argument === undefined) continue;
+    if (isT(p.type)) return [argument];
+    if (p.type !== undefined && ts.isFunctionTypeNode(p.type) && isT(p.type.type)) {
+      if (!(ts.isArrowFunction(argument) || ts.isFunctionExpression(argument))) return undefined;
+      const body = argument.body;
+      if (!ts.isBlock(body)) return [body];
+      const returned: TS.Expression[] = [];
+      const visit = (node: TS.Node): void => {
+        if (ts.isFunctionLike(node)) return;
+        if (ts.isReturnStatement(node) && node.expression !== undefined)
+          returned.push(node.expression);
+        ts.forEachChild(node, visit);
+      };
+      ts.forEachChild(body, visit);
+      return returned.length > 0 ? returned : undefined;
+    }
+  }
+  return undefined;
 }
