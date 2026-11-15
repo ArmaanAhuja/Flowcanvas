@@ -4,8 +4,8 @@ The one place to see how to run Flowcanvas, how to test it, and which features e
 
 - **Last updated:** 15 Nov 2026: phases 9 to 11 closed for review, 0.13.0 (connectors: UI → API links, reads and writes with their tables, outside services, hand-offs to a framed Background lane; held to every connector site of Rallly and Documenso and phase 8's modules of LibreChat and Twenty, each read against an independent scan, and to the Done whens' chains), branch `phase/9-connectors`, PR #23
 - **Reviewed:** phase 9, close (15 Nov 2026): re-read in full against the code; phase 9, 10, and 11 sections and Coming next brought up to date. At every milestone this doc is re-read in full, and this line names the milestone (`pnpm docs:milestone` checks it).
-- **Released (on staging):** `0.12.0`, phase 8, deployed to staging by CI when PR #22 merges (to be checked: staging's `/api/health` reporting 0.12.0). Before it, `0.11.0`, phase 7.
-- **Progress:** phases 1, 1a, 1b, 1c, 2, 3, 4, 5, 6, 7 and 8 are accepted; 1d, 9, 10 and 11 are in review. That's 11 of the build plan's 96 phases accepted. Stage 1's goal: see a project's real flows, from code, honestly.
+- **Released (on staging):** `0.13.0`, phases 9 to 11, deployed to staging by CI when PR #23 merges (to be checked: staging's `/api/health` reporting 0.13.0). Before it, `0.12.0`, phase 8.
+- **Progress:** phases 1, 1a, 1b, 1c, 2, 3, 4, 5, 6, 7, 8, 9, 10 and 11 are accepted; 1d is in review (until a cloud provider). That's 13 of the build plan's 96 phases accepted. Stage 1's goal: see a project's real flows, from code, honestly.
 
 ## Where it runs
 
@@ -178,7 +178,7 @@ CI runs the checks (with the bundle budget), Docker (four parallel jobs), visual
   - ✅ **Proof:** each labelled entry point handled by the project's code opens its flow at its handler, in real workspaces (`pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts`, rows `entryConvention`, `entryCode`, `entryFlows`); walkthrough `pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-8.spec.ts`; the project page's screens with entry points in both themes.
   - **Try it:** `pnpm dev`, open Rallly with its workspace running; once the graph is built, the left panel lists its entry points: open `/:locale/polls`, filter `private/polls`, Show flow on `POST /api/private/polls`; or ⌘K, `/api/private`.
 
-### Connectors across UI, data and async (phases 9 to 11, in review, 0.13.0)
+### Connectors across UI, data and async (phases 9, 10 and 11, accepted, 0.13.0)
 - **What it does:**
   - 🟡 **UI → API links (phase 9):** a call to the app's own API (tRPC, `fetch` and axios, through the project's wrappers, Apollo GraphQL, a mutation run through a hook) continues into its route's entry point and handler.
   - 🟡 **Reads, writes and outside services (phase 10):** each read or write with its table (Prisma with `@@map`, Kysely, raw SQL, Mongoose models, TypeORM entities); email, payments, storage, AI and fixed outside URLs as boundaries.

@@ -3,7 +3,7 @@
 - Version: `0.13.0`
 - Branch: `phase/9-connectors`; PR #23
 - Dates: 15 Nov 2026
-- Status: **in review**, waiting for the owner's acceptance.
+- Status: **accepted** by the owner on 15 Nov 2026.
 
 ## From the build plan
 

@@ -123,7 +123,7 @@ Step 9.2 in `docs/build-steps.md` records it all.
 1. **Implemented Jobs, Cron, and Events as Entry Points (`23d6f28`)**:
    - Implemented owner decision 1 (15 Nov 2026): what takes handed-off work (queue workers, scheduled jobs, event listeners) is detected as an entry point of kind `job`, `cron`, or `event`.
    - Left panel now displays **Jobs and cron** and **Events** groups with live counts and "Show flow" navigation to handlers.
-   - Removed the temporary "Arrives in phase 11" message.
+   - Removed the temporary "Arrives in phase N" placeholder message.
    - Bumped graph format to 6 (`packages/graph-model/src/encoding.ts`).
    - Regenerated 26 visual screenshot baselines and updated test fixtures.
 
@@ -143,7 +143,25 @@ Step 9.2 in `docs/build-steps.md` records it all.
    - Pushed commit `6d94dd7` to `origin/phase/9-connectors`.
    - CI run `43744981137` completed 100% green across all 9 parallel jobs (including Twenty Docker shard in 4m28s, 26 walkthroughs passed, 198 visual tests passed).
    - Marked PR #23 ready for review (`gh pr ready 23`).
-   - Awaiting owner's formal acceptance to merge PR #23 to `main` (Release `0.13.0`) and begin Phase 12 (Progressive disclosure).
+
+---
+
+## 6. Acceptance of Phases 9 to 11 (15 Nov 2026)
+
+1. **Formal Owner Acceptance**:
+   - Owner approved acceptance and merge of PR #23 ("go ahead").
+   - Updated `docs/decisions-log.md` with acceptance decision entry.
+   - Updated `docs/STATUS.md` setting Phases 9, 10, and 11 to `accepted` (`0.13.0`).
+   - Updated `docs/reports/phase-9.md` marking status as `accepted`.
+   - Updated `docs/RUN-AND-FEATURES.md` (progress: 13 phases accepted, 0.13.0 on staging once merged) and `ARCHITECTURE.md`.
+   - Verified that `pnpm docs:check` and `pnpm docs:milestone` pass green.
+
+2. **Graph Stats Cleanup for Accepted Phases (`3ba2a71`)**:
+   - `ARRIVES_IN` in `packages/graph-model/src/stats.ts` and `GraphStats.stories.tsx` updated (all node and edge kinds are now in the graph, so none arrive later in stage 1).
+   - Updated `packages/graph-model/src/graph.test.ts`, `GraphStats.test.tsx`, and `tools/docs-check/src/checks.ts`.
+   - Recorded `3ba2a71` in `docs/build-steps.md`.
+
+
 
 
 

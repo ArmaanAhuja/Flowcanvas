@@ -709,3 +709,10 @@ CLAUDE.md's "Working pace" says the same.
 2. **Never wait on CI mid-phase:** work continues while a run goes; only the run before the report must be green.
 3. **Before a push, the one heavy suite matching the change, once, on the laptop:** visual when screens change, the changed fork's Docker shard when the engine changes (amends 11 Nov: heavy suites otherwise on CI).
 4. **Graphs reused across Claude's own repeated runs** (scratch tools only, not the product).
+
+## 15 Nov 2026: phases 9 to 11 accepted (owner)
+
+**Owner:** "go ahead" (on PR #23 acceptance and merge).
+- **Phases 9 to 11 accepted.** PR #23 marked ready for review and all checks passed green. Connectors across UI → API, database reads/writes with tables/collections, external service boundaries, and async hand-offs (BullMQ, Twenty message queue, Documenso job client, EventEmitter, WebSockets) proven on all 4 forks in real workspaces. Background lane on canvas and jobs/cron/events listed as entry points in the left panel. Release 0.13.0.
+- **Next:** Phases 12 and 13 grouped (progressive disclosure and sequence view).
+
