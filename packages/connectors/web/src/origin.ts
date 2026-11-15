@@ -6,10 +6,21 @@
 import type * as TS from 'typescript';
 import type { FileContext } from './ast.js';
 
-/** A step from the import to the value: an instance (`new`), a call's result (`()`), or a property's name. */
+/**
+ * A step from the import to the value: an instance (`new`), a call's result, or a property's name. A call is written
+ * with its arguments' string literals, `_` for any other: `()`, `('User',_)`, `(_,'person')`.
+ */
 export type Step = string;
 export const NEW: Step = 'new';
 export const CALL: Step = '()';
+/** Whether a step is a call's result (not a callback's parameter). */
+export const isCall = (step: Step | undefined): boolean =>
+  step !== undefined && step.startsWith('(') && step !== PARAM;
+/** A call step's string arguments, by position (null where it isn't a literal). */
+export function callArguments(step: Step): (string | null)[] {
+  if (!isCall(step) || step === CALL) return [];
+  return JSON.parse(`[${step.slice(1, -1).replaceAll('_', 'null')}]`) as (string | null)[];
+}
 /** A callback's parameter: the value a library passes to a function given to it (`$transaction(async (tx) => …)`). */
 export const PARAM: Step = '(param)';
 
@@ -36,6 +47,13 @@ const GLOBALS = new Set([
 
 export function originOf(context: FileContext, expression: TS.Expression): Origin | null {
   return trace(context, expression, 0, new Set());
+}
+
+function callStep(ts: typeof TS, call: TS.CallExpression): Step {
+  if (call.arguments.length === 0) return CALL;
+  return `(${call.arguments
+    .map((a) => (ts.isStringLiteralLike(a) ? JSON.stringify(a.text) : '_'))
+    .join(',')})`;
 }
 
 function unwrap(ts: typeof TS, expression: TS.Expression): TS.Expression {
@@ -105,7 +123,7 @@ function trace(
       const followed = next(returned);
       if (followed !== null) return followed;
     }
-    return withSteps(next(callee), CALL);
+    return withSteps(next(callee), callStep(ts, expression));
   }
   if (ts.isNewExpression(expression)) return withSteps(next(expression.expression), NEW);
   if (ts.isBinaryExpression(expression)) {
@@ -257,9 +275,8 @@ function declarationOrigin(
       const followed = next(declaration.initializer);
       if (followed !== null) return followed;
     }
-    return declaration.type === undefined
-      ? null
-      : typeOrigin(context, declaration.type, depth, seen);
+    const type = ts.isPropertyAssignment(declaration) ? undefined : declaration.type;
+    return type === undefined ? null : typeOrigin(context, type, depth, seen);
   }
   if (ts.isShorthandPropertyAssignment(declaration)) {
     const value = checker?.getShorthandAssignmentValueSymbol(declaration);
@@ -283,6 +300,18 @@ function typeOrigin(
   seen: Set<TS.Node>,
 ): Origin | null {
   const { ts, checker } = context;
+  // `typeof import('mongoose')`: the module itself.
+  if (ts.isImportTypeNode(type) && type.isTypeOf) {
+    const argument = type.argument;
+    return ts.isLiteralTypeNode(argument) && ts.isStringLiteral(argument.literal)
+      ? { module: argument.literal.text, name: '*', steps: [] }
+      : null;
+  }
+  // `typeof mongoose`: what that value is.
+  if (ts.isTypeQueryNode(type)) {
+    const name = ts.isIdentifier(type.exprName) ? type.exprName : type.exprName.right;
+    return trace(context, name, depth + 1, seen);
+  }
   if (!ts.isTypeReferenceNode(type)) return null;
   const name = ts.isIdentifier(type.typeName) ? type.typeName : type.typeName.right;
   const symbol = checker?.getSymbolAtLocation(name);
