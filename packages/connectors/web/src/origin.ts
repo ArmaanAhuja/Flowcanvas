@@ -119,10 +119,18 @@ function trace(
         : null;
     }
     // A project function: what it returns (a factory, a singleton's getter).
+    // Several returned values (a transport per mail provider): when every one comes from one import.
     const returned = returnedValue(context, callee);
     if (returned !== undefined) {
-      const followed = next(returned);
-      if (followed !== null) return followed;
+      const origins = returned.map((value) => trace(context, value, depth + 1, new Set(seen)));
+      const [first] = origins;
+      if (
+        first !== null &&
+        first !== undefined &&
+        origins.every((o) => o !== null && o.module === first.module && o.name === first.name)
+      ) {
+        return first;
+      }
     }
     // A project function typed to hand back what it's given: `remember<T>(name, getValue: () => T): T`.
     // Several values (`if (!replicas) return prisma; return prisma.$extends(…)`): when all come from one import.
@@ -386,6 +394,8 @@ function typeOrigin(
     const found = aliased.declarations?.[0];
     if (found !== undefined && !found.getSourceFile().isDeclarationFile) target = found;
   }
+  // `type EnvelopeBuilder = ExpressionBuilder<DB, 'Envelope'>`: the type it names.
+  if (ts.isTypeAliasDeclaration(target)) return typeOrigin(context, target.type, depth + 1, seen);
   if (ts.isClassDeclaration(target)) {
     const base = baseOf(ts, target);
     const followed = base === undefined ? null : trace(context, base, depth + 1, seen);
@@ -426,7 +436,10 @@ function memberDeclaration(
 }
 
 /** For a call of a function the project declares with one returned value: that value. */
-function returnedValue(context: FileContext, callee: TS.Expression): TS.Expression | undefined {
+function returnedValue(
+  context: FileContext,
+  callee: TS.Expression,
+): readonly TS.Expression[] | undefined {
   const { ts, checker } = context;
   if (checker === undefined) return undefined;
   const at = ts.isPropertyAccessExpression(callee) ? callee.name : callee;
@@ -453,7 +466,7 @@ function returnedValue(context: FileContext, callee: TS.Expression): TS.Expressi
   }
   const body = declaration.body;
   if (body === undefined) return undefined;
-  if (!ts.isBlock(body)) return body;
+  if (!ts.isBlock(body)) return [body];
   const returns: TS.Expression[] = [];
   const visit = (node: TS.Node): void => {
     if (ts.isFunctionLike(node)) return;
@@ -461,11 +474,7 @@ function returnedValue(context: FileContext, callee: TS.Expression): TS.Expressi
     ts.forEachChild(node, visit);
   };
   ts.forEachChild(body, visit);
-  // One value returned, or several that are the same variable (`if (!client) client = …; return client;`).
-  const [first] = returns;
-  if (first === undefined) return undefined;
-  const text = first.getText();
-  return returns.every((r) => r.getText() === text) ? first : undefined;
+  return returns.length === 0 ? undefined : returns;
 }
 
 /**

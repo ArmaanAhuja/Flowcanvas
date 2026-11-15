@@ -172,3 +172,41 @@ describe('originOf through assignments and pass-through wrappers', () => {
     });
   });
 });
+
+describe('originOf through several returns and type aliases', () => {
+  it('follows a function with a return per case when every one comes from one import', () => {
+    expect(
+      originAt(
+        {
+          '/mailer.ts': [
+            "import { createTransport } from 'nodemailer';",
+            'declare const provider: string;',
+            'const getTransport = () => {',
+            "  if (provider === 'smtp') return createTransport({ host: 'x' });",
+            "  if (provider === 'resend') return createTransport({ service: 'r' });",
+            '  return createTransport({});',
+            '};',
+            'export const mailer = getTransport();',
+          ].join('\n'),
+          '/send.ts': "import { mailer } from './mailer';\nmailer.sendMail({}); // here",
+        },
+        '/send.ts',
+      ),
+    ).toMatchObject({ module: 'nodemailer', name: 'createTransport' });
+  });
+
+  it('follows a parameter typed with an alias to the type it names', () => {
+    expect(
+      originAt(
+        {
+          '/q.ts': [
+            "import type { ExpressionBuilder } from 'kysely';",
+            'type EnvelopeBuilder = ExpressionBuilder;',
+            "export const sub = (eb: EnvelopeBuilder) => eb.selectFrom('Recipient'); // here",
+          ].join('\n'),
+        },
+        '/q.ts',
+      ),
+    ).toEqual({ module: 'kysely', name: 'ExpressionBuilder', steps: ['new'] });
+  });
+});
