@@ -22,6 +22,19 @@ export interface ForkConnections {
   readonly scope: readonly string[];
   readonly notes?: readonly string[];
   readonly sites: readonly ConnectionLabel[];
+  /**
+   * The *Done when*s' chains, read in the code: each node reachable from the one before it in the graph (phase 9: a
+   * form's submit → its API's entry point → its handler; phase 10: writes and the email; phase 11: enqueue → queue →
+   * worker → result).
+   */
+  readonly chains?: readonly ConnectionChain[];
+}
+
+export interface ConnectionChain {
+  /** Which *Done when*, and what it shows. */
+  readonly name: string;
+  /** Node ids, in order. */
+  readonly path: readonly string[];
 }
 
 interface GraphLike {
@@ -161,5 +174,45 @@ export function connectionBarProblems(result: ConnectionResult): string[] {
   for (const key of result.falseFinds) problems.push(`false find: ${key}`);
   for (const key of result.unexplained) problems.push(`missed without a reason: ${key}`);
   for (const key of result.nowFound) problems.push(`labelled as missed, but found: ${key}`);
+  return problems;
+}
+
+/** Each chain's first unreachable step: none means every chain holds in the graph. */
+export function chainProblems(labels: ForkConnections, graph: GraphLike): string[] {
+  const out = new Map<string, string[]>();
+  for (const edge of graph.edges) {
+    if (edge.to !== null) out.set(edge.from, [...(out.get(edge.from) ?? []), edge.to]);
+  }
+  const ids = new Set(graph.nodes.map((n) => n.id));
+  const reaches = (from: string, to: string): boolean => {
+    const seen = new Set([from]);
+    const queue = [from];
+    for (const id of queue) {
+      if (id === to) return true;
+      for (const next of out.get(id) ?? []) {
+        if (!seen.has(next)) {
+          seen.add(next);
+          queue.push(next);
+        }
+      }
+    }
+    return false;
+  };
+  const problems: string[] = [];
+  for (const chain of labels.chains ?? []) {
+    const missing = chain.path.find((id) => !ids.has(id));
+    if (missing !== undefined) {
+      problems.push(`${chain.name}: no node ${missing}`);
+      continue;
+    }
+    for (let i = 1; i < chain.path.length; i += 1) {
+      const from = chain.path[i - 1] ?? '';
+      const to = chain.path[i] ?? '';
+      if (!reaches(from, to)) {
+        problems.push(`${chain.name}: ${to} isn’t reached from ${from}`);
+        break;
+      }
+    }
+  }
   return problems;
 }

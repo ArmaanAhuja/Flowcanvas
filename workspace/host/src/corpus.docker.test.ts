@@ -31,6 +31,7 @@ import { dockerCli } from './docker-cli.js';
 import { WorkspaceHost } from './workspaces.js';
 import { checkGraph, compareCalls, type CallsLabel } from '../../../corpus/src/calls.js';
 import {
+  chainProblems,
   compareConnections,
   connectionBarProblems,
   CONNECTION_KINDS,
@@ -265,6 +266,9 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
         // against the schema, then the labelled functions are found in it.
         const graphDiffering: string[] = [];
         let connectionResult: ConnectionResult | null = null;
+        // The Done whens' chains (phase 9: a form's submit into its API's handler, in all 4 forks; 10: writes and the
+        // email; 11: enqueue → queue → worker → result): each step reached from the one before, in the stored graph.
+        let chainsBroken: string[] | null = null;
         const roots: { readonly label: CallsLabel; readonly id: string }[] = [];
         const sampled = [...(callLabels[repo.id] ?? []), ...(graphLabels[repo.id] ?? [])];
         if (graph.state === 'ready' && graph.snapshot !== null && sampled.length > 0) {
@@ -284,6 +288,7 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
             const forConnections = connectionLabels[repo.id];
             if (forConnections !== undefined) {
               connectionResult = compareConnections(forConnections, loaded.graph);
+              chainsBroken = chainProblems(forConnections, loaded.graph);
             }
             for (const label of sampled) {
               const found = checkGraph(loaded.graph, label);
@@ -501,6 +506,7 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
                   0,
                 ),
                 connectionsFalseFinds: connectionResult.falseFinds.length,
+                connectionChains: `${String((connectionLabels[repo.id]?.chains?.length ?? 0) - (chainsBroken?.length ?? 0))} of ${String(connectionLabels[repo.id]?.chains?.length ?? 0)}`,
               }
             : {}),
         };
@@ -541,6 +547,7 @@ describe('the corpus in real workspaces (phases 4, 5 and 6)', { timeout: 900_000
               }
             }
             expect(connectionBarProblems(connectionResult)).toEqual([]);
+            expect(chainsBroken).toEqual([]);
           }
           expect(Math.max(...flowMs, ...detailsMs)).toBeLessThan(ANSWER_MS);
         }

@@ -504,34 +504,71 @@ export function mutationFunction(
     }
   }
   if (made === undefined || !ts.isCallExpression(made)) return null;
+  return mutationOfHook(context, made, 0);
+}
+
+/**
+ * The function a hook's call makes its mutation from: React Query's `useMutation` (its options' `mutationFn` in any
+ * argument, v4's `useMutation([key], { mutationFn })` included; v4's function argument; `mutationOptions(action)`),
+ * next-safe-action's `useAction(action)`, or the project's own hook returning one of them (LibreChat's
+ * `useLoginUserMutation(options)`), two levels deep.
+ */
+function mutationOfHook(
+  context: FileContext,
+  made: TS.CallExpression,
+  depth: number,
+): TS.Expression | null {
+  const { ts } = context;
   const hook = originOf(context, made.expression);
-  if (hook === null || hook.steps.length > 0) return null;
   const [first] = made.arguments;
-  if (first === undefined) return null;
-  if (
-    hook.name === 'useAction' &&
-    /^next-safe-action(\/|$)/.test(hook.module ?? '') // next-safe-action/hooks
-  ) {
-    return first;
+  if (hook !== null && hook.steps.length === 0 && first !== undefined) {
+    if (hook.name === 'useAction' && /^next-safe-action(\/|$)/.test(hook.module ?? '')) {
+      return first;
+    }
+    if (
+      hook.name === 'useMutation' &&
+      /^@tanstack\/(react|vue|solid|svelte)-query$/.test(hook.module ?? '')
+    ) {
+      for (const argument of made.arguments) {
+        if (ts.isObjectLiteralExpression(argument)) {
+          const fn = optionValue(ts, argument, 'mutationFn');
+          if (fn !== undefined) return fn;
+        }
+      }
+      // React Query 4's `useMutation(fn, options)`.
+      if (ts.isArrowFunction(first) || ts.isFunctionExpression(first) || ts.isIdentifier(first)) {
+        return first;
+      }
+      // `mutationOptions(action, …)` (next-safe-action's adapter, or the project's own helper of that shape).
+      if (ts.isCallExpression(first)) {
+        const options = originOf(context, first.expression);
+        if (options?.name === 'mutationOptions' && options.steps.length === 0) {
+          return first.arguments[0] ?? null;
+        }
+      }
+      return null;
+    }
   }
-  if (
-    hook.name !== 'useMutation' ||
-    !/^@tanstack\/(react|vue|solid|svelte)-query$/.test(hook.module ?? '')
-  ) {
-    return null;
+  // The project's own hook: the one call it returns.
+  if (depth >= 2) return null;
+  const fn = projectFunction(context, made.expression);
+  const body = fn?.body;
+  if (body === undefined) return null;
+  const returned: TS.Expression[] = [];
+  if (!ts.isBlock(body)) returned.push(body);
+  else {
+    const visit = (node: TS.Node): void => {
+      if (ts.isFunctionLike(node)) return;
+      if (ts.isReturnStatement(node) && node.expression !== undefined)
+        returned.push(node.expression);
+      ts.forEachChild(node, visit);
+    };
+    ts.forEachChild(body, visit);
   }
-  if (ts.isObjectLiteralExpression(first)) return optionValue(ts, first, 'mutationFn') ?? null;
-  // React Query 4's `useMutation(fn, options)`.
-  if (ts.isArrowFunction(first) || ts.isFunctionExpression(first) || ts.isIdentifier(first)) {
-    return first;
-  }
-  // `mutationOptions(action, …)` (next-safe-action's adapter, or the project's own helper of that shape).
-  if (ts.isCallExpression(first)) {
-    const options = originOf(context, first.expression);
-    if (options?.name === 'mutationOptions' && options.steps.length === 0)
-      return first.arguments[0] ?? null;
-  }
-  return null;
+  const [only] = returned;
+  return returned.length === 1 && only !== undefined && ts.isCallExpression(only)
+    ? mutationOfHook(context, only, depth + 1)
+    : null;
 }
 
 /** What a variable holding a value was set to (`const mutation = useMutation(…)`). */

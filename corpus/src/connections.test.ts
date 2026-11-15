@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  chainProblems,
   compareConnections,
   connectionBarProblems,
   connectionsOf,
@@ -156,5 +157,29 @@ describe('labels/connections.json', () => {
       }
     }
     expect(typeof file.about).toBe('string');
+  });
+});
+
+describe('the Done whens’ chains', () => {
+  it('holds when each node is reached from the one before it, and says where one breaks', () => {
+    const labels: ForkConnections = {
+      scope: ['*'],
+      sites: [],
+      chains: [
+        {
+          name: 'submit to its handler',
+          path: ['src/form.tsx#Form', 'src/server.ts#(entry mutation polls.make)'],
+        },
+        {
+          name: 'make writes and emails',
+          path: ['src/poll.ts#make', '(data prisma polls write)', '(service email nodemailer)'],
+        },
+        { name: 'not there', path: ['src/poll.ts#gone'] },
+      ],
+    };
+    expect(chainProblems(labels, GRAPH)).toEqual([
+      'make writes and emails: (service email nodemailer) isn’t reached from (data prisma polls write)',
+      'not there: no node src/poll.ts#gone',
+    ]);
   });
 });

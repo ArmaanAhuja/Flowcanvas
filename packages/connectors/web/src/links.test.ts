@@ -138,10 +138,13 @@ describe('mutationFunction and linksWithin', () => {
       "import { mutationOptions } from '@next-safe-action/adapter-tanstack-query';",
       "import { cancelInvite } from './actions';",
       "import * as dataService from './service';",
+      "// LibreChat's shape: the project's own hook returning React Query 4's useMutation([key], { mutationFn }).",
+      "const useLoginUserMutation = () => useMutation(['login'], { mutationFn: (p: unknown) => dataService.login(p) });",
       'export function Form() {',
       '  const cancel = useMutation(mutationOptions(cancelInvite, {}));',
       '  const { mutateAsync: logIn } = useMutation({ mutationFn: (p: unknown) => dataService.login(p) });',
-      '  return async () => { cancel.mutate({}); await logIn({}); };',
+      '  const { mutate: logIn4 } = useLoginUserMutation();',
+      '  return async () => { cancel.mutate({}); await logIn({}); logIn4({}); };',
       '}',
     ].join('\n'),
   };
@@ -163,7 +166,11 @@ describe('mutationFunction and linksWithin', () => {
       ts.forEachChild(node, visit);
     };
     visit(source);
-    expect(runs).toEqual(['cancelInvite', '(p: unknown) => dataService.lo']);
-    expect(links).toEqual(['POST /api/auth/login']);
+    expect(runs).toEqual([
+      'cancelInvite',
+      '(p: unknown) => dataService.lo',
+      '(p: unknown) => dataService.lo',
+    ]);
+    expect(links).toEqual(['POST /api/auth/login', 'POST /api/auth/login']);
   });
 });
