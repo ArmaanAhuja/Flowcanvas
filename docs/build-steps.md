@@ -13983,4 +13983,4 @@ pnpm test:visual
 
 **Risks and laptop:** Laptop runs all unit, walkthrough, and lint suites in seconds. Graph memory on Twenty kept under 1.2 GB.
 
-**Commits:** `2d962fb`, `c07492c`, `0ad9f79`, `511ec45`, `16077ea`, `c4abd0f`, `65e56b3`, `2ceeb7b`, `3f299ba`, `c5c0cc9`, `9fffabc`, `d49eacd`, `a01dde0`, `808899a`, `5c3fbf5`, `1ed8ebd`, `a772e5b`, `1fd99c3`, `b8f4e76`, `4790336`, `f47728f`, `eb73caf`, `f324e29`, `ef8e11f`, `3a6ecb5`, `95eaa9a`, `4fbfad1`, `9f8f493`, `6e00c53`, `1fca557`, `0250751`, `775dcdc`, `1f948d5`.
+**Commits:** `2d962fb`, `c07492c`, `0ad9f79`, `511ec45`, `16077ea`, `c4abd0f`, `65e56b3`, `2ceeb7b`, `3f299ba`, `c5c0cc9`, `9fffabc`, `d49eacd`, `a01dde0`, `808899a`, `5c3fbf5`, `1ed8ebd`, `a772e5b`, `1fd99c3`, `b8f4e76`, `4790336`, `f47728f`, `eb73caf`, `f324e29`, `ef8e11f`, `3a6ecb5`, `95eaa9a`, `4fbfad1`, `9f8f493`, `6e00c53`, `1fca557`, `0250751`, `775dcdc`, `1f948d5`, `32c5b26`.

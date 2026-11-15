@@ -98,5 +98,6 @@ This document tracks all modifications, tests, scripts, and documentation change
 
 10. **Committed Changes on `phase/9-connectors`**:
     * Commit `1f948d5`: `feat(connectors): close phases 9 to 11: release 0.13.0, hand labels and walkthroughs`
-    * Step 9.1 in `docs/build-steps.md` updated to document `1f948d5`.
+    * Commit `32c5b26`: `fix(test): give Twenty's graph build with connectors up to 10 minutes on CI` (increased `GRAPH_GIVE_UP_MS` from 420s to 600s in `corpus.docker.test.ts` so 61k-node graph build passes on 2-CPU CI runners)
+    * Step 9.1 in `docs/build-steps.md` updated to document all commits.
     * Milestone docs verified passing with `pnpm docs:milestone`.
