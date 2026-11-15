@@ -225,7 +225,7 @@ describe('entry points on the page', () => {
       names.findIndex((n) => n.startsWith('email-queue')),
     );
     expect(row('workspace.created')).toBeTruthy();
-    expect(screen.queryByText('Arrives in phase 11.')).toBeNull();
+    expect(screen.queryByText(/^Arrives in phase/)).toBeNull();
     expect(row('/polls/:urlId').textContent).toContain('PollPage');
     row('/polls/:urlId').focus();
     await user.keyboard('{ArrowRight}');

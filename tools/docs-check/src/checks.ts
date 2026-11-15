@@ -42,7 +42,7 @@ export function phasesNamed(text: string): string[] {
 }
 
 /**
- * Words that say something is still to come, said of a phase: "arrives in phase 10", "until phase 12", "planned for
+ * Words that say something is still to come, said of a phase: "arrives in phase 15", "until phase 12", "planned for
  * phase 48a", "phase 30 adds". A phase named that way must not be accepted yet.
  */
 const PHASES = String.raw`phases?\s+\d+[a-z]?(?:\s*(?:,|and)\s*\d+[a-z]?)*`;

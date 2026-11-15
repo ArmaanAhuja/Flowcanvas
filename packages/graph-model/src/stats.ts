@@ -46,12 +46,5 @@ export function graphStats(graph: Graph): GraphStats {
   };
 }
 
-/** When each kind not filled yet arrives (build plan): shown with its zero (owner, 12 Nov 2026). */
-export const ARRIVES_IN: Readonly<Partial<Record<NodeKind | EdgeKind, number>>> = {
-  'data-access': 10,
-  'external-boundary': 10,
-  'async-handoff': 11,
-  data: 10,
-  boundary: 10,
-  handoff: 11,
-};
+/** When each kind not filled yet arrives (build plan): all kinds are filled since phases 7, 8, 10 and 11. */
+export const ARRIVES_IN: Readonly<Partial<Record<NodeKind | EdgeKind, number>>> = {};
