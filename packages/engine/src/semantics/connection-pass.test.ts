@@ -56,7 +56,34 @@ const FILES: Record<string, string> = {
   ].join('\n'),
   'src/trpc.ts':
     "import { createTRPCReact } from '@trpc/react-query';\nexport const trpc = createTRPCReact();",
-  'src/app/api/polls/route.ts': 'export async function GET() {\n  return Response.json([]);\n}',
+  'src/app/api/polls/route.ts':
+    'export async function GET() {\n  return Response.json([]);\n}\nexport async function POST() {\n  return Response.json({});\n}',
+  // The project's own job client and request wrapper: calls into them resolve, and still hand off and link.
+  'src/job-client.ts': [
+    'class JobClient {',
+    '  async triggerJob(options: { name: string }) {',
+    '    return options;',
+    '  }',
+    '}',
+    'export const jobsClient = new JobClient();',
+  ].join('\n'),
+  'src/request.ts': [
+    "import axios from 'axios';",
+    'export async function post(url: string, data?: unknown) {',
+    '  return (await axios.post(url, data)).data;',
+    '}',
+  ].join('\n'),
+  'src/close.ts': [
+    "import { prisma } from './db';",
+    "import { jobsClient } from './job-client';",
+    "import { post } from './request';",
+    'export async function closePoll() {',
+    '  await prisma.poll',
+    '    .update({ data: {} });',
+    "  await jobsClient.triggerJob({ name: 'poll.closed' });",
+    "  await post('/api/polls', {});",
+    '}',
+  ].join('\n'),
   'src/form.tsx': [
     "import { trpc } from './trpc';",
     'export function CreatePoll() {',
@@ -139,6 +166,16 @@ describe('the connectors in the graph pass', () => {
         .filter((e) => e.from.startsWith('src/form.tsx') && e.provenance === 'unknown')
         .map((e) => e.target),
     ).toEqual(['trpc.polls.make.useMutation']);
+
+    // Through the project's own code: the job client's triggerJob hands off; the wrapper's post reaches the route; a
+    // chained call is drawn at its method's line (6, `.update`), not the chain's start (5).
+    const close = 'src/close.ts#closePoll';
+    expect(edge(close, '(data prisma polls write)')?.lines).toEqual([6]);
+    expect(edge(close, '(handoff job:poll.closed)')).toMatchObject({ kind: 'handoff', lines: [7] });
+    expect(edge(close, entry('POST /api/polls')?.id ?? '')).toMatchObject({
+      provenance: 'convention',
+      lines: [8],
+    });
 
     // Done when (phase 9): the form's flow crosses into the handler, and on to the table and the job.
     // From the submit handler, as the form's onSubmit entry point opens it.

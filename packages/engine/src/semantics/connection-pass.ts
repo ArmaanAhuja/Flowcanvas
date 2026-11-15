@@ -32,9 +32,11 @@ import {
 /** A call's link to the app's API, joined after the pass (it replaces the call's unknown edge when it's found). */
 export interface PendingLink {
   readonly from: string;
-  /** The unknown edge's text it replaces. */
-  readonly target: string;
+  /** The unknown edge's text it replaces (at `line`); null beside a resolved call (a wrapper), replacing nothing. */
+  readonly target: string | null;
   readonly line: number;
+  /** Its own line: the method's (`request.post`), where the joined edge is drawn. */
+  readonly at: number;
   readonly protocol: LinkProtocol;
   readonly keys: readonly string[];
 }
@@ -184,6 +186,14 @@ export class FileConnector {
     return null;
   }
 
+  /** For a call into the project's own code: work it hands off as well (`jobs.triggerJob(…)`), or null. */
+  alongside(node: TS.CallExpression, line: number): Reached | null {
+    const handoff = handoffOf(this.#context, node);
+    return handoff === null || handoff.kind === 'timer'
+      ? null
+      : { node: handoffNode(handoff, this.#path, line), edge: 'handoff' };
+  }
+
   /** A tagged template of raw SQL. */
   reachedByTemplate(node: TS.TaggedTemplateExpression): Reached | null {
     const data = taggedDataOf(this.#context, node);
@@ -191,18 +201,26 @@ export class FileConnector {
   }
 
   /** A call to the app's own API: recorded, to join once every file's entry points are known. */
-  link(node: TS.CallExpression, from: string, target: string, line: number): void {
+  link(
+    node: TS.CallExpression,
+    from: string,
+    target: string | null,
+    line: number,
+    at: number,
+  ): void {
     const { ts } = this.#ctx;
     const found = linkOf(this.#context, node);
     if (found !== null && found.keys.length > 0) {
-      this.links.push({ from, target, line, protocol: found.protocol, keys: found.keys });
+      this.links.push({ from, target, line, at, protocol: found.protocol, keys: found.keys });
       return;
     }
+    // Beside a resolved call, only a link of its own (a wrapper's): not what an inline mutation makes.
+    if (target === null) return;
     // `mutation.mutate(…)` on a mutation whose function is written inline: the links that function makes.
     const fn = mutationFunction(this.#context, node);
     if (fn === null || !(ts.isArrowFunction(fn) || ts.isFunctionExpression(fn))) return;
     for (const inner of linksWithin(this.#context, fn)) {
-      this.links.push({ from, target, line, protocol: inner.protocol, keys: inner.keys });
+      this.links.push({ from, target, line, at, protocol: inner.protocol, keys: inner.keys });
     }
   }
 
@@ -377,10 +395,32 @@ export function joinConnections(
   const joined = new Map<string, Set<string>>();
   const at = (from: string, target: string, line: number) =>
     `${from}\u0000${target}\u0000${String(line)}`;
+  // Beside a resolved call (a wrapper): edges of their own, replacing nothing.
+  const beside: GraphEdge[] = [];
+  // Where each replacing link is drawn: its own line.
+  const drawnAt = new Map<string, number>();
   for (const part of parts) {
     for (const link of part.links) {
       const ids = matches(link);
-      if (ids.size > 0) joined.set(at(link.from, link.target, link.line), ids);
+      if (ids.size === 0) continue;
+      if (link.target === null) {
+        for (const id of ids) {
+          beside.push({
+            from: link.from,
+            to: id,
+            target: null,
+            kind: 'call',
+            relation: 'calls',
+            label: null,
+            provenance: 'convention',
+            lines: [link.at],
+          });
+        }
+        continue;
+      }
+      const key = at(link.from, link.target, link.line);
+      joined.set(key, ids);
+      drawnAt.set(key, link.at);
     }
   }
   // The unit a decision is in: its id up to the `?` (ADR 0028).
@@ -413,7 +453,8 @@ export function joinConnections(
     const target = edge.target;
     const kept: number[] = [];
     for (const line of edge.lines) {
-      const ids = joined.get(at(unitOf(edge.from), target, line));
+      const key = at(unitOf(edge.from), target, line);
+      const ids = joined.get(key);
       if (ids === undefined) {
         kept.push(line);
         continue;
@@ -428,8 +469,8 @@ export function joinConnections(
           relation: edge.relation,
           label: edge.label,
           provenance: 'convention',
-          lines: [line],
-          ...(guardedHere ? { guarded: [line] } : {}),
+          lines: [drawnAt.get(key) ?? line],
+          ...(guardedHere ? { guarded: [drawnAt.get(key) ?? line] } : {}),
         });
       }
     }
@@ -448,6 +489,7 @@ export function joinConnections(
       put(guarded.length === 0 ? rest : { ...rest, guarded });
     }
   }
+  for (const edge of beside) put(edge);
   // Hand-offs to their receivers.
   for (const part of parts) {
     for (const receiver of part.receivers) {

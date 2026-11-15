@@ -528,6 +528,8 @@ export function walkFile(
         }
         const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
         const line = source.getLineAndCharacterOfPosition(callee.getStart(source)).line + 1;
+        // A connection's line is its method's (`.selectFrom('Envelope')` in a chain written over lines), not the chain's.
+        const nameLine = ts.isPropertyAccessExpression(callee) ? lineOf(callee.name) : line;
         const declaredIn = declaration?.getSourceFile().fileName;
         const start = callee.getStart(source);
         // Built-ins are counted and listed as before; one the connectors recognise (`fetch` to a URL, a timer) is
@@ -601,9 +603,11 @@ export function walkFile(
               reaches = { to: runsId, target: null, provenance: 'convention' };
             }
           }
+          let edgeLine = line;
           if (reaches.to === null && connector !== undefined && !jsx) {
             const reached = connector.reached(node, line);
             if (reached !== null) {
+              edgeLine = nameLine;
               targets.set(reached.node.id, reached.node);
               reaches = { to: reached.node.id, target: null, provenance: 'convention' };
               kind = reached.edge;
@@ -619,11 +623,11 @@ export function walkFile(
                     label: null,
                     provenance: 'resolved',
                   },
-                  line,
+                  nameLine,
                 );
               }
             } else if (ts.isCallExpression(node)) {
-              connector.link(node, current, reaches.target, line);
+              connector.link(node, current, reaches.target, line, nameLine);
             }
           }
           if (target !== undefined && targetId !== undefined) {
@@ -635,9 +639,35 @@ export function walkFile(
           const guards = guardsOf(ts, source, node, currentNode);
           add(
             { from: current, kind, relation: edgeRelation, label: null, ...reaches },
-            line,
+            edgeLine,
             guards.length > 0,
           );
+          // A call into the project's own code that also hands work off (`jobs.triggerJob(…)` on the project's job
+          // client) or reaches the app's API through a wrapper (`request.post(url)`): beside the call (ADR 0031).
+          if (
+            reaches.provenance === 'resolved' &&
+            connector !== undefined &&
+            ts.isCallExpression(node)
+          ) {
+            const handed = connector.alongside(node, nameLine);
+            if (handed !== null) {
+              targets.set(handed.node.id, handed.node);
+              add(
+                {
+                  from: current,
+                  to: handed.node.id,
+                  target: null,
+                  kind: 'handoff',
+                  relation: null,
+                  label: null,
+                  provenance: 'convention',
+                },
+                nameLine,
+                guards.length > 0,
+              );
+            }
+            connector.link(node, current, null, line, nameLine);
+          }
           if (target !== undefined && targetId !== undefined) {
             const reached = nodeOf(ctx, target, targetId);
             note(
@@ -714,7 +744,7 @@ export function walkFile(
             outcome = guard.outcome;
           }
           if (outcome !== null) {
-            add({ from, kind: 'branch', relation, label: outcome, ...reaches }, line);
+            add({ from, kind: 'branch', relation, label: outcome, ...reaches }, edgeLine);
           }
         }
       }

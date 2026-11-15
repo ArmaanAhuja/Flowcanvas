@@ -106,7 +106,8 @@ function trace(
       if (followed !== null) return followed;
     }
     if (name === null) return null;
-    return withSteps(next(expression.expression), name);
+    // A step along the chain (`a.b`): syntax, not a hop to a declaration, so it doesn't count toward the depth.
+    return withSteps(trace(context, expression.expression, depth, seen), name);
   }
   if (ts.isCallExpression(expression)) {
     const callee = unwrap(ts, expression.expression);
@@ -138,9 +139,11 @@ function trace(
         return first;
       }
     }
-    return withSteps(next(callee), callStep(ts, expression));
+    return withSteps(trace(context, callee, depth, seen), callStep(ts, expression));
   }
-  if (ts.isNewExpression(expression)) return withSteps(next(expression.expression), NEW);
+  if (ts.isNewExpression(expression)) {
+    return withSteps(trace(context, expression.expression, depth, seen), NEW);
+  }
   if (ts.isBinaryExpression(expression)) {
     // `a || b`, `a ?? b`: the first side that can be followed (`mongoose.models.User || mongoose.model(…)`).
     const kind = expression.operatorToken.kind;
