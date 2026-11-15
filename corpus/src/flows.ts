@@ -48,8 +48,10 @@ const fileOf = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 function keyOf(node: FlowLike['nodes'][number]): string {
   // A table, service or hand-off has no place: it's named by what it is (`Folder (prisma write)`).
   if (node.data !== undefined) return `${node.name} (${node.data.library} ${node.data.operation})`;
-  if (node.service !== undefined) return `${node.name} (${node.service.kind} ${node.service.library})`;
-  if (node.handoff !== undefined) return `${node.name} (${node.handoff.kind} ${node.handoff.library})`;
+  if (node.service !== undefined)
+    return `${node.name} (${node.service.kind} ${node.service.library})`;
+  if (node.handoff !== undefined)
+    return `${node.name} (${node.handoff.kind} ${node.handoff.library})`;
   const at = node.place === null ? '?' : `${fileOf(node.place.path)}:${String(node.place.line)}`;
   return node.kind === 'decision' ? `if ${node.name} (${at})` : `${node.name} (${at})`;
 }
