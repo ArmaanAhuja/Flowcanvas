@@ -93,6 +93,8 @@ describe('handoffOf and receiversOf', () => {
         "bus.emit('poll.created', {});",
         "await mail.add('welcome', {});",
         'setTimeout(() => {}, 1000);',
+        'await new Promise((resolve) => setTimeout(resolve, 50));',
+        'await new Promise((r) => setTimeout(() => r(undefined), 50));',
       ].join('\n'),
     };
     expect(senders(files, '/e.ts')).toEqual([

@@ -121,6 +121,8 @@ export function handoffOf(context: FileContext, call: TS.CallExpression): FoundH
   if (ts.isIdentifier(callee) && TIMERS.has(callee.text)) {
     const origin = originOf(context, callee);
     if (origin?.module !== null || origin.name !== callee.text) return null;
+    // `new Promise((resolve) => setTimeout(resolve, ms))`, or a function that only resolves one: a pause, not work.
+    if (first !== undefined && resolvesPromise(context, first)) return null;
     return first === undefined
       ? null
       : {
@@ -353,4 +355,32 @@ export function receiversOf(context: FileContext): FoundReceiver[] {
   };
   visit(source);
   return found;
+}
+
+/** Whether a timer's function only resolves a promise: a promise executor's parameter, or `() => resolve()`. */
+function resolvesPromise(context: FileContext, fn: TS.Expression): boolean {
+  const { ts, checker } = context;
+  let target: TS.Expression = fn;
+  if ((ts.isArrowFunction(fn) || ts.isFunctionExpression(fn)) && fn.parameters.length === 0) {
+    const body = fn.body;
+    const [statement, ...rest] = ts.isBlock(body) ? body.statements : [];
+    const only = !ts.isBlock(body)
+      ? body
+      : rest.length === 0 && statement !== undefined && ts.isExpressionStatement(statement)
+        ? statement.expression
+        : undefined;
+    if (only === undefined || !ts.isCallExpression(only)) return false;
+    target = only.expression;
+  }
+  if (!ts.isIdentifier(target) || checker === undefined) return false;
+  const declaration = checker.getSymbolAtLocation(target)?.valueDeclaration;
+  if (declaration === undefined || !ts.isParameter(declaration)) return false;
+  const executor = declaration.parent;
+  return (
+    (ts.isArrowFunction(executor) || ts.isFunctionExpression(executor)) &&
+    executor.parameters[0] === declaration &&
+    ts.isNewExpression(executor.parent) &&
+    ts.isIdentifier(executor.parent.expression) &&
+    executor.parent.expression.text === 'Promise'
+  );
 }

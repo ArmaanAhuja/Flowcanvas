@@ -332,6 +332,40 @@ describe('flows (phase 7)', () => {
     expect(ok({ ...result, flow: null, version: null, takenAt: null, complete: false })).toBe(true);
   });
 
+  it('accepts data, service and hand-off nodes with their details, and edges to them (phases 10 and 11)', () => {
+    const data = {
+      ...node('(data prisma polls write)', 'data-access'),
+      name: 'polls',
+      place: null,
+      data: { library: 'prisma', table: 'polls', operation: 'write', complete: true, why: null },
+    };
+    const toData = {
+      from: 'src/db.ts#save',
+      to: data.id,
+      kind: 'data',
+      relation: null,
+      label: null,
+      provenance: 'convention',
+      lines: [9],
+      sites: 1,
+    };
+    expect(
+      ok({
+        ...result,
+        flow: { ...flow, nodes: [...flow.nodes, data], edges: [...flow.edges, toData] },
+      }),
+    ).toBe(true);
+    for (const bad of [
+      { ...data, data: { ...data.data, operation: 'delete-everything' } },
+      { ...data, data: { ...data.data, complete: false } },
+      { ...data, data: undefined },
+      { ...node('src/x.ts#f'), data: data.data },
+      { ...data, kind: 'async-handoff' },
+    ]) {
+      expect(ok({ ...result, flow: { ...flow, nodes: [...flow.nodes, bad] } })).toBe(false);
+    }
+  });
+
   it('refuses a flow that isn’t whole, bounded and well-formed', () => {
     const [first, second] = flow.edges;
     const group = flow.unknown[0];
@@ -348,7 +382,7 @@ describe('flows (phase 7)', () => {
       { ...flow, nodes: [{ ...node('a.ts#x'), kind: 'guess' }] },
       { ...flow, edges: [{ ...first, to: 'src/elsewhere.ts#x' }] },
       { ...flow, edges: [{ ...second, provenance: 'guessed' }] },
-      { ...flow, edges: [{ ...second, kind: 'data' }] },
+      { ...flow, edges: [{ ...second, kind: 'teleport' }] },
       {
         ...flow,
         edges: [{ ...second, lines: Array.from({ length: 11 }, (_, i) => i + 1), sites: 11 }],
