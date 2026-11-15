@@ -115,3 +115,22 @@ Before the phases were reported, the close above was checked against the bar. Wh
 5. **The report** misquoted phases 10 and 11's *Done when*s and claimed results the above didn't support; rewritten from the build plan's text and what's proven.
 
 Step 9.2 in `docs/build-steps.md` records it all.
+
+---
+
+## 5. Jobs, Cron and Events Entry Points & Milestone Close (15 Nov 2026, step 9.3)
+
+1. **Implemented Jobs, Cron, and Events as Entry Points (`23d6f28`)**:
+   - Implemented owner decision 1 (15 Nov 2026): what takes handed-off work (queue workers, scheduled jobs, event listeners) is detected as an entry point of kind `job`, `cron`, or `event`.
+   - Left panel now displays **Jobs and cron** and **Events** groups with live counts and "Show flow" navigation to handlers.
+   - Removed the temporary "Arrives in phase 11" message.
+   - Bumped graph format to 6 (`packages/graph-model/src/encoding.ts`).
+   - Regenerated 26 visual screenshot baselines and updated test fixtures.
+
+2. **Test Style Fix (`acbd109`)**:
+   - Typed hand-off kind by `HandoffKind` in `connection-pass.test.ts`.
+
+3. **Updated Living Documentation (`docs/build-steps.md`)**:
+   - Recorded commit SHAs `23d6f28` and `acbd109` under Step 9.3 in `docs/build-steps.md`.
+   - Verified that `pnpm docs:milestone` and `pnpm docs:check` pass green.
+
