@@ -309,9 +309,12 @@ function declarationOrigin(
       }
       const member = checker?.getPropertyOfType(checker.getTypeAtLocation(holder), property);
       const memberDeclaration = member?.valueDeclaration ?? member?.declarations?.[0];
-      return memberDeclaration === undefined || memberDeclaration.getSourceFile().isDeclarationFile
-        ? null
-        : declarationOrigin(context, memberDeclaration, depth + 1, seen);
+      if (memberDeclaration !== undefined && !memberDeclaration.getSourceFile().isDeclarationFile) {
+        const followed = declarationOrigin(context, memberDeclaration, depth + 1, seen);
+        if (followed !== null) return followed;
+      }
+      // `qb.where(({ eb }) => …)`: the callback's parameter, then that property.
+      return withSteps(declarationOrigin(context, holder, depth + 1, seen), property);
     }
     if (ts.isVariableDeclaration(holder) && holder.initializer !== undefined) {
       // A property the project declares on what's destructured: followed to its value.
@@ -414,6 +417,11 @@ function typeOrigin(
     const aliased = checker.getAliasedSymbol(symbol);
     const found = aliased.declarations?.[0];
     if (found !== undefined && !found.getSourceFile().isDeclarationFile) target = found;
+    else {
+      // Re-exported from a package the repository doesn't install (`export type { Stripe } from 'stripe'`).
+      const reexported = lastReexport(ts, checker, symbol);
+      if (reexported !== null) return withSteps(reexported, NEW);
+    }
   }
   // `type EnvelopeBuilder = ExpressionBuilder<DB, 'Envelope'>`: the type it names.
   if (ts.isTypeAliasDeclaration(target)) return typeOrigin(context, target.type, depth + 1, seen);
@@ -451,6 +459,7 @@ function memberDeclaration(
   return ts.isPropertyAssignment(declaration) ||
     ts.isShorthandPropertyAssignment(declaration) ||
     ts.isPropertyDeclaration(declaration) ||
+    ts.isPropertySignature(declaration) ||
     ts.isParameter(declaration)
     ? declaration
     : undefined;

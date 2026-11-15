@@ -237,3 +237,48 @@ describe('originOf through dynamic and namespace imports', () => {
     ).toEqual({ module: '@aws-sdk/s3-request-presigner', name: 'getSignedUrl', steps: [] });
   });
 });
+
+describe('originOf through type re-exports, declared properties and destructured callback parameters', () => {
+  it('follows a type re-exported from a package the repository lacks', () => {
+    expect(
+      originAt(
+        {
+          '/billing.ts': "export type { Stripe } from 'stripe';",
+          '/m.ts': [
+            "import type { Stripe } from './billing';",
+            'export const go = ({ stripe }: { stripe: Stripe }) => stripe.prices.list(); // here',
+          ].join('\n'),
+        },
+        '/m.ts',
+      ),
+    ).toEqual({ module: 'stripe', name: 'Stripe', steps: ['new', 'prices'] });
+  });
+
+  it('follows a property a type declares, and one destructured from a callback’s parameter', () => {
+    expect(
+      originAt(
+        {
+          '/t.ts': [
+            "import type { Transporter } from 'nodemailer';",
+            'type Resolved = { transporter: Transporter };',
+            'declare const resolved: Resolved;',
+            'resolved.transporter.sendMail({}); // here',
+          ].join('\n'),
+        },
+        '/t.ts',
+      ),
+    ).toEqual({ module: 'nodemailer', name: 'Transporter', steps: ['new'] });
+    expect(
+      originAt(
+        {
+          '/k.ts': [
+            "import { Kysely } from 'kysely';",
+            'const db = new Kysely();',
+            "db.selectFrom('Envelope').where(({ eb }) => eb.selectFrom('Recipient')); // here",
+          ].join('\n'),
+        },
+        '/k.ts',
+      ),
+    ).toMatchObject({ module: 'kysely', name: 'Kysely' });
+  });
+});

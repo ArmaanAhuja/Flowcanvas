@@ -183,6 +183,20 @@ describe('dataOf', () => {
     ]);
   });
 
+  it('finds a Kysely subquery through a callback’s destructured builder (`where(({ eb }) => …)`)', () => {
+    const hits = found(
+      {
+        '/k.ts': [
+          "import { Kysely } from 'kysely';",
+          'const db = new Kysely();',
+          "db.selectFrom('Envelope').where(({ eb }) => eb.exists(eb.selectFrom('Recipient')));",
+        ].join('\n'),
+      },
+      '/k.ts',
+    );
+    expect(hits.map((h) => h.table)).toEqual(['Envelope', 'Recipient']);
+  });
+
   it('finds Mongoose models’ reads and writes, from a factory of models (CommonJS)', () => {
     const hits = found(
       {
