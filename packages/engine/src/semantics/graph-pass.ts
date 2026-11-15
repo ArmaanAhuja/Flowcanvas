@@ -530,12 +530,11 @@ export function walkFile(
         const line = source.getLineAndCharacterOfPosition(callee.getStart(source)).line + 1;
         const declaredIn = declaration?.getSourceFile().fileName;
         const start = callee.getStart(source);
-        // A built-in the connectors recognise (`fetch` to a URL, a timer) is a connection; other built-ins are counted.
-        if (
-          declaredIn !== undefined &&
-          ctx.builtIn(declaredIn) &&
-          !(connector !== undefined && !jsx && connector.claims(node))
-        ) {
+        // Built-ins are counted and listed as before; one the connectors recognise (`fetch` to a URL, a timer) is
+        // also a connection in the graph.
+        const isBuiltIn = declaredIn !== undefined && ctx.builtIn(declaredIn);
+        const claimed = isBuiltIn && connector !== undefined && !jsx && connector.claims(node);
+        if (isBuiltIn) {
           builtInCalls += 1;
           // Built-ins: named as the compiler names them (`split`, `Promise`), one row per name.
           const named = cut(symbol?.getName() ?? calleeText(ts, callee, source));
@@ -557,7 +556,10 @@ export function walkFile(
             true,
             start,
           );
-        } else {
+        }
+        if (!isBuiltIn || claimed) {
+          // The Calls tab lists a built-in once, as a built-in (above).
+          const note: typeof record = isBuiltIn ? () => undefined : record;
           const target =
             declaration !== undefined && declaredIn !== undefined && ctx.inProject(declaredIn)
               ? targetOf(ctx, declaration)
@@ -638,7 +640,7 @@ export function walkFile(
           );
           if (target !== undefined && targetId !== undefined) {
             const reached = nodeOf(ctx, target, targetId);
-            record(
+            note(
               calling,
               `${targetId}:${relation}`,
               {
@@ -662,7 +664,7 @@ export function walkFile(
             // graph keeps it unknown, as it's not the project's code).
             const named = cut(symbol?.getName() ?? calleeText(ts, callee, source));
             const owner = declaration.parent;
-            record(
+            note(
               calling,
               `package:${declaredIn}:${String(declaration.getStart())}:${relation}`,
               {
@@ -682,7 +684,7 @@ export function walkFile(
             );
           } else {
             const written = cut(calleeText(ts, callee, source));
-            record(
+            note(
               calling,
               `unresolved:${written}:${relation}`,
               { name: written, kind: null, container: null, place: null, builtIn: false },

@@ -556,7 +556,7 @@
         }
       ],
       "graph": {
-        "why": "Phase 8 (ADR 0030 §3): each call is in a Hono route's anonymous handler, a unit of its own in the graph named after its route; the Calls tab keeps TypeScript's view (the file's top level). Read at the pin: both calls are in the POST /polls handler, one per branch.",
+        "why": "Phase 8 (ADR 0030 §3): each call is in a Hono route's anonymous handler, a unit of its own in the graph named after its route; the Calls tab keeps TypeScript's view (the file's top level). Read at the pin: both calls are in the POST /polls handler, one per branch. Phase 10 (ADR 0031): in the graph, tx.poll.create (line 118, inside prisma.$transaction) is a write to the polls table (Poll's @@map), a data edge of convention provenance; the Calls tab still lists TypeScript's unresolved call.",
         "callers": [
           {
             "name": "POST /api/private/polls",
@@ -569,6 +569,72 @@
             "relation": "calls",
             "path": "apps/web/src/app/api/v1/[...route]/route.ts",
             "lines": [612, 683]
+          }
+        ],
+        "callees": [
+          {
+            "name": "some",
+            "relation": "calls",
+            "provenance": "resolved",
+            "builtIn": true,
+            "place": null,
+            "lines": [113]
+          },
+          {
+            "name": "prisma.$transaction",
+            "relation": "calls",
+            "provenance": "unresolved",
+            "builtIn": false,
+            "place": null,
+            "lines": [115]
+          },
+          {
+            "name": "assertOpenPollCapacity",
+            "relation": "calls",
+            "provenance": "resolved",
+            "builtIn": false,
+            "place": "apps/web/src/features/poll/limit/mutations.ts:57",
+            "lines": [116]
+          },
+          {
+            "name": "polls",
+            "relation": "data",
+            "provenance": "convention",
+            "builtIn": false,
+            "place": null,
+            "lines": [118]
+          },
+          {
+            "name": "nanoid",
+            "relation": "calls",
+            "provenance": "resolved",
+            "builtIn": false,
+            "place": "packages/utils/src/nanoid.ts:3",
+            "lines": [120]
+          },
+          {
+            "name": "recordPollActivities",
+            "relation": "calls",
+            "provenance": "resolved",
+            "builtIn": false,
+            "place": "apps/web/src/features/activity/mutations.ts:20",
+            "lines": [139]
+          },
+          {
+            "name": "scheduleWebhookDispatch",
+            "relation": "calls",
+            "provenance": "resolved",
+            "builtIn": false,
+            "place": "apps/web/src/features/webhook/mutations.ts:479",
+            "lines": [147]
+          },
+          {
+            "name": "toPollResponse",
+            "relation": "calls",
+            "provenance": "resolved",
+            "builtIn": false,
+            "place": "apps/web/src/features/poll/mutations.ts:82",
+            "lines": [152]
           }
         ]
       }
@@ -813,7 +879,68 @@
           "place": null,
           "lines": [32]
         }
-      ]
+      ],
+      "graph": {
+        "why": "Phase 11 (ADR 0031), read at the pin: setTimeout(() => controller.abort(), timeoutMs) at line 21 hands the abort to a timer, a hand-off edge in the graph; the Calls tab still lists the built-in. The setTimeout at line 9 only resolves a promise (a wait), so it's no hand-off.",
+        "callees": [
+          {
+            "name": "AbortController",
+            "relation": "calls",
+            "provenance": "resolved",
+            "builtIn": true,
+            "place": null,
+            "lines": [20]
+          },
+          {
+            "name": "setTimeout",
+            "relation": "calls",
+            "provenance": "resolved",
+            "builtIn": true,
+            "place": null,
+            "lines": [21]
+          },
+          {
+            "name": "abort",
+            "relation": "calls",
+            "provenance": "resolved",
+            "builtIn": true,
+            "place": null,
+            "lines": [21]
+          },
+          {
+            "name": "fetch",
+            "relation": "calls",
+            "provenance": "resolved",
+            "builtIn": true,
+            "place": null,
+            "lines": [24]
+          },
+          {
+            "name": "Error",
+            "relation": "calls",
+            "provenance": "resolved",
+            "builtIn": true,
+            "place": null,
+            "lines": [27]
+          },
+          {
+            "name": "clearTimeout",
+            "relation": "calls",
+            "provenance": "resolved",
+            "builtIn": true,
+            "place": null,
+            "lines": [32]
+          },
+          {
+            "name": "setTimeout",
+            "relation": "handoff",
+            "provenance": "convention",
+            "builtIn": false,
+            "place": null,
+            "lines": [21]
+          }
+        ]
+      }
     },
     {
       "name": "isValidReturnTo",

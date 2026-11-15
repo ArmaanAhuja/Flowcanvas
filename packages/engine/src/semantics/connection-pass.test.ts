@@ -92,6 +92,9 @@ describe('the connectors in the graph pass', () => {
     if (pass === null) throw new Error('no pass');
     const { graph } = pass;
     expect(validateGraph(graph)).toEqual([]);
+    // Built-ins the connectors recognise are still counted as built-ins (and listed so in the Calls tab): the
+    // server's fetch and setTimeout, the form's fetch, Response.json.
+    expect(pass.builtInCalls).toBeGreaterThanOrEqual(4);
     const node = (id: string) => graph.nodes.find((n) => n.id === id);
     const edge = (from: string, to: string) =>
       graph.edges.find((e) => e.from.startsWith(from) && e.to === to);
