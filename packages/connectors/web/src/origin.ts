@@ -127,7 +127,8 @@ function trace(
     // Several values (`if (!replicas) return prisma; return prisma.$extends(…)`): when all come from one import.
     const passed = passedThrough(context, expression);
     if (passed !== undefined) {
-      const origins = passed.map(next);
+      // Each with its own record of what it's been through: they may share a declaration, which isn't a cycle.
+      const origins = passed.map((value) => trace(context, value, depth + 1, new Set(seen)));
       const [first] = origins;
       if (
         first !== null &&
