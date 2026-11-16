@@ -14106,6 +14106,9 @@ pnpm test:visual
 - The group card used tokens that don't exist (`--font-sans`, `--text-body-strong-size`, `--size-node-height`, `--focus-ring-*`) and a 14 px chevron; the whole open frame was a button; the sequence view's CSS used `--space-20` and `--space-6` (not in the scale) and fixed pixel sizes. Both now use only Graphite's tokens; Stylelint passes.
 - Walkthroughs 9 and 10 expanded a group "if grouped": they now open the group the flow has (`trpc/routers`, `Tables`).
 - RUN-AND-FEATURES said 74,692 unit tests: recounted.
+- The project page's chunk went over its budget (118.9 of 115 kB): the sequence view now loads on its own, when chosen; the budget is 120 kB for what a large flow needs whenever one is shown (116.5 kB; the reason beside it in `scripts/bundle-size.ts`).
+- The sequence view's duration on a selected row fell under 4.5:1 (axe): one text level up there.
+- `pnpm corpus:check` failed on Medusa: GitHub answers 422, "this diff is taking too long to generate", comparing its pin with `develop` (not our code; the fork is unchanged since 29 Oct). The check then lists `develop`'s commits at the pin's own commit time, which include it if, and only if, the branch reaches it (`corpus/src/check.ts`, with tests).
 - All 54 screen baselines the draft regenerated, and its 12 new ones, were set aside and made again from this code, each difference read.
 
 **Tests:** grouping (8: named from the code, kinds, decisions in their function's group, the finest grouping that fits 8, never more than the most, the background apart, titles, empty); layout on the engine's `sendDocument` flow (8 or fewer; opening each group in turn moves no other node, members inside the frame and over it, every edge ending at a drawn node, no stale route into the open group; two open at once; weak edges); sequence (the code's order, nesting and spans, branches, failure only from an error branch, the Background group, nothing timed, a row selecting its node); the group card (4) and the sequence view (5); walkthroughs 12 and 13 (and 9 and 10) in a real browser on the engine's own flows.
@@ -14114,5 +14117,5 @@ pnpm test:visual
 
 **Risks and laptop:** an open group's frame can cover what's beside it (nothing moves, so it lies over the canvas until closed). Groups follow folders, so a project with one flat folder groups by kind only and its functions stay together. Laptop: the forks' graphs were built once into `~/.cache/flowcanvas/graphs` and reused for every grouping check (owner's CI answer 4); the screenshot suite run once before the push (answer 3); no Docker run, as the engine didn't change.
 
-**Commits:** `87ef015` the groups, the layout, the sequence view, their tests, walkthroughs and screens, and the docs; this commit, naming it.
+**Commits:** `87ef015` the groups, the layout, the sequence view, their tests, walkthroughs and screens, and the docs; `b83fa67` named it; `ff5e72c` the sequence view loaded on its own, lint, the corpus check when GitHub can't build a diff; this commit, naming them.
 
