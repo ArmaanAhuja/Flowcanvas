@@ -14114,5 +14114,5 @@ pnpm test:visual
 
 **Risks and laptop:** an open group's frame can cover what's beside it (nothing moves, so it lies over the canvas until closed). Groups follow folders, so a project with one flat folder groups by kind only and its functions stay together. Laptop: the forks' graphs were built once into `~/.cache/flowcanvas/graphs` and reused for every grouping check (owner's CI answer 4); the screenshot suite run once before the push (answer 3); no Docker run, as the engine didn't change.
 
-**Commits:** this commit.
+**Commits:** `87ef015` the groups, the layout, the sequence view, their tests, walkthroughs and screens, and the docs; this commit, naming it.
 
