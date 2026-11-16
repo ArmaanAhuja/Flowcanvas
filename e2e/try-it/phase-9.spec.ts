@@ -80,6 +80,9 @@ test('phase 9 · Try it: in Rallly, the Create poll submit’s flow continues in
     const canvas = page.getByRole('main', { name: 'Canvas' });
     await expect(canvas.getByRole('status')).toContainText('convention');
     await page.keyboard.press('f');
+    // 60 nodes: grouped (phase 12). The procedure and its handler are in the tRPC routers' folder: opened.
+    await canvas.getByRole('button', { name: 'trpc/routers, 2 nodes' }).click();
+    await page.keyboard.press('f');
     // The procedure's entry point, and its handler (an anonymous unit named after it, ADR 0030 §3).
     await expect(canvas.getByText('mutation polls.make', { exact: true })).toHaveCount(2);
     await expect(canvas.getByText('tRPC', { exact: true }).first()).toBeAttached();

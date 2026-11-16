@@ -92,6 +92,25 @@ export function FlowInspector({ flow, selected, details, onOpen }: FlowInspector
   }
   // The background lane is a frame: never selected (it isn't selectable).
   if (selected.type === 'lane') return null;
+  if (selected.type === 'group') {
+    const { title, count, members } = selected.data;
+    return (
+      <section className={styles.inspector} aria-label={`Group ${title}`}>
+        <p className={styles.caption}>Group</p>
+        <p
+          className={styles.title}
+        >{`${title} · ${String(count)} ${count === 1 ? 'node' : 'nodes'}`}</p>
+        <ul className={styles.list} aria-label="Group members">
+          {members.map((m) => (
+            <li key={m.id} className={styles.row}>
+              <span className={styles.code}>{m.name}</span>
+              <span className={styles.outcome}>{m.location}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  }
   const { place, title } = selected.data;
   const node = flow.nodes.find((n) => n.id === selected.data.id);
   if (node !== undefined && (node.data ?? node.service ?? node.handoff) !== undefined) {

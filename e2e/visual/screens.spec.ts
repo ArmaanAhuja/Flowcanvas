@@ -590,6 +590,20 @@ const SCREENS: readonly Screen[] = [
     },
   },
   {
+    // Phase 13 (Figma 08): the same flow as a sequence, in the code's order, the worker's steps in its Background
+    // group, one row selected and read in the inspector.
+    name: 'project-sequence',
+    api: { running: true, connections: 'twenty-queue' },
+    arrange: async (page) => {
+      await showFlowOf(page, 'send');
+      await page.getByRole('tab', { name: 'Sequence' }).click();
+      const sequence = page.getByRole('region', { name: 'Sequence' });
+      await sequence.getByRole('button', { name: /^handle,/ }).click();
+      await expect(page.getByRole('region', { name: 'handle' })).toBeVisible();
+      await page.mouse.move(1200, 700);
+    },
+  },
+  {
     name: 'project-flow-details',
     api: { running: true, documenso: true },
     arrange: async (page) => {

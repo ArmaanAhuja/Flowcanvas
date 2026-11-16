@@ -1,5 +1,5 @@
-// The flow's own parts on the canvas (phase 7): decisions, the open ends (stubs), and edges drawn by how each is known.
-import { DecisionNode, FlowStub } from '@flowcanvas/ui';
+// The flow's own parts on the canvas (phase 7): decisions, the open ends (stubs), groups (phase 12), and edges drawn by how each is known.
+import { DecisionNode, FlowStub, GroupNode } from '@flowcanvas/ui';
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -11,15 +11,46 @@ import {
   type Node,
   type NodeProps,
 } from '@xyflow/react';
-import { memo } from 'react';
+import { createContext, memo, useContext } from 'react';
 import { Clock } from 'lucide-react';
-import type { DecisionData, FlowEdgeData, LaneData, StubData } from '../flow/layout';
+import type { DecisionData, FlowEdgeData, GroupData, LaneData, StubData } from '../flow/layout';
 import { CORNER, pointAlong, routePath } from '../flow/route';
 import styles from './FlowCanvas.module.css';
 
 export type DecisionCanvasNode = Node<DecisionData, 'decision'>;
 export type StubCanvasNode = Node<StubData, 'stub'>;
 export type LaneCanvasNode = Node<LaneData, 'lane'>;
+export type GroupCanvasNode = Node<GroupData, 'group'>;
+
+/** Opens or closes a group by its id: the page's, given to the canvas (phase 12). */
+export const GroupToggle = createContext<(id: string) => void>(() => undefined);
+
+/**
+ * A group of the flow's nodes (phase 12): closed, a stacked card; open, a frame its members are drawn in, over the
+ * canvas. Its header opens and closes it.
+ */
+export const GroupCard = memo(function GroupCard({
+  id,
+  data,
+  selected,
+}: NodeProps<GroupCanvasNode>) {
+  const toggle = useContext(GroupToggle);
+  return (
+    <>
+      <Anchors />
+      <GroupNode
+        title={data.title}
+        count={data.count}
+        kind={data.kind}
+        expanded={data.expanded}
+        selected={selected}
+        onToggle={() => {
+          toggle(id);
+        }}
+      />
+    </>
+  );
+});
 
 /** The background lane (phase 11): a labelled frame behind what handed-off work runs. */
 export const LaneCard = memo(function LaneCard({ data }: NodeProps<LaneCanvasNode>) {
@@ -114,6 +145,8 @@ export const FlowEdge = memo(function FlowEdge({
         className={styles.edge}
         data-form={form}
         data-selected={selected === true || undefined}
+        data-highlighted={data?.highlighted === true || undefined}
+        data-dimmed={data?.highlighted === false || undefined}
         {...(data?.stub === true ? {} : { markerEnd })}
       />
       {data !== undefined &&

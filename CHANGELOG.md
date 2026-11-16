@@ -4,14 +4,19 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
-## [0.14.0] — 2026-11-16 — Phases 12 and 13: progressive disclosure and sequence view (in progress)
+## [0.14.0] — 2026-11-16 — Phases 12 and 13: progressive disclosure and sequence view
 
-Progressive disclosure (phase 12: semantic grouping, expand/collapse, pinned positions, unknown stubs, completeness pill) and Sequence view (phase 13: waterfall timeline, order from code, async hops in background lane, Graph / Sequence switch). Grouped per owner decision (15 Nov 2026).
+A large flow now opens as a few groups named from the code (its folders, its tables, its outside services and hand-offs) that open in place without moving anything else, and any flow can be read in order as a sequence: the calls in the order the code makes them, nested, each hand-off's work after it (phases 12 and 13). Workspaces still run on your own computer (`pnpm dev`).
+
+### Try it
+
+1. Open Twenty's corpus project with its workspace running; ⌘K `PartnerProfilePage` and **Show the flow**: 60 nodes open as 8 or fewer groups and nodes, each group named by its folder (`src/platform · 18`). Open one: its members are drawn in its frame, and nothing else moves. Press the completeness pill: the edges known less surely than resolved stand out.
+2. Switch to **Sequence** in the top bar: the same flow as rows, in the code's order, nested; a decision's branches on the rows they lead to; each hand-off's work in a Background group. Without a run there are no timings, and it says so. Click a row: the inspector shows that node.
 
 ### Added
 
-- **Progressive disclosure (phase 12):** semantic grouping into stacked cards, expand and collapse with pinned positions, unknown stubs, completeness pill.
-- **Sequence view (phase 13):** waterfall timeline showing synchronous execution order and async hand-offs in a Background lane; Graph / Sequence switch in the top bar.
+- **Progressive disclosure (phase 12):** a flow of 25 nodes or more opens grouped, at most 8 groups and nodes besides its root: functions by their folder, as deep as fits; tables, outside services and hand-offs each a group; a decision in its function's group; a group of one shown as its node. A group opens in place, its members drawn in its frame over the canvas; nothing else moves, on the canvas or the screen. Open ends are counted per group. The completeness pill, pressed, makes weak edges stand out.
+- **Sequence view (phase 13):** the Graph / Sequence switch; the flow as a waterfall (Figma 08): depth first in the code's call order, nested, a parent's bar covering its calls', branches and failure paths (a catch's) said in words, open ends as rows, each hand-off's work in its own Background group; selecting a row selects its node.
 
 ## [0.13.0] — 2026-11-15 — Phases 9 to 11: connectors
 

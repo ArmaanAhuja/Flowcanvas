@@ -89,6 +89,9 @@ test('phase 10 · Try it: in Documenso, Send document’s database writes and it
     await showFlow(page, 'sendDocument');
     await expect(canvas.getByRole('status')).toContainText('convention');
     await page.keyboard.press('f');
+    // 60 nodes: grouped (phase 12). Its reads and writes are the Tables group: opened.
+    await canvas.getByRole('button', { name: 'Tables, 6 nodes' }).click();
+    await page.keyboard.press('f');
     for (const table of ['Envelope', 'Recipient', 'DocumentMeta', 'DocumentAuditLog', 'Field']) {
       await expect(canvas.getByText(table, { exact: true }).first()).toBeAttached();
     }
@@ -108,6 +111,7 @@ test('phase 10 · Try it: in Documenso, Send document’s database writes and it
   await test.step('The signing email’s job runner: the nodemailer boundary', async () => {
     await showFlow(page, 'run');
     await page.keyboard.press('f');
+    // Grouped too; the email is its only outside service, so it's shown on its own, not as a group of one.
     await expect(canvas.getByText('Email · nodemailer', { exact: true })).toBeAttached();
     await canvas.locator('[data-id="(service email nodemailer)"]').click();
     const inspector = page.getByRole('region', { name: 'Email · nodemailer' });

@@ -27,9 +27,12 @@ import { useWorkspaceEvents } from '../code/events';
 import { useCodeFiles } from '../code/useCodeFiles';
 import { fetchProjects, isProblem, type Project } from '../projects/api';
 import { FlowCanvas, type CanvasEdge, type CanvasNode } from '../canvas/FlowCanvas';
+import { cardOf } from '../flow/layout';
 import { FlowInspector } from '../flow/FlowInspector';
 import { FlowStatus } from '../flow/FlowStatus';
 import { useFlow, type FlowState } from '../flow/useFlow';
+import { pageElk } from '../flow/elk';
+import { SequenceCanvas } from '../sequence/SequenceCanvas';
 import { EXAMPLE_BANNER, exampleGraph } from '../canvas/examples';
 import { useLabs } from '../labs/LabsProvider';
 import { useGraphStats } from '../graph/useGraphStats';
@@ -86,26 +89,22 @@ export const EMPTY = {
     'Workspaces run on your own computer until a cloud provider is connected (phase 1d), so there’s no terminal here.',
 } as const;
 
-/** The view switch: Graph and Code (phase 3); Sequence arrives with its phase (shown, never offered). */
+/** The view switch: Graph, Sequence (phase 13), and Code (phase 3). */
 const VIEWS = [
   { id: 'graph', label: 'Graph' },
-  {
-    id: 'sequence',
-    label: 'Sequence',
-    disabled: true,
-    hint: 'The sequence view arrives in phase 13',
-  },
+  { id: 'sequence', label: 'Sequence' },
   { id: 'code', label: 'Code' },
 ];
 
-export type ProjectView = 'graph' | 'code';
+export type ProjectView = 'graph' | 'sequence' | 'code';
 type LeftTool = 'entry-points' | 'files';
 
 const viewKey = (projectId: string) => `flowcanvas-view-${projectId}`;
 
 function rememberedView(projectId: string): ProjectView {
   try {
-    return window.localStorage.getItem(viewKey(projectId)) === 'code' ? 'code' : 'graph';
+    const v = window.localStorage.getItem(viewKey(projectId));
+    return v === 'code' || v === 'sequence' ? v : 'graph';
   } catch {
     return 'graph';
   }
@@ -282,7 +281,7 @@ function ReadyProject({
   const graph = useGraphStats(project.id, running, graphStatsOn, fetcher);
   const calls = useCalls(project.id, fetcher);
   // Flows (phase 7): opened from the right-click menu, ⌘K and the Calls tab; one on the canvas at a time.
-  const flows = useFlow(project.id, fetcher);
+  const flows = useFlow(project.id, fetcher, pageElk);
   const [selected, setSelected] = useState<CanvasNode | null>(null);
   const [selections, setSelections] = useState(0);
   const [menu, setMenu] = useState<{
@@ -526,13 +525,28 @@ function ReadyProject({
                 }}
               />
             </Suspense>
+          ) : view === 'sequence' ? (
+            <SequenceCanvas
+              index={<IndexChip status={index.status} />}
+              flow={flows.flow}
+              selected={selected}
+              onSelectNode={select}
+            />
           ) : (
             <ProjectCanvas
               index={<IndexChip status={index.status} />}
               flow={flows.flow}
+              filterWeak={flows.filterWeak}
+              onToggleFilterWeak={flows.toggleFilterWeak}
+              onToggleGroup={(id) => {
+                void flows.toggleGroup(id);
+              }}
               onSelectNode={select}
               onOpenNode={(node) => {
-                const place = node.type === 'stub' || node.type === 'lane' ? null : node.data.place;
+                const place =
+                  node.type === 'stub' || node.type === 'lane' || node.type === 'group'
+                    ? null
+                    : node.data.place;
                 if (place != null) openPlace(place);
               }}
             />
@@ -646,7 +660,7 @@ function ProjectTopBar({
           items={VIEWS}
           value={view}
           onValueChange={(id) => {
-            if (id === 'graph' || id === 'code') onView(id);
+            if (id === 'graph' || id === 'sequence' || id === 'code') onView(id);
           }}
         />
       }
@@ -758,11 +772,17 @@ function Dock({ project, running }: { readonly project: Project; readonly runnin
 function ProjectCanvas({
   index,
   flow,
+  filterWeak,
+  onToggleFilterWeak,
+  onToggleGroup,
   onSelectNode,
   onOpenNode,
 }: {
   readonly index: ReactNode;
   readonly flow: FlowState;
+  readonly filterWeak: boolean;
+  readonly onToggleFilterWeak: () => void;
+  readonly onToggleGroup: (id: string) => void;
   readonly onSelectNode: (node: CanvasNode | null) => void;
   readonly onOpenNode: (node: CanvasNode) => void;
 }) {
@@ -773,9 +793,18 @@ function ProjectCanvas({
     () => (laid === null ? (examples?.nodes ?? []) : laid.nodes),
     [laid, examples],
   );
+  // The completeness pill pressed: weak edges stand out, the rest recede (drawn so, not laid out again).
   const edges = useMemo<readonly CanvasEdge[]>(
-    () => (laid === null ? (examples?.edges ?? []) : laid.edges),
-    [laid, examples],
+    () =>
+      laid === null
+        ? (examples?.edges ?? [])
+        : filterWeak
+          ? laid.edges.map((edge) => ({
+              ...edge,
+              data: { ...edge.data, highlighted: edge.data.weak },
+            }))
+          : laid.edges,
+    [laid, examples, filterWeak],
   );
   const said =
     flow.kind === 'loading'
@@ -797,11 +826,18 @@ function ProjectCanvas({
       status={
         <>
           {index}
-          {flow.kind === 'ready' && <FlowStatus result={flow.result} />}
+          {flow.kind === 'ready' && (
+            <FlowStatus
+              result={flow.result}
+              filterWeak={filterWeak}
+              onToggleFilterWeak={onToggleFilterWeak}
+            />
+          )}
         </>
       }
       onSelectNode={onSelectNode}
       onOpenNode={onOpenNode}
+      onToggleGroup={onToggleGroup}
       {...(laid !== null && flow.kind === 'ready' && flow.result.flow !== null
         ? { focus: flow.result.flow.root }
         : {})}

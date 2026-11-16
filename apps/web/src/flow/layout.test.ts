@@ -1,9 +1,10 @@
 // @vitest-environment node
 import ELK from 'elkjs/lib/elk.bundled.js';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { capFlow, edge, small, unit, type Flow } from './fixtures';
 import { nodeHeight } from '@flowcanvas/ui';
-import { SIZES, backgroundOf, cardOf, layoutFlow, shortPlace } from './layout';
+import { GROUP_THRESHOLD, SIZES, backgroundOf, cardOf, layoutFlow, shortPlace } from './layout';
 
 const boxes = (laid: Awaited<ReturnType<typeof layoutFlow>>) =>
   laid.nodes.map((node) => ({ id: node.id, ...node.position, ...node.size }));
@@ -95,7 +96,7 @@ describe('layoutFlow', () => {
   it('lays a flow at the 60-node cap out without overlaps', async () => {
     // A tree of calls, some shared, one node in eight a decision, unknown groups and cuts: the shape the spike timed.
     const big = capFlow();
-    const laid = await layoutFlow(big, new ELK());
+    const laid = await layoutFlow(big, new ELK(), { group: false });
     expect(laid.nodes).toHaveLength(64);
     const placed = boxes(laid);
     for (const [i, a] of placed.entries()) {
@@ -252,5 +253,117 @@ describe('tables, services and hand-offs on the canvas (phases 9 to 11)', () => 
         },
       }).location,
     ).toBe('read · Prisma · not fully detected');
+  });
+});
+
+describe('a grouped flow (phase 12): 8 or fewer groups, and opening one moves nothing else', () => {
+  // The engine's own flow for Documenso's sendDocument (60 nodes), as the walkthroughs use it.
+  const fixture = JSON.parse(
+    readFileSync(
+      new URL('../../../../e2e/try-it/fixtures/phase-10-documenso.json', import.meta.url),
+      'utf8',
+    ),
+  ) as { flows: Record<string, Flow> };
+  const flow = fixture.flows['packages/lib/server-only/document/send-document.ts#sendDocument'];
+  if (flow === undefined) throw new Error('No sendDocument flow in the fixture');
+  const shown = (laid: Awaited<ReturnType<typeof layoutFlow>>) =>
+    laid.nodes.filter((n) => n.type !== 'lane' && n.type !== 'stub');
+
+  it('opens as 8 or fewer groups named from the code, the root and groups of one on their own', async () => {
+    const laid = await layoutFlow(flow, new ELK());
+    const groups = laid.nodes.filter((n) => n.type === 'group');
+    expect(flow.nodes.length).toBeGreaterThanOrEqual(GROUP_THRESHOLD);
+    // The root aside, at most 8 things to read.
+    expect(shown(laid).length - 1).toBeLessThanOrEqual(8);
+    expect(groups.length).toBeGreaterThan(1);
+    // A folder's last two parts, or a kind: never an inferred category.
+    for (const group of groups) {
+      if (group.type !== 'group') continue;
+      expect(
+        group.data.title === 'Tables' || group.data.title.includes('/'),
+        group.data.title,
+      ).toBe(true);
+    }
+    expect(laid.nodes.some((n) => n.id === flow.root)).toBe(true);
+    // Every node is on the canvas or in a group's members.
+    const inGroups = groups.flatMap((g) =>
+      g.type === 'group' ? g.data.members.map((m) => m.id) : [],
+    );
+    expect(new Set([...inGroups, ...laid.nodes.map((n) => n.id)]).size).toBeGreaterThanOrEqual(
+      flow.nodes.length,
+    );
+    // One stub per thing it hangs off and kind: no id twice.
+    const ids = laid.nodes.map((n) => n.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('opening each group moves no other node, and draws its members inside its frame, over the rest', async () => {
+    const closed = await layoutFlow(flow, new ELK());
+    const before = new Map(closed.nodes.map((n) => [n.id, { ...n.position, ...n.size }]));
+    for (const group of closed.nodes.filter((n) => n.type === 'group')) {
+      if (group.type !== 'group') continue;
+      const opened = await layoutFlow(flow, new ELK(), { expandedGroups: new Set([group.id]) });
+      for (const node of opened.nodes) {
+        const was = before.get(node.id);
+        if (was === undefined || node.id === group.id) continue;
+        expect(
+          { ...node.position, ...node.size },
+          `${node.id} moved when ${group.id} opened`,
+        ).toEqual(was);
+      }
+      const frame = opened.nodes.find((n) => n.id === group.id);
+      expect(frame?.type === 'group' && frame.data.expanded).toBe(true);
+      // The frame stays where the card was.
+      expect(frame?.position).toEqual(group.position);
+      for (const member of group.data.members) {
+        const node = opened.nodes.find((n) => n.id === member.id);
+        expect(node, member.id).toBeDefined();
+        if (node === undefined || frame === undefined) continue;
+        expect(node.position.x).toBeGreaterThanOrEqual(frame.position.x);
+        expect(node.position.y).toBeGreaterThan(frame.position.y);
+        expect(node.position.x + node.size.width).toBeLessThanOrEqual(
+          frame.position.x + frame.size.width,
+        );
+        expect(node.position.y + node.size.height).toBeLessThanOrEqual(
+          frame.position.y + frame.size.height,
+        );
+        expect('zIndex' in node ? node.zIndex : 0).toBeGreaterThan(
+          frame.type === 'group' ? frame.zIndex : 0,
+        );
+      }
+      // Every edge ends at something on the canvas; one into the open group has no route made for the closed card.
+      const present = new Set(opened.nodes.map((n) => n.id));
+      for (const edge of opened.edges) {
+        expect(present.has(edge.source) && present.has(edge.target), edge.id).toBe(true);
+        const touches = group.data.members.some(
+          (m) => m.id === edge.source || m.id === edge.target,
+        );
+        // Inside the frame: between members, or a member's own stub; laid out with them, so routed with them.
+        const inside =
+          group.data.members.some((m) => m.id === edge.source) &&
+          (group.data.members.some((m) => m.id === edge.target) ||
+            edge.target.startsWith(`${edge.source}::`));
+        if (touches && !inside) expect(edge.data.route, edge.id).toBeUndefined();
+      }
+    }
+  });
+
+  it('opening two groups still moves nothing else', async () => {
+    const closed = await layoutFlow(flow, new ELK());
+    const [a, b] = closed.nodes.filter((n) => n.type === 'group');
+    if (a === undefined || b === undefined) throw new Error('fewer than two groups');
+    const opened = await layoutFlow(flow, new ELK(), { expandedGroups: new Set([a.id, b.id]) });
+    for (const node of closed.nodes) {
+      if (node.id === a.id || node.id === b.id) continue;
+      const now = opened.nodes.find((n) => n.id === node.id);
+      if (now !== undefined) expect(now.position).toEqual(node.position);
+    }
+  });
+
+  it('says of each edge whether it’s known less surely than resolved, for the completeness pill', async () => {
+    const laid = await layoutFlow(small, new ELK());
+    for (const e of laid.edges) {
+      expect(e.data.weak).toBe(!['resolved', 'observed'].includes(e.data.provenance));
+    }
   });
 });

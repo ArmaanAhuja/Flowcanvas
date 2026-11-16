@@ -33,10 +33,13 @@ import styles from './FlowCanvas.module.css';
 import {
   DecisionCard,
   FlowEdge,
+  GroupCard,
+  GroupToggle,
   StubCard,
   LaneCard,
   type DecisionCanvasNode,
   type FlowCanvasEdge,
+  type GroupCanvasNode,
   type StubCanvasNode,
   type LaneCanvasNode,
 } from './flow-parts';
@@ -51,9 +54,10 @@ export interface FlowNodeData extends Record<string, unknown> {
   readonly place?: { readonly path: string; readonly line: number; readonly column: number } | null;
 }
 
-/** A code unit (and the phase 2 examples); and, in a flow (phase 7), its decisions and open ends. */
+/** A code unit (and the phase 2 examples); and, in a flow (phase 7), its decisions, open ends, and groups. */
 export type UnitCanvasNode = Node<FlowNodeData, 'flow'>;
-export type CanvasNode = UnitCanvasNode | DecisionCanvasNode | StubCanvasNode | LaneCanvasNode;
+export type CanvasNode =
+  UnitCanvasNode | DecisionCanvasNode | StubCanvasNode | LaneCanvasNode | GroupCanvasNode;
 export type CanvasEdge = Edge | FlowCanvasEdge;
 
 /** Our FlowNode as React Flow's node type; the handles only anchor edges (nodes aren't connected by hand). */
@@ -86,7 +90,13 @@ const FlowNodeCard = memo(function FlowNodeCard({
   );
 });
 
-const NODE_TYPES = { flow: FlowNodeCard, decision: DecisionCard, stub: StubCard, lane: LaneCard };
+const NODE_TYPES = {
+  flow: FlowNodeCard,
+  decision: DecisionCard,
+  stub: StubCard,
+  lane: LaneCard,
+  group: GroupCard,
+};
 const EDGE_TYPES = { flow: FlowEdge };
 const px = (token: keyof typeof baseValues) => Number.parseFloat(baseValues[token]);
 const MINIMAP = { width: px('--size-minimap-width'), height: px('--size-minimap-height') };
@@ -132,6 +142,8 @@ export interface FlowCanvasProps {
   readonly onSelectNode?: (node: CanvasNode | null) => void;
   /** A node opened (a double-click): its code. */
   readonly onOpenNode?: (node: CanvasNode) => void;
+  /** A group opened or closed (phase 12): its card's chevron, a click, or Enter. */
+  readonly onToggleGroup?: (id: string) => void;
   /**
    * A node to open on (a flow's root): at 100%, centred across, near the top, as Figma 06 shows a flow (owner,
    * 14 Nov 2026). Without one, everything is fitted (the stress test). F fits either way.
@@ -147,9 +159,17 @@ export interface FlowCanvasProps {
  * - The minimap is bottom-left and the toolbar bottom-centre, as on Figma 06.
  */
 export function FlowCanvas(props: FlowCanvasProps) {
+  // The group cards call the latest handler through one that never changes, so a new one doesn't redraw them all.
+  const toggle = useRef(props.onToggleGroup);
+  toggle.current = props.onToggleGroup;
+  const onToggleGroup = useCallback((id: string) => {
+    toggle.current?.(id);
+  }, []);
   return (
     <ReactFlowProvider>
-      <Canvas {...props} />
+      <GroupToggle.Provider value={onToggleGroup}>
+        <Canvas {...props} />
+      </GroupToggle.Provider>
     </ReactFlowProvider>
   );
 }
@@ -193,10 +213,18 @@ function Canvas({
 
   // A new set of nodes with a node to open on: that node at 100%, near the top. Set before React Flow's first fit,
   // which is off when there's a focus.
+  // Only for a new flow (another root, or after an empty canvas): opening or closing a group of the same flow keeps
+  // the view where the person has it (phase 12: nothing else moves, on the screen either).
   const focused = focus === undefined ? undefined : given.find((node) => node.id === focus);
+  const lastFocus = useRef<string | null>(null);
   useEffect(() => {
     const box = container.current?.getBoundingClientRect();
-    if (focused === undefined || box === undefined) return;
+    if (focused === undefined) {
+      if (given.length === 0) lastFocus.current = null;
+      return;
+    }
+    if (box === undefined || lastFocus.current === focused.id) return;
+    lastFocus.current = focused.id;
     const width = (focused as { readonly size?: { readonly width: number } }).size?.width ?? 0;
     void flow.setViewport({
       x: Math.round(box.width / 2 - (focused.position.x + width / 2)),

@@ -59,17 +59,47 @@ export function useFlow(
 ) {
   const [flow, setFlow] = useState<FlowState>({ kind: 'none' });
   const [details, setDetails] = useState<DetailsState>({ kind: 'none' });
+  // The groups opened (phase 12), and whether the completeness pill is pressed: the pill only changes how edges are
+  // drawn, so it never lays the flow out again.
+  const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set());
+  const [filterWeak, setFilterWeak] = useState(false);
   const layouts = useRef(new Recent<LaidOutFlow>(KEPT));
   const detailsKept = useRef(new Recent<DetailsResult>(KEPT));
   const flowAsked = useRef(0);
+  const laidAsked = useRef(0);
   const detailsAsked = useRef(0);
   const version = useRef<string | null>(null);
+  const current = useRef<{ result: FlowResult; open: ReadonlySet<string> } | null>(null);
+
+  /** A layout of the flow with these groups open: kept by graph version, root and what's open. */
+  const laidOut = useCallback(
+    async (result: FlowResult, open: ReadonlySet<string>) => {
+      const shown = result.flow;
+      if (shown === null) return null;
+      const key = [
+        result.version ?? '',
+        shown.root,
+        String(shown.nodes.length),
+        [...open].sort().join(','),
+      ].join('|');
+      let laid = layouts.current.get(key);
+      if (laid === undefined) {
+        laid = await layoutFlow(shown, await elk(), { expandedGroups: open });
+        layouts.current.set(key, laid);
+      }
+      return laid;
+    },
+    [elk],
+  );
 
   const open = useCallback(
     async (at: CodePosition) => {
       const asked = ++flowAsked.current;
       setFlow({ kind: 'loading' });
       setDetails({ kind: 'none' });
+      setExpandedGroups(new Set());
+      setFilterWeak(false);
+      current.current = null;
       const answer = await fetchFlow(projectId, at, fetcher);
       if (asked !== flowAsked.current) return;
       if (!('flow' in answer)) {
@@ -77,21 +107,39 @@ export function useFlow(
         return;
       }
       version.current = answer.version;
-      if (answer.flow === null) {
-        setFlow({ kind: 'ready', result: answer, laid: null });
-        return;
-      }
-      const key = `${answer.version ?? ''}|${answer.flow.root}|${String(answer.flow.nodes.length)}`;
-      let laid = layouts.current.get(key);
-      if (laid === undefined) {
-        laid = await layoutFlow(answer.flow, await elk());
-        layouts.current.set(key, laid);
-      }
+      const laid = await laidOut(answer, new Set());
       if (asked !== flowAsked.current) return;
+      current.current = { result: answer, open: new Set() };
       setFlow({ kind: 'ready', result: answer, laid });
     },
-    [projectId, fetcher, elk],
+    [projectId, fetcher, laidOut],
   );
+
+  /** Opens or closes a group (phase 12): nothing else moves, as the base layout doesn't change. */
+  const toggleGroup = useCallback(
+    async (groupId: string) => {
+      const shown = current.current;
+      if (shown === null) return;
+      const next = new Set(shown.open);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      shown.open = next;
+      setExpandedGroups(next);
+      const asked = flowAsked.current;
+      const laid = ++laidAsked.current;
+      const placed = await laidOut(shown.result, next);
+      // A newer flow, or a later toggle, wins over this late layout.
+      if (asked !== flowAsked.current || laid !== laidAsked.current || placed === null) return;
+      setFlow((prev) =>
+        prev.kind === 'ready' && prev.result === shown.result ? { ...prev, laid: placed } : prev,
+      );
+    },
+    [laidOut],
+  );
+
+  const toggleFilterWeak = useCallback(() => {
+    setFilterWeak((on) => !on);
+  }, []);
 
   /** The details of the code unit at a place (a node of the flow), or none. */
   const select = useCallback(
@@ -123,9 +171,20 @@ export function useFlow(
   const close = useCallback(() => {
     flowAsked.current += 1;
     detailsAsked.current += 1;
+    current.current = null;
     setFlow({ kind: 'none' });
     setDetails({ kind: 'none' });
   }, []);
 
-  return { flow, details, open, select, close };
+  return {
+    flow,
+    details,
+    open,
+    select,
+    close,
+    filterWeak,
+    toggleFilterWeak,
+    toggleGroup,
+    expandedGroups,
+  };
 }

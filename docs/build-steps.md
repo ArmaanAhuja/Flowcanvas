@@ -14058,9 +14058,9 @@ pnpm test:visual
 | # | Step | Milestone | Status |
 | --- | --- | --- | --- |
 | 0 | The plan and decisions; branch; pace option C (phases 12 and 13 grouped) | A | done (Claude & Antigravity, 16 Nov): `docs: phases 12 and 13's plan` |
-| 1 | Progressive disclosure: semantic grouping, expand/collapse, pinned positions, unknown stubs, completeness pill | A | *next* |
-| 2 | Sequence view: timeline layout, order from code, async hops, Graph/Sequence switch, bidirectional inspector | A | *planned* |
-| 3 | Verification on corpus (Twenty 60-node flow), walkthroughs, visual baselines, report, release 0.14.0 | A | *planned* |
+| 1 | Progressive disclosure: semantic grouping, expand/collapse, pinned positions, unknown stubs, completeness pill | A | done (Antigravity's draft, checked and rebuilt by Claude, 16 Nov): step 12.1 |
+| 2 | Sequence view: timeline layout, order from code, async hops, Graph/Sequence switch, bidirectional inspector | A | done (as above): step 12.1 |
+| 3 | Verification on corpus (Twenty 60-node flow), walkthroughs, visual baselines, report, release 0.14.0 | A | done (Claude, 16 Nov): step 12.1 |
 
 ### Step 12.0 — The plan and the owner's decisions (done by Claude & Antigravity)
 
@@ -14077,4 +14077,42 @@ pnpm test:visual
 - **Sequence view:** Timeline waterfall representation of the exact same flow graph (synchronous order, async hops in background lane, failure paths).
 
 **Found on the way:** grouping phases 12 and 13 per owner decision (15 Nov 2026); release 0.14.0 in progress.
+
+### Step 12.1 — Groups named from the code, opened in place; the sequence view (done by Claude, from Antigravity's draft)
+
+**Goal:** phases 12 and 13 as the plan says: a 60-node flow opens as 8 or fewer groups, and expanding one moves no other node; the same flow reads correctly as a sequence. The draft that came in uncommitted was checked first (decisions log, 16 Nov 2026) and rebuilt where it fell short; the owner decided how groups are named ("go ahead for all 4").
+
+**What a person can do now:** open a large flow (Twenty's `PartnerProfilePage`, 60 nodes) and read it as 8 or fewer things: groups named by their folder (`src/platform · 18`) or kind (`Tables · 6`), the root and groups of one on their own. Open a group with its header: its members appear in its frame and nothing else moves, on the canvas or the screen; close it again. Press the completeness pill to see the weak edges. Switch to Sequence: the flow in the order the code calls it, nested, branches and failure paths in words, open ends as rows, each hand-off's work after it; a row opens its node in the inspector.
+
+**Files:**
+- `packages/graph-model/src/grouping.ts` (`semanticGrouping`, `folderTitle`) and `grouping.test.ts`; `flow.ts` (`backgroundOf`, shared with the web).
+- `apps/web/src/flow/layout.ts` (the grouped layout: base layout, open groups' frames, edges to members, stubs per group; `Unplaced`; `GROUP_FRAME`), `layout.test.ts`; `useFlow.ts` (open groups, layouts kept by what's open, the pill as a switch); `apps/web/src/canvas/FlowCanvas.tsx` (`onToggleGroup`; re-centred only for a new flow), `flow-parts.tsx` (`GroupToggle`, `GroupCard`); `apps/web/src/project/ProjectPage.tsx` (the pill drawn by the canvas, not laid out again).
+- `apps/web/src/sequence/SequenceCanvas.tsx` (`flowToSequence`), its CSS and test.
+- `packages/ui/src/components/group-node/` (the card and the open frame, one control) and `sequence-view/` (the waterfall), each with test and stories.
+- `e2e/try-it/phase-12.spec.ts` (Twenty's largest flow), `phase-13.spec.ts`, `phase-9.spec.ts` and `phase-10.spec.ts` (each opens the group it needs, no "if grouped"), `e2e/try-it/fixtures/phase-12-twenty.json` (the engine's own flow, from Twenty's graph at its pin); the screens' baselines; ADR 0032's addendum; the report, CHANGELOG and the living docs.
+
+**Concepts:**
+- **Folders as groups, top down:** start with the deepest folder all of a lane's functions share, and split the largest group into its subfolders while it fits; a tree cut, the finest that fits a budget. The names are the code's own, so they can't mislead the way an inferred category can.
+- **A layout that doesn't depend on what's open:** opening a group never runs the base layout with different input, so nothing else can move; the open group is laid out on its own and drawn over the canvas. React Flow draws an edge without a route as a step between its nodes' handles, so edges into it meet the members where they are ([React Flow edges](https://reactflow.dev/learn/customization/custom-edges)).
+- **A trace waterfall without timings:** a parent span covers its children ([OpenTelemetry traces](https://opentelemetry.io/docs/concepts/signals/traces/)); with order only, a bar covers its calls' rows, which shows nesting without inventing durations.
+
+**What was found and fixed (the draft, checked):**
+- Groups were named by regexes into invented categories ("Validation", "Auth & security", "Jobs & queues"), Twenty's folders hard-coded; the largest group was truncated into the last one under its old title. Replaced by folders and kinds; then, on the forks, a level-wise merge put Documenso's whole flow in `packages/lib` (51) and Twenty's in one group (58), so it became top down with partial splits.
+- "Pinned" positions were put back after a new ELK layout whose edges were routed for the new positions: edges ended in empty space, boxes overlapped. The walkthrough checked one other group only. Rebuilt as above; the walkthrough now checks every node's box on the screen.
+- The canvas re-centred on the root whenever its nodes changed, so opening a group threw the view back: now only for a new flow.
+- The draft dropped the layout cache (owner, 13 Nov 2026: snappy by caching): restored, keyed by what's open.
+- Callbacks were stored in the layout's data and layouts started inside a state updater: the toggle is now a context, and layouts a plain async step that a newer one wins over.
+- The sequence view ordered breadth first and called a step a failure when its name contained "error"; it showed one Background group for every hand-off, ticks "Step 1…Step 3" without timings, and a legend for things not shown. Rebuilt as above.
+- The group card used tokens that don't exist (`--font-sans`, `--text-body-strong-size`, `--size-node-height`, `--focus-ring-*`) and a 14 px chevron; the whole open frame was a button; the sequence view's CSS used `--space-20` and `--space-6` (not in the scale) and fixed pixel sizes. Both now use only Graphite's tokens; Stylelint passes.
+- Walkthroughs 9 and 10 expanded a group "if grouped": they now open the group the flow has (`trpc/routers`, `Tables`).
+- RUN-AND-FEATURES said 74,692 unit tests: recounted.
+- All 54 screen baselines the draft regenerated, and its 12 new ones, were set aside and made again from this code, each difference read.
+
+**Tests:** grouping (8: named from the code, kinds, decisions in their function's group, the finest grouping that fits 8, never more than the most, the background apart, titles, empty); layout on the engine's `sendDocument` flow (8 or fewer; opening each group in turn moves no other node, members inside the frame and over it, every edge ending at a drawn node, no stale route into the open group; two open at once; weak edges); sequence (the code's order, nesting and spans, branches, failure only from an error branch, the Background group, nothing timed, a row selecting its node); the group card (4) and the sequence view (5); walkthroughs 12 and 13 (and 9 and 10) in a real browser on the engine's own flows.
+
+**Run and check it:** `pnpm dev`, Twenty's corpus project with its workspace running: ⌘K `PartnerProfilePage`, Show flow; open `src/platform`; press the completeness pill; switch to Sequence and click a row. Tests: `pnpm --filter @flowcanvas/graph-model exec vitest run src/grouping.test.ts`; `pnpm --filter @flowcanvas/web exec vitest run src/flow src/sequence`; `pnpm --filter @flowcanvas/e2e exec playwright test try-it/phase-12.spec.ts try-it/phase-13.spec.ts`; `pnpm test:visual`.
+
+**Risks and laptop:** an open group's frame can cover what's beside it (nothing moves, so it lies over the canvas until closed). Groups follow folders, so a project with one flat folder groups by kind only and its functions stay together. Laptop: the forks' graphs were built once into `~/.cache/flowcanvas/graphs` and reused for every grouping check (owner's CI answer 4); the screenshot suite run once before the push (answer 3); no Docker run, as the engine didn't change.
+
+**Commits:** this commit.
 

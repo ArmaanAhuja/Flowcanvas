@@ -716,3 +716,13 @@ CLAUDE.md's "Working pace" says the same.
 - **Phases 9 to 11 accepted.** PR #23 marked ready for review and all checks passed green. Connectors across UI → API, database reads/writes with tables/collections, external service boundaries, and async hand-offs (BullMQ, Twenty message queue, Documenso job client, EventEmitter, WebSockets) proven on all 4 forks in real workspaces. Background lane on canvas and jobs/cron/events listed as entry points in the left panel. Release 0.13.0.
 - **Next:** Phases 12 and 13 grouped (progressive disclosure and sequence view).
 
+
+## 16 Nov 2026: phases 12 and 13's draft, checked; how groups are named (owner)
+
+Claude checked the uncommitted work on phases 12 and 13 against the plan: groups were named by regexes over folder names into invented categories (every decision "Validation", `email*` folders "Jobs & queues", Twenty's folders hard-coded); expanding a group put the other nodes back but kept ELK's edges for the new layout (edges ending in empty space, overlapping boxes), with a test checking one other group only; the sequence view ordered steps breadth-first, marked failures by a name containing "error", and showed no nesting or branches; a screen baseline of a broken grouped flow had been accepted unread.
+
+**Owner:** "okay go ahead for all 4".
+1. **Groups are named from the code:** the folder the functions are in (moved up a level while there are too many), tables, outside services and hand-offs each their own group by kind, a decision in its function's group; never an inferred category.
+2. **The pinned layout rebuilt:** edges drawn to where the nodes are; members given room without overlapping; every other node checked, on Twenty's largest flow (the plan's *Try it*).
+3. **The sequence view:** call order from the code's lines, nesting, decisions with their branches, failure paths only from the code's error branches, compared with Figma 08.
+4. **Format, the affected baselines regenerated and each read, the docs, one push.**
