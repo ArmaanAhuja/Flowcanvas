@@ -38,7 +38,11 @@ function fakeApi(changes: Partial<Record<string, unknown>> = {}): GitHubApi {
     ...(changes.files as Record<string, string | undefined> | undefined),
   };
   return {
-    json: (path) => Promise.resolve(json[path]),
+    // An Error stands for GitHub's error answer to that path.
+    json: (path) => {
+      const answer = json[path];
+      return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
+    },
     raw: (_repo, file) => Promise.resolve(files[file]),
   };
 }
@@ -83,6 +87,41 @@ describe('checkRepo', () => {
     const result = await checkRepo(repo, fakeApi(changes));
     expect(result.ok).toBe(false);
     expect(result.lines.join('\n')).toContain(message);
+  });
+
+  describe('when GitHub can’t build the diff (a 422, Medusa on 16 Nov 2026)', () => {
+    const pin = 'a'.repeat(40);
+    const tooLong = {
+      [`repos/us/example/compare/${pin}...main`]: new Error(
+        `GitHub API 422 for repos/us/example/compare/${pin}...main`,
+      ),
+      [`repos/us/example/commits/${pin}`]: {
+        commit: { committer: { date: '2026-10-14T11:27:02Z' } },
+      },
+    };
+    const listing = `repos/us/example/commits?sha=main&since=2026-10-14T11:27:02Z&until=2026-10-14T11:27:02Z&per_page=100`;
+
+    it('passes when the branch lists the pin at its commit time', async () => {
+      const result = await checkRepo(repo, fakeApi({ ...tooLong, [listing]: [{ sha: pin }] }));
+      expect(result.ok).toBe(true);
+      expect(result.lines.join('\n')).toContain(`commit ${pin.slice(0, 7)} is on main`);
+    });
+
+    it('fails when the branch doesn’t list it', async () => {
+      const result = await checkRepo(
+        repo,
+        fakeApi({ ...tooLong, [listing]: [{ sha: 'b'.repeat(40) }] }),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.lines.join('\n')).toContain('not listed on the branch');
+    });
+
+    it('still throws on any other error', async () => {
+      const broken = {
+        [`repos/us/example/compare/${pin}...main`]: new Error('GitHub API 500 for compare'),
+      };
+      await expect(checkRepo(repo, fakeApi(broken))).rejects.toThrow('500');
+    });
   });
 });
 

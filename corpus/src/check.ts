@@ -24,6 +24,35 @@ function dependencies(packageJson: string): Set<string> {
   ]);
 }
 
+/**
+ * Whether the branch reaches the pinned commit: GitHub's comparison of the two, or, when GitHub can't build that
+ * diff ("this diff is taking too long to generate", a 422: Medusa's develop, 16 Nov 2026), the branch's commits at
+ * the pin's own commit time, which list the pin if, and only if, the branch reaches it.
+ */
+async function commitOnBranch(
+  repo: CorpusRepo,
+  api: GitHubApi,
+): Promise<{ readonly ok: boolean; readonly status: string }> {
+  try {
+    const compare = (await api.json(
+      `repos/${repo.fork}/compare/${repo.commit}...${repo.branch}`,
+    )) as { status?: string } | undefined;
+    const status = compare?.status ?? 'not found';
+    return { ok: status === 'ahead' || status === 'identical', status };
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes(' 422 ')) throw error;
+    const pinned = (await api.json(`repos/${repo.fork}/commits/${repo.commit}`)) as
+      { commit?: { committer?: { date?: string } } } | undefined;
+    const date = pinned?.commit?.committer?.date;
+    if (date === undefined) return { ok: false, status: 'not found' };
+    const listed = (await api.json(
+      `repos/${repo.fork}/commits?sha=${repo.branch}&since=${date}&until=${date}&per_page=100`,
+    )) as { sha: string }[] | undefined;
+    const ok = listed?.some((commit) => commit.sha === repo.commit) ?? false;
+    return { ok, status: ok ? 'listed on the branch' : 'not listed on the branch' };
+  }
+}
+
 /** Checks one pinned repo: the fork, the commit, the licence and the stack evidence. */
 export async function checkRepo(repo: CorpusRepo, api: GitHubApi): Promise<CheckResult> {
   const lines: string[] = [];
@@ -48,14 +77,11 @@ export async function checkRepo(repo: CorpusRepo, api: GitHubApi): Promise<Check
   if (info.private === false) pass('public');
   else failWith('fork must be public (decisions log, 29 Oct 2026)');
 
-  const compare = (await api.json(`repos/${repo.fork}/compare/${repo.commit}...${repo.branch}`)) as
-    { status?: string } | undefined;
-  if (compare?.status === 'ahead' || compare?.status === 'identical') {
+  const onBranch = await commitOnBranch(repo, api);
+  if (onBranch.ok) {
     pass(`commit ${repo.commit.slice(0, 7)} is on ${repo.branch}`);
   } else {
-    failWith(
-      `commit ${repo.commit.slice(0, 7)} is not on ${repo.branch} (${compare?.status ?? 'not found'})`,
-    );
+    failWith(`commit ${repo.commit.slice(0, 7)} is not on ${repo.branch} (${onBranch.status})`);
   }
 
   const licence = await api.raw(repo.fork, repo.licence.file, repo.commit);

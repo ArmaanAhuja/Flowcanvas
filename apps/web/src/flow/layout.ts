@@ -335,7 +335,7 @@ async function layoutPart(part: Part, elk: ElkLike, dx: number, dy: number) {
         ...node,
         position: { x: (at?.x ?? 0) + dx, y: (at?.y ?? 0) + dy },
         size: { width: at?.width ?? 0, height: at?.height ?? 0 },
-      } as LaidOutNode;
+      };
     }),
     edges: part.edges.map((edge) => {
       const route = routes.get(edge.id);
@@ -660,7 +660,7 @@ async function layoutGrouped(
       zIndex: Z.frame,
       data: { ...node.data, expanded: true },
     });
-    for (const member of sub.nodes) nodes.push({ ...member, zIndex: Z.member } as LaidOutNode);
+    for (const member of sub.nodes) nodes.push({ ...member, zIndex: Z.member });
     for (const edge of sub.edges) edges.push({ ...edge, zIndex: Z.member });
   }
   // Edges: the base's between closed things as ELK routed them; any touching an open group, to its members as placed.

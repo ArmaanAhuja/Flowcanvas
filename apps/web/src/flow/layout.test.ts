@@ -278,7 +278,6 @@ describe('a grouped flow (phase 12): 8 or fewer groups, and opening one moves no
     expect(groups.length).toBeGreaterThan(1);
     // A folder's last two parts, or a kind: never an inferred category.
     for (const group of groups) {
-      if (group.type !== 'group') continue;
       expect(
         group.data.title === 'Tables' || group.data.title.includes('/'),
         group.data.title,
@@ -286,9 +285,7 @@ describe('a grouped flow (phase 12): 8 or fewer groups, and opening one moves no
     }
     expect(laid.nodes.some((n) => n.id === flow.root)).toBe(true);
     // Every node is on the canvas or in a group's members.
-    const inGroups = groups.flatMap((g) =>
-      g.type === 'group' ? g.data.members.map((m) => m.id) : [],
-    );
+    const inGroups = groups.flatMap((g) => g.data.members.map((m) => m.id));
     expect(new Set([...inGroups, ...laid.nodes.map((n) => n.id)]).size).toBeGreaterThanOrEqual(
       flow.nodes.length,
     );
@@ -301,7 +298,6 @@ describe('a grouped flow (phase 12): 8 or fewer groups, and opening one moves no
     const closed = await layoutFlow(flow, new ELK());
     const before = new Map(closed.nodes.map((n) => [n.id, { ...n.position, ...n.size }]));
     for (const group of closed.nodes.filter((n) => n.type === 'group')) {
-      if (group.type !== 'group') continue;
       const opened = await layoutFlow(flow, new ELK(), { expandedGroups: new Set([group.id]) });
       for (const node of opened.nodes) {
         const was = before.get(node.id);

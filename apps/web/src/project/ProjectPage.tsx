@@ -27,12 +27,10 @@ import { useWorkspaceEvents } from '../code/events';
 import { useCodeFiles } from '../code/useCodeFiles';
 import { fetchProjects, isProblem, type Project } from '../projects/api';
 import { FlowCanvas, type CanvasEdge, type CanvasNode } from '../canvas/FlowCanvas';
-import { cardOf } from '../flow/layout';
 import { FlowInspector } from '../flow/FlowInspector';
 import { FlowStatus } from '../flow/FlowStatus';
 import { useFlow, type FlowState } from '../flow/useFlow';
 import { pageElk } from '../flow/elk';
-import { SequenceCanvas } from '../sequence/SequenceCanvas';
 import { EXAMPLE_BANNER, exampleGraph } from '../canvas/examples';
 import { useLabs } from '../labs/LabsProvider';
 import { useGraphStats } from '../graph/useGraphStats';
@@ -57,6 +55,10 @@ const EntryPointsLeft = lazy(async () => ({
   default: (await import('../entry-points/EntryPointsLeft')).EntryPointsLeft,
 }));
 const CodeView = lazy(async () => ({ default: (await import('../code/CodeView')).CodeView }));
+// The sequence view (phase 13): only once Sequence is chosen.
+const SequenceCanvas = lazy(async () => ({
+  default: (await import('../sequence/SequenceCanvas')).SequenceCanvas,
+}));
 // Quick-open (Ctrl/⌘+P) and the command palette (⌘K, phase 4): one chunk of their own (SearchDialogs.ts), fetched in
 // the background once the workspace runs, so it's there before the first keypress. Loading it on the keypress lost
 // the first letters typed (found by the screen test, phase 3 step 8).
@@ -526,12 +528,14 @@ function ReadyProject({
               />
             </Suspense>
           ) : view === 'sequence' ? (
-            <SequenceCanvas
-              index={<IndexChip status={index.status} />}
-              flow={flows.flow}
-              selected={selected}
-              onSelectNode={select}
-            />
+            <Suspense fallback={<p className={styles.empty}>Loading the sequence…</p>}>
+              <SequenceCanvas
+                index={<IndexChip status={index.status} />}
+                flow={flows.flow}
+                selected={selected}
+                onSelectNode={select}
+              />
+            </Suspense>
           ) : (
             <ProjectCanvas
               index={<IndexChip status={index.status} />}

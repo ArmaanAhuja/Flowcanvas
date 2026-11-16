@@ -77,7 +77,7 @@ const FLOW: Flow = {
   cut: [],
   hidden: 0,
   byProvenance: { observed: 0, resolved: 7, convention: 2, suggested: 0, unknown: 2 },
-} as Flow;
+};
 
 describe('flowToSequence', () => {
   const sequence = flowToSequence(FLOW);

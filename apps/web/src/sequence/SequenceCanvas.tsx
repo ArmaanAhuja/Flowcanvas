@@ -103,8 +103,9 @@ export function flowToSequence(flow: Flow): FlowSequence {
   walk(flow.root, 0, null, mainSteps, false);
   const sections: SequenceBackgroundSection[] = [];
   let order = mainSteps.length;
-  for (let i = 0; i < handoffs.length; i += 1) {
-    const handoff = byId.get(handoffs[i] ?? '');
+  // A hand-off found in the background is walked too: the array's iterator sees what's added as it goes.
+  for (const id of handoffs) {
+    const handoff = byId.get(id);
     if (handoff === undefined) continue;
     const rows: SequenceStep[] = [];
     for (const edge of out.get(handoff.id) ?? []) {

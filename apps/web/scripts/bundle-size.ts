@@ -17,8 +17,10 @@ export const BUDGETS: Readonly<Record<string, number>> = {
   // whenever a project is open, the Graph view included, to keep unsaved work safe; loading them lazily would only
   // delay that protection. Raised 110 → 115 on 15 Nov 2026 (phase 8, 110.6 kB): the entry points' lists, groups, `/`
   // shortcut and notices (1.6 kB) are needed whenever a project is open, as the left panel's default; the panel
-  // itself (React Aria's tree and virtualizer) loads on its own, below.
-  ProjectPage: 115,
+  // itself (React Aria's tree and virtualizer) loads on its own, below. Raised 115 → 120 on 16 Nov 2026 (phase 12,
+  // 116.5 kB): a large flow's grouping, its group card and the grouped layout (about 3.6 kB) are needed whenever a
+  // flow is on the canvas, the default view; the sequence view (phase 13) loads on its own, when chosen.
+  ProjectPage: 120,
   WorkspaceTerminal: 95,
   // 8 Nov 2026 (phase 3): the editor's core, only with the Code view (115.5 kB; ADR 0021 estimated about 150 with
   // a language).
