@@ -2,7 +2,15 @@
 // some: `FLOWCANVAS_PACKAGES=AppImage pnpm package` where the .deb tooling can't run). Run after `pnpm build`
 // (which assembled build/). The app is staged on its own first (the two bundled files and a package.json without
 // dependencies), so electron-builder never walks pnpm's node_modules: everything the app needs is bundled.
-import { chmodSync, cpSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  cpSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
