@@ -5,5 +5,5 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src/protocol.ts"]
+  "include": ["src/protocol.ts", "src/indexers.ts", "src/errors.ts"]
 }

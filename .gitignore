@@ -30,5 +30,6 @@ blob-report/
 
 # the accessibility check's report
 playwright-report-a11y/
+playwright-report-desktop/
 report-site/
 reports-data/

@@ -1,0 +1,84 @@
+/* The desktop app's projects (build plan v2, phase 1): Open folder, then the recent folders. */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+.headingRow {
+  display: flex;
+  gap: var(--space-12);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.heading {
+  margin: 0;
+  font-family: var(--text-heading-font-family);
+  font-size: var(--text-heading-font-size);
+  font-weight: var(--text-heading-font-weight);
+  line-height: var(--text-heading-line-height);
+  letter-spacing: var(--text-heading-letter-spacing);
+  color: var(--color-text-primary);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-12);
+  border: var(--border-width-default) solid var(--color-border-subtle);
+  border-radius: var(--radius-node);
+  background: var(--color-surface-raised);
+}
+
+.name {
+  font-family: var(--text-body-strong-font-family);
+  font-size: var(--text-body-strong-font-size);
+  font-weight: var(--text-body-strong-font-weight);
+  line-height: var(--text-body-strong-line-height);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.name:hover {
+  text-decoration: underline;
+}
+
+.name:focus-visible {
+  outline: var(--border-width-focus) solid var(--color-accent-solid);
+  outline-offset: var(--border-width-default);
+  border-radius: var(--radius-control);
+}
+
+.path {
+  overflow: hidden;
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  line-height: var(--text-mono-small-line-height);
+  color: var(--color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty,
+.error {
+  margin: 0;
+  font-family: var(--text-body-font-family);
+  font-size: var(--text-body-font-size);
+  line-height: var(--text-body-line-height);
+  color: var(--color-text-secondary);
+}
+
+.error {
+  color: var(--color-state-removed-text);
+}

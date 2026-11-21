@@ -18,10 +18,10 @@ All reference material lives in `docs/reference/`. Screenshots of a clickable pr
 
 | File | What it is | How to use it |
 | --- | --- | --- |
-| **Build plan** (`docs/reference/build-plan.md`) | 96 phases across 10 stages, each with *Build*, *Done when* and *Try it* | **The source of truth for order, scope and acceptance.** Build exactly these phases, in this order |
-| **Research report** (`docs/reference/research-report.md`) | Product vision, users, competitors, architecture, trust model, prompting, model choice, coverage plan, risks | The *why*. Read it fully before phase 1 and re-read the relevant section before each phase |
+| **Build plan v2** (`docs/reference/build-plan.md`, owner, Nov 2026) | A desktop app (Linux first) for understanding AI coding: 33 phases in 6 stages, then more kinds of software; each phase with *Build*, *Done when* and *Try it*. The web plan it replaces is `build-plan-v1-web.md` (history; its phases 1–13 are built) | **The source of truth for order, scope and acceptance.** Build these phases, in this order |
+| **Research report** (`docs/reference/research-report.md`) | Product vision, users, competitors, architecture, trust model, prompting, model choice, coverage plan, risks (written for the web plan) | Background on the *why*; the build plan v2 wins where they differ (desktop, no cloud, map/paths/live app over flow graphs) |
 | **Design language: Graphite** (`docs/reference/design-language-graphite.md`) | Principles, muted colour palette, typography, spacing, components, accessibility | **The source of truth for how things look and behave visually** |
-| **Design brief** (`docs/reference/design-brief.md`) | Every screen, panel, component and state, with interaction notes | Detailed behaviour of each screen |
+| **Design brief** (`docs/reference/design-brief.md`) | Every screen, panel, component and state of the web plan, with interaction notes | Detail for parts that still apply (inspector, review, agent panel, states); the build plan v2 wins where they differ |
 | **Figma file** (`Flowcanvas — Product Design`, https://www.figma.com/design/aV9vPto305pKFPlvWQOBX8) | Variables (tokens), text styles, components, screens | Background only: screens aren't matched or reviewed against it any more (owner, 21 Nov 2026); the built product is the base |
 | **Figma generator scripts** (`docs/reference/figma-scripts/`: `flowcanvas-screens.js`, `flowcanvas-prompting-screens.js`, `flowcanvas-cloud-screens.js`) | The code that generated the Figma file | Exact token values (`HEX` map), text styles, sizes, copy and layout rules; an exact fallback when Figma is ambiguous or unreachable |
 | **Decisions log** (`docs/decisions-log.md`), frozen 21 Nov 2026 | Answers to open questions up to 21 Nov 2026 | Check it, and CHANGELOG.md's later entries, before raising a question that may already be settled |
@@ -31,7 +31,7 @@ All reference material lives in `docs/reference/`. Screenshots of a clickable pr
 
 ## 3. The product in one paragraph (confirm you understand it)
 
-Flowcanvas is a canvas-first, AI-native development environment that replaces the traditional IDE. It is a web app: every project runs in an isolated cloud workspace (repo, dependencies, dev server, analysis engine, agent) with autosave, backups and sleep when idle, so users install nothing; a local runner comes later. Developers see their app running as live frames on an infinite canvas, click any element or entry point to see the real flow behind it through code, data, external services and background work, and inspect every step in detail. They ask existing coding agents (Claude Code, Codex and others via the Agent Client Protocol) for changes, from the chat or directly from nodes, flows, events or frames, and watch the frames and flows update step by step. Every change is checkpointed, shown as a behavioural diff with blast radius, test evidence and what is still unverified, and can be accepted or reverted. Every connection is tagged with how it is known (observed, resolved, convention, suggested, unknown) and nothing is ever drawn as fact without evidence. Web apps (TypeScript full stack) are supported first; other kinds of software follow in waves. First users are individual developers and startups.
+Flowcanvas is a desktop app (Linux first, then Windows, then macOS) for building software with AI coding agents while understanding what they do. It opens a project folder on the user's own machine, runs the project inside, and shows it three ways: **the live app** (its real screens, each element linked to its code), **the app map** (areas, screens, endpoints, data and outside services in human terms) and **paths** (one action as a short line of meaningful steps, from a click to what it writes, sends and returns). From any of these the user **learns** how the app works, **steers** Claude Code (the main agent; Codex and others through the Agent Client Protocol) with exactly the right context, and **reviews** each change as behaviours with proof (tested, seen running, not yet checked) and risks raised, with every agent step checkpointed and undoable. Every fact says where it came from (found in the code, seen running, AI's summary, unknown) and nothing is ever shown as fact without evidence; the big flow graphs are only an advanced detail view. TypeScript web apps are supported first. First users are people building their own projects and startup founders.
 
 ## 4. Non-negotiable rules
 
@@ -40,8 +40,8 @@ Flowcanvas is a canvas-first, AI-native development environment that replaces th
 2. **Always shippable.** The app must build, start and pass the full regression suite at the end of every phase and ideally every commit. No long-lived broken branches.
 3. **Never fabricate.** No connection, value, test result or metric may be shown that the system did not actually derive. Unknown is a valid, visible state. AI-suggested edges are always drawn as *suggested* (dotted) and never solid.
 4. **Provenance on everything.** Every edge and every inspector value carries its provenance. A feature that cannot provide provenance is not done.
-5. **Safe by default.** Every project runs in its own isolated workspace (lightweight VM), with outbound network rules and resource limits. `.env` files and secrets live only in the secrets vault and are never indexed, logged, shown, or sent to any model. Workspaces never see each other. Telemetry is off by default. Runtime payload capture is opt-in and masked.
-5a. **Never lose work.** Autosave, checkpoint backups and snapshots must work before any feature that changes code ships. Hitting a usage limit pauses gracefully and saves everything.
+5. **Safe by default.** Projects run on the user's own machine, in their own folder; nothing is uploaded. `.env` files and secrets are never indexed, logged, shown, or sent to any model (the context sent to an agent masks them). Telemetry is off by default. Runtime payload capture is opt-in and masked. The app works fully with AI summaries off.
+5a. **Never lose work.** Edits are saved to disk; every agent step is a checkpoint (shadow refs) before any feature that changes code ships; the app recovers its state after a crash.
 6. **Wrap agents, don't build one.** All agent work goes through the Agent Client Protocol (plus Claude Code hooks where useful). The product does not make code edits with its own model.
 7. **Checkpoints never touch the user's branches.** Use shadow refs (e.g. `refs/flowcanvas/checkpoints/<session>/<step>`).
 8. **Test repos are public open-source projects only.** Use the repos in `corpus/manifest.json` (a deliberately varied set, see the decisions log): public forks pinned to exact commits, their code never copied into this repository, their commercial or enterprise parts never enabled. Never use the user's own projects as test data.
@@ -65,7 +65,7 @@ The user wants to build this themselves. They have built projects before and are
 - Explain the why, not just the what: what problem this step solves, how it fits the architecture, what the alternatives were and why we chose this one, and what is happening under the hood.
 - Assume general programming, TypeScript/JavaScript basics and Git basics. Don't over-explain basics; do explain anything new (pnpm workspaces, Turborepo, Vite internals, Playwright, CI pipelines, Firecracker sandboxes, ACP, tree-sitter, the TypeScript compiler API, OpenTelemetry, etc.). At the start, ask a short list of calibration questions and adjust to the answers.
 - Link to official documentation for each new tool or concept, so the user learns where to look things up.
-- Account and service setup (GitHub, Cloudflare, Fly.io and later providers): teach the user to set up each account and connection rather than doing it for them. Prefer free tiers until told otherwise.
+- Account and service setup (GitHub and any later providers): teach the user to set up each account and connection rather than doing it for them. Prefer free tiers until told otherwise.
 
 ### For each phase
 
@@ -101,7 +101,7 @@ Fast, and still right: every *Done when* proven by tests, but nothing done that 
 
 ## 5. How to run each phase
 
-Follow the teaching loop in section 4a for every phase, including all 15 lettered phases: **1a, 1b, 1c, 1d, 18a, 20a, 22a, 27a, 27b, 27c, 31a, 36a, 42a, 44a, 48a**. The build plan's 96 phases (81 numbered + 15 lettered) are authoritative; follow the plan as written and don't change scope based on the research report unless the user says so.
+Follow the loop in section 4a for every phase of the build plan v2 (33 phases in 6 stages, then more kinds of software). Follow the plan as written and don't change scope unless the user says so.
 
 ### Step 1 — Overview lesson and phase plan
 
@@ -129,16 +129,15 @@ Give the overview lesson in chat (section 4a), covering the plan template in sec
 
 - Unit and integration tests for the new logic.
 - Corpus tests against the pinned forks for anything that analyses code.
-- End-to-end tests (Playwright driving the web app at the preview URL) that perform the phase's *Try it* steps and record a video.
+- End-to-end tests (Playwright driving the app) that perform the phase's *Try it* steps and record a video.
 - Accessibility for any UI change: axe on its catalogue stories and on the walkthrough's page. No screenshots (owner, 21 Nov 2026).
 - Performance and security checks where the phase touches them (section 8).
 
 ### Step 4 — Make it visible
 
-- Update the **demo project** bundle so the *Try it* steps work with one click.
 - Write the milestone's brief entry in `CHANGELOG.md` (it is the in-app **What's new**).
 - Put unfinished parts behind a **Labs** switch, never in the default experience.
-- Make sure the phase is live at its pull-request preview URL and, after merge, on staging.
+- Make sure the Linux packages CI builds (from phase 1) install and run the phase's *Try it*.
 
 ### Step 5 — Recap, report and acceptance
 
@@ -146,35 +145,24 @@ Recap what was built, walk the user through the *Done when* checks and *Try it* 
 
 ## 6. Technology and repository structure
 
-Use the stack from the build plan unless you propose a change and the user agrees: a React + TypeScript web app, React Flow (later a WebGL layer), ELK, CodeMirror 6 (chosen over Monaco, owner decision 7 Nov 2026, ADR 0021), LSP and DAP clients, xterm.js in the browser with a pty in the workspace, tree-sitter, the TypeScript compiler API, SQLite per workspace, git CLI with shadow refs, Agent Client Protocol client, MCP server (official SDK), SWC/Babel element stamping, OpenTelemetry, Vitest/Jest/Playwright, a provider-neutral model gateway; for the cloud: Firecracker-style workspace VMs (a managed sandbox provider at first), a TypeScript control-plane service with Postgres, a WebSocket gateway and authenticated preview proxy, S3-compatible snapshot storage plus a private backup git remote, GitHub and Google sign-in, usage-based billing, an encrypted secrets vault, and GitHub Actions for continuous deployment with per-PR preview URLs.
+Use the stack from the build plan v2 unless you propose a change and the user agrees: an **Electron** desktop app (Linux first: AppImage and .deb; Windows and macOS later) with the React + TypeScript UI, the engine in an Electron utility process (tree-sitter, the TypeScript compiler API, SQLite), CodeMirror 6 (ADR 0021), xterm.js with node-pty, the project's own dev server shown in a `WebContentsView`, SWC/Babel element stamping, git CLI with shadow refs, an Agent Client Protocol client (Claude Code first, with its hooks), Claude Code in headless mode for AI summaries (cached, with a no-AI mode), OpenTelemetry and test-runner tracing for real example values, Vitest and Playwright, and GitHub Actions CI building the Linux packages. No cloud: no workspaces VMs, control plane, gateway, accounts or billing (retired with the web plan).
 
-Suggested monorepo (pnpm workspaces + Turborepo); adjust if needed (say so in the CHANGELOG entry):
+Monorepo (pnpm workspaces + Turborepo); adjust if needed (say so in the CHANGELOG entry):
 
 ```
 apps/
-  web/                React web app: canvas, panels, screens (talks to the gateway)
-  local-runner/       (phase 48a) the workspace software packaged for users' machines
-services/
-  control-plane/      Accounts, projects, scheduling, secrets vault, metering, billing, backups
-  gateway/            WebSocket sync + authenticated preview proxy for live frames
-workspace/
-  image/              Base images and prebuilt stack caches for workspace VMs
-  agent/              In-workspace daemon: file and process API, autosave journal, snapshots
+  desktop/            Electron main process, preload, packaging (from phase 1)
+  web/                The React UI, loaded by the desktop app (still runs in a browser for tests)
 packages/
   ui/                 Graphite design system (tokens, components) + component catalogue
-  tokens/             Generated from Figma variables; never edited by hand
-  graph-model/        Node/edge/provenance/change-state types, snapshots, diffing
-  engine/             Indexer, parsers, resolvers, flow builder, incremental analysis (worker process)
+  tokens/             Design tokens, generated from packages/tokens/source; never edited by hand
+  graph-model/        Node/edge/provenance types, flows, grouping, entry points
+  engine/             Indexer, parsers, resolvers, graph, connectors' pass, stored facts
   connectors/web/     Framework connectors (React, Next.js, Express, tRPC, Prisma, BullMQ…)
-  preview/            Live frames, element-to-source plugin, frame states
-  agents/             ACP client, agent registry, approvals, checkpoints
-  mcp-server/         Flow graph exposed to agents
-  model-gateway/      Providers, routing, vault-stored keys, self-hosted-only mode, usage
-  tracing/            Test-run and dev-server tracing, masking
-  plugin-sdk/         Extension points (from stage 7)
-corpus/               Manifest of pinned forks + hand-labelled flows (JSON)
-e2e/                  Playwright tests, Try-it scripts, recordings
-tools/figma-tokens/   Script that converts exported Figma variables into packages/tokens
+  (later) agents/, preview/, tracing/  ACP client and checkpoints; live app and stamping; test and dev tracing
+services/, workspace/ Retired cloud parts (control plane, Docker workspaces): kept until removed by a phase
+corpus/               Manifest of pinned forks + hand labels (JSON)
+e2e/                  Playwright walkthroughs and the catalogue's accessibility check
 docs/                 reference/, and frozen history (adr/, reports/, build-steps, STATUS, ARCHITECTURE…)
 ```
 
@@ -182,10 +170,10 @@ docs/                 reference/, and frozen history (adr/, reports/, build-step
 
 - **TypeScript strict mode** everywhere; no `any` without a comment explaining why.
 - ESLint + Prettier, enforced in CI. Conventional commits. Semantic versioning.
-- **Web and cloud security:** strict content-security policy; previews served from a separate origin and signed per user and session; short-lived tokens; every workspace is an isolated VM with outbound network rules, CPU/memory/time limits and abuse detection; encrypted volumes; no staff access to customer workspaces without consent; least-privilege service accounts.
-- **Process boundaries:** heavy analysis runs in the engine inside the workspace, never in the browser's UI thread. Every message between browser, gateway, control plane and workspace is typed, versioned and authenticated.
-- **Cost awareness:** workspaces sleep when idle, start from prebuilt caches, and report their cost; any feature that keeps a workspace awake must justify it.
-- **Errors:** never swallow them. Show actionable errors in the UI ("Preview needs DATABASE_URL" with a fix), and log details server-side with secrets redacted.
+- **Desktop security:** Electron with context isolation, sandboxed renderers, no Node in the UI renderer (a typed preload bridge only), a strict content-security policy; the user's app runs in its own view, never with access to ours; agent commands go through the agent's own permission prompts.
+- **Process boundaries:** heavy analysis runs in the engine's utility process, never on the UI thread. Every message between the UI, the main process and the engine is typed and versioned.
+- **Resource awareness:** the app runs on the user's laptop: keep memory and CPU modest, analyse incrementally, and never keep processes running that the user didn't start.
+- **Errors:** never swallow them. Show actionable errors in the UI ("Your app needs DATABASE_URL" with a fix), and log details locally with secrets redacted.
 - **Dependencies:** pin versions, avoid abandoned packages, check licences (including the forks' licences before redistributing demo projects), and run a vulnerability scan in CI.
 - **Accessibility:** keyboard reachable everything, visible focus rings, WCAG AA contrast (the Graphite tokens already pass; don't break them), state never shown by colour alone.
 - **Documentation:** comment the *why*, not the *what*, in code. Project docs: only CHANGELOG.md, briefly, per milestone (owner, 21 Nov 2026).
@@ -196,11 +184,11 @@ docs/                 reference/, and frozen history (adr/, reports/, build-step
 | --- | --- | --- |
 | Unit | Pure logic: parsers, resolvers, graph diffing, masking, routing | Every commit |
 | Corpus | Flows extracted from the pinned forks compared with hand-labelled flows; precision, recall and update speed reported per repo | Every commit (fast subset), nightly (full) |
-| End-to-end | Playwright drives the web app at the preview URL, against real workspaces, through every *Try it* step ever written; records video | Every merge; the whole history runs nightly as the regression suite |
+| End-to-end | Playwright drives the app (the UI in a browser, and the Electron app from phase 1) through each *Try it*, against the corpus forks; records video | At each milestone and on CI when the UI changes |
 | Accessibility | axe (WCAG 2.2 AA) on every catalogue story and at the end of every walkthrough; no screenshots (owner, 21 Nov 2026) | When the UI changes |
-| Performance | Index time, p90 canvas update after an agent step (target under 3 s), frame rate with 500 and 2,000 nodes, memory | Nightly; fail the build on regression beyond agreed tolerance |
-| Security | Canary secrets planted in `.env`, the vault and fixtures must never appear in the index, logs, traces, context packs or model requests; one workspace must never reach another | Every merge |
-| Resilience | Kill a workspace mid-edit, restore from backup, sleep and resume; no work lost | Nightly |
+| Performance | Analysis time, p90 update after an agent step (target under 3 s), memory | When the engine or the update path changes |
+| Security | Canary secrets planted in `.env` and fixtures must never appear in the index, logs, traces, context sent to agents or AI summary requests | When those paths change |
+| Resilience | Kill the app mid-session; reopen with no work lost and every checkpoint restorable | When checkpoints or saving change |
 
 A phase's *Done when* must be proven by named automated tests wherever possible. If something truly can't be automated, say so in the report with the manual check.
 
@@ -223,7 +211,7 @@ Significant technical choices (a library, a data format, a protocol detail, a de
   - **Primary button:** `surface/inverse` background (#E6E8EB) with `text/on-accent` text (#0B0C0E). Never a blue button.
   - Light theme: approved 27 Oct 2026, state and accent hues moved to Signal 28 Oct 2026; values in `packages/tokens/source/color.light.tokens.json` and the Graphite doc.
 - **Type and spacing:** Inter for UI, JetBrains Mono for code, paths and prompts. Text styles: Display 24/32 600, Title 20/28 600, Heading 15/22 600, Body 13/20 400, Body strong 13/20 500, Small 12/16 400, Small strong 12/16 500, Caption 11/14 500, Mono 12/18 400, Mono small 11/16 400. Letter-spacing −1.5% on Display, −1% on Title and Heading. 4 px grid; radii 4 / 6 / 8 / 10. Sentence-case labels, no ALL CAPS.
-- **Layout:** the Figma screens use a 40 px top bar (project, branch, Graph / Sequence / Code switch, search, workspace status, share, avatar), a 44 px rail and a 40 px review bar. The Figma file is the layout reference.
+- **Layout:** the main window has the map on the left, the live app and a path in the centre, the agent session on the right; the editor, terminal and git are a click away (build plan v2, version 1).
 - **Components first.** Build each component in `packages/ui` with all its variants and states, and show it in the catalogue, before using it in screens.
 - **Avoid the "AI-generated" look:** no gradients, glows, emoji, decorative colour or ALL-CAPS labels; sentence case everywhere; real-looking content in demos; state dots only where something actually changed; quiet chrome, loud canvas.
 - **Both themes.** Dark first, light using the same tokens. Respect "reduce motion".
@@ -231,14 +219,14 @@ Significant technical choices (a library, a data format, a protocol detail, a de
 
 ## 11. Domain rules you must preserve
 
-- **Flow model:** entry point, code unit, call, decision, data access, async hand-off, external boundary. Every edge has provenance; every node has change state; snapshots are versioned per checkpoint.
-- **Node inspector:** for every node type, show everything the code reveals and, once tracing is on, real values (masked). If a detail affects behaviour, surface it.
-- **Live updates:** re-analyse per agent step, not per keystroke; nodes behind the latest edit show *analysing* and never stale values as current.
-- **Prompting from anywhere:** chat, node, selection, flow, entry point, event, job, live element, failing test, review item, comment, and `@` mentions. Always show the user the context that will be sent, with secrets masked. Agents keep full-project access by default; selection only focuses them, and edits outside it are flagged, never blocked.
-- **Direct editing:** edit in place only for values that are literal in source; everything else opens code or goes to the agent. Every direct edit is a checkpoint.
-- **Models:** coding agents bring their own models (pass through their options); the product's own AI goes through the model gateway with per-task routing, self-hosted-only and no-AI modes.
-- **Coverage:** web first; later waves through the plugin SDK. Unsupported projects still open at Level 1 with an honest support banner.
-- **Workspaces:** the browser holds the editor buffer for instant typing and syncs to the workspace; the canvas always shows workspace state (running, sleeping, resuming); restore history covers every checkpoint, autosave point and snapshot; categories the cloud can't run (iOS simulators, physical hardware, GPUs) wait for the local runner.
+- **The views:** the app map (areas, screens, endpoints, data, outside services), paths (one action as a short line of meaningful steps; plumbing folded; outcomes at the end), the live app (each element linked to its code and path). Flows and graphs are an advanced detail view only.
+- **Where every fact came from:** found in the code, seen running, AI's summary, or unknown, shown in words; AI summaries are always marked; a step or behaviour without proof says "not yet checked".
+- **Live updates:** re-analyse per agent step, not per keystroke; anything behind the latest edit shows *analysing* and never stale values as current.
+- **Steering from anywhere:** chat, an area, a station, a screen element, a review item. Always show the context that will be sent, with secrets masked. Agents keep full-project access by default; a fence or selection only focuses them, and edits outside it are flagged, never silently allowed. Plans before edits are the user's choice.
+- **Review by behaviour:** each agent change shown as behaviours with proof and risks (login, payments, data deletion, secrets, schema always raised), each with its code diff underneath; accept or undo per behaviour where possible, per step otherwise.
+- **Models:** coding agents bring their own models; AI summaries use the user's own Claude Code, cached, with a no-AI mode that sends nothing.
+- **Coverage:** TypeScript web apps first; other kinds of software later. Unsupported projects still open (editor, terminal, agent) with an honest support banner.
+- **Local projects:** the project's folder on the user's machine is the truth; edits go straight to disk; every agent step is a checkpoint restorable after a crash.
 
 ## 12. Communication
 

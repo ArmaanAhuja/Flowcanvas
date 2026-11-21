@@ -19,16 +19,27 @@ import { startEngineService } from './service.js';
 import { IndexStore } from './store.js';
 
 useGrammarDirectory(dirname(fileURLToPath(import.meta.url)));
-// Beside the journal, in the volume; only the workspace's own user can read it.
-await mkdir(dirname(INDEX_FILE), { recursive: true, mode: 0o700 });
+// The workspace's fixed places by default; the desktop app (build plan v2, phase 1) gives the user's own folder and
+// a data folder of its own (never inside the project), through the environment.
+const PROJECT = process.env.FLOWCANVAS_PROJECT_ROOT ?? PROJECT_ROOT;
+const DATA = process.env.FLOWCANVAS_DATA_DIR;
+const [indexFile, graphFile, factsFile] =
+  DATA === undefined
+    ? [INDEX_FILE, GRAPH_FILE, FACTS_FILE]
+    : [join(DATA, 'index.db'), join(DATA, 'graph.db'), join(DATA, 'facts.db')];
+// Beside the journal, in the volume (or the desktop's data folder); only its own user can read it.
+await mkdir(dirname(indexFile), { recursive: true, mode: 0o700 });
 
 // The same file list as the file tree: the agent's own (git's files, never secret ones).
-const agent = createAgent({ root: PROJECT_ROOT });
-const store = new IndexStore(INDEX_FILE);
-const snapshots = new SnapshotStore(GRAPH_FILE);
+const agent = createAgent({
+  root: PROJECT,
+  ...(DATA === undefined ? {} : { journal: join(DATA, 'journal') }),
+});
+const store = new IndexStore(indexFile);
+const snapshots = new SnapshotStore(graphFile);
 // Opened here first (it sets the table up); the worker writes it during passes, the engine reads it.
-const facts = new FactsStore(FACTS_FILE, { root: PROJECT_ROOT });
-const indexer = new Indexer({ root: PROJECT_ROOT, store });
+const facts = new FactsStore(factsFile, { root: PROJECT });
+const indexer = new Indexer({ root: PROJECT, store });
 const listFiles = async () => {
   const result = await agent.handle({ op: 'files' });
   if (!('files' in result)) throw new Error('no file list');
@@ -38,9 +49,9 @@ const listFiles = async () => {
 // TypeScript unpacked beside this script by the host.
 const here = dirname(fileURLToPath(import.meta.url));
 const semantics = new SemanticClient({
-  root: PROJECT_ROOT,
+  root: PROJECT,
   typescriptPath: join(here, 'typescript', 'typescript.js'),
-  factsFile: FACTS_FILE,
+  factsFile,
   start: threadWorker(new URL(`./${ENGINE_SEMANTICS_WORKER}`, import.meta.url)),
   listFiles,
 });
@@ -48,7 +59,7 @@ const service = startEngineService({
   store,
   indexer,
   listFiles,
-  watch: (emit) => startWatcher({ root: PROJECT_ROOT, emit }),
+  watch: (emit) => startWatcher({ root: PROJECT, emit }),
   semantics,
   snapshots,
   facts,

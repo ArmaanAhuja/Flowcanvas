@@ -13,7 +13,11 @@ export default defineConfig([
     '**/.wrangler/',
     // Playwright output: reports bundle the trace viewer's own JavaScript.
     '**/playwright-report/',
-    '**/playwright-report-visual/',
+    '**/playwright-report-a11y/',
+    '**/playwright-report-desktop/',
+    // The desktop app's assembled and packaged output (bundles of other packages).
+    'apps/desktop/build/',
+    'apps/desktop/release/',
     '**/test-results/',
     '**/report-site/',
     '**/reports-data/',
