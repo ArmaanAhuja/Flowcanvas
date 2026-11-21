@@ -7,3 +7,5 @@ docs/reference/
 *.md
 packages/tokens/css/tokens.css
 packages/tokens/src/tokens.generated.ts
+apps/desktop/build/
+apps/desktop/release/

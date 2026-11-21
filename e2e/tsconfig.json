@@ -9,6 +9,8 @@
   },
   "include": [
     "try-it",
+    "desktop",
+    "playwright.desktop.config.ts",
     "visual",
     "perf",
     "scripts",

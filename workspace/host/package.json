@@ -7,6 +7,14 @@
     "./protocol": {
       "types": "./dist/protocol.d.ts",
       "default": "./dist/protocol.js"
+    },
+    "./indexers": {
+      "types": "./dist/indexers.d.ts",
+      "default": "./dist/indexers.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "default": "./dist/errors.js"
     }
   },
   "files": [

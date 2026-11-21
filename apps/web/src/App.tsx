@@ -19,6 +19,8 @@ import styles from './App.module.css';
 import { LabsPanel } from './labs/LabsPanel';
 import { LabsProvider } from './labs/LabsProvider';
 import { Projects } from './projects/Projects';
+import { DesktopProjects } from './desktop/DesktopProjects';
+import { desktopBridge } from './desktop/bridge';
 import { CATALOGUE_URL } from './links';
 import { linkTo, useRoute } from './routing/route';
 import { Usage } from './usage/Usage';
@@ -105,6 +107,8 @@ function Home({
   }, []);
   const user = session?.kind === 'signed-in' ? session.user : undefined;
   const apiFetcher = fetcher === undefined ? {} : { fetcher };
+  // In the desktop app (build plan v2): folders on this computer, no accounts, usage or admin.
+  const desktop = desktopBridge();
   return (
     <LabsProvider>
       <main className={styles.page}>
@@ -117,12 +121,15 @@ function Home({
           <dl className={styles.facts}>
             <dt className={styles.term}>Build</dt>
             <dd className={styles.build}>{formatBuildInfo(buildInfo)}</dd>
-            <Account {...apiFetcher} onSessionChange={onSessionChange} />
+            {desktop === undefined && <Account {...apiFetcher} onSessionChange={onSessionChange} />}
           </dl>
-          {user !== undefined && <Projects {...apiFetcher} />}
-          {user !== undefined && <Usage {...apiFetcher} />}
+          {desktop !== undefined && <DesktopProjects bridge={desktop} {...apiFetcher} />}
+          {desktop === undefined && user !== undefined && <Projects {...apiFetcher} />}
+          {desktop === undefined && user !== undefined && <Usage {...apiFetcher} />}
           {/* The API checks the role on every request too; hiding the section is for clarity, not security. */}
-          {user?.role === 'admin' && <Admin ownEmail={user.email} {...apiFetcher} />}
+          {desktop === undefined && user?.role === 'admin' && (
+            <Admin ownEmail={user.email} {...apiFetcher} />
+          )}
           <div className={styles.actions}>
             <a className={styles.link} href={CATALOGUE_URL}>
               Open the component catalogue

@@ -45,6 +45,8 @@ catalog:
   '@xterm/xterm': 6.0.0
   '@xyflow/react': 12.12.0
   elkjs: 0.13.0
+  electron: 45.3.2
+  electron-builder: 26.18.0
   esbuild: 0.28.2
   eslint: 10.13.0
   eslint-config-prettier: 10.1.8
@@ -74,6 +76,8 @@ catalog:
   ws: 8.21.0
 
 allowBuilds:
+  # Electron's install script downloads its own binary for this platform (the desktop app, build plan v2).
+  electron: true
   esbuild: false
   # The grammars' install scripts build native Node bindings we don't use: the engine loads their
   # ready-made .wasm files with web-tree-sitter (ADR 0023).

@@ -1,0 +1,35 @@
+{
+  "name": "@flowcanvas/desktop",
+  "productName": "Flowcanvas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Flowcanvas for Linux: understand what your AI coding agent does.",
+  "type": "module",
+  "main": "build/app/main.mjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && tsx scripts/assemble.ts",
+    "start": "electron .",
+    "package": "tsx scripts/package.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@flowcanvas/engine": "workspace:*",
+    "@flowcanvas/workspace-agent": "workspace:*",
+    "@flowcanvas/workspace-host": "workspace:*",
+    "ws": "catalog:"
+  },
+  "devDependencies": {
+    "@flowcanvas/web": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/ws": "catalog:",
+    "electron": "catalog:",
+    "electron-builder": "catalog:",
+    "esbuild": "catalog:",
+    "eslint": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

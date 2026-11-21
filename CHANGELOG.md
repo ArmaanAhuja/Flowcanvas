@@ -4,6 +4,29 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-11-21 — Phases 1 and 2 (build plan v2): the Linux desktop app
+
+Flowcanvas is now a Linux app: install it, open a project folder on your computer, and everything built so far (the code view, search, entry points and flows) works on that folder, with nothing uploaded and no account.
+
+### Try it
+
+1. Build and install it: `pnpm build`, then `pnpm --filter @flowcanvas/desktop package` (an AppImage and a .deb in `apps/desktop/release/`), or run it straight from the repository with `pnpm --filter @flowcanvas/desktop start`.
+2. Click **Open folder** and choose a project (or run `flowcanvas ~/code/my-app`). Its files and ⌘K search are there once it's read.
+3. Edit a file and save: it's on disk at once. Change it in another editor: the app shows it within a second.
+
+### Added
+
+- **The desktop app** (`apps/desktop`, Electron 45): the web UI in a sandboxed window, served with the site's security policy by a local server on 127.0.0.1 that only the window can use (a per-launch secret); the start screen with Open folder and recent projects; one window per machine, `flowcanvas <folder>` opens straight into it.
+- **Your own folders** in place of cloud workspaces: the file agent, the engine (on Electron's own Node) and the file watcher run on the folder; each project's index, graph and unsaved buffers live in the app's own data (`~/.config/Flowcanvas`), never in the project.
+- **Linux packages:** an AppImage and a .deb; `flowcanvas --smoke-test <folder>` checks an installed app end to end.
+
+### Decisions
+
+- **Build plan v2** (owner, Nov 2026): a desktop app, Linux first, centred on the live app, an app map and short paths; the web plan kept as `docs/reference/build-plan-v1-web.md`. "Let's build it, move ahead"; the name stays Flowcanvas.
+- **Electron**, so the existing Node engine runs unchanged; its main process bundled with esbuild (no node_modules shipped).
+- **The UI unchanged where possible:** the local server answers the same routes the control plane did, reusing the file agent, the engine protocol and the host's engine manager; the cloud parts stay in the repository until a later phase removes them.
+- **CI** builds both packages on Ubuntu, runs the desktop walkthrough in the real app on Rallly, installs the .deb and smoke-tests it (not a required check).
+
 ## [0.14.0] — 2026-11-16 — Phases 12 and 13: progressive disclosure and sequence view
 
 A large flow now opens as a few groups named from the code (its folders, its tables, its outside services and hand-offs) that open in place without moving anything else, and any flow can be read in order as a sequence: the calls in the order the code makes them, nested, each hand-off's work after it (phases 12 and 13). Workspaces still run on your own computer (`pnpm dev`).

@@ -4,6 +4,6 @@
     "types": ["node"],
     "noEmit": true
   },
-  // The host runs from source with tsx; tsconfig.build.json emits only what the control plane imports.
+  // The host runs from source with tsx; tsconfig.build.json emits only what the control plane and the desktop app import.
   "include": ["src", "scripts"]
 }

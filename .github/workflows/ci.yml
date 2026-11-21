@@ -143,6 +143,53 @@ jobs:
           pnpm turbo run build --filter='@flowcanvas/workspace-host^...'
           pnpm --filter @flowcanvas/workspace-host exec vitest run src/corpus.docker.test.ts
 
+  desktop:
+    # Not a required check. The desktop app (build plan v2, phase 1): the walkthrough in the real Electron app on
+    # Rallly, then both Linux packages built, the .deb installed on this clean Ubuntu and smoke-tested there.
+    name: Desktop app (Linux packages)
+    needs: changes
+    if: ${{ needs.changes.outputs.web == 'true' || needs.changes.outputs.engine == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.COMMIT }}
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Ubuntu 24.04 stops unprivileged user namespaces, which Electron's sandbox needs when run from node_modules
+      # (an installed .deb sets up its own sandbox helper instead). Also a virtual display for the windows.
+      - name: Let Electron's sandbox start; a virtual display
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo apt-get update -q
+          sudo apt-get install -yq xvfb
+      - run: pnpm build
+      - run: pnpm corpus:fetch rallly
+      - name: The walkthrough in the real app
+        run: xvfb-run -a pnpm --filter @flowcanvas/e2e test:desktop
+      - name: Package (AppImage and .deb)
+        run: pnpm --filter @flowcanvas/desktop package
+      - name: Install the .deb on this clean Ubuntu, and smoke-test the installed app on Rallly
+        run: |
+          sudo apt-get install -yq ./apps/desktop/release/flowcanvas_*_amd64.deb
+          rallly="$(ls -d ~/.cache/flowcanvas/corpus/rallly@*)"
+          git clone --quiet --shared "$rallly" "$RUNNER_TEMP/rallly"
+          xvfb-run -a flowcanvas --smoke-test "$RUNNER_TEMP/rallly"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: desktop-linux
+          path: |
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.AppImage
+            e2e/playwright-report-desktop/
+          retention-days: 14
+
   perf:
     name: Canvas performance (headless, regressions only)
     needs: changes
