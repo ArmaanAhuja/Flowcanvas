@@ -16,9 +16,12 @@ import {
 } from '@flowcanvas/engine/protocol';
 import { LIMITS, type AgentErrorCode } from '@flowcanvas/workspace-agent/protocol';
 import { HostError } from '@flowcanvas/workspace-host/errors';
-import { WebSocketServer } from 'ws';
+import { checkSize } from '@flowcanvas/workspace-host/protocol';
+import { WebSocketServer, type WebSocket } from 'ws';
 import type { Folders } from './folders.js';
 import type { OpenedProject, Projects } from './projects.js';
+import { RunProblem, type RunService, type StartRequest } from './run/service.js';
+import { relayPty, type OpenPty } from './run/terminal.js';
 
 /** The cookie that carries the per-launch secret. */
 export const SESSION_COOKIE = 'fc_desktop';
@@ -51,6 +54,8 @@ export const MESSAGES = {
   json: 'Send it as JSON.',
   tooLarge: 'Keep files under 1 MB.',
   forbidden: 'Open Flowcanvas from its window.',
+  terminalSize: 'Give the terminal’s size.',
+  terminalFailed: 'The terminal couldn’t start. Check that your shell works, then try again.',
 } as const;
 
 const TYPES: Readonly<Record<string, string>> = {
@@ -75,6 +80,10 @@ export interface DesktopServerOptions {
   readonly folders: FolderService;
   /** The built web app (apps/web/dist). */
   readonly webRoot: string;
+  /** Running the project (phase 3): its scripts, services and variables. */
+  readonly run: RunService;
+  /** Opens a shell on a pty (node-pty; tests pass their own). */
+  readonly openPty: OpenPty;
   /** For tests: a fixed secret instead of a random one. */
   readonly secret?: string;
   readonly log?: (message: string) => void;
@@ -204,6 +213,10 @@ export async function startDesktopServer(options: DesktopServerOptions): Promise
       });
       return;
     }
+    if (rest === '/run' || rest.startsWith('/run/')) {
+      await run(request, response, project, rest.slice('/run'.length));
+      return;
+    }
     if (rest.startsWith('/index/')) {
       await index(response, project, rest.slice('/index/'.length), url);
       return;
@@ -270,6 +283,81 @@ export async function startDesktopServer(options: DesktopServerOptions): Promise
         error: answer.error.message,
         code: answer.error.code,
       });
+    }
+  }
+
+  async function run(
+    request: IncomingMessage,
+    response: ServerResponse,
+    project: OpenedProject,
+    rest: string,
+  ) {
+    const root = project.path;
+    try {
+      if (rest === '' && request.method === 'GET') {
+        json(response, 200, await options.run.state(root));
+        return;
+      }
+      if (rest === '/start' && request.method === 'POST') {
+        const body = await jsonBody(request, response, 4096);
+        if (body === undefined) return;
+        const start = startRequest(body);
+        if (start === undefined) {
+          json(response, 400, { error: 'Say what to start.', code: 'invalid_request' });
+          return;
+        }
+        const process = await options.run.start(root, start);
+        log(`project ${project.id} run ${start.kind}: started`);
+        json(response, 200, { process });
+        return;
+      }
+      if (rest === '/env' && request.method === 'PUT') {
+        const body = await jsonBody(request, response, 64 * 1024);
+        if (body === undefined) return;
+        const { file, name, value } = body;
+        if (typeof file !== 'string' || typeof name !== 'string' || typeof value !== 'string') {
+          json(response, 400, {
+            error: 'Give the file, the name and the value.',
+            code: 'invalid_request',
+          });
+          return;
+        }
+        await options.run.setVariable(root, file, name, value);
+        // That a variable was set, never its name's value.
+        log(`project ${project.id} run env: set`);
+        json(response, 200, await options.run.state(root));
+        return;
+      }
+      if (rest === '/env-file' && request.method === 'POST') {
+        const body = await jsonBody(request, response, 4096);
+        if (body === undefined) return;
+        if (typeof body.file !== 'string') {
+          json(response, 400, { error: 'Give the file.', code: 'invalid_request' });
+          return;
+        }
+        await options.run.createEnvFile(root, body.file);
+        log(`project ${project.id} run env file: created`);
+        json(response, 200, await options.run.state(root));
+        return;
+      }
+      const match = /^\/processes\/(p\d+)\/(stop|restart|log)$/.exec(rest);
+      if (match?.[1] !== undefined) {
+        const id = match[1];
+        if (match[2] === 'log' && request.method === 'GET') {
+          json(response, 200, { log: options.run.log(root, id) });
+          return;
+        }
+        if (request.method === 'POST') {
+          const process =
+            match[2] === 'stop' ? options.run.stop(root, id) : await options.run.restart(root, id);
+          json(response, 200, { process });
+          return;
+        }
+      }
+      json(response, 404, { error: MESSAGES.notHere });
+    } catch (error) {
+      if (!(error instanceof RunProblem)) throw error;
+      json(response, 409, { error: error.message, code: 'not_allowed' });
     }
   }
 
@@ -344,34 +432,76 @@ export async function startDesktopServer(options: DesktopServerOptions): Promise
     response.end(body);
   }
 
-  // The file watcher (phase 3): a WebSocket of the folder's changes, as the control plane relayed them.
+  // WebSockets: the folder's file changes (as the control plane relayed them), its processes' events, and terminals.
   const sockets = new WebSocketServer({ noServer: true });
   server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url ?? '/', origin);
-    const match = /^\/api\/projects\/([^/]+)\/workspace\/events$/.exec(url.pathname);
+    const match = /^\/api\/projects\/([^/]+)\/workspace\/(events|run\/events|terminal)$/.exec(
+      url.pathname,
+    );
     const project = match?.[1] === undefined ? undefined : options.projects.get(match[1]);
+    // Same origin matters most here: a WebSocket isn't limited by CORS.
     if (!signedIn(request) || request.headers.origin !== origin || project === undefined) {
       socket.end('HTTP/1.1 403 Forbidden\r\n\r\n');
       return;
     }
+    const kind = match?.[2];
+    const size = checkSize(
+      Number(url.searchParams.get('cols')),
+      Number(url.searchParams.get('rows')),
+    );
+    if (kind === 'terminal' && size === undefined) {
+      socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+      return;
+    }
     sockets.handleUpgrade(request, socket, head, (browser) => {
-      void options.folders
-        .watch(project.path, (event) => {
-          if (browser.readyState === browser.OPEN) browser.send(JSON.stringify(event));
-        })
-        .then(
-          (watcher) => {
-            browser.on('close', () => {
-              watcher.close();
-            });
-            if (browser.readyState !== browser.OPEN) watcher.close();
-          },
-          () => {
-            browser.close(1011, 'watching failed');
-          },
-        );
+      if (kind === 'events') watchFolder(browser, project);
+      else if (kind === 'run/events') {
+        const off = options.run.onEvent((root, event) => {
+          if (root === project.path && browser.readyState === browser.OPEN)
+            browser.send(JSON.stringify(event));
+        });
+        browser.on('close', off);
+        // Typing into a process card (answering its prompt), and its size; nothing typed is logged.
+        browser.on('message', (data: Buffer, isBinary: boolean) => {
+          const message = isBinary ? undefined : processMessage(data.toString('utf8'));
+          if (message?.type === 'input') options.run.input(project.path, message.id, message.data);
+          else if (message?.type === 'resize') {
+            options.run.resize(project.path, message.id, message.cols, message.rows);
+          }
+        });
+      } else if (size !== undefined) {
+        try {
+          relayPty(browser, options.openPty({ cwd: project.path, ...size }));
+          log(`project ${project.id} terminal opened`);
+        } catch (error) {
+          log(
+            `project ${project.id} terminal failed: ${error instanceof Error ? error.name : 'unknown'}`,
+          );
+          browser.send(JSON.stringify({ type: 'error', message: MESSAGES.terminalFailed }));
+          browser.close(1011, 'terminal failed');
+        }
+      }
     });
   });
+
+  function watchFolder(browser: WebSocket, project: OpenedProject) {
+    void options.folders
+      .watch(project.path, (event) => {
+        if (browser.readyState === browser.OPEN) browser.send(JSON.stringify(event));
+      })
+      .then(
+        (watcher) => {
+          browser.on('close', () => {
+            watcher.close();
+          });
+          if (browser.readyState !== browser.OPEN) watcher.close();
+        },
+        () => {
+          browser.close(1011, 'watching failed');
+        },
+      );
+  }
 
   await new Promise<void>((resolve) => {
     server.listen(0, '127.0.0.1', resolve);
@@ -410,6 +540,34 @@ export function publicProject(project: OpenedProject) {
       failure: null,
     },
   };
+}
+
+type ProcessMessage =
+  | { readonly type: 'input'; readonly id: string; readonly data: string }
+  | { readonly type: 'resize'; readonly id: string; readonly cols: number; readonly rows: number };
+
+function processMessage(text: string): ProcessMessage | undefined {
+  if (text.length > 70 * 1024) return undefined;
+  try {
+    const message = JSON.parse(text) as Record<string, unknown>;
+    if (typeof message.id !== 'string') return undefined;
+    if (message.type === 'input' && typeof message.data === 'string') {
+      return { type: 'input', id: message.id, data: message.data };
+    }
+    const size = message.type === 'resize' ? checkSize(message.cols, message.rows) : undefined;
+    return size === undefined ? undefined : { type: 'resize', id: message.id, ...size };
+  } catch {
+    return undefined;
+  }
+}
+
+function startRequest(body: Record<string, unknown>): StartRequest | undefined {
+  if (body.kind === 'install' || body.kind === 'services' || body.kind === 'services-stop') {
+    return { kind: body.kind };
+  }
+  if (body.kind === 'script' && typeof body.script === 'string')
+    return { kind: 'script', script: body.script };
+  return undefined;
 }
 
 function json(response: ServerResponse, status: number, body: unknown): void {

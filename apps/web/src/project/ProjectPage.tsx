@@ -46,6 +46,9 @@ import { useCalls } from '../symbols/useCalls';
 import { useProjectIndex, useSymbolSearch } from '../symbols/useProjectIndex';
 import { Inspector } from './Inspector';
 import { entryById, entryGroups, useEntryPoints } from '../entry-points/useEntryPoints';
+import { desktopBridge } from '../desktop/bridge';
+import { RunButton } from '../run/RunButton';
+import { useRun, type RunControl } from '../run/useRun';
 import styles from './ProjectPage.module.css';
 
 // The file tree (React Aria's Tree) only when Files is shown, and CodeMirror only when the Code view opens:
@@ -69,6 +72,8 @@ const CommandPalette = lazy(async () => ({ default: (await loadSearchDialogs()).
 /** ⌘K on a Mac, Ctrl+K elsewhere; the top bar shows whichever applies. */
 const isMac = () => /Mac|iPhone|iPad/.test(navigator.platform);
 
+// The desktop app's Run panel (phase 3) only when the dock shows it.
+const RunPanel = lazy(async () => ({ default: (await import('../run/RunPanel')).RunPanel }));
 // xterm.js only when the dock opens a terminal.
 const WorkspaceTerminal = lazy(async () => ({
   default: (await import('../terminal/WorkspaceTerminal')).WorkspaceTerminal,
@@ -189,6 +194,10 @@ function ReadyProject({
 }) {
   const control = useWorkspace(project.id, project.workspace, fetcher);
   const running = workspacesAvailable && shownState(control) === 'running';
+  // Running the project (build plan v2, phase 3): in the desktop app only, where it runs on the person's computer.
+  const desktop = useMemo(() => desktopBridge() !== undefined, []);
+  const run = useRun(project.id, desktop && running, fetcher);
+  const [dockTab, setDockTab] = useState<DockTab>('run');
   const [view, setViewState] = useState<ProjectView>(() => rememberedView(project.id));
   const [leftTool, setLeftTool] = useState<LeftTool>(view === 'code' ? 'files' : 'entry-points');
   const code = useCodeFiles(project.id, fetcher, running);
@@ -416,7 +425,19 @@ function ReadyProject({
           view={view}
           onView={setView}
           onSearch={openPalette}
-          {...(workspacesAvailable ? { workspace: control } : {})}
+          {...(workspacesAvailable && !desktop ? { workspace: control } : {})}
+          {...(desktop
+            ? {
+                runButton: (
+                  <DesktopRunButton
+                    run={run}
+                    onShowRun={() => {
+                      setDockTab('run');
+                    }}
+                  />
+                ),
+              }
+            : {})}
           fetcher={fetcher}
         />
       }
@@ -618,10 +639,14 @@ function ReadyProject({
         />
       }
       dock={
-        <Dock
-          project={project}
-          {...(workspacesAvailable ? { running: shownState(control) === 'running' } : {})}
-        />
+        desktop ? (
+          <DesktopDock project={project} run={run} tab={dockTab} onTab={setDockTab} />
+        ) : (
+          <Dock
+            project={project}
+            {...(workspacesAvailable ? { running: shownState(control) === 'running' } : {})}
+          />
+        )
       }
       review={<ProjectReviewBar />}
       reviewDetail={<p className={styles.empty}>{EMPTY.reviewDetail}</p>}
@@ -635,6 +660,7 @@ function ProjectTopBar({
   onView,
   onSearch,
   workspace,
+  runButton,
   fetcher,
 }: {
   readonly project: Project;
@@ -644,6 +670,8 @@ function ProjectTopBar({
   readonly onSearch: () => void;
   /** Absent where workspaces can't run (staging): no chip at all. */
   readonly workspace?: WorkspaceControl;
+  /** The desktop app's Run (phase 3). */
+  readonly runButton?: ReactNode;
   readonly fetcher: typeof fetch;
 }) {
   const shell = useShell();
@@ -670,6 +698,7 @@ function ProjectTopBar({
       }
       end={
         <>
+          {runButton}
           <SearchTrigger
             onPress={onSearch}
             shortcutLabel={isMac() ? '⌘K' : 'Ctrl K'}
@@ -754,6 +783,73 @@ function ProjectReviewBar() {
         >
           {shell.reviewOpen ? 'Hide review' : 'Show review'}
         </Button>
+      }
+    />
+  );
+}
+
+type DockTab = 'run' | 'terminal';
+const DOCK_TABS = [
+  { id: 'run', label: 'Run' },
+  { id: 'terminal', label: 'Terminal' },
+] as const;
+
+/** Run, inside the shell: it opens the dock on the Run tab, where the variables to fill in and the output are. */
+function DesktopRunButton({
+  run,
+  onShowRun,
+}: {
+  readonly run: RunControl;
+  readonly onShowRun: () => void;
+}) {
+  const shell = useShell();
+  return (
+    <RunButton
+      run={run}
+      onNeedsPanel={() => {
+        onShowRun();
+        shell.setOpen('dock', true);
+      }}
+    />
+  );
+}
+
+/** The desktop app's dock (phase 3): the project's processes, and a terminal in its folder. */
+function DesktopDock({
+  project,
+  run,
+  tab,
+  onTab,
+}: {
+  readonly project: Project;
+  readonly run: RunControl;
+  readonly tab: DockTab;
+  readonly onTab: (tab: DockTab) => void;
+}) {
+  return (
+    <Tabs
+      aria-label="Dock"
+      className={styles.dock ?? ''}
+      items={DOCK_TABS}
+      value={tab}
+      onValueChange={(id) => {
+        if (id === 'run' || id === 'terminal') onTab(id);
+      }}
+      renderPanel={(id) =>
+        id === 'run' ? (
+          <Suspense fallback={<p className={styles.empty}>Loading…</p>}>
+            <RunPanel
+              run={run}
+              onRun={(options) => {
+                run.runMain(options);
+              }}
+            />
+          </Suspense>
+        ) : (
+          <Suspense fallback={<p className={styles.empty}>Loading the terminal…</p>}>
+            <WorkspaceTerminal projectId={project.id} projectName={project.name} />
+          </Suspense>
+        )
       }
     />
   );

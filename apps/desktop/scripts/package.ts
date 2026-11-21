@@ -1,7 +1,8 @@
 // Builds the Linux packages (build plan v2, phase 1): an AppImage and a .deb, in release/ (FLOWCANVAS_PACKAGES picks
 // some: `FLOWCANVAS_PACKAGES=AppImage pnpm package` where the .deb tooling can't run). Run after `pnpm build`
 // (which assembled build/). The app is staged on its own first (the two bundled files and a package.json without
-// dependencies), so electron-builder never walks pnpm's node_modules: everything the app needs is bundled.
+// dependencies), so electron-builder never walks pnpm's node_modules: everything the app needs is bundled, except
+// node-pty, which assemble.ts copied beside the bundle.
 import {
   chmodSync,
   cpSync,
@@ -69,6 +70,8 @@ await build({
     npmRebuild: false,
     directories: { output: here('release') },
     files: ['build/app/**', 'package.json'],
+    // A native module is loaded from a real file, never from inside the app's archive.
+    asarUnpack: ['build/app/node_modules/node-pty/**'],
     extraResources: [
       { from: here('build/web'), to: 'web' },
       { from: here('build/engine'), to: 'engine' },

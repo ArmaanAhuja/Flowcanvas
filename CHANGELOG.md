@@ -4,6 +4,37 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-11-22 — Phase 3 (build plan v2): run the project
+
+Press **Run** and the project starts on your computer: Flowcanvas installs its dependencies if they aren't there, asks for the environment variables it needs first, and shows each process as a card with its live output, the address it serves and Stop. A terminal in the project's folder is one tab away.
+
+### Try it
+
+1. Open a project (`flowcanvas ~/code/my-app`) and press **Run** in the top bar. If its example .env says a variable is required, the Run tab asks for it first: **Create .env from .env.example**, fill it in or **Generate** a secret, **Save**. The value goes into the project's own .env and is never shown again.
+2. Press **Run** again: **Install dependencies** runs with the project's package manager (pnpm, npm, yarn or bun), then its `dev` script. Its card shows its output, `localhost:<port>` once it listens, and **Stop**. Answer a prompt (sudo, "use another port?") by typing in the card.
+3. **Start services** runs the project's development compose file in Docker; **Stop services** stops it. **All scripts** lists the others, each with its command and its own Run; the **Terminal** tab is your shell in the folder.
+
+### Added
+
+- **Run** (top bar) and the dock's **Run** tab: the project's scripts (`dev` first), its package manager from its lockfile, whether its dependencies are installed, its Node version against its `engines` field ("This project needs Node 24; you have v26.13.0"), and its development compose file (`docker-compose.dev.yml`, `docker/development/compose.yml`) when Docker is installed, or what's missing when it isn't.
+- **Process cards** (`ProcessCard` in the catalogue): each process on a pty in its own process group, so its colours and prompts work and Stop (or closing the app) stops everything it started; its output with the project's own .env values masked; the ports it listens on, read from the system (Linux `/proc`) and from what it prints.
+- **Missing variables:** names from `.env.example` / `.sample` / `.template` files compared with the .env files beside them and your shell; those the example's comment calls required are asked for before Run, the rest folded away. Values are written to the project's .env (readable by you only), never logged, shown or sent.
+- **Terminal:** your login shell on a pty in the project's folder (node-pty), in the dock.
+
+### Decisions
+
+- **The owner's answers:** values are saved in "the project's .env file"; services are offered "via Docker" (a compose file, when Docker is installed); dependencies get "one-click install".
+- **Processes run on a pty, not pipes:** real dev scripts prompt (Rallly's proxy asks for sudo) and print colour; the card is a small terminal. node-pty is shipped beside the bundle and unpacked from the app's archive; it's an optional dependency, so the jobs and machines that never run the desktop app install without a compiler.
+- **Ports from the system, not only the output:** a dev server's address is found from the sockets its process tree listens on, since tools like turbo redraw a full-screen view on a terminal and never print it as one line.
+- **Required means what the example says:** a variable blocks Run only when its comment says "required"; Documenso's example lists dozens of optional ones.
+- **CI:** a long walkthrough installs and starts Rallly and Documenso in the real app, on main only (owner: "only main") (Node 24 beside the build's Node for Rallly; Playwright's browser download skipped for both projects' installs); the installed .deb's smoke test now also runs a process on a pty.
+
+### Known gaps
+
+- **Rallly needs its own proxy first:** at its pin, its `dev` runs behind portless, a local HTTPS proxy started once with sudo; until `proxy:start` has run (from **All scripts**, answering sudo in its card), `dev` fails with portless's own instructions in its card.
+- Tools that start daemons of their own (turbo's) keep them after Stop, as they would after closing a terminal.
+- Documenso's pages need its database migrated (`prisma:migrate-dev`, from **All scripts**) before they work; its dev server starts and answers without it.
+
 ## [0.15.0] — 2026-11-21 — Phases 1 and 2 (build plan v2): the Linux desktop app
 
 Flowcanvas is now a Linux app: install it, open a project folder on your computer, and everything built so far (the code view, search, entry points and flows) works on that folder, with nothing uploaded and no account.

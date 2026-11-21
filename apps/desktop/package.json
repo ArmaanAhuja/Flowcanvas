@@ -20,6 +20,9 @@
     "@flowcanvas/workspace-host": "workspace:*",
     "ws": "catalog:"
   },
+  "optionalDependencies": {
+    "node-pty": "catalog:"
+  },
   "devDependencies": {
     "@flowcanvas/web": "workspace:*",
     "@types/node": "catalog:",

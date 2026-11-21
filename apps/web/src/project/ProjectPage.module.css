@@ -98,3 +98,12 @@
   align-self: flex-start;
   margin-inline: var(--space-4);
 }
+
+/* The desktop app's dock (phase 3): its tabs over the Run panel or the terminal. */
+.dock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  block-size: 100%;
+  min-block-size: 0;
+}

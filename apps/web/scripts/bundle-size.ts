@@ -21,7 +21,10 @@ export const BUDGETS: Readonly<Record<string, number>> = {
   // 116.5 kB): a large flow's grouping, its group card and the grouped layout (about 3.6 kB) are needed whenever a
   // flow is on the canvas, the default view; the sequence view (phase 13) loads on its own, when chosen.
   ProjectPage: 120,
-  WorkspaceTerminal: 95,
+  // The terminal's own code (1.7 kB); xterm.js itself is shared with the desktop app's process cards since build
+  // plan v2 phase 3 (22 Nov 2026), in its own chunk (84.6 kB then), loaded with the first terminal.
+  WorkspaceTerminal: 5,
+  xterm: 95,
   // 8 Nov 2026 (phase 3): the editor's core, only with the Code view (115.5 kB; ADR 0021 estimated about 150 with
   // a language).
   codemirror: 130,

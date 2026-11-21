@@ -14,6 +14,12 @@ export {
 } from './components/button/Button';
 export { Tag, type TagProps, type TagTone } from './components/tag/Tag';
 export {
+  PROCESS_STATE_LABELS,
+  ProcessCard,
+  type ProcessCardProps,
+  type ProcessCardState,
+} from './components/process-card/ProcessCard';
+export {
   WORKSPACE_STATUS_LABELS,
   WorkspaceStatus,
   type WorkspaceStatusProps,

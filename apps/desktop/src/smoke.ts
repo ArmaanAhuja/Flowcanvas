@@ -1,9 +1,11 @@
 // `flowcanvas --smoke-test <folder>`: checks an installed app works end to end without a person (CI, after
 // installing the .deb): the page is served under its security policy, the folder's files are listed, and the engine
-// indexes it and finds a symbol. Prints one line per check; the exit code says whether all passed.
+// indexes it and finds a symbol, and a process runs on a pty (node-pty shipped and loading, phase 3). Prints one line
+// per check; the exit code says whether all passed.
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { Folders } from './folders.js';
 import type { Projects } from './projects.js';
+import { Processes } from './run/processes.js';
 import type { DesktopServer } from './server.js';
 
 export async function smokeTest(options: {
@@ -58,5 +60,25 @@ export async function smokeTest(options: {
       Array.isArray(search.result.symbols) &&
       search.result.symbols.length > 0;
   }
-  return served && listed && indexed && say(found, 'search finds symbols');
+  const searched = say(found, 'search finds symbols');
+
+  // The terminal's and the process cards' native module, loaded from the installed app.
+  let ran: boolean;
+  try {
+    const processes = new Processes();
+    const view = processes.start({
+      kind: 'script',
+      label: 'smoke',
+      file: 'sh',
+      args: ['-c', 'echo pty-$((40+2))'],
+      cwd: project.path,
+    });
+    for (let i = 0; i < 100 && processes.get(view.id)?.state === 'running'; i += 1) await sleep(50);
+    ran =
+      processes.get(view.id)?.state === 'finished' &&
+      (processes.log(view.id) ?? '').includes('pty-42');
+  } catch {
+    ran = false;
+  }
+  return served && listed && indexed && searched && say(ran, 'a process runs on a pty');
 }

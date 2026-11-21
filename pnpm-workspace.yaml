@@ -48,6 +48,7 @@ catalog:
   electron: 45.3.2
   electron-builder: 26.18.0
   esbuild: 0.28.2
+  node-pty: 1.1.0
   eslint: 10.13.0
   eslint-config-prettier: 10.1.8
   hono: 4.13.13
@@ -81,6 +82,9 @@ allowBuilds:
   # Pulled in by electron-builder; only for Windows installers (a later stage).
   electron-winstaller: false
   esbuild: false
+  # The desktop app's terminal (build plan v2, phase 3): compiled on Linux (no prebuilt there); N-API, so the
+  # same build works in Electron.
+  node-pty: true
   # The grammars' install scripts build native Node bindings we don't use: the engine loads their
   # ready-made .wasm files with web-tree-sitter (ADR 0023).
   tree-sitter-css: false
