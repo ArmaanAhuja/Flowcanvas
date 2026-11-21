@@ -8,7 +8,7 @@
   "main": "build/app/main.mjs",
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsx scripts/assemble.ts",
-    "start": "electron .",
+    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
     "package": "tsx scripts/package.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

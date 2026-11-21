@@ -2,7 +2,7 @@
 // some: `FLOWCANVAS_PACKAGES=AppImage pnpm package` where the .deb tooling can't run). Run after `pnpm build`
 // (which assembled build/). The app is staged on its own first (the two bundled files and a package.json without
 // dependencies), so electron-builder never walks pnpm's node_modules: everything the app needs is bundled.
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +17,12 @@ const own = JSON.parse(readFileSync(here('package.json'), 'utf8')) as {
 const electronPackage = createRequire(here('package.json')).resolve('electron/package.json');
 const electronVersion = (JSON.parse(readFileSync(electronPackage, 'utf8')) as { version: string })
   .version;
+
+const LAUNCHER = `#!/bin/sh
+# Flowcanvas: always start the app, even where ELECTRON_RUN_AS_NODE is set (it would start Electron as plain Node).
+unset ELECTRON_RUN_AS_NODE
+exec "$(dirname "$(readlink -f "$0")")/flowcanvas-bin" "$@"
+`;
 
 const stage = here('build/stage');
 rmSync(stage, { recursive: true, force: true });
@@ -67,6 +73,16 @@ await build({
       desktop: { entry: { StartupWMClass: own.productName } },
     },
     deb: { depends: ['git'] },
+    // The `flowcanvas` command is a small launcher: Electron starts as plain Node when ELECTRON_RUN_AS_NODE is set
+    // (VS Code's terminals set it), so the launcher clears it and starts the real binary, renamed flowcanvas-bin.
+    // The engine sets it again for its own child process on purpose (folders.ts).
+    afterPack: (context) => {
+      const binary = join(context.appOutDir, 'flowcanvas');
+      renameSync(binary, `${binary}-bin`);
+      writeFileSync(binary, LAUNCHER);
+      chmodSync(binary, 0o755);
+      return Promise.resolve();
+    },
   },
 });
 process.stdout.write(`packaged ${root.version} into ${here('release')}\n`);

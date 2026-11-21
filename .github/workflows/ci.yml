@@ -179,7 +179,8 @@ jobs:
           sudo apt-get install -yq ./apps/desktop/release/flowcanvas_*_amd64.deb
           rallly="$(ls -d ~/.cache/flowcanvas/corpus/rallly@*)"
           git clone --quiet --shared "$rallly" "$RUNNER_TEMP/rallly"
-          xvfb-run -a flowcanvas --smoke-test "$RUNNER_TEMP/rallly"
+          # With ELECTRON_RUN_AS_NODE set (as VS Code's terminals do): the launcher still starts the app.
+          ELECTRON_RUN_AS_NODE=1 xvfb-run -a flowcanvas --smoke-test "$RUNNER_TEMP/rallly"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
