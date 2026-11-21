@@ -121,6 +121,16 @@
   stroke: var(--color-accent-solid);
 }
 
+.edge[data-dimmed] {
+  opacity: 0.2;
+}
+
+.edge[data-highlighted] {
+  stroke: var(--color-accent-solid);
+  stroke-width: calc(var(--border-width-edge) * 1.5);
+  opacity: 1;
+}
+
 /* An outcome on its edge: Caption on the canvas colour, so it reads over the line. */
 .edgeLabel {
   position: absolute;

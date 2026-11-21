@@ -1,0 +1,2000 @@
+{
+  "about": "The engine’s own flows from this fork at its pin (buildFlow on its graph), for the walkthrough’s fake workspace.",
+  "flows": {
+    "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx#PartnerProfilePage": {
+      "root": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx#PartnerProfilePage",
+      "nodes": [
+        {
+          "id": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx#PartnerProfilePage",
+          "kind": "code-unit",
+          "name": "PartnerProfilePage",
+          "place": {
+            "path": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx",
+            "line": 40,
+            "column": 31
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx#PartnerProfilePage?1",
+          "kind": "decision",
+          "name": "!partner",
+          "place": {
+            "path": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx",
+            "line": 52,
+            "column": 7
+          },
+          "unit": null,
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/i18n/get-route-i18n.ts#getRouteI18n",
+          "kind": "code-unit",
+          "name": "getRouteI18n",
+          "place": {
+            "path": "packages/twenty-website/src/platform/i18n/get-route-i18n.ts",
+            "line": 14,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats",
+          "kind": "code-unit",
+          "name": "getCommunityStats",
+          "place": {
+            "path": "packages/twenty-website/src/platform/community/get-community-stats.ts",
+            "line": 63,
+            "column": 23
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/i18n/resolve-locale-param.ts#resolveLocaleParam",
+          "kind": "code-unit",
+          "name": "resolveLocaleParam",
+          "place": {
+            "path": "packages/twenty-website/src/platform/i18n/resolve-locale-param.ts",
+            "line": 6,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/partners-marketplace/get-marketplace-partner-by-slug.ts#getMarketplacePartnerBySlug",
+          "kind": "code-unit",
+          "name": "getMarketplacePartnerBySlug",
+          "place": {
+            "path": "packages/twenty-website/src/partners-marketplace/get-marketplace-partner-by-slug.ts",
+            "line": 4,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/seo/JsonLd.tsx#JsonLd",
+          "kind": "code-unit",
+          "name": "JsonLd",
+          "place": {
+            "path": "packages/twenty-website/src/platform/seo/JsonLd.tsx",
+            "line": 7,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/seo/build-breadcrumb-list-json-ld.ts#buildBreadcrumbListJsonLd",
+          "kind": "code-unit",
+          "name": "buildBreadcrumbListJsonLd",
+          "place": {
+            "path": "packages/twenty-website/src/platform/seo/build-breadcrumb-list-json-ld.ts",
+            "line": 10,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "kind": "code-unit",
+          "name": "Menu",
+          "place": {
+            "path": "packages/twenty-website/src/sections/menu/Menu.tsx",
+            "line": 113,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/client-brief/ClientBriefModalRoot.tsx#ClientBriefModalRoot",
+          "kind": "code-unit",
+          "name": "ClientBriefModalRoot",
+          "place": {
+            "path": "packages/twenty-website/src/client-brief/ClientBriefModalRoot.tsx",
+            "line": 8,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "kind": "code-unit",
+          "name": "PartnerProfile",
+          "place": {
+            "path": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx",
+            "line": 112,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/client-brief/GetMatchedButton.tsx#GetMatchedButton",
+          "kind": "code-unit",
+          "name": "GetMatchedButton",
+          "place": {
+            "path": "packages/twenty-website/src/client-brief/GetMatchedButton.tsx",
+            "line": 10,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/i18n/create-i18n-instance.ts#createI18nInstance",
+          "kind": "code-unit",
+          "name": "createI18nInstance",
+          "place": {
+            "path": "packages/twenty-website/src/platform/i18n/create-i18n-instance.ts",
+            "line": 6,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats?1",
+          "kind": "decision",
+          "name": "!isDefined(githubStars)",
+          "place": {
+            "path": "packages/twenty-website/src/platform/community/get-community-stats.ts",
+            "line": 70,
+            "column": 5
+          },
+          "unit": null,
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats?2",
+          "kind": "decision",
+          "name": "hasMissingLiveValue",
+          "place": {
+            "path": "packages/twenty-website/src/platform/community/get-community-stats.ts",
+            "line": 71,
+            "column": 18
+          },
+          "unit": null,
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats?3",
+          "kind": "decision",
+          "name": "isDefined(githubStars)",
+          "place": {
+            "path": "packages/twenty-website/src/platform/community/get-community-stats.ts",
+            "line": 78,
+            "column": 7
+          },
+          "unit": null,
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats?4",
+          "kind": "decision",
+          "name": "isDefined(githubStars) || isDefined(discordMembers)",
+          "place": {
+            "path": "packages/twenty-website/src/platform/community/get-community-stats.ts",
+            "line": 78,
+            "column": 7
+          },
+          "unit": null,
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/community/get-community-stats.ts#fetchGithubStars",
+          "kind": "code-unit",
+          "name": "fetchGithubStars",
+          "place": {
+            "path": "packages/twenty-website/src/platform/community/get-community-stats.ts",
+            "line": 19,
+            "column": 16
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/community/get-community-stats.ts#fetchDiscordMembers",
+          "kind": "code-unit",
+          "name": "fetchDiscordMembers",
+          "place": {
+            "path": "packages/twenty-website/src/platform/community/get-community-stats.ts",
+            "line": 43,
+            "column": 16
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined",
+          "kind": "code-unit",
+          "name": "isDefined",
+          "place": {
+            "path": "packages/twenty-shared/src/utils/validation/isDefined.ts",
+            "line": 3,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/i18n/resolve-locale-param.ts#resolveLocaleParam?1",
+          "kind": "decision",
+          "name": "!isWebsiteLocale(raw)",
+          "place": {
+            "path": "packages/twenty-website/src/platform/i18n/resolve-locale-param.ts",
+            "line": 9,
+            "column": 7
+          },
+          "unit": null,
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/i18n/is-website-locale.ts#isWebsiteLocale",
+          "kind": "code-unit",
+          "name": "isWebsiteLocale",
+          "place": {
+            "path": "packages/twenty-website/src/platform/i18n/is-website-locale.ts",
+            "line": 7,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/partners-marketplace/fetch-live-partner-profile.ts#fetchLivePartnerProfile",
+          "kind": "code-unit",
+          "name": "fetchLivePartnerProfile",
+          "place": {
+            "path": "packages/twenty-website/src/partners-marketplace/fetch-live-partner-profile.ts",
+            "line": 75,
+            "column": 23
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/seo/serialize-json-ld.ts#serializeJsonLd",
+          "kind": "code-unit",
+          "name": "serializeJsonLd",
+          "place": {
+            "path": "packages/twenty-website/src/platform/seo/serialize-json-ld.ts",
+            "line": 10,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/seo/get-site-url.ts#getSiteUrl",
+          "kind": "code-unit",
+          "name": "getSiteUrl",
+          "place": {
+            "path": "packages/twenty-website/src/platform/seo/get-site-url.ts",
+            "line": 3,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu?1",
+          "kind": "decision",
+          "name": "isDrawerOpen",
+          "place": {
+            "path": "packages/twenty-website/src/sections/menu/Menu.tsx",
+            "line": 168,
+            "column": 19
+          },
+          "unit": null,
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu?2",
+          "kind": "decision",
+          "name": "isDrawerOpen",
+          "place": {
+            "path": "packages/twenty-website/src/sections/menu/Menu.tsx",
+            "line": 174,
+            "column": 18
+          },
+          "unit": null,
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/menu-style/use-menu-style.ts#useMenuStyle",
+          "kind": "code-unit",
+          "name": "useMenuStyle",
+          "place": {
+            "path": "packages/twenty-website/src/platform/menu-style/use-menu-style.ts",
+            "line": 16,
+            "column": 17
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/sections/menu/effect-components/CloseDrawerOnDesktopEffect.tsx#CloseDrawerOnDesktopEffect",
+          "kind": "code-unit",
+          "name": "CloseDrawerOnDesktopEffect",
+          "place": {
+            "path": "packages/twenty-website/src/sections/menu/effect-components/CloseDrawerOnDesktopEffect.tsx",
+            "line": 11,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/sections/menu/effect-components/ScrollStateEffect.tsx#ScrollStateEffect",
+          "kind": "code-unit",
+          "name": "ScrollStateEffect",
+          "place": {
+            "path": "packages/twenty-website/src/sections/menu/effect-components/ScrollStateEffect.tsx",
+            "line": 12,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/ui/Container.tsx#Container",
+          "kind": "code-unit",
+          "name": "Container",
+          "place": {
+            "path": "packages/twenty-website/src/ui/Container.tsx",
+            "line": 8,
+            "column": 14
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/sections/menu/Menu.tsx#MenuRow",
+          "kind": "code-unit",
+          "name": "MenuRow",
+          "place": {
+            "path": "packages/twenty-website/src/sections/menu/Menu.tsx",
+            "line": 70,
+            "column": 7
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/sections/menu/Menu.tsx#LogoLink",
+          "kind": "code-unit",
+          "name": "LogoLink",
+          "place": {
+            "path": "packages/twenty-website/src/sections/menu/Menu.tsx",
+            "line": 78,
+            "column": 7
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/icons/TwentyLogo.tsx#TwentyLogo",
+          "kind": "code-unit",
+          "name": "TwentyLogo",
+          "place": {
+            "path": "packages/twenty-website/src/icons/TwentyLogo.tsx",
+            "line": 19,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/sections/menu/components/MenuNav.tsx#MenuNav",
+          "kind": "code-unit",
+          "name": "MenuNav",
+          "place": {
+            "path": "packages/twenty-website/src/sections/menu/components/MenuNav.tsx",
+            "line": 151,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/sections/menu/components/MenuSocial.tsx#MenuSocial",
+          "kind": "code-unit",
+          "name": "MenuSocial",
+          "place": {
+            "path": "packages/twenty-website/src/sections/menu/components/MenuSocial.tsx",
+            "line": 75,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/sections/menu/Menu.tsx#DesktopActions",
+          "kind": "code-unit",
+          "name": "DesktopActions",
+          "place": {
+            "path": "packages/twenty-website/src/sections/menu/Menu.tsx",
+            "line": 88,
+            "column": 7
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/ui/Button.tsx#Button",
+          "kind": "code-unit",
+          "name": "Button",
+          "place": {
+            "path": "packages/twenty-website/src/ui/Button.tsx",
+            "line": 180,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/sections/menu/Menu.tsx#MobileActions",
+          "kind": "code-unit",
+          "name": "MobileActions",
+          "place": {
+            "path": "packages/twenty-website/src/sections/menu/Menu.tsx",
+            "line": 98,
+            "column": 7
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/ui/IconButton.tsx#IconButton",
+          "kind": "code-unit",
+          "name": "IconButton",
+          "place": {
+            "path": "packages/twenty-website/src/ui/IconButton.tsx",
+            "line": 50,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/sections/menu/components/MenuDrawer.tsx#MenuDrawer",
+          "kind": "code-unit",
+          "name": "MenuDrawer",
+          "place": {
+            "path": "packages/twenty-website/src/sections/menu/components/MenuDrawer.tsx",
+            "line": 207,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/client-brief/ClientBriefModal.tsx#ClientBriefModal",
+          "kind": "code-unit",
+          "name": "ClientBriefModal",
+          "place": {
+            "path": "packages/twenty-website/src/client-brief/ClientBriefModal.tsx",
+            "line": 40,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/platform/i18n/get-server-i18n.ts#getServerI18n",
+          "kind": "code-unit",
+          "name": "getServerI18n",
+          "place": {
+            "path": "packages/twenty-website/src/platform/i18n/get-server-i18n.ts",
+            "line": 9,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/ui/SectionShell.tsx#SectionShell",
+          "kind": "code-unit",
+          "name": "SectionShell",
+          "place": {
+            "path": "packages/twenty-website/src/ui/SectionShell.tsx",
+            "line": 117,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#GradientBackdrop",
+          "kind": "code-unit",
+          "name": "GradientBackdrop",
+          "place": {
+            "path": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx",
+            "line": 29,
+            "column": 7
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#ProfileInner",
+          "kind": "code-unit",
+          "name": "ProfileInner",
+          "place": {
+            "path": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx",
+            "line": 36,
+            "column": 7
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#ContentGrid",
+          "kind": "code-unit",
+          "name": "ContentGrid",
+          "place": {
+            "path": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx",
+            "line": 42,
+            "column": 7
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#MainColumn",
+          "kind": "code-unit",
+          "name": "MainColumn",
+          "place": {
+            "path": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx",
+            "line": 58,
+            "column": 7
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/partners-marketplace/BackToMarketplaceLink.tsx#BackToMarketplaceLink",
+          "kind": "code-unit",
+          "name": "BackToMarketplaceLink",
+          "place": {
+            "path": "packages/twenty-website/src/partners-marketplace/BackToMarketplaceLink.tsx",
+            "line": 23,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/partners-marketplace/PartnerProfileHeader.tsx#PartnerProfileHeader",
+          "kind": "code-unit",
+          "name": "PartnerProfileHeader",
+          "place": {
+            "path": "packages/twenty-website/src/partners-marketplace/PartnerProfileHeader.tsx",
+            "line": 54,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/partners-marketplace/PartnerProfileAbout.tsx#PartnerProfileAbout",
+          "kind": "code-unit",
+          "name": "PartnerProfileAbout",
+          "place": {
+            "path": "packages/twenty-website/src/partners-marketplace/PartnerProfileAbout.tsx",
+            "line": 79,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/partners-marketplace/PartnerCoverageSection.tsx#PartnerCoverageSection",
+          "kind": "code-unit",
+          "name": "PartnerCoverageSection",
+          "place": {
+            "path": "packages/twenty-website/src/partners-marketplace/PartnerCoverageSection.tsx",
+            "line": 77,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/partners-marketplace/PartnerSelectedWork.tsx#PartnerSelectedWork",
+          "kind": "code-unit",
+          "name": "PartnerSelectedWork",
+          "place": {
+            "path": "packages/twenty-website/src/partners-marketplace/PartnerSelectedWork.tsx",
+            "line": 225,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/partners-marketplace/PartnerServices.tsx#PartnerServices",
+          "kind": "code-unit",
+          "name": "PartnerServices",
+          "place": {
+            "path": "packages/twenty-website/src/partners-marketplace/PartnerServices.tsx",
+            "line": 155,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#RailColumn",
+          "kind": "code-unit",
+          "name": "RailColumn",
+          "place": {
+            "path": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx",
+            "line": 72,
+            "column": 7
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/ui/GuideCrosshair.tsx#GuideCrosshair",
+          "kind": "code-unit",
+          "name": "GuideCrosshair",
+          "place": {
+            "path": "packages/twenty-website/src/ui/GuideCrosshair.tsx",
+            "line": 116,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/tokens/spacing.ts#spacing",
+          "kind": "code-unit",
+          "name": "spacing",
+          "place": {
+            "path": "packages/twenty-website/src/tokens/spacing.ts",
+            "line": 3,
+            "column": 14
+          },
+          "unit": "function",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/partners-marketplace/PartnerProfilePhoto.tsx#PartnerProfilePhoto",
+          "kind": "code-unit",
+          "name": "PartnerProfilePhoto",
+          "place": {
+            "path": "packages/twenty-website/src/partners-marketplace/PartnerProfilePhoto.tsx",
+            "line": 35,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/partners-marketplace/PartnerProfileCtas.tsx#PartnerProfileCtas",
+          "kind": "code-unit",
+          "name": "PartnerProfileCtas",
+          "place": {
+            "path": "packages/twenty-website/src/partners-marketplace/PartnerProfileCtas.tsx",
+            "line": 118,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        },
+        {
+          "id": "packages/twenty-website/src/partners-marketplace/PartnerRatesPanel.tsx#PartnerRatesPanel",
+          "kind": "code-unit",
+          "name": "PartnerRatesPanel",
+          "place": {
+            "path": "packages/twenty-website/src/partners-marketplace/PartnerRatesPanel.tsx",
+            "line": 78,
+            "column": 17
+          },
+          "unit": "component",
+          "change": "unchanged"
+        }
+      ],
+      "edges": [
+        {
+          "from": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx#PartnerProfilePage",
+          "to": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx#PartnerProfilePage?1",
+          "kind": "branch",
+          "relation": null,
+          "label": null,
+          "provenance": "resolved",
+          "lines": [52],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx#PartnerProfilePage",
+          "to": "packages/twenty-website/src/platform/i18n/get-route-i18n.ts#getRouteI18n",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [46],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx#PartnerProfilePage",
+          "to": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [47],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx#PartnerProfilePage",
+          "to": "packages/twenty-website/src/platform/i18n/resolve-locale-param.ts#resolveLocaleParam",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [50],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx#PartnerProfilePage",
+          "to": "packages/twenty-website/src/partners-marketplace/get-marketplace-partner-by-slug.ts#getMarketplacePartnerBySlug",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [51],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx#PartnerProfilePage",
+          "to": "packages/twenty-website/src/platform/seo/JsonLd.tsx#JsonLd",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [58],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx#PartnerProfilePage",
+          "to": "packages/twenty-website/src/platform/seo/build-breadcrumb-list-json-ld.ts#buildBreadcrumbListJsonLd",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [59],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx#PartnerProfilePage",
+          "to": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [68],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx#PartnerProfilePage",
+          "to": "packages/twenty-website/src/client-brief/ClientBriefModalRoot.tsx#ClientBriefModalRoot",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [69],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx#PartnerProfilePage",
+          "to": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [71],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx#PartnerProfilePage",
+          "to": "packages/twenty-website/src/client-brief/GetMatchedButton.tsx#GetMatchedButton",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [73],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/platform/i18n/get-route-i18n.ts#getRouteI18n",
+          "to": "packages/twenty-website/src/platform/i18n/create-i18n-instance.ts#createI18nInstance",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [17],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/platform/i18n/get-route-i18n.ts#getRouteI18n",
+          "to": "packages/twenty-website/src/platform/i18n/resolve-locale-param.ts#resolveLocaleParam",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [17],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats",
+          "to": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats?1",
+          "kind": "branch",
+          "relation": null,
+          "label": null,
+          "provenance": "resolved",
+          "lines": [70],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats",
+          "to": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats?2",
+          "kind": "branch",
+          "relation": null,
+          "label": null,
+          "provenance": "resolved",
+          "lines": [71],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats",
+          "to": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats?3",
+          "kind": "branch",
+          "relation": null,
+          "label": null,
+          "provenance": "resolved",
+          "lines": [78],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats",
+          "to": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats?4",
+          "kind": "branch",
+          "relation": null,
+          "label": null,
+          "provenance": "resolved",
+          "lines": [78],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats",
+          "to": "packages/twenty-website/src/platform/community/get-community-stats.ts#fetchGithubStars",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [65],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats",
+          "to": "packages/twenty-website/src/platform/community/get-community-stats.ts#fetchDiscordMembers",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [66],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats",
+          "to": "packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [70, 78],
+          "sites": 2
+        },
+        {
+          "from": "packages/twenty-website/src/platform/i18n/resolve-locale-param.ts#resolveLocaleParam",
+          "to": "packages/twenty-website/src/platform/i18n/resolve-locale-param.ts#resolveLocaleParam?1",
+          "kind": "branch",
+          "relation": null,
+          "label": null,
+          "provenance": "resolved",
+          "lines": [9],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/platform/i18n/resolve-locale-param.ts#resolveLocaleParam",
+          "to": "packages/twenty-website/src/platform/i18n/is-website-locale.ts#isWebsiteLocale",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [9],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/get-marketplace-partner-by-slug.ts#getMarketplacePartnerBySlug",
+          "to": "packages/twenty-website/src/partners-marketplace/fetch-live-partner-profile.ts#fetchLivePartnerProfile",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [7],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/platform/seo/JsonLd.tsx#JsonLd",
+          "to": "packages/twenty-website/src/platform/seo/serialize-json-ld.ts#serializeJsonLd",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [11],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/platform/seo/build-breadcrumb-list-json-ld.ts#buildBreadcrumbListJsonLd",
+          "to": "packages/twenty-website/src/platform/seo/get-site-url.ts#getSiteUrl",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [14],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "to": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu?1",
+          "kind": "branch",
+          "relation": null,
+          "label": null,
+          "provenance": "resolved",
+          "lines": [168],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "to": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu?2",
+          "kind": "branch",
+          "relation": null,
+          "label": null,
+          "provenance": "resolved",
+          "lines": [174],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "to": "packages/twenty-website/src/platform/menu-style/use-menu-style.ts#useMenuStyle",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [115],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "to": "packages/twenty-website/src/sections/menu/effect-components/CloseDrawerOnDesktopEffect.tsx#CloseDrawerOnDesktopEffect",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [131],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "to": "packages/twenty-website/src/sections/menu/effect-components/ScrollStateEffect.tsx#ScrollStateEffect",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [132],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "to": "packages/twenty-website/src/ui/Container.tsx#Container",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [141],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "to": "packages/twenty-website/src/sections/menu/Menu.tsx#MenuRow",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [142],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "to": "packages/twenty-website/src/sections/menu/Menu.tsx#LogoLink",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [145],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "to": "packages/twenty-website/src/icons/TwentyLogo.tsx#TwentyLogo",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [147],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "to": "packages/twenty-website/src/sections/menu/components/MenuNav.tsx#MenuNav",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [149],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "to": "packages/twenty-website/src/sections/menu/components/MenuSocial.tsx#MenuSocial",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [150],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "to": "packages/twenty-website/src/sections/menu/Menu.tsx#DesktopActions",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [151],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "to": "packages/twenty-website/src/ui/Button.tsx#Button",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [152, 158, 165],
+          "sites": 3
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "to": "packages/twenty-website/src/sections/menu/Menu.tsx#MobileActions",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [164],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "to": "packages/twenty-website/src/ui/IconButton.tsx#IconButton",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [166],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "to": "packages/twenty-website/src/sections/menu/components/MenuDrawer.tsx#MenuDrawer",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [184],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/client-brief/ClientBriefModalRoot.tsx#ClientBriefModalRoot",
+          "to": "packages/twenty-website/src/client-brief/ClientBriefModal.tsx#ClientBriefModal",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [25],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/platform/i18n/get-server-i18n.ts#getServerI18n",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [119],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/ui/SectionShell.tsx#SectionShell",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [122],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#GradientBackdrop",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [123],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#ProfileInner",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [127],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#ContentGrid",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [128],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#MainColumn",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [129],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/partners-marketplace/BackToMarketplaceLink.tsx#BackToMarketplaceLink",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [130],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/partners-marketplace/PartnerProfileHeader.tsx#PartnerProfileHeader",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [131],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/partners-marketplace/PartnerProfileAbout.tsx#PartnerProfileAbout",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [132],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/partners-marketplace/PartnerCoverageSection.tsx#PartnerCoverageSection",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [133],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/partners-marketplace/PartnerSelectedWork.tsx#PartnerSelectedWork",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [137],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/partners-marketplace/PartnerServices.tsx#PartnerServices",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [138],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#RailColumn",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [140],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/ui/GuideCrosshair.tsx#GuideCrosshair",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [141],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/tokens/spacing.ts#spacing",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [142, 143],
+          "sites": 2
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/partners-marketplace/PartnerProfilePhoto.tsx#PartnerProfilePhoto",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [145],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/partners-marketplace/PartnerProfileCtas.tsx#PartnerProfileCtas",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [150],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "to": "packages/twenty-website/src/partners-marketplace/PartnerRatesPanel.tsx#PartnerRatesPanel",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [156],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/client-brief/GetMatchedButton.tsx#GetMatchedButton",
+          "to": "packages/twenty-website/src/ui/Button.tsx#Button",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [23],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats?1",
+          "to": "packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined",
+          "kind": "branch",
+          "relation": "calls",
+          "label": "no",
+          "provenance": "resolved",
+          "lines": [70],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats?3",
+          "to": "packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined",
+          "kind": "branch",
+          "relation": "calls",
+          "label": "no",
+          "provenance": "resolved",
+          "lines": [78],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/components/MenuDrawer.tsx#MenuDrawer",
+          "to": "packages/twenty-website/src/ui/Button.tsx#Button",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [270],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/ui/SectionShell.tsx#SectionShell",
+          "to": "packages/twenty-website/src/ui/Container.tsx#Container",
+          "kind": "call",
+          "relation": "renders",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [148],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfileHeader.tsx#PartnerProfileHeader",
+          "to": "packages/twenty-website/src/platform/i18n/get-server-i18n.ts#getServerI18n",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [59],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerCoverageSection.tsx#PartnerCoverageSection",
+          "to": "packages/twenty-website/src/platform/i18n/get-server-i18n.ts#getServerI18n",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [92],
+          "sites": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerServices.tsx#PartnerServices",
+          "to": "packages/twenty-website/src/platform/i18n/get-server-i18n.ts#getServerI18n",
+          "kind": "call",
+          "relation": "calls",
+          "label": null,
+          "provenance": "resolved",
+          "lines": [164],
+          "sites": 1
+        }
+      ],
+      "unknown": [
+        {
+          "from": "packages/twenty-website/src/app/[locale]/(site)/partners/profile/[slug]/page.tsx#PartnerProfilePage?1",
+          "total": 1,
+          "calls": [
+            { "target": "notFound", "relation": "calls", "label": "yes", "lines": [53], "sites": 1 }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/platform/i18n/get-route-i18n.ts#getRouteI18n",
+          "total": 1,
+          "calls": [
+            { "target": "setI18n", "relation": "calls", "label": null, "lines": [18], "sites": 1 }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu",
+          "total": 6,
+          "calls": [
+            {
+              "target": "useLingui",
+              "relation": "calls",
+              "label": null,
+              "lines": [114],
+              "sites": 1
+            },
+            {
+              "target": "useState",
+              "relation": "calls",
+              "label": null,
+              "lines": [116, 117],
+              "sites": 2
+            },
+            {
+              "target": "useCallback",
+              "relation": "calls",
+              "label": null,
+              "lines": [120, 127],
+              "sites": 2
+            },
+            {
+              "target": "Drawer.Root",
+              "relation": "renders",
+              "label": null,
+              "lines": [130],
+              "sites": 1
+            },
+            {
+              "target": "Drawer.Close",
+              "relation": "renders",
+              "label": null,
+              "lines": [143],
+              "sites": 1
+            },
+            {
+              "target": "i18n._",
+              "relation": "calls",
+              "label": null,
+              "lines": [145, 154, 160, 165],
+              "sites": 4
+            }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/client-brief/ClientBriefModalRoot.tsx#ClientBriefModalRoot",
+          "total": 6,
+          "calls": [
+            {
+              "target": "useState",
+              "relation": "calls",
+              "label": null,
+              "lines": [9, 10],
+              "sites": 2
+            },
+            {
+              "target": "useCallback",
+              "relation": "calls",
+              "label": null,
+              "lines": [12],
+              "sites": 1
+            },
+            {
+              "target": "setPartnerSlug",
+              "relation": "calls",
+              "label": null,
+              "lines": [13],
+              "sites": 1
+            },
+            {
+              "target": "setIsOpen",
+              "relation": "calls",
+              "label": null,
+              "lines": [14],
+              "sites": 1
+            },
+            { "target": "useMemo", "relation": "calls", "label": null, "lines": [17], "sites": 1 },
+            {
+              "target": "ClientBriefModalContext.Provider",
+              "relation": "renders",
+              "label": null,
+              "lines": [23],
+              "sites": 1
+            }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "total": 1,
+          "calls": [
+            { "target": "i18n._", "relation": "calls", "label": null, "lines": [140], "sites": 1 }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/client-brief/GetMatchedButton.tsx#GetMatchedButton",
+          "total": 2,
+          "calls": [
+            {
+              "target": "useLingui",
+              "relation": "calls",
+              "label": null,
+              "lines": [19],
+              "sites": 1
+            },
+            { "target": "i18n._", "relation": "calls", "label": null, "lines": [24], "sites": 1 }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/platform/i18n/create-i18n-instance.ts#createI18nInstance",
+          "total": 1,
+          "calls": [
+            { "target": "setupI18n", "relation": "calls", "label": null, "lines": [9], "sites": 1 }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats?2",
+          "total": 1,
+          "calls": [
+            {
+              "target": "communityStatsStore.read",
+              "relation": "calls",
+              "label": "yes",
+              "lines": [71],
+              "sites": 1
+            }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/platform/community/get-community-stats.ts#getCommunityStats?4",
+          "total": 1,
+          "calls": [
+            {
+              "target": "communityStatsStore.write",
+              "relation": "calls",
+              "label": "yes",
+              "lines": [79],
+              "sites": 1
+            }
+          ]
+        },
+        {
+          "from": "packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined",
+          "total": 1,
+          "calls": [
+            {
+              "target": "isUndefined",
+              "relation": "calls",
+              "label": null,
+              "lines": [5],
+              "sites": 1
+            }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/platform/i18n/resolve-locale-param.ts#resolveLocaleParam?1",
+          "total": 1,
+          "calls": [
+            { "target": "notFound", "relation": "calls", "label": "yes", "lines": [9], "sites": 1 }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/platform/seo/get-site-url.ts#getSiteUrl",
+          "total": 1,
+          "calls": [
+            {
+              "target": "configured.endsWith",
+              "relation": "calls",
+              "label": null,
+              "lines": [6],
+              "sites": 1
+            }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu?1",
+          "total": 2,
+          "calls": [
+            { "target": "i18n._", "relation": "calls", "label": "yes", "lines": [169], "sites": 1 },
+            { "target": "i18n._", "relation": "calls", "label": "no", "lines": [170], "sites": 1 }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/Menu.tsx#Menu?2",
+          "total": 2,
+          "calls": [
+            {
+              "target": "IconX",
+              "relation": "renders",
+              "label": "yes",
+              "lines": [175],
+              "sites": 1
+            },
+            {
+              "target": "IconMenu2",
+              "relation": "renders",
+              "label": "no",
+              "lines": [177],
+              "sites": 1
+            }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/platform/menu-style/use-menu-style.ts#useMenuStyle",
+          "total": 1,
+          "calls": [
+            {
+              "target": "useContext",
+              "relation": "calls",
+              "label": null,
+              "lines": [17],
+              "sites": 1
+            }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/effect-components/CloseDrawerOnDesktopEffect.tsx#CloseDrawerOnDesktopEffect",
+          "total": 1,
+          "calls": [
+            { "target": "useEffect", "relation": "calls", "label": null, "lines": [14], "sites": 1 }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/effect-components/ScrollStateEffect.tsx#ScrollStateEffect",
+          "total": 2,
+          "calls": [
+            {
+              "target": "useEffect",
+              "relation": "calls",
+              "label": null,
+              "lines": [15],
+              "sites": 1
+            },
+            {
+              "target": "onScrollStateChange",
+              "relation": "calls",
+              "label": null,
+              "lines": [28],
+              "sites": 1
+            }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/components/MenuNav.tsx#MenuNav",
+          "total": 7,
+          "calls": [
+            {
+              "target": "useLingui",
+              "relation": "calls",
+              "label": null,
+              "lines": [152],
+              "sites": 1
+            },
+            {
+              "target": "NavigationMenu.Root",
+              "relation": "renders",
+              "label": null,
+              "lines": [156],
+              "sites": 1
+            },
+            {
+              "target": "i18n._",
+              "relation": "calls",
+              "label": null,
+              "lines": [156, 159],
+              "sites": 2
+            },
+            {
+              "target": "Fragment",
+              "relation": "renders",
+              "label": null,
+              "lines": [159],
+              "sites": 1
+            },
+            {
+              "target": "NavigationMenu.Item",
+              "relation": "renders",
+              "label": null,
+              "lines": [161],
+              "sites": 1
+            },
+            {
+              "target": "NavigationMenu.Portal",
+              "relation": "renders",
+              "label": null,
+              "lines": [186],
+              "sites": 1
+            },
+            {
+              "target": "NavigationMenu.Viewport",
+              "relation": "renders",
+              "label": null,
+              "lines": [189],
+              "sites": 1
+            }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/components/MenuSocial.tsx#MenuSocial",
+          "total": 3,
+          "calls": [
+            {
+              "target": "useLingui",
+              "relation": "calls",
+              "label": null,
+              "lines": [76],
+              "sites": 1
+            },
+            {
+              "target": "i18n._",
+              "relation": "calls",
+              "label": null,
+              "lines": [81, 91],
+              "sites": 2
+            },
+            {
+              "target": "IconComponent",
+              "relation": "renders",
+              "label": null,
+              "lines": [92],
+              "sites": 1
+            }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/components/MenuDrawer.tsx#MenuDrawer",
+          "total": 6,
+          "calls": [
+            {
+              "target": "useLingui",
+              "relation": "calls",
+              "label": null,
+              "lines": [213],
+              "sites": 1
+            },
+            {
+              "target": "useState",
+              "relation": "calls",
+              "label": null,
+              "lines": [215],
+              "sites": 1
+            },
+            {
+              "target": "Drawer.Portal",
+              "relation": "renders",
+              "label": null,
+              "lines": [218],
+              "sites": 1
+            },
+            {
+              "target": "i18n._",
+              "relation": "calls",
+              "label": null,
+              "lines": [220, 223, 225, 272, 284],
+              "sites": 5
+            },
+            {
+              "target": "Fragment",
+              "relation": "renders",
+              "label": null,
+              "lines": [225, 281],
+              "sites": 2
+            },
+            {
+              "target": "IconComponent",
+              "relation": "renders",
+              "label": null,
+              "lines": [287],
+              "sites": 1
+            }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/client-brief/ClientBriefModal.tsx#ClientBriefModal",
+          "total": 2,
+          "calls": [
+            {
+              "target": "useLingui",
+              "relation": "calls",
+              "label": null,
+              "lines": [49],
+              "sites": 1
+            },
+            { "target": "i18n._", "relation": "calls", "label": null, "lines": [52], "sites": 1 }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/platform/i18n/get-server-i18n.ts#getServerI18n",
+          "total": 1,
+          "calls": [
+            { "target": "getI18n", "relation": "calls", "label": null, "lines": [10], "sites": 1 }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/BackToMarketplaceLink.tsx#BackToMarketplaceLink",
+          "total": 2,
+          "calls": [
+            {
+              "target": "useLingui",
+              "relation": "calls",
+              "label": null,
+              "lines": [24],
+              "sites": 1
+            },
+            { "target": "i18n._", "relation": "calls", "label": null, "lines": [28], "sites": 1 }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerCoverageSection.tsx#PartnerCoverageSection",
+          "total": 1,
+          "calls": [
+            { "target": "i18n._", "relation": "calls", "label": null, "lines": [97], "sites": 1 }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerSelectedWork.tsx#PartnerSelectedWork",
+          "total": 3,
+          "calls": [
+            {
+              "target": "useLingui",
+              "relation": "calls",
+              "label": null,
+              "lines": [230],
+              "sites": 1
+            },
+            {
+              "target": "useState",
+              "relation": "calls",
+              "label": null,
+              "lines": [231],
+              "sites": 1
+            },
+            {
+              "target": "i18n._",
+              "relation": "calls",
+              "label": null,
+              "lines": [240, 254, 275],
+              "sites": 3
+            }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerServices.tsx#PartnerServices",
+          "total": 1,
+          "calls": [
+            { "target": "i18n._", "relation": "calls", "label": null, "lines": [169], "sites": 1 }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfileCtas.tsx#PartnerProfileCtas",
+          "total": 2,
+          "calls": [
+            {
+              "target": "useLingui",
+              "relation": "calls",
+              "label": null,
+              "lines": [129],
+              "sites": 1
+            },
+            { "target": "i18n._", "relation": "calls", "label": null, "lines": [149], "sites": 1 }
+          ]
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerRatesPanel.tsx#PartnerRatesPanel",
+          "total": 2,
+          "calls": [
+            {
+              "target": "useLingui",
+              "relation": "calls",
+              "label": null,
+              "lines": [85],
+              "sites": 1
+            },
+            { "target": "i18n._", "relation": "calls", "label": null, "lines": [101], "sites": 1 }
+          ]
+        }
+      ],
+      "cut": [
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfile.tsx#PartnerProfile",
+          "nodes": 1
+        },
+        {
+          "from": "packages/twenty-website/src/client-brief/GetMatchedButton.tsx#GetMatchedButton",
+          "nodes": 1
+        },
+        {
+          "from": "packages/twenty-website/src/platform/community/get-community-stats.ts#fetchGithubStars",
+          "nodes": 2
+        },
+        {
+          "from": "packages/twenty-website/src/platform/community/get-community-stats.ts#fetchDiscordMembers",
+          "nodes": 2
+        },
+        {
+          "from": "packages/twenty-shared/src/utils/validation/isDefined.ts#isDefined",
+          "nodes": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/fetch-live-partner-profile.ts#fetchLivePartnerProfile",
+          "nodes": 2
+        },
+        {
+          "from": "packages/twenty-website/src/platform/seo/get-site-url.ts#getSiteUrl",
+          "nodes": 1
+        },
+        { "from": "packages/twenty-website/src/icons/TwentyLogo.tsx#TwentyLogo", "nodes": 1 },
+        {
+          "from": "packages/twenty-website/src/sections/menu/components/MenuNav.tsx#MenuNav",
+          "nodes": 6
+        },
+        {
+          "from": "packages/twenty-website/src/sections/menu/components/MenuSocial.tsx#MenuSocial",
+          "nodes": 7
+        },
+        { "from": "packages/twenty-website/src/ui/Button.tsx#Button", "nodes": 2 },
+        {
+          "from": "packages/twenty-website/src/sections/menu/components/MenuDrawer.tsx#MenuDrawer",
+          "nodes": 11
+        },
+        {
+          "from": "packages/twenty-website/src/client-brief/ClientBriefModal.tsx#ClientBriefModal",
+          "nodes": 3
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/BackToMarketplaceLink.tsx#BackToMarketplaceLink",
+          "nodes": 1
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfileHeader.tsx#PartnerProfileHeader",
+          "nodes": 5
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfileAbout.tsx#PartnerProfileAbout",
+          "nodes": 2
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerCoverageSection.tsx#PartnerCoverageSection",
+          "nodes": 5
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerSelectedWork.tsx#PartnerSelectedWork",
+          "nodes": 16
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerServices.tsx#PartnerServices",
+          "nodes": 8
+        },
+        { "from": "packages/twenty-website/src/ui/GuideCrosshair.tsx#GuideCrosshair", "nodes": 2 },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfilePhoto.tsx#PartnerProfilePhoto",
+          "nodes": 4
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerProfileCtas.tsx#PartnerProfileCtas",
+          "nodes": 10
+        },
+        {
+          "from": "packages/twenty-website/src/partners-marketplace/PartnerRatesPanel.tsx#PartnerRatesPanel",
+          "nodes": 9
+        }
+      ],
+      "hidden": 96,
+      "byProvenance": {
+        "observed": 0,
+        "resolved": 60,
+        "convention": 0,
+        "suggested": 0,
+        "unknown": 61
+      }
+    }
+  }
+}

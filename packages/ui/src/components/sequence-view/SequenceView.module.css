@@ -1,0 +1,234 @@
+/*
+ * The sequence view (phase 13; Figma 08; design brief, "Sequence view"): a waterfall like a trace viewer. Step names
+ * in Mono, a row each (compact rows, a subtle rule between), bars to the right: dashed for order from code, solid for
+ * an observed span, the state's hue for a change, removed's red for a failure path.
+ */
+
+.view {
+  box-sizing: border-box;
+  block-size: 100%;
+  overflow-y: auto;
+  padding: var(--space-16) var(--space-24) var(--space-24);
+  background: var(--color-surface-canvas);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+  padding-block-end: var(--space-16);
+}
+
+.title {
+  font-family: var(--text-body-strong-font-family);
+  font-size: var(--text-body-strong-font-size);
+  font-weight: var(--text-body-strong-font-weight);
+  line-height: var(--text-body-strong-line-height);
+  color: var(--color-text-primary);
+}
+
+.subtitle,
+.axis,
+.section,
+.legend {
+  font-family: var(--text-small-font-family);
+  font-size: var(--text-small-font-size);
+  font-weight: var(--text-small-font-weight);
+  line-height: var(--text-small-line-height);
+  color: var(--color-text-muted);
+}
+
+.axis,
+.row {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--size-row-compact);
+  border-block-end: var(--border-width-default) solid var(--color-border-subtle);
+}
+
+/* An absolutely placed bar or label sits where the flex track centres it (its static position). */
+
+/* The step column: as wide as the left panel, each depth indented by a step of the grid. */
+.step {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-8);
+  box-sizing: border-box;
+  inline-size: var(--size-panel-left);
+  min-inline-size: 0;
+  padding-inline: calc(var(--space-12) * var(--depth, 0)) var(--space-8);
+  overflow: hidden;
+}
+
+.track {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  align-self: stretch;
+}
+
+.tick {
+  position: absolute;
+  white-space: nowrap;
+}
+
+.row {
+  cursor: pointer;
+  transition: background-color var(--duration-hover) ease-out;
+}
+
+.row:hover {
+  background: var(--color-surface-hover);
+}
+
+.row[data-selected] {
+  background: var(--color-surface-selected);
+}
+
+.row:focus-visible {
+  outline: var(--border-width-focus) solid var(--color-accent-solid);
+  outline-offset: calc(-1 * var(--border-width-focus));
+}
+
+.row[data-stub] {
+  cursor: default;
+}
+
+.row[data-stub]:hover {
+  background: none;
+}
+
+.name {
+  min-inline-size: 0;
+  overflow: hidden;
+  font-family: var(--text-mono-font-family);
+  font-size: var(--text-mono-font-size);
+  font-weight: var(--text-mono-font-weight);
+  line-height: var(--text-mono-line-height);
+  color: var(--color-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row[data-stub] .name {
+  color: var(--color-text-muted);
+}
+
+/* The outcome it's reached on, as the graph's edge labels: Caption, muted. */
+.branch {
+  flex: none;
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  font-weight: var(--text-caption-font-weight);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+}
+
+.bar,
+.swatch {
+  box-sizing: border-box;
+  block-size: var(--space-8);
+  border: var(--border-width-default) dashed var(--color-border-strong);
+  border-radius: var(--radius-control);
+}
+
+.bar {
+  position: absolute;
+  min-inline-size: var(--space-4);
+}
+
+.bar[data-timed],
+.swatch[data-timed] {
+  border-style: solid;
+  background: var(--color-border-strong);
+}
+
+.bar[data-change='added'] {
+  border-color: var(--color-state-added-solid);
+}
+
+.bar[data-change='modified'],
+.swatch[data-change='modified'] {
+  border-color: var(--color-state-modified-solid);
+}
+
+.bar[data-change='affected'] {
+  border-color: var(--color-state-affected-solid);
+}
+
+.bar[data-timed][data-change='added'] {
+  background: var(--color-state-added-solid);
+}
+
+.bar[data-timed][data-change='modified'],
+.swatch[data-change='modified'] {
+  background: var(--color-state-modified-solid);
+}
+
+.bar[data-timed][data-change='affected'] {
+  background: var(--color-state-affected-solid);
+}
+
+.bar[data-failure],
+.swatch[data-failure] {
+  border-style: solid;
+  border-color: var(--color-state-removed-solid);
+  background: var(--color-state-removed-tint);
+}
+
+.duration {
+  position: absolute;
+  padding-inline-start: var(--space-8);
+  font-family: var(--text-mono-small-font-family);
+  font-size: var(--text-mono-small-font-size);
+  line-height: var(--text-mono-small-line-height);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* On the selected row's surface, muted text falls under 4.5:1: one level up. */
+.row[data-selected] .duration,
+.row[data-selected] .branch {
+  color: var(--color-text-secondary);
+}
+
+/* A hand-off's work: its group's header, with a clock (Figma 08). */
+.section {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding-block: var(--space-12) var(--space-4);
+}
+
+.clock {
+  flex: none;
+  inline-size: var(--size-icon-xs);
+  block-size: var(--size-icon-xs);
+  color: var(--color-text-tertiary);
+  stroke-width: var(--icon-stroke-width);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-16);
+  padding-block-start: var(--space-16);
+}
+
+.key {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.swatch {
+  inline-size: var(--space-16);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row {
+    transition: none;
+  }
+}

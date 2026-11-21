@@ -110,5 +110,5 @@ test('phase 11 · Try it: in Twenty, a job flow’s hand-off and its background 
     await expect(inspector.getByRole('list', { name: 'Handled by' })).toContainText('handle');
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });

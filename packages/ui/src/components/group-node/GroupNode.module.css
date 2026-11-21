@@ -1,0 +1,139 @@
+/*
+ * A group of a flow's nodes (phase 12, ADR 0032; Graphite "Group": stacked card look, two offset outlines, count in
+ * caption). Closed: a card the height of a flow node (its two text lines and padding), two outlines behind it. Open:
+ * a frame filling its box, its members drawn over it; its header closes it.
+ */
+
+.group {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  border: var(--border-width-default) solid var(--color-border-subtle);
+  border-radius: var(--radius-node);
+  background: var(--color-surface-raised);
+  transition:
+    background-color var(--duration-hover) ease-out,
+    border-color var(--duration-hover) ease-out;
+}
+
+/* The stacked look: two outlines offset below the card (closed only). */
+.group:not([data-expanded])::before,
+.group:not([data-expanded])::after {
+  position: absolute;
+  border: var(--border-width-default) solid var(--color-border-subtle);
+  border-radius: var(--radius-node);
+  background: var(--color-surface-panel);
+  content: '';
+  pointer-events: none;
+}
+
+.group:not([data-expanded])::before {
+  inset-inline: var(--space-4);
+  top: var(--space-4);
+  bottom: calc(-1 * var(--space-4));
+  z-index: -1;
+}
+
+.group:not([data-expanded])::after {
+  inset-inline: var(--space-8);
+  top: var(--space-8);
+  bottom: calc(-1 * var(--space-8));
+  z-index: -2;
+}
+
+.group:not([data-expanded]):hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-hover);
+}
+
+/* Open: a frame over the canvas, quieter than the cards drawn in it. */
+.group[data-expanded] {
+  height: 100%;
+  border-color: var(--color-border-control);
+  background: var(--color-surface-panel);
+}
+
+/* Selected: as a flow node (Graphite), the accent outline and its tint halo. */
+.group[data-selected] {
+  border-color: var(--color-accent-solid);
+  box-shadow:
+    inset 0 0 0 calc(var(--border-width-selected) - var(--border-width-default))
+      var(--color-accent-solid),
+    0 0 0 var(--border-width-node-halo) var(--color-accent-tint);
+}
+
+/* As tall as a flow node: a title line, a location line's height, and the same padding. */
+.header {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-8) + var(--space-2));
+  box-sizing: border-box;
+  min-height: calc(
+    var(--text-body-strong-line-height) + var(--text-mono-small-line-height) + 2 *
+      (var(--space-8) + var(--space-2) / 2)
+  );
+  padding: 0 calc(var(--space-8) + var(--space-2)) 0 var(--space-12);
+  border-radius: var(--radius-node);
+  cursor: pointer;
+  user-select: none;
+}
+
+.group[data-expanded] .header {
+  border-bottom: var(--border-width-default) solid var(--color-border-subtle);
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.header:focus-visible {
+  outline: var(--border-width-focus) solid var(--color-accent-solid);
+  outline-offset: var(--border-width-default);
+}
+
+.icon,
+.chevron {
+  flex: none;
+  width: var(--size-icon-sm);
+  height: var(--size-icon-sm);
+  color: var(--color-text-tertiary);
+  stroke-width: var(--icon-stroke-width);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--text-body-strong-font-family);
+  font-size: var(--text-body-strong-font-size);
+  font-weight: var(--text-body-strong-font-weight);
+  line-height: var(--text-body-strong-line-height);
+  letter-spacing: var(--text-body-strong-letter-spacing);
+  color: var(--color-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Graphite: the count in caption. */
+.count {
+  flex: none;
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  font-weight: var(--text-caption-font-weight);
+  line-height: var(--text-caption-line-height);
+  letter-spacing: var(--text-caption-letter-spacing);
+  color: var(--color-text-muted);
+}
+
+.chevron {
+  transition: transform var(--duration-hover) ease-out;
+}
+
+.group[data-expanded] .chevron {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .group,
+  .chevron {
+    transition: none;
+  }
+}

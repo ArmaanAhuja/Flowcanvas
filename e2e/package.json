@@ -8,7 +8,7 @@
     "test:perf": "playwright test --config playwright.perf.config.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test:visual": "sh scripts/visual.sh",
+    "test:a11y": "playwright test --config playwright.a11y.config.ts",
     "report": "playwright show-report",
     "publish-report": "node scripts/publish-report.ts"
   },

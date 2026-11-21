@@ -111,5 +111,5 @@ test('phase 6: Labs → Graph stats shows the graph’s node and edge counts', a
     await expect(stats).toContainText('Built in 4.1 s · saved in 20 ms · loaded in 10 ms');
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });

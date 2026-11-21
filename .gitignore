@@ -28,7 +28,7 @@ blob-report/
 *.log
 .idea/
 
-# visual tests (baselines in e2e/visual/__screenshots__ ARE committed)
-playwright-report-visual/
+# the accessibility check's report
+playwright-report-a11y/
 report-site/
 reports-data/

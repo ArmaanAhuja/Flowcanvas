@@ -204,3 +204,33 @@ export function buildFlow(
     byProvenance,
   };
 }
+
+/**
+ * What runs in the background (phase 11): what a hand-off leads to that the flow doesn't reach any other way. The
+ * hand-off itself stays where the work is handed off.
+ */
+export function backgroundOf(flow: Flow): Set<string> {
+  const out = new Map<string, string[]>();
+  const handoffs = new Set(flow.nodes.filter((n) => n.kind === 'async-handoff').map((n) => n.id));
+  for (const edge of flow.edges) out.set(edge.from, [...(out.get(edge.from) ?? []), edge.to]);
+  const reach = (starts: readonly string[], through: (id: string) => boolean) => {
+    const seen = new Set<string>(starts);
+    const queue = [...starts];
+    for (const id of queue) {
+      if (!through(id)) continue;
+      for (const next of out.get(id) ?? []) {
+        if (!seen.has(next)) {
+          seen.add(next);
+          queue.push(next);
+        }
+      }
+    }
+    return seen;
+  };
+  const fromMain = reach([flow.root], (id) => !handoffs.has(id));
+  const fromHandoffs = reach(
+    flow.edges.filter((e) => handoffs.has(e.from)).map((e) => e.to),
+    () => true,
+  );
+  return new Set([...fromHandoffs].filter((id) => !fromMain.has(id)));
+}

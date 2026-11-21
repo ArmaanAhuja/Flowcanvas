@@ -126,6 +126,18 @@ export {
 } from './components/decision-node/DecisionNode';
 export { FlowStub, type FlowStubProps } from './components/flow-stub/FlowStub';
 export {
+  GroupNode,
+  type GroupNodeKind,
+  type GroupNodeProps,
+} from './components/group-node/GroupNode';
+export {
+  SequenceView,
+  type SequenceBackgroundSection,
+  type SequenceChange,
+  type SequenceStep,
+  type SequenceViewProps,
+} from './components/sequence-view/SequenceView';
+export {
   NodeDetails,
   completenessText,
   type DetailListData,

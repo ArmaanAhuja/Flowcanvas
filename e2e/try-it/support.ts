@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
+import { accessibilityProblems } from '../accessibility.js';
 
 // The product version lives in the root package.json; the page must show exactly that.
 export const { version } = JSON.parse(
@@ -10,10 +11,11 @@ export const { version } = JSON.parse(
 export const expectedCommit = process.env.E2E_EXPECTED_COMMIT?.slice(0, 7);
 
 /**
- * Collects uncaught page errors and Content-Security-Policy violations for the whole walkthrough.
- * Call it before the first navigation; assert that `problems()` is empty at the end.
+ * Collects uncaught page errors and Content-Security-Policy violations for the whole walkthrough, and, when asked,
+ * adds what axe finds on the page as it is then (accessibility kept without screenshots: owner, 21 Nov 2026).
+ * Call it before the first navigation; assert that `await problems()` is empty at the end.
  */
-export function watchForPageProblems(page: Page): { problems: () => string[] } {
+export function watchForPageProblems(page: Page): { problems: () => Promise<string[]> } {
   const found: string[] = [];
   page.on('pageerror', (error) => found.push(`page error: ${error.message}`));
   page.on('console', (message) => {
@@ -21,7 +23,7 @@ export function watchForPageProblems(page: Page): { problems: () => string[] } {
       found.push(`CSP: ${message.text()}`);
     }
   });
-  return { problems: () => [...found] };
+  return { problems: async () => [...found, ...(await accessibilityProblems(page))] };
 }
 
 /**

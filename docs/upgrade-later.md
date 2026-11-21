@@ -1,5 +1,7 @@
 # Upgrade later
 
+> **Frozen on 21 Nov 2026** (owner): no longer kept up to date. What's done, and decisions, are now in brief in [`CHANGELOG.md`](../CHANGELOG.md), one entry per milestone.
+
 **What belongs here: the gaps we left in what's built.** Shortcuts we took (a free plan, a version pin, a local stand-in, skipped hardening) and limits of what we built, each with what we do now, what to do later, and what should trigger the change. Review it at the end of every phase, and before anyone else joins the project.
 
 **What doesn't belong here:**
@@ -9,7 +11,7 @@
 
 Entries keep their numbers, because the docs and code refer to them. Removed numbers are listed at the end, with where each one went.
 
-**Reviewed:** phase 9, close (15 Nov 2026): re-read in full against the code; no change. At every milestone this doc is re-read in full against the code, and this line names the milestone (`pnpm docs:milestone` checks it).
+**Reviewed:** phases 12 and 13, close (16 Nov 2026): re-read in full against the code; no change, and no item's trigger reached in these phases. At every milestone this doc is re-read in full against the code, and this line names the milestone (`pnpm docs:milestone` checks it).
 
 **Policy (27 Oct 2026):** build with free tools and free tiers only. Anything that needs billing or a payment method is listed here with the free stand-in we use meanwhile, and we upgrade when its trigger is reached.
 

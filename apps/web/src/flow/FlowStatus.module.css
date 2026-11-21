@@ -24,12 +24,53 @@
   color: var(--color-text-primary);
 }
 
+/* Completeness pill: interactive button to filter/highlight weak edges (design brief §7, phase 12) */
 .counts {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
   font-family: var(--text-caption-font-family);
   font-size: var(--text-caption-font-size);
   font-weight: var(--text-caption-font-weight);
   line-height: var(--text-caption-line-height);
   color: var(--color-text-muted);
+  background: var(--color-surface-panel);
+  border: var(--border-width-default) solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  padding: var(--space-2) var(--space-8);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color var(--duration-hover) ease-out,
+    border-color var(--duration-hover) ease-out,
+    color var(--duration-hover) ease-out;
+}
+
+.counts:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-control);
+  color: var(--color-text-primary);
+}
+
+.counts[data-active] {
+  background: var(--color-accent-tint);
+  border-color: var(--color-accent-solid);
+  color: var(--color-accent-text);
+}
+
+.counts:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.filterBadge {
+  font-family: var(--text-caption-font-family);
+  font-size: var(--text-caption-font-size);
+  background: var(--color-accent-solid);
+  color: var(--color-surface-canvas);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-control);
+  line-height: var(--text-caption-line-height);
 }
 
 .note {

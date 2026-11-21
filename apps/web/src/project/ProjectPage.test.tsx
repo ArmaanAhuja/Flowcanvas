@@ -82,8 +82,8 @@ describe('ProjectPage', () => {
       'true',
     );
     expect(screen.getByRole('tab', { name: 'Graph' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole<HTMLButtonElement>('tab', { name: 'Sequence' }).disabled).toBe(true);
-    // Code works since phase 3; Sequence arrives with its phase.
+    // Graph and Code work since phase 3; Sequence works in phase 13.
+    expect(screen.getByRole<HTMLButtonElement>('tab', { name: 'Sequence' }).disabled).toBe(false);
     expect(screen.getByRole<HTMLButtonElement>('tab', { name: 'Code' }).disabled).toBe(false);
   });
 

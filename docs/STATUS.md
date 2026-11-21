@@ -1,10 +1,12 @@
 # Status
 
+> **Frozen on 21 Nov 2026** (owner): no longer kept up to date. What's done, and decisions, are now in brief in [`CHANGELOG.md`](../CHANGELOG.md), one entry per milestone.
+
 One row per phase of the build plan (`docs/reference/build-plan.md`). Status: planned / in progress / in review / accepted.
 
-**Current milestone:** phase 9, close
+**Current milestone:** phases 12 and 13, close
 
-**Reviewed:** phase 9, close (15 Nov 2026): re-read in full against the code; phases 9, 10 and 11 brought up to date. At every milestone this doc is re-read in full, and this line names the milestone (`pnpm docs:milestone` checks it).
+**Reviewed:** phases 12 and 13, close (16 Nov 2026): re-read in full against the code; phases 12 and 13 in review. At every milestone this doc is re-read in full, and this line names the milestone (`pnpm docs:milestone` checks it).
 
 | Phase | Name | Status | Build | Notes |
 | --- | --- | --- | --- | --- |
@@ -23,3 +25,5 @@ One row per phase of the build plan (`docs/reference/build-plan.md`). Status: pl
 | 9 | Connectors (UI → API, data, async) | accepted | `0.13.0` | Accepted by the owner on 15 Nov 2026; merged in PR #23. Grouped phases 9 to 11 (owner, 15 Nov 2026); PR #23, branch `phase/9-connectors`. Report: `docs/reports/phase-9.md`; Figma differences: `docs/reports/phase-9-figma-differences.md`. ADR 0031 (and addenda). Every connector site of Rallly and Documenso, and of phase 8's modules of LibreChat and Twenty, labelled by reading the engine's answers against an independent scan (step 9.2 corrected step 9.1's self-checked labels and hand-written walkthroughs); the Done whens' chains in all 4 forks; walkthroughs on the engine's own flows; jobs, cron and events in entry points panel |
 | 10 | Data and external connectors | accepted | `0.13.0` | Grouped with phase 9 per owner decision (15 Nov 2026); covered by PR #23 and release 0.13.0. |
 | 11 | Async connectors and background lane | accepted | `0.13.0` | Grouped with phase 9 per owner decision (15 Nov 2026); covered by PR #23 and release 0.13.0. |
+| 12 | Progressive disclosure | in review | `0.14.0` | Grouped with phase 13 (owner, 15 Nov 2026); branch `phase/12-progressive-disclosure`, PR #24. Report: `docs/reports/phase-12.md`; Figma differences: `docs/reports/phase-12-figma-differences.md`. ADR 0032 (and its addendum). The draft that came in was checked and rebuilt (decisions log, 16 Nov 2026): groups named from the code (folders, kinds); opening one moves nothing else, proven on every node; Twenty's largest flow opens as 6 groups and 2 nodes besides its root |
+| 13 | Sequence view | in review | `0.14.0` | Grouped with phase 12; same branch, PR and report. The flow in the code's call order, nested, branches and failure paths from the code's edges, open ends, a Background group per hand-off; nothing timed until runs are observed (phase 29); the Graph / Sequence switch |

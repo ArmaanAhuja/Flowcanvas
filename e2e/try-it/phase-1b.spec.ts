@@ -25,7 +25,7 @@ test("phase 1b: what's new in this build", async ({ page }) => {
     await expect(page.getByRole('button', { name: "What's new" })).toBeVisible();
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });
 
 // Phase 1b · Labs: switches for unfinished features, off by default (Settings → Labs from phase 2).
@@ -46,5 +46,5 @@ test('phase 1b: Labs lists previews of unfinished features', async ({ page }) =>
     await expect(labs).toBeHidden();
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });

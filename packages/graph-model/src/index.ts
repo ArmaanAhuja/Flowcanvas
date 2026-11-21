@@ -46,6 +46,7 @@ export {
 export {
   FLOW_LIMITS,
   FLOW_MAX_NODES,
+  backgroundOf,
   buildFlow,
   indexGraph,
   placeKey,
@@ -56,3 +57,11 @@ export {
   type FlowUnknownGroup,
   type GraphIndex,
 } from './flow.js';
+export {
+  MAX_FLOW_GROUPS,
+  folderTitle,
+  semanticGrouping,
+  type GroupKind,
+  type SemanticGroup,
+  type SemanticGroupingResult,
+} from './grouping.js';
