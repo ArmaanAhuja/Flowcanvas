@@ -78,6 +78,8 @@ catalog:
 allowBuilds:
   # Electron's install script downloads its own binary for this platform (the desktop app, build plan v2).
   electron: true
+  # Pulled in by electron-builder; only for Windows installers (a later stage).
+  electron-winstaller: false
   esbuild: false
   # The grammars' install scripts build native Node bindings we don't use: the engine loads their
   # ready-made .wasm files with web-tree-sitter (ADR 0023).
