@@ -157,3 +157,25 @@
   outline: var(--border-width-focus) solid var(--color-accent-solid);
   outline-offset: var(--space-2);
 }
+
+.scripts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.script {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+  min-inline-size: 0;
+}
+
+.script .where {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

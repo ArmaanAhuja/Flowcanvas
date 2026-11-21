@@ -1,12 +1,4 @@
-import {
-  Button,
-  Input,
-  Menu,
-  MenuButton,
-  MenuItem,
-  MenuTrigger,
-  ProcessCard,
-} from '@flowcanvas/ui';
+import { Button, Input, ProcessCard } from '@flowcanvas/ui';
 import { Suspense, lazy, useState } from 'react';
 import {
   looksSecret,
@@ -44,6 +36,7 @@ export const RUN_TEXT = {
       ? `This project needs Node ${wanted}, and there’s no node on your PATH. Install Node ${wanted}, then reopen the project.`
       : `This project needs Node ${wanted}; you have ${have}. Install Node ${wanted} (with nvm, fnm or your package manager), then try again.`,
   runAnyway: 'Run anyway',
+  scripts: (count: number) => `All scripts (${String(count)} more)`,
   empty: 'Nothing has run yet.',
 } as const;
 
@@ -96,28 +89,6 @@ export function RunPanel({
             Run {plan.main}
           </Button>
         )}
-        {others.length > 0 && (
-          <MenuTrigger>
-            <MenuButton>Run a script</MenuButton>
-            <Menu
-              aria-label="Scripts"
-              onAction={(key) => {
-                void run.start({ kind: 'script', script: String(key) });
-              }}
-            >
-              {others.map((script) => (
-                <MenuItem
-                  key={script.name}
-                  id={script.name}
-                  description={script.command}
-                  descriptionMono
-                >
-                  {script.name}
-                </MenuItem>
-              ))}
-            </Menu>
-          </MenuTrigger>
-        )}
         <Button kind="ghost" onClick={() => void run.start({ kind: 'install' })}>
           {RUN_TEXT.install}
         </Button>
@@ -144,6 +115,27 @@ export function RunPanel({
       )}
       {!plan.installed && <p className={styles.note}>{RUN_TEXT.notInstalled}</p>}
       {plan.compose !== null && !state.docker && <p className={styles.note}>{RUN_TEXT.noDocker}</p>}
+      {others.length > 0 && (
+        <details className={styles.more}>
+          <summary>{RUN_TEXT.scripts(others.length)}</summary>
+          <ul className={styles.scripts} aria-label="Scripts">
+            {others.map((script) => (
+              <li key={script.name} className={styles.script}>
+                <Button
+                  size="sm"
+                  kind="ghost"
+                  aria-label={`Run ${script.name}`}
+                  onClick={() => void run.start({ kind: 'script', script: script.name })}
+                >
+                  Run
+                </Button>
+                <span className={styles.name}>{script.name}</span>
+                <code className={styles.where}>{script.command}</code>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <EnvPrompt
         run={run}
         state={state}

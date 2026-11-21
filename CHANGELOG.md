@@ -12,7 +12,7 @@ Press **Run** and the project starts on your computer: Flowcanvas installs its d
 
 1. Open a project (`flowcanvas ~/code/my-app`) and press **Run** in the top bar. If its example .env says a variable is required, the Run tab asks for it first: **Create .env from .env.example**, fill it in or **Generate** a secret, **Save**. The value goes into the project's own .env and is never shown again.
 2. Press **Run** again: **Install dependencies** runs with the project's package manager (pnpm, npm, yarn or bun), then its `dev` script. Its card shows its output, `localhost:<port>` once it listens, and **Stop**. Answer a prompt (sudo, "use another port?") by typing in the card.
-3. **Start services** runs the project's development compose file in Docker; **Stop services** stops it. **Run a script** runs any other script; the **Terminal** tab is your shell in the folder.
+3. **Start services** runs the project's development compose file in Docker; **Stop services** stops it. **All scripts** lists the others, each with its command and its own Run; the **Terminal** tab is your shell in the folder.
 
 ### Added
 
@@ -31,9 +31,9 @@ Press **Run** and the project starts on your computer: Flowcanvas installs its d
 
 ### Known gaps
 
-- **Rallly needs its own proxy first:** at its pin, its `dev` runs behind portless, a local HTTPS proxy started once with sudo; until `proxy:start` has run (from **Run a script**, answering sudo in its card), `dev` fails with portless's own instructions in its card.
+- **Rallly needs its own proxy first:** at its pin, its `dev` runs behind portless, a local HTTPS proxy started once with sudo; until `proxy:start` has run (from **All scripts**, answering sudo in its card), `dev` fails with portless's own instructions in its card.
 - Tools that start daemons of their own (turbo's) keep them after Stop, as they would after closing a terminal.
-- Documenso's pages need its database migrated (`prisma:migrate-dev`, from **Run a script**) before they work; its dev server starts and answers without it.
+- Documenso's pages need its database migrated (`prisma:migrate-dev`, from **All scripts**) before they work; its dev server starts and answers without it.
 
 ## [0.15.0] — 2026-11-21 — Phases 1 and 2 (build plan v2): the Linux desktop app
 

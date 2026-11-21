@@ -375,3 +375,20 @@ describe('run api', () => {
     expect(randomSecret()).toMatch(/^[0-9a-f]{64}$/);
   });
 });
+
+describe('RunPanel scripts', () => {
+  it('lists the other scripts with their commands, each with its own Run', async () => {
+    const api = server(plan());
+    const { result } = renderHook(() => useRun('p-1', true, api.fetcher, api.open));
+    await waitFor(() => {
+      expect(result.current.state).toBeDefined();
+    });
+    render(<RunPanel run={result.current} onRun={() => undefined} />);
+    await userEvent.click(screen.getByText(RUN_TEXT.scripts(1)));
+    expect(screen.getByText('next build')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Run build' }));
+    await waitFor(() => {
+      expect(starts(api.calls)).toEqual([{ kind: 'script', script: 'build' }]);
+    });
+  });
+});
