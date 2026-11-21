@@ -4,6 +4,8 @@ import { join, resolve } from 'node:path';
 import electron from 'electron';
 import { Folders } from './folders.js';
 import { Projects } from './projects.js';
+import { listedFiles, RunService } from './run/service.js';
+import { nodePty } from './run/terminal.js';
 import { startDesktopServer, type DesktopServer } from './server.js';
 import { smokeTest } from './smoke.js';
 
@@ -38,6 +40,7 @@ function folderArgument(argv: readonly string[]): string | undefined {
 
 let server: DesktopServer | undefined;
 let folders: Folders | undefined;
+let run: RunService | undefined;
 
 async function main(): Promise<void> {
   // One window per machine: opening Flowcanvas again (or `flowcanvas <folder>`) focuses it instead.
@@ -55,7 +58,20 @@ async function main(): Promise<void> {
       return projects.dataFolder(project?.id ?? 'unlisted');
     },
   });
-  server = await startDesktopServer({ projects, folders, webRoot: paths.webRoot });
+  const local = folders;
+  run = new RunService({
+    files: async (root) => {
+      const answer = await local.agent(root, { op: 'files' });
+      return answer.ok ? listedFiles(answer.result) : [];
+    },
+  });
+  server = await startDesktopServer({
+    projects,
+    folders,
+    run,
+    openPty: nodePty,
+    webRoot: paths.webRoot,
+  });
 
   if (process.argv.includes('--smoke-test')) {
     const folder = folderArgument(process.argv);
@@ -123,9 +139,18 @@ function createWindow(local: DesktopServer, preload: string, path: string): Brow
 app.on('window-all-closed', () => {
   app.quit();
 });
-app.on('will-quit', () => {
-  folders?.close();
-  void server?.close();
+let quitting = false;
+app.on('will-quit', (event) => {
+  // The project's processes are stopped first (everything they started too): nothing keeps running that the person
+  // didn't start, once the app is closed.
+  if (quitting) return;
+  quitting = true;
+  event.preventDefault();
+  void (run?.stopAll() ?? Promise.resolve()).finally(() => {
+    folders?.close();
+    void server?.close();
+    app.exit(0);
+  });
 });
 
 void main();

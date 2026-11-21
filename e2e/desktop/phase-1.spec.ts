@@ -2,35 +2,13 @@
 // - phase 1 · Done when: the app opens Rallly and shows its files and search;
 // - phase 2 · Done when: an edit in the app is on disk at once; an edit from elsewhere shows in the app within 1 s.
 // Open folder goes through the real IPC and folder picker, with the system dialog's answer stubbed in Electron.
-import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import {
-  _electron as electron,
-  expect,
-  test,
-  type ElectronApplication,
-  type Page,
-} from '@playwright/test';
+import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 import { accessibilityProblems } from '../accessibility.js';
+import { cloneFork, launchApp } from './support.js';
 
-const appDir = fileURLToPath(new URL('../../apps/desktop/', import.meta.url));
-const electronPath = createRequire(join(appDir, 'package.json'))('electron') as string;
-const manifest = JSON.parse(
-  readFileSync(new URL('../../corpus/manifest.json', import.meta.url), 'utf8'),
-) as { repos: { id: string; commit: string }[] };
-const rallly = manifest.repos.find((repo) => repo.id === 'rallly');
-// Where `pnpm corpus:fetch` keeps the forks (corpus/src/cache.ts): the same rules.
-const cache =
-  process.env.FLOWCANVAS_CORPUS_CACHE ??
-  join(
-    process.env.XDG_CACHE_HOME ?? join(process.env.HOME ?? '', '.cache'),
-    'flowcanvas',
-    'corpus',
-  );
 const FILE = 'apps/web/src/features/poll/mutations.ts';
 
 let base: string;
@@ -38,18 +16,8 @@ let folder: string;
 let app: ElectronApplication;
 
 test.beforeAll(() => {
-  if (rallly === undefined) throw new Error('No Rallly in corpus/manifest.json');
   base = mkdtempSync(join(tmpdir(), 'fc-desktop-e2e-'));
-  folder = join(base, 'rallly');
-  // A copy of the pinned fork, so edits never touch the cached clone.
-  execFileSync('git', [
-    'clone',
-    '--quiet',
-    '--shared',
-    join(cache, `rallly@${rallly.commit.slice(0, 12)}`),
-    folder,
-  ]);
-  execFileSync('git', ['-C', folder, 'checkout', '--quiet', rallly.commit]);
+  folder = cloneFork('rallly', base);
 });
 test.afterAll(async () => {
   await app.close();
@@ -57,22 +25,9 @@ test.afterAll(async () => {
 });
 
 async function launch(args: readonly string[]): Promise<Page> {
-  // Electron must start as Electron, whatever started the test (VS Code sets ELECTRON_RUN_AS_NODE), with its own
-  // data folder so the person's recent projects are never touched.
-  const env = Object.fromEntries(
-    Object.entries(process.env).filter(
-      (entry): entry is [string, string] =>
-        entry[1] !== undefined && entry[0] !== 'ELECTRON_RUN_AS_NODE',
-    ),
-  );
-  app = await electron.launch({
-    executablePath: process.env.FLOWCANVAS_DESKTOP_EXECUTABLE ?? electronPath,
-    args: process.env.FLOWCANVAS_DESKTOP_EXECUTABLE === undefined ? [appDir, ...args] : [...args],
-    env: { ...env, XDG_CONFIG_HOME: join(base, 'config') },
-  });
-  const page = await app.firstWindow();
-  await page.setViewportSize({ width: 1440, height: 900 });
-  return page;
+  const launched = await launchApp(base, args);
+  app = launched.app;
+  return launched.page;
 }
 
 test('phases 1 and 2 · Try it: open Rallly from the start screen, search, edit, see an outside edit', async () => {

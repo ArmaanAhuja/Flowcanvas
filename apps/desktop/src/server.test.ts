@@ -10,6 +10,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { Folders } from './folders.js';
 import { Projects } from './projects.js';
+import { listedFiles, RunService, type RunState } from './run/service.js';
+import type { Pty } from './run/terminal.js';
 import { MESSAGES, SESSION_COOKIE, startDesktopServer, type DesktopServer } from './server.js';
 
 const SECRET = 'test-secret-0123456789';
@@ -20,6 +22,12 @@ let server: DesktopServer;
 let projects: Projects;
 let engineAnswer: (request: EngineRequest) => Promise<EngineResponse>;
 let projectId: string;
+let run: RunService;
+/** What the fake shell was sent, and a way to make it print. */
+let typed: string[];
+let resized: [number, number][];
+let print: (text: string) => void;
+let exitShell: (code: number) => void;
 
 const cookie = `${SESSION_COOKIE}=${SECRET}`;
 const get = (path: string, headers: Record<string, string> = { cookie }) =>
@@ -52,10 +60,38 @@ beforeEach(async () => {
     dataFolder: (ref) =>
       projects.dataFolder(projects.list().find((p) => p.path === ref)?.id ?? 'x'),
   });
+  run = new RunService({
+    files: async (ref) => {
+      const answer = await folders.agent(ref, { op: 'files' });
+      return answer.ok ? listedFiles(answer.result) : [];
+    },
+    onPath: () => false,
+  });
+  typed = [];
+  resized = [];
+  print = () => undefined;
+  exitShell = () => undefined;
+  const fakePty = (): Pty => ({
+    onData: (listener) => {
+      print = listener;
+      return { dispose: () => undefined };
+    },
+    onExit: (listener) => {
+      exitShell = (exitCode) => {
+        listener({ exitCode });
+      };
+      return { dispose: () => undefined };
+    },
+    write: (data) => typed.push(data.toString()),
+    resize: (cols, rows) => resized.push([cols, rows]),
+    kill: () => undefined,
+  });
   server = await startDesktopServer({
     projects,
     webRoot: web,
     secret: SECRET,
+    run,
+    openPty: fakePty,
     folders: {
       agent: (ref, request) => folders.agent(ref, request),
       index: (_ref, request) => engineAnswer(request),
@@ -64,6 +100,7 @@ beforeEach(async () => {
   });
 });
 afterEach(async () => {
+  await run.stopAll();
   await server.close();
   rmSync(base, { recursive: true, force: true });
 });
@@ -232,5 +269,125 @@ describe('the API the web app calls, from the folder', () => {
       })
       .toBe(true);
     socket.close();
+  });
+});
+
+const socketUrl = (rest: string) => `${server.origin.replace('http', 'ws')}${workspace(rest)}`;
+const opened = (socket: WebSocket) =>
+  new Promise<void>((resolve, reject) => {
+    socket.on('open', () => {
+      resolve();
+    });
+    socket.on('error', reject);
+  });
+
+describe('running the project', () => {
+  beforeEach(() => {
+    writeFileSync(
+      join(folder, 'package.json'),
+      JSON.stringify({ scripts: { dev: 'echo ready on http://localhost:4555' } }),
+    );
+    writeFileSync(join(folder, 'package-lock.json'), '{}');
+    writeFileSync(join(folder, '.env.example'), 'SECRET=\nAPI_KEY=\n');
+  });
+
+  it('says how the project runs and which variables are missing, never their values', async () => {
+    const state = (await (await get(workspace('/run'))).json()) as RunState;
+    expect(state).toMatchObject({
+      docker: false,
+      plan: { packageManager: 'npm', main: 'dev', installed: false, compose: null },
+      processes: [],
+    });
+    // SECRET is set in the folder's .env; only API_KEY is missing.
+    expect(state.plan.missing).toEqual([
+      { name: 'API_KEY', listedIn: '.env.example', file: '.env', required: null },
+    ]);
+    expect(JSON.stringify(state)).not.toContain('SECRET=1');
+  });
+
+  it('starts a script from the page, and streams its card and output to our own page only', async () => {
+    const refused = new WebSocket(socketUrl('/run/events'), {
+      headers: { cookie, origin: 'http://evil.example' },
+    });
+    await expect(opened(refused)).rejects.toThrow();
+    const socket = new WebSocket(socketUrl('/run/events'), {
+      headers: { cookie, origin: server.origin },
+    });
+    const events: { type: string; process?: { state: string; ports: number[] }; text?: string }[] =
+      [];
+    socket.on('message', (data: Buffer) =>
+      events.push(JSON.parse(data.toString()) as (typeof events)[number]),
+    );
+    await opened(socket);
+
+    expect(
+      (await send('POST', workspace('/run/start'), { kind: 'script', script: 'nope' })).status,
+    ).toBe(409);
+    const started = await send('POST', workspace('/run/start'), { kind: 'script', script: 'dev' });
+    expect(started.status).toBe(200);
+    const { process } = (await started.json()) as { process: { id: string; command: string } };
+    expect(process.command).toBe('npm run dev');
+    await expect
+      .poll(() => events.some((e) => e.type === 'process' && e.process?.state === 'finished'), {
+        timeout: 10_000,
+      })
+      .toBe(true);
+    expect(events.some((e) => e.text?.includes('ready on') === true)).toBe(true);
+    const { log } = (await (await get(workspace(`/run/processes/${process.id}/log`))).json()) as {
+      log: string;
+    };
+    expect(log).toContain('ready on');
+    expect((await send('POST', workspace('/run/start'), { kind: 'services' })).status).toBe(409);
+    socket.close();
+  }, 20_000);
+
+  it('writes a missing variable into the .env beside the example, and nowhere else', async () => {
+    const outside = await send('PUT', workspace('/run/env'), {
+      file: '../x/.env',
+      name: 'API_KEY',
+      value: 'v',
+    });
+    expect(outside.status).toBe(409);
+    const set = await send('PUT', workspace('/run/env'), {
+      file: '.env',
+      name: 'API_KEY',
+      value: 'key-value-1',
+    });
+    expect(set.status).toBe(200);
+    expect(((await set.json()) as RunState).plan.missing).toEqual([]);
+    expect(readFileSync(join(folder, '.env'), 'utf8')).toBe('SECRET=1\nAPI_KEY=key-value-1\n');
+    // It's there already, so it isn't started again from the example.
+    expect((await send('POST', workspace('/run/env-file'), { file: '.env' })).status).toBe(409);
+  });
+
+  it('opens a terminal in the folder over a WebSocket: bytes both ways, resizes, and the exit code', async () => {
+    const noSize = new WebSocket(socketUrl('/terminal'), {
+      headers: { cookie, origin: server.origin },
+    });
+    await expect(opened(noSize)).rejects.toThrow();
+    const socket = new WebSocket(socketUrl('/terminal?cols=80&rows=24'), {
+      headers: { cookie, origin: server.origin },
+    });
+    const frames: (string | Buffer)[] = [];
+    socket.on('message', (data: Buffer, binary: boolean) =>
+      frames.push(binary ? data : data.toString()),
+    );
+    await opened(socket);
+    socket.send(Buffer.from('ls\r'), { binary: true });
+    socket.send(JSON.stringify({ type: 'resize', cols: 120, rows: 40 }));
+    await expect.poll(() => typed).toEqual(['ls\r']);
+    await expect.poll(() => resized).toEqual([[120, 40]]);
+    print('file.txt\r\n');
+    await expect
+      .poll(() => frames.some((f) => Buffer.isBuffer(f) && f.toString() === 'file.txt\r\n'))
+      .toBe(true);
+    const closed = new Promise<void>((resolve) =>
+      socket.on('close', () => {
+        resolve();
+      }),
+    );
+    exitShell(0);
+    await closed;
+    expect(frames).toContain(JSON.stringify({ type: 'exit', code: 0 }));
   });
 });

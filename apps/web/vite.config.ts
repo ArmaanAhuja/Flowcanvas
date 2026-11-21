@@ -91,6 +91,13 @@ export default defineConfig({
               priority: 2,
             },
             {
+              // xterm.js and our terminal helpers (phase 3 of build plan v2: the terminal and the process cards share
+              // them): one chunk, loaded with the first terminal or card output.
+              name: 'xterm',
+              test: /node_modules[\\/]@xterm[\\/]|src[\\/]terminal[\\/](theme|adopt-styles)\.ts$/,
+              priority: 1,
+            },
+            {
               // The editor's core (CodeMirror itself): one chunk, loaded only with the Code view.
               name: 'codemirror',
               test: /node_modules[\\/](@codemirror|@lezer|style-mod|w3c-keyname|crelt|@marijn)[\\/]/,
