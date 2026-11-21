@@ -56,9 +56,9 @@ jobs:
           engine="$shared|^(packages/(engine|connectors|graph-model)/|workspace/|corpus/)"
           echo "web=$(echo "$files" | grep -Eq "$web" && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "engine=$(echo "$files" | grep -Eq "$engine" && echo true || echo false)" >> "$GITHUB_OUTPUT"
-          # Running projects (build plan v2, phase 3): the long walkthrough that installs and starts two forks.
-          run="$shared|^(apps/desktop/|apps/web/src/(run|terminal)/|e2e/desktop/)"
-          echo "run=$(echo "$files" | grep -Eq "$run" && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          # Running projects (build plan v2, phase 3): the long walkthrough that installs and starts two forks runs on
+          # main only (owner, 22 Nov 2026: "only main"), never on a pull request.
+          echo run=false >> "$GITHUB_OUTPUT"
 
   checks:
     name: Lint, typecheck, unit tests, build
@@ -150,7 +150,7 @@ jobs:
 
   desktop:
     # Not a required check. The desktop app (build plan v2): the walkthroughs in the real Electron app (phases 1–2 on
-    # Rallly; phase 3, when running projects changed, installing and starting Rallly and Documenso), then both Linux
+    # Rallly; phase 3, on main only, installing and starting Rallly and Documenso), then both Linux
     # packages built, the .deb installed on this clean Ubuntu and smoke-tested there.
     name: Desktop app (Linux packages)
     needs: changes
@@ -187,7 +187,7 @@ jobs:
           echo "FLOWCANVAS_E2E_NODE_BIN=$RUNNER_TEMP/node24/bin" >> "$GITHUB_ENV"
       - name: The walkthroughs in the real app
         env:
-          # Phase 3's walkthrough (installing and starting Rallly and Documenso) only when running projects changed.
+          # Phase 3's walkthrough (installing and starting Rallly and Documenso) on main only.
           SPECS: ${{ needs.changes.outputs.run == 'true' && 'desktop' || 'desktop/phase-1' }}
         run: xvfb-run -a pnpm --filter @flowcanvas/e2e test:desktop "$SPECS"
       - name: Package (AppImage and .deb)

@@ -27,7 +27,7 @@ Press **Run** and the project starts on your computer: Flowcanvas installs its d
 - **Processes run on a pty, not pipes:** real dev scripts prompt (Rallly's proxy asks for sudo) and print colour; the card is a small terminal. node-pty is shipped beside the bundle and unpacked from the app's archive; it's an optional dependency, so the jobs and machines that never run the desktop app install without a compiler.
 - **Ports from the system, not only the output:** a dev server's address is found from the sockets its process tree listens on, since tools like turbo redraw a full-screen view on a terminal and never print it as one line.
 - **Required means what the example says:** a variable blocks Run only when its comment says "required"; Documenso's example lists dozens of optional ones.
-- **CI:** a long walkthrough installs and starts Rallly and Documenso in the real app, only when running projects changed (Node 24 beside the build's Node for Rallly; Playwright's browser download skipped for both projects' installs); the installed .deb's smoke test now also runs a process on a pty.
+- **CI:** a long walkthrough installs and starts Rallly and Documenso in the real app, on main only (owner: "only main") (Node 24 beside the build's Node for Rallly; Playwright's browser download skipped for both projects' installs); the installed .deb's smoke test now also runs a process on a pty.
 
 ### Known gaps
 
