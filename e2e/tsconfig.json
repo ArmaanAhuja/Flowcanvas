@@ -13,7 +13,8 @@
     "perf",
     "scripts",
     "playwright.config.ts",
-    "playwright.visual.config.ts",
+    "playwright.a11y.config.ts",
+    "accessibility.ts",
     "playwright.perf.config.ts"
   ]
 }

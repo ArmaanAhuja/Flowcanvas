@@ -155,7 +155,7 @@ test('phase 1d: a terminal in the workspace, under the deployed CSP', async ({ p
     await expect(page.locator('.xterm-rows')).toContainText('Rallly workspace');
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });
 
 test('phase 1d: open the demo project in one click, put it to sleep, then resume', async ({
@@ -219,7 +219,7 @@ test('phase 1d: open the demo project in one click, put it to sleep, then resume
     expect(actions).toEqual(['open', 'sleep', 'resume']);
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });
 
 test('phase 1d: where workspaces can’t run (staging), the page says so and offers nothing that can’t work', async ({
@@ -239,7 +239,7 @@ test('phase 1d: where workspaces can’t run (staging), the page says so and off
   await expect(page.getByText('Rallly', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open demo project' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Open', exact: true })).toHaveCount(0);
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });
 
 test('phase 1d · Try it: open Rallly from its GitHub URL, run a command, wait for sleep, then resume', async ({
@@ -319,5 +319,5 @@ test('phase 1d · Try it: open Rallly from its GitHub URL, run a command, wait f
     await expect(page.getByText('Running · 2 cores')).toBeVisible();
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });

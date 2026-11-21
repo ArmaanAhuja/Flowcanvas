@@ -119,5 +119,5 @@ test('phase 10 · Try it: in Documenso, Send document’s database writes and it
     await expect(inspector).toContainText('nodemailer');
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });

@@ -1,5 +1,7 @@
 # Flowcanvas — Changes Since Handoff
 
+> **Frozen on 21 Nov 2026** (owner): no longer kept up to date. What's done, and decisions, are now in brief in [`CHANGELOG.md`](CHANGELOG.md), one entry per milestone.
+
 This document tracks all modifications, tests, scripts, and documentation changes made after the handoff on 15 Nov 2026, starting from commit `775dcdc` on branch `phase/9-connectors`.
 
 ---
@@ -311,3 +313,26 @@ Section 8's work was checked against the build plan before anything was committe
 - **RUN-AND-FEATURES** said 74,692 unit tests: recounted.
 
 Step 12.1 in `docs/build-steps.md` records it all.
+
+
+---
+
+## 10. Verification of Committed Changes & Living Docs Alignment (16 Nov 2026, Antigravity)
+
+### 10.1 Verification of Peer Work (Commits `87ef015`, `b83fa67`, `ff5e72c`, `f49adaa`)
+Verified the rebuild of Phases 12 & 13 in focused, targeted pieces:
+1. **Typecheck (`tsc --noEmit`)**: All 4 touched packages (`@flowcanvas/graph-model`, `@flowcanvas/ui`, `@flowcanvas/web`, and `@flowcanvas/corpus`) passed cleanly with zero type errors.
+2. **Lint & Stylelint (`eslint`, `stylelint`)**: All 4 packages passed with 0 errors and 0 warnings.
+3. **Targeted Unit Tests**:
+   - `packages/graph-model`: 44/44 tests passed (`grouping.test.ts`, `flow.test.ts`, `graph.test.ts`, `build-info.test.ts`).
+   - `packages/ui`: 162/162 tests passed (`GroupNode.test.tsx`, `SequenceView.test.tsx`, etc.).
+   - `apps/web`: 32/32 tests passed across `src/flow` (`layout.test.ts`, `layout.perf.test.ts`, `flow.test.tsx`, `route.test.ts`) and `src/sequence` (`SequenceCanvas.test.tsx`).
+   - `corpus`: 46/46 tests passed (`check.test.ts`, etc.).
+4. **Targeted E2E Walkthroughs**:
+   - `try-it/phase-12.spec.ts` & `try-it/phase-13.spec.ts`: Passed in 9.2s (Twenty's 60-node flow, $\le 8$ groups, open in place, invariant bounding boxes, completeness pill, Sequence view order and inspector link).
+   - `try-it/phase-9.spec.ts` & `try-it/phase-10.spec.ts`: Passed in 11.6s (Documenso and Rallly flows opening their required groups cleanly).
+
+### 10.2 Living Documentation & Milestone Alignment
+- `pnpm docs:update` synced `docs/RUN-AND-FEATURES.md` unit test count from 1,302 to 1,305 (reflecting the 3 tests added to `corpus/src/check.test.ts` in commit `ff5e72c`).
+- Added commit `2093243` to Step 12.0 in `docs/build-steps.md` so that `pnpm docs:milestone` validates all commits between `origin/main..HEAD`.
+- Both `pnpm docs:check` and `pnpm docs:milestone` now pass with: "The living docs agree with the code."

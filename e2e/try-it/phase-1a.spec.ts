@@ -37,5 +37,5 @@ test('phase 1a: switch theme and open the component catalogue', async ({ page })
     );
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });

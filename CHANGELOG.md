@@ -18,6 +18,13 @@ A large flow now opens as a few groups named from the code (its folders, its tab
 - **Progressive disclosure (phase 12):** a flow of 25 nodes or more opens grouped, at most 8 groups and nodes besides its root: functions by their folder, as deep as fits; tables, outside services and hand-offs each a group; a decision in its function's group; a group of one shown as its node. A group opens in place, its members drawn in its frame over the canvas; nothing else moves, on the canvas or the screen. Open ends are counted per group. The completeness pill, pressed, makes weak edges stand out.
 - **Sequence view (phase 13):** the Graph / Sequence switch; the flow as a waterfall (Figma 08): depth first in the code's call order, nested, a parent's bar covering its calls', branches and failure paths (a catch's) said in words, open ends as rows, each hand-off's work in its own Background group; selecting a row selects its node.
 
+### Decisions
+
+- **Groups named from the code** (owner, 16 Nov: "go ahead for all 4"): folders and kinds, never an inferred category; an open group drawn over the canvas so nothing else moves (design brief: "pushes nothing else around").
+- **A faster process** (owner, 21 Nov): no screenshots and no Figma matching (axe accessibility checks kept, on the catalogue and in every walkthrough); one brief CHANGELOG entry per milestone, the other docs frozen; tests in small steps with one combined test of the changes at each milestone; CI runs the walkthroughs only when the web app changes and the Docker corpus only when the engine does.
+- **The project page's budget 115 → 120 kB** for a large flow's grouping, needed whenever a flow is shown; the sequence view loads on its own.
+- **Medusa's corpus check** finds its pin among `develop`'s commits when GitHub can't build the comparison ("this diff is taking too long to generate").
+
 ## [0.13.0] — 2026-11-15 — Phases 9 to 11: connectors
 
 Flows now cross from a form into the API that serves it, show each read and write with its table, each email, payment, storage or AI call as an outside service, and work handed to a queue or job in a Background lane below the main flow (phases 9 to 11). Workspaces still run on your own computer (`pnpm dev`).

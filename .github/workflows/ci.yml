@@ -1,11 +1,12 @@
 name: CI
 
-# On every pull request and every push to main: checks, visual tests, walkthroughs against the deployed
-# preview (or staging), then one published report with videos, linked from the PR (phase 1b).
+# A trimmed safety net (owner, 21 Nov 2026): on every pull request push, lint, typecheck, unit tests and the build;
+# the walkthroughs, the catalogue's accessibility check and canvas performance only when the web app or its packages
+# changed; the Docker corpus only when the engine, connectors or workspace changed. Everything on a push to main.
+# Then one published report with videos, linked from the PR (phase 1b). Skipped jobs count as passed checks.
 
 on:
   pull_request:
-    # ready_for_review too: marking a phase's pull request ready runs the milestone gate (docs:check --milestone).
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
@@ -24,6 +25,36 @@ env:
   COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
+  changes:
+    name: What changed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      web: ${{ steps.diff.outputs.web }}
+      engine: ${{ steps.diff.outputs.engine }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.COMMIT }}
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
+            echo web=true >> "$GITHUB_OUTPUT"
+            echo engine=true >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files="$(git diff --name-only "$BASE...$COMMIT")"
+          echo "$files"
+          # Shared files (dependencies, CI itself) count for both.
+          shared='^(pnpm-lock\.yaml|pnpm-workspace\.yaml|package\.json|turbo\.json|\.github/)'
+          web="$shared|^(apps/|packages/(ui|tokens|graph-model)/|packages/engine/src/protocol|services/|e2e/)"
+          engine="$shared|^(packages/(engine|connectors|graph-model)/|workspace/|corpus/)"
+          echo "web=$(echo "$files" | grep -Eq "$web" && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "engine=$(echo "$files" | grep -Eq "$engine" && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
   checks:
     name: Lint, typecheck, unit tests, build
     runs-on: ubuntu-24.04
@@ -58,26 +89,14 @@ jobs:
       - run: pnpm corpus:check
         env:
           GITHUB_TOKEN: ${{ github.token }}
-      # The living docs held to the code: release, progress, counts, phases still to come, paths, packages (phase 7).
-      # A pull request ready for review (a phase closing) also passes the milestone gate: every living doc re-read at
-      # this milestone, every step written up in full, every commit named in build-steps (owner, 13 Nov 2026).
-      - name: Docs held to the code (and the milestone gate, once ready for review)
-        env:
-          READY: ${{ github.event_name == 'pull_request' && !github.event.pull_request.draft }}
-        run: |
-          if [ "$READY" = true ]; then
-            # The checkout is one commit deep: the gate needs the branch's history back to main.
-            git fetch --quiet --unshallow origin +refs/heads/main:refs/remotes/origin/main
-            pnpm docs:milestone
-          else
-            pnpm docs:check
-          fi
 
   docker:
     # Not a required check. Split into parallel shards (owner, 13 Nov 2026): the corpus test was 8½ of the job's 9
     # minutes, most of it the three largest projects. Each large project gets its own runner; the `rest` shard runs
     # every other Docker test and every other project (CORPUS_EXCEPT), so a project added later is still tested.
     name: Workspaces against real Docker (${{ matrix.shard }})
+    needs: changes
+    if: ${{ needs.changes.outputs.engine == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
@@ -126,6 +145,8 @@ jobs:
 
   perf:
     name: Canvas performance (headless, regressions only)
+    needs: changes
+    if: ${{ needs.changes.outputs.web == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     # The same browser image as the visual job. Headless means software rendering, so this job only catches large
@@ -155,17 +176,17 @@ jobs:
 
   visual:
     # This name is a required check in main's ruleset: renaming it blocks every merge until the ruleset changes
-    # too. It covers the screens as well since phase 2.
+    # too. Since 21 Nov 2026 (owner) it has no screenshots: the catalogue's accessibility check (axe), then its deploy.
     name: Visual and accessibility (catalogue)
+    needs: changes
+    if: ${{ needs.changes.outputs.web == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    # Same image as `pnpm test:visual` on every machine, so the approved screenshots match (ADR 0012).
-    # Keep the tag equal to @playwright/test in pnpm-workspace.yaml (checked below).
+    # Playwright's image for its browsers; keep the tag equal to @playwright/test in pnpm-workspace.yaml (checked below).
     container:
       image: mcr.microsoft.com/playwright:v1.64.1-noble
       options: --ipc=host --init
     env:
-      FLOWCANVAS_IN_PLAYWRIGHT_IMAGE: 1
       # Whether CI can deploy the catalogue (a fork's pull request has no secrets); the token stays in its step.
       CAN_DEPLOY: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
     steps:
@@ -183,7 +204,7 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test:visual
+      - run: pnpm test:a11y
       # The catalogue just built and checked: as the branch's preview, or staging from main (owner, 13 Nov 2026; it
       # was Cloudflare's own build). Only once its checks pass.
       - name: Deploy the catalogue (preview, or staging from main)
@@ -201,14 +222,16 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
-          name: report-visual
+          name: report-a11y
           path: |
-            e2e/playwright-report-visual/
-            e2e/reports-data/visual.json
+            e2e/playwright-report-a11y/
+            e2e/reports-data/a11y.json
           retention-days: 14
 
   walkthroughs:
     name: Walkthroughs (try-it) on the deployed app
+    needs: changes
+    if: ${{ needs.changes.outputs.web == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
@@ -280,8 +303,8 @@ jobs:
   publish:
     name: Publish report and comment
     needs: [visual, walkthroughs]
-    # Also after failures, so a failing run still gets a report; never for cancelled runs.
-    if: ${{ !cancelled() }}
+    # Also after failures, so a failing run still gets a report; never for cancelled runs, nor when neither ran.
+    if: ${{ !cancelled() && (needs.visual.result != 'skipped' || needs.walkthroughs.result != 'skipped') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

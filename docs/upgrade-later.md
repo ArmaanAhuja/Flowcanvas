@@ -1,5 +1,7 @@
 # Upgrade later
 
+> **Frozen on 21 Nov 2026** (owner): no longer kept up to date. What's done, and decisions, are now in brief in [`CHANGELOG.md`](../CHANGELOG.md), one entry per milestone.
+
 **What belongs here: the gaps we left in what's built.** Shortcuts we took (a free plan, a version pin, a local stand-in, skipped hardening) and limits of what we built, each with what we do now, what to do later, and what should trigger the change. Review it at the end of every phase, and before anyone else joins the project.
 
 **What doesn't belong here:**

@@ -179,5 +179,5 @@ test('phase 8 · Try it: the left panel lists screens, routes, jobs and events; 
     ).toBeVisible();
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });

@@ -266,5 +266,5 @@ test('phase 5: right-click a function → Callers', async ({ page }) => {
     await expect(page.getByRole('button', { name: `${V1_ROUTE}:683` })).toBeVisible();
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });

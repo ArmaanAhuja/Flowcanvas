@@ -1,5 +1,7 @@
 # Flowcanvas: run it, test it, and what's built
 
+> **Frozen on 21 Nov 2026** (owner): no longer kept up to date. What's done, and decisions, are now in brief in [`CHANGELOG.md`](../CHANGELOG.md), one entry per milestone.
+
 The one place to see how to run Flowcanvas, how to test it, and which features exist so far. It's updated at every build step. Details for each step live in `docs/build-steps.md`; phase status in `docs/STATUS.md`; how it's put together in `ARCHITECTURE.md`.
 
 - **Last updated:** 16 Nov 2026: phases 12 and 13 closed for review, 0.14.0 (large flows in groups named from the code, opened in place; the sequence view), branch `phase/12-progressive-disclosure`
@@ -46,7 +48,7 @@ If the host can't start, its log line says why: the token, Docker, or another `p
 
 | Command | What it checks | Time |
 | --- | --- | --- |
-| `pnpm test` | <!-- count:unit -->1,302<!-- /count --> unit and component tests, with no Docker or network | about 30 s |
+| `pnpm test` | <!-- count:unit -->1,305<!-- /count --> unit and component tests, with no Docker or network | about 30 s |
 | `pnpm lint`, `pnpm typecheck`, `pnpm format:check` | Lint (with the design-token rules), strict TypeScript, formatting | — |
 | `pnpm test:docker` | <!-- count:docker -->49<!-- /count --> tests against real containers: isolation, the network allowlist, clone time, sleep and resume, the guard, no secret kept anywhere; (phase 3) the file list, a save refused after a terminal edit, the journal surviving a restart, a terminal edit reaching the page's events socket in about 160 ms; (phase 4) Rallly indexed in a real workspace with an edit searchable in about 300 ms, and the corpus: all six forks at their pins indexed in real workspaces, Rallly and Documenso held to under 30 s and 100 ms, 21 hand-labelled symbols checked; (phase 5) 20 labelled functions' callers and callees; (phase 6) four forks' graphs, saved and loaded under 1 s; (phase 7) each labelled function's flow and details, at its own node, each answered in under 1 s, 10 hand-labelled Documenso flows drawn exactly as labelled, and callers and callees again from the store, held to the same labels; (phase 8) each fork's entry points against 2,118 hand labels, held to the owner's bar. Needs Docker 28+ and the internet. On CI as four parallel jobs (Twenty, Medusa, LibreChat, the rest); `CORPUS_ONLY=documenso` runs one project | about 4 min (CI, in parallel) |
 | `pnpm test:e2e` | <!-- count:walkthroughs -->28<!-- /count --> recorded walkthroughs of each phase's *Try it*, under the production security policy (1 needs a real API: CI, or a running `pnpm dev`) | about 40 s |

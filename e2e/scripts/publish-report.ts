@@ -1,6 +1,6 @@
 /**
  * Publishes the latest test reports as one small site on the `flowcanvas-reports` Worker (ADR 0011):
- * an index page, the walkthroughs report (videos and traces) and, when present, the visual report.
+ * an index page, the walkthroughs report (videos and traces) and, when present, the accessibility report.
  *
  *   node scripts/publish-report.ts --alias pr-12          a new version, also reachable as pr-12-flowcanvas-reports…
  *   node scripts/publish-report.ts --alias main --production   also make it the Worker's main address
@@ -166,10 +166,10 @@ function main(): void {
       data: 'reports-data/walkthroughs.json',
     },
     {
-      name: 'Visual and accessibility',
-      folder: 'visual',
-      report: 'playwright-report-visual',
-      data: 'reports-data/visual.json',
+      name: 'Accessibility (catalogue)',
+      folder: 'a11y',
+      report: 'playwright-report-a11y',
+      data: 'reports-data/a11y.json',
     },
   ];
   const site = path('report-site/');

@@ -195,5 +195,5 @@ test('phase 4: press ⌘K and jump to any function in Rallly', async ({ page }) 
   });
 
   expect(searches).toContain('createPoll');
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });

@@ -103,7 +103,7 @@ test('phase 3: open a file in the Code view, edit it, save it, and see a conflic
     ).toBeVisible();
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });
 
 test('phase 3 · Try it: edit a file, close the tab, reopen it: the change is still there', async ({
@@ -142,7 +142,7 @@ test('phase 3 · Try it: edit a file, close the tab, reopen it: the change is st
   });
 
   await test.step('Close the tab at once, before autosave: the changes go out as it closes', async () => {
-    expect(watch.problems()).toEqual([]);
+    expect(await watch.problems()).toEqual([]);
     await page.close({ runBeforeUnload: true });
     expect(workspace.files.get(greeting)).toBe('export const greeting = "Hello";\n');
   });
@@ -188,7 +188,7 @@ test('phase 3 · Try it: edit a file, close the tab, reopen it: the change is st
       await expect(reopened.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
       await expect.poll(() => workspace.journal.has(greeting)).toBe(false);
     });
-    expect(reopenedWatch.problems()).toEqual([]);
+    expect(await reopenedWatch.problems()).toEqual([]);
     await reopened.close();
   });
 
@@ -272,5 +272,5 @@ test('phase 3: an edit made in the terminal appears in the editor; quick-open; a
     await expect(page.getByRole('button', { name: 'greeting.ts', exact: true })).toHaveCount(0);
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });

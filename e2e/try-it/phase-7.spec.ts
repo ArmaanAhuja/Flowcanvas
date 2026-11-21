@@ -165,5 +165,5 @@ test('phase 7 · Try it: open a Documenso function’s flow, click its nodes, re
     await expect(decision.getByRole('list', { name: 'Outcomes' })).toContainText('AppError');
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });

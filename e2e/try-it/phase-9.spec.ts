@@ -88,5 +88,5 @@ test('phase 9 · Try it: in Rallly, the Create poll submit’s flow continues in
     await expect(canvas.getByText('tRPC', { exact: true }).first()).toBeAttached();
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });

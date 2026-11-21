@@ -18,5 +18,5 @@ test('phase 1: the app loads and shows its version', async ({ page }) => {
     await expect(page.getByText(buildLine)).toBeVisible();
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });

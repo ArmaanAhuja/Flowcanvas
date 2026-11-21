@@ -149,5 +149,5 @@ test('phase 12 · Try it: Twenty’s largest flow in 8 or fewer groups; opening 
     await expect(canvas.locator('.react-flow__node-stub').first()).toBeVisible();
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });

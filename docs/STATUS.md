@@ -1,5 +1,7 @@
 # Status
 
+> **Frozen on 21 Nov 2026** (owner): no longer kept up to date. What's done, and decisions, are now in brief in [`CHANGELOG.md`](../CHANGELOG.md), one entry per milestone.
+
 One row per phase of the build plan (`docs/reference/build-plan.md`). Status: planned / in progress / in review / accepted.
 
 **Current milestone:** phases 12 and 13, close

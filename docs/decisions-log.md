@@ -1,5 +1,7 @@
 # Decisions log
 
+> **Frozen on 21 Nov 2026** (owner): no longer kept up to date. Decisions are now in brief in [`CHANGELOG.md`](../CHANGELOG.md), one entry per milestone.
+
 Answers to open questions raised during the project, with dates. Check here before asking a question that may already be settled. Engineering decisions with options and consequences go in `docs/adr/`; this log records product and project decisions made by the project owner.
 
 ## 26 Oct 2026: answers to the kick-off questions
@@ -726,3 +728,15 @@ Claude checked the uncommitted work on phases 12 and 13 against the plan: groups
 2. **The pinned layout rebuilt:** edges drawn to where the nodes are; members given room without overlapping; every other node checked, on Twenty's largest flow (the plan's *Try it*).
 3. **The sequence view:** call order from the code's lines, nesting, decisions with their branches, failure paths only from the code's error branches, compared with Figma 08.
 4. **Format, the affected baselines regenerated and each read, the docs, one push.**
+
+## 21 Nov 2026: a faster process; screenshots, Figma matching and the living docs stopped (owner)
+
+**Owner:** "each phase takes a lot longer than i would want it to, the testing and other things need to be perfect while taking less time, matching the screenshot with figma designs is no longer necessary as we have a good base to develop on, so the screenshot thing needs to go and matching should not be done, secondly maintaining the docs take very long so we need to stop maintaining docs and only just update in one location the things we did and that to after milestones and that too in brief, the testing should be done in small steps with one combined test at the end of milestone (combined test meaning the testing the changes and what it affects and not the entire thing unless required)".
+
+On Claude's questions: "Keep, no pictures"; "CHANGELOG.md"; "Freeze in place"; "Trimmed safety net".
+- **No screenshots, no Figma matching.** The screenshot suite and its 212 baselines are deleted; axe (WCAG 2.2 AA) stays: every catalogue story (`pnpm test:a11y`), and the page at the end of every walkthrough.
+- **One brief CHANGELOG.md entry per milestone** (what was done, decisions, how to try it); it feeds the in-app What's new. The other docs are frozen as history; `docs:check` and `docs:milestone` and the tool behind them are removed.
+- **Testing in small steps,** then one combined test at each milestone of the changes and what they affect, not everything unless needed.
+- **CI as a trimmed safety net:** lint, typecheck, unit tests and the build always; walkthroughs, the catalogue's accessibility check and canvas performance only when the web app or its packages change; the Docker corpus only when the engine, connectors or workspace change; everything on main. Pushed once per milestone. The required checks keep their names (a skipped job counts as passed), so main's ruleset needs no change.
+
+This log is frozen after this entry: decisions from now on go in CHANGELOG.md's milestone entries.

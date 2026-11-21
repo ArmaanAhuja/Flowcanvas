@@ -96,7 +96,7 @@ test('phase 2: a project opens in the app shell, laid out like Figma 06', async 
     await expect(page.getByRole('banner')).toContainText('Rallly');
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });
 
 const width = async (page: Page, region: string) =>
@@ -188,7 +188,7 @@ test('phase 2: panels collapse, resize by mouse and keyboard, and keep their lay
     await expect.poll(() => width(page, 'left-panel')).toBe(320);
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });
 
 const viewport = (page: Page) =>
@@ -209,7 +209,7 @@ test('phase 2: the canvas is honest when empty', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Fit (F)' })).toBeDisabled();
   await expect(page.locator('.react-flow__minimap')).toHaveCount(0);
   await expect(page.locator('.react-flow__node')).toHaveCount(0);
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });
 
 test('phase 2 · Try it: pan, zoom and select on the canvas (stress test, 500 example nodes)', async ({
@@ -321,7 +321,7 @@ test('phase 2 · Try it: pan, zoom and select on the canvas (stress test, 500 ex
     expect((await viewport(page)).x).toBeCloseTo(before.x - 100, 0);
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });
 
 test('phase 2: the workspace popover in the top bar, and the dock following the workspace', async ({
@@ -382,5 +382,5 @@ test('phase 2: the workspace popover in the top bar, and the dock following the 
     );
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });

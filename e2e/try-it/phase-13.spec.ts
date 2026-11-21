@@ -127,5 +127,5 @@ test('phase 13 · Try it: timeline sequence view, Graph / Sequence view switch, 
     await expect(canvas).toBeVisible();
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });

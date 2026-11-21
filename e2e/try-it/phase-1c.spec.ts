@@ -38,7 +38,7 @@ test('phase 1c: signed out, sign-in is offered and the API refuses', async ({ pa
     }
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });
 
 const SECRET_VALUE = 'CANARY-walkthrough-value';
@@ -142,5 +142,5 @@ test('phase 1c: create a project and add a secret that is never shown again', as
     expect(api.responses.join('\n')).not.toContain(SECRET_VALUE);
   });
 
-  expect(watch.problems()).toEqual([]);
+  expect(await watch.problems()).toEqual([]);
 });

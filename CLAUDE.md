@@ -22,10 +22,10 @@ All reference material lives in `docs/reference/`. Screenshots of a clickable pr
 | **Research report** (`docs/reference/research-report.md`) | Product vision, users, competitors, architecture, trust model, prompting, model choice, coverage plan, risks | The *why*. Read it fully before phase 1 and re-read the relevant section before each phase |
 | **Design language: Graphite** (`docs/reference/design-language-graphite.md`) | Principles, muted colour palette, typography, spacing, components, accessibility | **The source of truth for how things look and behave visually** |
 | **Design brief** (`docs/reference/design-brief.md`) | Every screen, panel, component and state, with interaction notes | Detailed behaviour of each screen |
-| **Figma file** (`Flowcanvas — Product Design`, https://www.figma.com/design/aV9vPto305pKFPlvWQOBX8) | Variables (tokens), text styles, components (Tag, Button, Flow node), screens 01–31 plus the cloud workspace screens | Visual reference (not compared automatically; owner decision 29 Oct 2026). Each phase names the screens it builds from; the owner reviews the result by eye |
+| **Figma file** (`Flowcanvas — Product Design`, https://www.figma.com/design/aV9vPto305pKFPlvWQOBX8) | Variables (tokens), text styles, components, screens | Background only: screens aren't matched or reviewed against it any more (owner, 21 Nov 2026); the built product is the base |
 | **Figma generator scripts** (`docs/reference/figma-scripts/`: `flowcanvas-screens.js`, `flowcanvas-prompting-screens.js`, `flowcanvas-cloud-screens.js`) | The code that generated the Figma file | Exact token values (`HEX` map), text styles, sizes, copy and layout rules; an exact fallback when Figma is ambiguous or unreachable |
-| **Decisions log** (`docs/decisions-log.md`) | Answers to open questions, with dates | Check it before raising a question that may already be settled |
-| **Upgrade later** (`docs/upgrade-later.md`) | Things deliberately deferred (now / later / trigger) | Add an entry whenever we choose a cheaper or simpler option for now; review it at the end of every phase |
+| **Decisions log** (`docs/decisions-log.md`), frozen 21 Nov 2026 | Answers to open questions up to 21 Nov 2026 | Check it, and CHANGELOG.md's later entries, before raising a question that may already be settled |
+| **CHANGELOG.md** | One brief entry per milestone: what was done, decisions made (quoting the owner), how to try it; feeds the in-app What's new | **The one doc kept up to date** (owner, 21 Nov 2026). The other docs (build-steps, STATUS, RUN-AND-FEATURES, ARCHITECTURE, decisions log, upgrade-later, ADRs, reports) are frozen history |
 
 **Priority when sources disagree:** Build plan (scope, order, acceptance) → **colour tokens in `packages/tokens/source` (Signal palette, owner decision 28 Oct 2026; colour values only)** → Graphite design language (everything visual except colour values: principles, type, spacing, radii, motion, components) → Figma screens → Design brief → Research report. Graphite's colour section and the Figma generator scripts' `HEX` maps match the tokens. If an older value (the muted or the original saturated palette) appears anywhere, including the Figma file until it is regenerated, the tokens win. If the conflict matters, stop and ask.
 
@@ -56,11 +56,11 @@ The user wants to build this themselves. They have built projects before and are
 ### Ground rules
 
 - By default the user writes or types the code, config and tests, and you don't create or edit source, config, test or CI files. **When the user asks you to do a step (or a phase) yourself, comply and do it**, then briefly explain what you did so they still learn from it.
-- **Teach in chat, not in files.** Lessons, primers, step lists and explanations go in your replies. Don't create lesson or learning-log files. Edit project docs (ADRs, STATUS.md, reports, decisions log) only when asked.
+- **Teach in chat, not in files.** Lessons, primers, step lists and explanations go in your replies. Don't create lesson or learning-log files.
 - **Explain first, then the user decides.** Present each step fully in chat and stop. The user says whether they will do it or you will.
-- **Every phase ends runnable and checkable by the user.** Before the steps, state the phase's expected outcome (what the user will see and be able to do). By the end, automated tests that verify the Done-when items must be in place and runnable with one command, and `docs/build-steps.md` must have a "Run and check it" section: exact commands to start it (and the preview or staging URL once deployed), what to click, what they should see, and which test command proves it. A phase isn't complete until that section works on a fresh clone.
-- **Free first.** Build with free tools and free tiers only. When a step needs a paid service, propose a free stand-in, say what's lost, and log the paid option in `docs/upgrade-later.md` with its trigger. Don't block on payment.
-- **Keep `docs/build-steps.md` current.** Every time you explain a step in chat, add the same step (goal, concepts with doc links, files with full contents, commands, verification, gotchas, commit message) to `docs/build-steps.md`, and update its status table when a step is done (commit SHA and who did it). This is the one teaching file that exists.
+- **Every phase ends runnable and checkable by the user.** Before the steps, state the phase's expected outcome (what the user will see and be able to do). By the end, automated tests that verify the Done-when items are in place, and the milestone's CHANGELOG entry says in a few lines how to try it.
+- **Free first.** Build with free tools and free tiers only. When a step needs a paid service, propose a free stand-in, say what's lost, and note the paid option in the milestone's CHANGELOG entry. Don't block on payment.
+- **One brief note per milestone** (owner, 21 Nov 2026): a CHANGELOG.md entry, nothing else. No build-steps, STATUS, ADRs, reports or other docs.
 - Teach one small step at a time (roughly 15–45 minutes of work each). Never dump a whole phase at once. When the user types, stop after each step and wait for "done" (or their code or output). When you do the steps, follow the working pace below: check in at milestones of 2–3 steps.
 - Explain the why, not just the what: what problem this step solves, how it fits the architecture, what the alternatives were and why we chose this one, and what is happening under the hood.
 - Assume general programming, TypeScript/JavaScript basics and Git basics. Don't over-explain basics; do explain anything new (pnpm workspaces, Turborepo, Vite internals, Playwright, CI pipelines, Firecracker sandboxes, ACP, tree-sitter, the TypeScript compiler API, OpenTelemetry, etc.). At the start, ask a short list of calibration questions and adjust to the answers.
@@ -82,25 +82,20 @@ The user wants to build this themselves. They have built projects before and are
 5. **Debugging.** When something breaks, teach debugging: ask for the exact error and context, help form a hypothesis and check it, then fix. Explain the root cause.
 6. **Tests are part of every step.** The user writes them too; teach how to test that kind of code.
 7. **Check understanding occasionally.** Ask the user to predict what a piece of code will do, or explain a decision back. Keep it light and quick.
-8. **End of phase.** Recap what was built and learned; walk through the *Done when* checks and *Try it* steps; write the phase report together and update `docs/STATUS.md`. Summarise the key concepts, commands and gotchas of the phase in chat.
+8. **End of phase.** Recap what was built; walk through the *Done when* checks and *Try it* steps in chat; write the brief CHANGELOG entry.
 
 The quality bar in sections 4, 7 and 8 still applies (tests, strict TypeScript, security rules, provenance, design tokens only). Teaching mode changes who types, not how good the result must be. If the user takes a shortcut that would hurt the project, say so plainly and explain why.
 
-### Working pace (owner decisions, 8, 11 and 15 Nov 2026)
+### Working pace (owner decisions, 8, 11, 15 and 21 Nov 2026)
 
-Faster, with nothing dropped: every test type, document, decision record and Done-when proof stays.
+Fast, and still right: every *Done when* proven by tests, but nothing done that doesn't help build the product.
 
-1. **One report per phase** (owner, 15 Nov 2026; was milestones of 3–4 steps). After "go" on the phase plan, build the whole phase and report once, at the end, when CI is green; then wait for acceptance. Stop mid-phase only for a product question the documents don't settle (point 4) or anything risky (security, money, deleting or overwriting something, outward-facing actions).
-   **Related phases grouped** (owner, 15 Nov 2026): 9–11 (the connectors) in one branch, pull request, plan and acceptance, then 12–13; each phase's *Done when* and *Try it* are still proven by their own named tests and listed in the report. Not adopted (15 Nov 2026): the plan's bar instead of a stricter one with a sampled set of labels (the rigour stays), and parallel subagents.
-2. **Tiered testing.** While working, run the tests for what changed. Before commits are pushed, run the fast suites once on the laptop, as CI's main job runs them: format, lint, typecheck, every package's unit tests, the web build with its bundle budget, and `pnpm docs:check`. The heavy suites (walkthroughs, visual, Docker) run on CI (owner, 11 Nov 2026): each phase has a draft pull request from its first push, so CI checks every push to the branch. A phase is reported only when CI is green on its last commit; a red CI is fixed on the branch before anything else. Run a heavy suite on the laptop only to investigate a failure, one at a time (the laptop's budget), or, before a push, the one heavy suite matching the change, once (visual when screens change, the changed fork's Docker shard when the engine changes; owner, 15 Nov 2026). Push at milestones, 2 to 3 times per phase, not after every fix, and never wait on a CI run mid-phase (owner, 15 Nov 2026). Nothing merges to `main` without every required check green. Never push with a failing fast suite, and never claim a result that wasn't run.
-   Not adopted (owner, 11 Nov 2026): Turborepo's `--affected` filter, shorter docs, and a fixed rerun limit for flaky tests. Every flaky test is investigated until it's explained or recorded with what was checked.
-3. **Docs once per phase, complete** (owner, 15 Nov 2026; was once per milestone, an entry per step). Write one `docs/build-steps.md` entry per phase (or per group of phases) with a fixed template: goal; what a person can do now; files; concepts with links; what was found and fixed; tests (counts, mutation checks); run and check it; risks and laptop; commit. Update STATUS, RUN-AND-FEATURES, ARCHITECTURE, ADRs, the decisions log and upgrade-later before the phase's report. Before reporting, check the entry against the template so nothing is left out. Chat reports are a summary plus whatever needs the owner's decision.
-   **Before each phase report (owner, 13 Nov 2026; per phase since 15 Nov):**
-   - **Living docs** (README, ARCHITECTURE, docs/RUN-AND-FEATURES, docs/STATUS, docs/upgrade-later) describe the project as it is now. Re-read each in full against the code, fix what's no longer true, and set its `**Reviewed:**` line to the current milestone (STATUS's `**Current milestone:**`, now one per phase). In upgrade-later, every item whose trigger has been reached says what happened.
-   - **Records** (build-steps entries, the decisions log, ADRs, phase reports) are true about their own dates and are never rewritten; they're checked for what's missing: every phase written up with the full template, every commit of the phase named in build-steps, every owner decision in the decisions log (quoting the owner), every significant engineering choice in an ADR.
-   - Run `pnpm docs:milestone` (the automatic part of both: it fails on any of the above it can check) and only report once it passes. The report lists, per living doc, what changed or "re-read, no change", and the decisions recorded.
-4. **Questions up front, and whenever something new comes up.** At the phase start, list every product question you can foresee. If something unforeseen comes up mid-phase that the documents and decisions don't already settle, stop and ask: never decide a product question yourself. If the documents do settle it (the source priority in section 2, Graphite's rules, the decisions log), apply it and say so in the report instead of asking.
-5. **Careful edits.** Edit the exact lines read from a file; don't run text-replacement scripts over code that Prettier may have reflowed. Format before editing, and check that every edit applied.
+1. **One report per phase** (owner, 15 Nov 2026). After "go" on the phase plan, build the whole phase and report once, at the end, when CI is green; then wait for acceptance. Stop mid-phase only for a product question the documents don't settle (point 4) or anything risky (security, money, deleting or overwriting something, outward-facing actions). Related phases may be grouped in one branch and acceptance (9–11, 12–13).
+2. **Testing in small steps, one combined test at the milestone** (owner, 21 Nov 2026). While working, run only the tests for what just changed. At the end of each milestone, run one combined test: the changes and what they affect (the changed packages' unit tests, their walkthroughs, the changed fork's Docker shard if the engine changed), plus format, lint, typecheck and the build, not everything unless the change needs it. Push once per milestone. CI is a trimmed safety net: lint, typecheck, unit tests and the build always; walkthroughs, the catalogue's accessibility check and canvas performance only when the web app or its packages change; the Docker corpus only when the engine, connectors or workspace change; everything on main. A phase is reported when CI is green; nothing merges without every required check green. Never claim a result that wasn't run. Flaky tests are still investigated, briefly.
+3. **No screenshots, no Figma matching** (owner, 21 Nov 2026). No screenshot baselines; screens aren't compared with Figma. Accessibility stays: axe on every catalogue story (`pnpm test:a11y`) and on the page at the end of every walkthrough.
+4. **Docs: one brief CHANGELOG entry per milestone** (owner, 21 Nov 2026), written after the milestone: what was done, the owner's decisions (quoted), significant engineering choices in a line each, how to try it, known gaps. The other docs are frozen; don't update them.
+5. **Questions up front, and whenever something new comes up.** At the phase start, list every product question you can foresee. If something unforeseen comes up mid-phase that the documents and decisions don't already settle, stop and ask: never decide a product question yourself.
+6. **Careful edits.** Edit the exact lines read from a file; format before editing, and check that every edit applied.
 
 **Naming.** "Flowcanvas" is a working name (shortlist: Throughline, Cutaway). Use it and the `@flowcanvas/*` package scope so a rename later is mechanical. Never use "Glassbox" in code or package names (trademark conflict); the folder name does not matter.
 
@@ -114,9 +109,9 @@ Give the overview lesson in chat (section 4a), covering the plan template in sec
 
 - Goal and the exact *Build*, *Done when* and *Try it* text from the build plan.
 - Concepts the phase needs, each with a short primer and a link to official docs.
-- Figma screens and design-brief sections involved.
+- Design-brief sections involved.
 - Scope and explicit out-of-scope items.
-- Technical approach, new packages or dependencies, and any decision records needed.
+- Technical approach, and new packages or dependencies.
 - How every *Done when* item will be proven, as named automated tests wherever possible.
 - The numbered step list.
 - Risks, unknowns and questions.
@@ -135,25 +130,25 @@ Give the overview lesson in chat (section 4a), covering the plan template in sec
 - Unit and integration tests for the new logic.
 - Corpus tests against the pinned forks for anything that analyses code.
 - End-to-end tests (Playwright driving the web app at the preview URL) that perform the phase's *Try it* steps and record a video.
-- Visual regression for any UI change: screenshots compared with our own approved baselines, plus accessibility checks. Figma screens are the reference the owner reviews against by eye, not an automated test.
+- Accessibility for any UI change: axe on its catalogue stories and on the walkthrough's page. No screenshots (owner, 21 Nov 2026).
 - Performance and security checks where the phase touches them (section 8).
 
 ### Step 4 — Make it visible
 
 - Update the **demo project** bundle so the *Try it* steps work with one click.
-- Add an entry to the in-app **What's new** panel and to `CHANGELOG.md`.
+- Write the milestone's brief entry in `CHANGELOG.md` (it is the in-app **What's new**).
 - Put unfinished parts behind a **Labs** switch, never in the default experience.
 - Make sure the phase is live at its pull-request preview URL and, after merge, on staging.
 
 ### Step 5 — Recap, report and acceptance
 
-Recap what was built and learned, walk the user through the *Done when* checks and *Try it* steps, then write the report together using the template in section 13.2: what was built, how to try it (step by step), test results with links, screenshots against Figma, deviations from the plan and why, known issues, and a preview of the next phase. Update `docs/STATUS.md`. Then **stop and wait** for acceptance or change requests.
+Recap what was built, walk the user through the *Done when* checks and *Try it* steps, and give a short report in chat (section 13.2): what works and how to try it, test results, deviations and why, known gaps, what needs the owner's decision. Then **stop and wait** for acceptance or change requests.
 
 ## 6. Technology and repository structure
 
-Use the stack from the build plan unless you raise a decision record and the user agrees: a React + TypeScript web app, React Flow (later a WebGL layer), ELK, CodeMirror 6 (chosen over Monaco, owner decision 7 Nov 2026, ADR 0021), LSP and DAP clients, xterm.js in the browser with a pty in the workspace, tree-sitter, the TypeScript compiler API, SQLite per workspace, git CLI with shadow refs, Agent Client Protocol client, MCP server (official SDK), SWC/Babel element stamping, OpenTelemetry, Vitest/Jest/Playwright, a provider-neutral model gateway; for the cloud: Firecracker-style workspace VMs (a managed sandbox provider at first), a TypeScript control-plane service with Postgres, a WebSocket gateway and authenticated preview proxy, S3-compatible snapshot storage plus a private backup git remote, GitHub and Google sign-in, usage-based billing, an encrypted secrets vault, and GitHub Actions for continuous deployment with per-PR preview URLs.
+Use the stack from the build plan unless you propose a change and the user agrees: a React + TypeScript web app, React Flow (later a WebGL layer), ELK, CodeMirror 6 (chosen over Monaco, owner decision 7 Nov 2026, ADR 0021), LSP and DAP clients, xterm.js in the browser with a pty in the workspace, tree-sitter, the TypeScript compiler API, SQLite per workspace, git CLI with shadow refs, Agent Client Protocol client, MCP server (official SDK), SWC/Babel element stamping, OpenTelemetry, Vitest/Jest/Playwright, a provider-neutral model gateway; for the cloud: Firecracker-style workspace VMs (a managed sandbox provider at first), a TypeScript control-plane service with Postgres, a WebSocket gateway and authenticated preview proxy, S3-compatible snapshot storage plus a private backup git remote, GitHub and Google sign-in, usage-based billing, an encrypted secrets vault, and GitHub Actions for continuous deployment with per-PR preview URLs.
 
-Suggested monorepo (pnpm workspaces + Turborepo); adjust with a decision record if needed:
+Suggested monorepo (pnpm workspaces + Turborepo); adjust if needed (say so in the CHANGELOG entry):
 
 ```
 apps/
@@ -180,7 +175,7 @@ packages/
 corpus/               Manifest of pinned forks + hand-labelled flows (JSON)
 e2e/                  Playwright tests, Try-it scripts, recordings
 tools/figma-tokens/   Script that converts exported Figma variables into packages/tokens
-docs/                 adr/, phases/, STATUS.md, ARCHITECTURE.md, SECURITY.md
+docs/                 reference/, and frozen history (adr/, reports/, build-steps, STATUS, ARCHITECTURE…)
 ```
 
 ## 7. Engineering standards
@@ -193,7 +188,7 @@ docs/                 adr/, phases/, STATUS.md, ARCHITECTURE.md, SECURITY.md
 - **Errors:** never swallow them. Show actionable errors in the UI ("Preview needs DATABASE_URL" with a fix), and log details server-side with secrets redacted.
 - **Dependencies:** pin versions, avoid abandoned packages, check licences (including the forks' licences before redistributing demo projects), and run a vulnerability scan in CI.
 - **Accessibility:** keyboard reachable everything, visible focus rings, WCAG AA contrast (the Graphite tokens already pass; don't break them), state never shown by colour alone.
-- **Documentation:** keep `ARCHITECTURE.md` current, write a decision record for every significant choice, and comment the *why*, not the *what*.
+- **Documentation:** comment the *why*, not the *what*, in code. Project docs: only CHANGELOG.md, briefly, per milestone (owner, 21 Nov 2026).
 
 ## 8. Testing, quality and budgets
 
@@ -202,16 +197,16 @@ docs/                 adr/, phases/, STATUS.md, ARCHITECTURE.md, SECURITY.md
 | Unit | Pure logic: parsers, resolvers, graph diffing, masking, routing | Every commit |
 | Corpus | Flows extracted from the pinned forks compared with hand-labelled flows; precision, recall and update speed reported per repo | Every commit (fast subset), nightly (full) |
 | End-to-end | Playwright drives the web app at the preview URL, against real workspaces, through every *Try it* step ever written; records video | Every merge; the whole history runs nightly as the regression suite |
-| Visual | Screenshots of every catalogue story and implemented screen, in both themes, compared with approved baselines (pixel-exact), plus axe | Every UI change |
+| Accessibility | axe (WCAG 2.2 AA) on every catalogue story and at the end of every walkthrough; no screenshots (owner, 21 Nov 2026) | When the UI changes |
 | Performance | Index time, p90 canvas update after an agent step (target under 3 s), frame rate with 500 and 2,000 nodes, memory | Nightly; fail the build on regression beyond agreed tolerance |
 | Security | Canary secrets planted in `.env`, the vault and fixtures must never appear in the index, logs, traces, context packs or model requests; one workspace must never reach another | Every merge |
 | Resilience | Kill a workspace mid-edit, restore from backup, sleep and resume; no work lost | Nightly |
 
-A phase's *Done when* must be proven by named automated tests wherever possible. If something truly can't be automated, write a manual checklist in the phase report and say why.
+A phase's *Done when* must be proven by named automated tests wherever possible. If something truly can't be automated, say so in the report with the manual check.
 
 ## 9. Decision records
 
-When you make a significant technical choice (a library, a data format, a protocol detail, a deviation from the plan), add `docs/adr/NNNN-title.md` with: context, options considered, decision, consequences. Mention it in the phase report. Product or scope decisions are **not** yours to make alone; ask.
+Significant technical choices (a library, a data format, a protocol detail, a deviation from the plan) get a line each in the milestone's CHANGELOG entry, with the reason. No separate ADR files (owner, 21 Nov 2026; `docs/adr/` is frozen history). Product or scope decisions are **not** yours to make alone; ask.
 
 ## 10. Design implementation rules
 
@@ -229,10 +224,10 @@ When you make a significant technical choice (a library, a data format, a protoc
   - Light theme: approved 27 Oct 2026, state and accent hues moved to Signal 28 Oct 2026; values in `packages/tokens/source/color.light.tokens.json` and the Graphite doc.
 - **Type and spacing:** Inter for UI, JetBrains Mono for code, paths and prompts. Text styles: Display 24/32 600, Title 20/28 600, Heading 15/22 600, Body 13/20 400, Body strong 13/20 500, Small 12/16 400, Small strong 12/16 500, Caption 11/14 500, Mono 12/18 400, Mono small 11/16 400. Letter-spacing −1.5% on Display, −1% on Title and Heading. 4 px grid; radii 4 / 6 / 8 / 10. Sentence-case labels, no ALL CAPS.
 - **Layout:** the Figma screens use a 40 px top bar (project, branch, Graph / Sequence / Code switch, search, workspace status, share, avatar), a 44 px rail and a 40 px review bar. The Figma file is the layout reference.
-- **Components first.** Build each component in `packages/ui` with all its variants and states, show it in the catalogue, and review it against the Figma component and screens before using it in screens.
+- **Components first.** Build each component in `packages/ui` with all its variants and states, and show it in the catalogue, before using it in screens.
 - **Avoid the "AI-generated" look:** no gradients, glows, emoji, decorative colour or ALL-CAPS labels; sentence case everywhere; real-looking content in demos; state dots only where something actually changed; quiet chrome, loud canvas.
 - **Both themes.** Dark first, light using the same tokens. Respect "reduce motion".
-- **Screens map to phases.** Each phase lists the Figma screens it builds from. Use them as the reference for layout and behaviour (built from our own components, not copied pixel for pixel), and note notable differences in the phase report for the owner's review.
+- **Screens.** The design brief describes each screen's behaviour; build from our own components and Graphite's rules. Figma isn't matched or reviewed against any more (owner, 21 Nov 2026).
 
 ## 11. Domain rules you must preserve
 
@@ -265,14 +260,14 @@ Done when: <copied>
 Try it: <copied>
 
 ## Design references
-Figma screens: <ids>     Design brief sections: <names>
+Design brief sections: <names>
 
 ## Scope
 In: …
 Out (explicitly): …
 
 ## Approach
-Architecture, packages touched, data/IPC changes, new dependencies, decision records needed.
+Architecture, packages touched, data/IPC changes, new dependencies.
 
 ## Proof
 | Done-when item | Test name / type | Data (fork, fixture) |
@@ -284,32 +279,24 @@ Architecture, packages touched, data/IPC changes, new dependencies, decision rec
 …
 ```
 
-### 13.2 Phase report
+### 13.2 Phase report (in chat, short)
 
 ```
-# Phase <number> — <name>: report
-
-## Result
-Accepted criteria: ✅ / ❌ per Done-when item, with test links.
-
-## How to try it
-Preview URL: <link>   Demo project: <name>
-1. …
-
-## Evidence
-Test summary (unit / corpus / e2e / visual / perf / security), recording link,
-screenshots of the new screens (for review against the Figma reference).
-
-## Deviations from plan and why
-## Decision records added
-## Known issues and follow-ups
-## Next phase preview
+# Phase <number> — <name>
+Result: ✅ / ❌ per Done-when item, with the test that proves it.
+How to try it: 1. …
+Tests run: what, and the CI run.
+Deviations and why · Known gaps · Questions for the owner
 ```
 
-### 13.3 `docs/STATUS.md`
+### 13.3 CHANGELOG.md entry (per milestone, brief)
 
 ```
-| Phase | Name | Status (planned / in progress / in review / accepted) | Build | Notes |
+## [x.y.z] — date — Phase(s) n: name
+One or two sentences: what a person can do now.
+### Try it  (a few steps)
+### Added / Changed / Fixed  (a line each)
+### Decisions  (owner's, quoted; significant engineering choices, a line each)
 ```
 
 ## 14. Your first response

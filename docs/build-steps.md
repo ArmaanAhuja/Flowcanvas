@@ -1,5 +1,7 @@
 # Build steps
 
+> **Frozen on 21 Nov 2026** (owner): no longer kept up to date. What's done, and decisions, are now in brief in [`CHANGELOG.md`](../CHANGELOG.md), one entry per milestone.
+
 A running record of every step to build Flowcanvas, in order. Each step is explained in chat first and added here at the same time. The project owner then decides who does it (owner or Claude). Status: **done** (with commit and who did it), **next** (explained, waiting) or *planned*.
 
 Machine conventions: fish shell, Node from the system (26.x locally; the repo pins 24 LTS), pnpm through Corepack.
@@ -14077,6 +14079,8 @@ pnpm test:visual
 - **Sequence view:** Timeline waterfall representation of the exact same flow graph (synchronous order, async hops in background lane, failure paths).
 
 **Found on the way:** grouping phases 12 and 13 per owner decision (15 Nov 2026); release 0.14.0 in progress.
+
+**Commit:** `2093243` docs: phases 12 and 13's plan (step 12.0: ADR 0032, release 0.14.0).
 
 ### Step 12.1 — Groups named from the code, opened in place; the sequence view (done by Claude, from Antigravity's draft)
 

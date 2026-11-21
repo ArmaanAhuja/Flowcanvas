@@ -180,7 +180,9 @@ export async function fileState(
       ...historyKeymap,
       ...defaultKeymap,
     ]),
-    EditorView.contentAttributes.of({ 'aria-label': `Code: ${path}` }),
+    // tabindex 0 says outright that the content is in the tab order (contenteditable already is): axe doesn't count a
+    // contenteditable in a shadow root as focusable, and flagged the scroller as unreachable by keyboard.
+    EditorView.contentAttributes.of({ 'aria-label': `Code: ${path}`, tabindex: '0' }),
   ];
   return EditorState.create({ doc: text, extensions });
 }

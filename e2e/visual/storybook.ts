@@ -35,7 +35,20 @@ export async function openStory(page: Page, id: string, theme: Theme): Promise<v
       (document.querySelector('#storybook-root')?.childElementCount ?? 0) > 0,
     theme,
   );
+  // Everything the story fetches (lazy chunks, fonts) in, then the fonts applied and two frames drawn: axe reads text
+  // as laid out, and `fonts.ready` alone can resolve before a font is even requested.
+  await page.waitForLoadState('networkidle');
   await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            resolve(undefined);
+          });
+        });
+      }),
+  );
   // Let finite animations (popover fade-in) finish; infinite ones (the analysing shimmer) keep running.
   await page.waitForFunction(() =>
     document
