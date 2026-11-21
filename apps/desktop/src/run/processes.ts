@@ -3,7 +3,7 @@
 // terminal: colours, progress bars, and prompts they can answer (a dev script that asks for sudo, or "use another
 // port?"). Each is the leader of its own process group, so stopping it stops everything it started, and closing the
 // app stops them all: nothing keeps running that the person didn't start.
-import { accessSync, constants } from 'node:fs';
+import { accessSync, constants, readdirSync, readFileSync, readlinkSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { delimiter, isAbsolute, join } from 'node:path';
 
@@ -67,6 +67,8 @@ export const PROCESS_LIMITS = {
   ended: 20,
   /** An unfinished line (a prompt) is shown after this long without more output. */
   partialMs: 40,
+  /** How often a running process's listening ports are looked up (Linux, /proc). */
+  portsMs: 1500,
   /** Largest typing or pasting sent to a process at once. */
   inputChars: 64 * 1024,
   cols: 120,
@@ -97,6 +99,74 @@ export function portsIn(text: string): number[] {
     if (port > 0 && port < 65536 && !ports.includes(port)) ports.push(port);
   }
   return ports;
+}
+
+/**
+ * The TCP ports a process and everything under it listen on, as the system says (Linux: /proc), so an address is
+ * found however the project prints it, or if it never does (turbo's full-screen view redraws by cursor position).
+ * Processes that left the tree (daemons) aren't counted. Empty where /proc can't be read.
+ */
+export function listeningPorts(rootPid: number, proc = '/proc'): number[] {
+  try {
+    // Every process's parent, then the tree under the root.
+    const children = new Map<number, number[]>();
+    for (const name of readdirSync(proc)) {
+      if (!/^\d+$/.test(name)) continue;
+      try {
+        const stat = readFileSync(`${proc}/${name}/stat`, 'utf8');
+        // The command name is in parentheses and may hold spaces: the parent's pid is the 2nd field after it.
+        const parent = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
+        children.set(parent, [...(children.get(parent) ?? []), Number(name)]);
+      } catch {
+        // It ended meanwhile.
+      }
+    }
+    const tree: number[] = [];
+    const queue = [rootPid];
+    while (queue.length > 0) {
+      const pid = queue.shift() ?? 0;
+      tree.push(pid);
+      queue.push(...(children.get(pid) ?? []));
+    }
+    const sockets = new Set<string>();
+    for (const pid of tree) {
+      let fds: string[];
+      try {
+        fds = readdirSync(`${proc}/${String(pid)}/fd`);
+      } catch {
+        continue;
+      }
+      for (const fd of fds) {
+        try {
+          const target = readlinkSync(`${proc}/${String(pid)}/fd/${fd}`);
+          const inode = /^socket:\[(\d+)\]$/.exec(target)?.[1];
+          if (inode !== undefined) sockets.add(inode);
+        } catch {
+          // Closed meanwhile.
+        }
+      }
+    }
+    const ports: number[] = [];
+    for (const table of ['tcp', 'tcp6']) {
+      let text: string;
+      try {
+        text = readFileSync(`${proc}/net/${table}`, 'utf8');
+      } catch {
+        continue;
+      }
+      for (const line of text.split('\n').slice(1)) {
+        const fields = line.trim().split(/\s+/);
+        // local address (hex ip:port), state (0A is LISTEN), inode
+        const [, local, , state, , , , , , inode] = fields;
+        if (state !== '0A' || inode === undefined || !sockets.has(inode)) continue;
+        const port = Number.parseInt(local?.split(':')[1] ?? '', 16);
+        if (port > 0 && !ports.includes(port)) ports.push(port);
+      }
+    }
+    return ports.sort((a, b) => a - b);
+  } catch {
+    return [];
+  }
 }
 
 /** Finds a program on the PATH, as the shell would. */
@@ -136,6 +206,7 @@ interface Entry {
   partial: string;
   partialTimer: NodeJS.Timeout | undefined;
   killTimer: NodeJS.Timeout | undefined;
+  portsTimer: NodeJS.Timeout | undefined;
 }
 
 export class Processes {
@@ -144,6 +215,7 @@ export class Processes {
   readonly #now: () => Date;
   readonly #spawn: SpawnPty;
   readonly #onPath: (program: string) => boolean;
+  readonly #ports: (pid: number) => number[];
   #next = 0;
 
   constructor(
@@ -151,11 +223,14 @@ export class Processes {
       readonly now?: () => Date;
       readonly spawn?: SpawnPty;
       readonly onPath?: (program: string) => boolean;
+      /** The ports a process tree listens on (from /proc otherwise). */
+      readonly ports?: (pid: number) => number[];
     } = {},
   ) {
     this.#now = options.now ?? (() => new Date());
     this.#spawn = options.spawn ?? nodePtySpawn;
     this.#onPath = options.onPath ?? ((program) => onPath(program, childEnvironment().PATH));
+    this.#ports = options.ports ?? ((pid) => listeningPorts(pid));
   }
 
   list(): ProcessView[] {
@@ -204,6 +279,7 @@ export class Processes {
       partial: '',
       partialTimer: undefined,
       killTimer: undefined,
+      portsTimer: undefined,
     };
     this.#entries.set(entry.view.id, entry);
     this.#prune();
@@ -286,12 +362,16 @@ export class Processes {
       return;
     }
     entry.pty = pty;
+    entry.portsTimer = setInterval(() => {
+      this.#addPorts(entry, this.#ports(pty.pid));
+    }, PROCESS_LIMITS.portsMs);
     pty.onData((data) => {
       this.#output(entry, data);
     });
     pty.onExit(({ exitCode, signal }) => {
       clearTimeout(entry.killTimer);
       clearTimeout(entry.partialTimer);
+      clearInterval(entry.portsTimer);
       this.#flush(entry);
       const stopped = entry.view.state === 'stopping' || (signal !== undefined && signal !== 0);
       this.#update(entry, {
@@ -327,8 +407,14 @@ export class Processes {
     const text = (entry.options.mask ?? ((value: string) => value))(raw);
     entry.log = (entry.log + text).slice(-PROCESS_LIMITS.logChars);
     this.#emit({ type: 'output', id: entry.view.id, text });
-    const found = portsIn(text).filter((port) => !entry.view.ports.includes(port));
-    if (found.length > 0) this.#update(entry, { ports: [...entry.view.ports, ...found] });
+    this.#addPorts(entry, portsIn(text));
+  }
+
+  #addPorts(entry: Entry, ports: readonly number[]): void {
+    const found = ports.filter((port) => !entry.view.ports.includes(port));
+    if (found.length > 0 && isLive(entry.view.state)) {
+      this.#update(entry, { ports: [...entry.view.ports, ...found] });
+    }
   }
 
   #failed(entry: Entry, problem: string): void {

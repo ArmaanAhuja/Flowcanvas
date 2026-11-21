@@ -18,8 +18,10 @@
     "@flowcanvas/engine": "workspace:*",
     "@flowcanvas/workspace-agent": "workspace:*",
     "@flowcanvas/workspace-host": "workspace:*",
-    "node-pty": "catalog:",
     "ws": "catalog:"
+  },
+  "optionalDependencies": {
+    "node-pty": "catalog:"
   },
   "devDependencies": {
     "@flowcanvas/web": "workspace:*",

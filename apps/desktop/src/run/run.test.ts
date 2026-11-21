@@ -12,7 +12,14 @@ import {
   setEnvValue,
 } from './env.js';
 import { nodeFits } from './node-version.js';
-import { childEnvironment, portsIn, Processes, stripAnsi, type ProcessView } from './processes.js';
+import {
+  childEnvironment,
+  listeningPorts,
+  portsIn,
+  Processes,
+  stripAnsi,
+  type ProcessView,
+} from './processes.js';
 import { MASK, RUN_MESSAGES, RunService, envTargets } from './service.js';
 
 let root: string;
@@ -345,6 +352,32 @@ describe('Processes', { timeout: 20_000 }, () => {
     await until(processes, view.id, (v) => v.state === 'finished');
     expect(stripAnsi(processes.log(view.id) ?? '')).toContain('answered yes');
     expect(processes.input(view.id, 'late\r')).toBe(false);
+  });
+
+  it('finds the port a server listens on from the system, though it never prints it', async () => {
+    const processes = new Processes();
+    // A child of the shell listens on a free port and prints nothing.
+    const script =
+      "require('node:net').createServer().listen(0, '127.0.0.1', function () { require('node:fs').writeFileSync('port', String(this.address().port)); })";
+    const view = processes.start({
+      kind: 'script',
+      label: 'quiet',
+      file: 'sh',
+      args: ['-c', `node -e "${script}"; true`],
+      cwd: root,
+    });
+    await until(processes, view.id, () => {
+      try {
+        return readFileSync(join(root, 'port'), 'utf8') !== '';
+      } catch {
+        return false;
+      }
+    });
+    const port = Number(readFileSync(join(root, 'port'), 'utf8'));
+    await until(processes, view.id, (v) => v.ports.includes(port));
+    // Read from the system: the same port the tree under the test sees.
+    expect(listeningPorts(process.pid)).toContain(port);
+    await processes.stopAll();
   });
 
   it('finds the addresses servers print, and keeps our own variables from the project', () => {

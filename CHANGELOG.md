@@ -17,14 +17,15 @@ Press **Run** and the project starts on your computer: Flowcanvas installs its d
 ### Added
 
 - **Run** (top bar) and the dock's **Run** tab: the project's scripts (`dev` first), its package manager from its lockfile, whether its dependencies are installed, its Node version against its `engines` field ("This project needs Node 24; you have v26.13.0"), and its development compose file (`docker-compose.dev.yml`, `docker/development/compose.yml`) when Docker is installed, or what's missing when it isn't.
-- **Process cards** (`ProcessCard` in the catalogue): each process on a pty in its own process group, so its colours and prompts work and Stop (or closing the app) stops everything it started; its output with the project's own .env values masked; the ports it says it listens on.
+- **Process cards** (`ProcessCard` in the catalogue): each process on a pty in its own process group, so its colours and prompts work and Stop (or closing the app) stops everything it started; its output with the project's own .env values masked; the ports it listens on, read from the system (Linux `/proc`) and from what it prints.
 - **Missing variables:** names from `.env.example` / `.sample` / `.template` files compared with the .env files beside them and your shell; those the example's comment calls required are asked for before Run, the rest folded away. Values are written to the project's .env (readable by you only), never logged, shown or sent.
 - **Terminal:** your login shell on a pty in the project's folder (node-pty), in the dock.
 
 ### Decisions
 
 - **The owner's answers:** values are saved in "the project's .env file"; services are offered "via Docker" (a compose file, when Docker is installed); dependencies get "one-click install".
-- **Processes run on a pty, not pipes:** real dev scripts prompt (Rallly's proxy asks for sudo) and print colour; the card is a small terminal. node-pty is shipped beside the bundle and unpacked from the app's archive.
+- **Processes run on a pty, not pipes:** real dev scripts prompt (Rallly's proxy asks for sudo) and print colour; the card is a small terminal. node-pty is shipped beside the bundle and unpacked from the app's archive; it's an optional dependency, so the jobs and machines that never run the desktop app install without a compiler.
+- **Ports from the system, not only the output:** a dev server's address is found from the sockets its process tree listens on, since tools like turbo redraw a full-screen view on a terminal and never print it as one line.
 - **Required means what the example says:** a variable blocks Run only when its comment says "required"; Documenso's example lists dozens of optional ones.
 - **CI:** a long walkthrough installs and starts Rallly and Documenso in the real app, only when running projects changed (Node 24 beside the build's Node for Rallly; Playwright's browser download skipped for both projects' installs); the installed .deb's smoke test now also runs a process on a pty.
 

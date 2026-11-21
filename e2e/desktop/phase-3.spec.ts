@@ -115,7 +115,8 @@ test('phase 3 · Try it: Rallly asks for its secret, then starts from one button
     // At this pin Rallly's dev script runs behind portless, a local HTTPS proxy started once with sudo; dev fails
     // until it runs. A card is a terminal, so its sudo prompt can be answered there by the person.
     await runPanel(page).getByRole('button', { name: 'Run a script' }).click();
-    await page.getByRole('menuitem', { name: /^proxy:start/ }).click();
+    // Enter on the item itself: the menu re-renders as cards update, and a click can land on its neighbour.
+    await page.getByRole('menuitem', { name: /^proxy:start/ }).press('Enter');
     expect(await ended(page, 'proxy:start', START_MS)).toBe('finished');
   });
 
