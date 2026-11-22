@@ -121,41 +121,44 @@ export function validateGraph(graph: Graph, limit = 50): string[] {
   const kinds = new Map(graph.nodes.map((node) => [node.id, node.kind]));
   const keys = new Set<string>();
   for (const edge of graph.edges) {
-    const name = `edge ${edge.from} → ${edge.to ?? (edge.target === null || edge.target === '' ? '?' : edge.target)}`;
-    if (!ids.has(edge.from)) say(`${name}: from a node that isn't in the graph`);
-    if (!has(EDGE_KINDS, edge.kind)) say(`${name}: unknown kind ${edge.kind}`);
+    // Named only when something's wrong: building the name for every edge took a third of the check on Twenty.
+    const name = () =>
+      `edge ${edge.from} → ${edge.to ?? (edge.target === null || edge.target === '' ? '?' : edge.target)}`;
+    if (!ids.has(edge.from)) say(`${name()}: from a node that isn't in the graph`);
+    if (!has(EDGE_KINDS, edge.kind)) say(`${name()}: unknown kind ${edge.kind}`);
     if (!has(PROVENANCES, edge.provenance)) {
-      say(`${name}: unknown provenance ${edge.provenance}`);
+      say(`${name()}: unknown provenance ${edge.provenance}`);
     }
     // A branch out of a decision reaches a call: it says calls or renders, as the call does (ADR 0028).
     const toDecision = edge.to !== null && kinds.get(edge.to) === 'decision';
     const reachesCall =
       edge.kind === 'call' || (edge.kind === 'branch' && edge.label !== null && !toDecision);
     if (reachesCall ? !has(RELATIONS, edge.relation) : edge.relation !== null) {
-      say(`${name}: a call needs calls or renders, and only a call has one`);
+      say(`${name()}: a call needs calls or renders, and only a call has one`);
     }
     const fromDecision = kinds.get(edge.from) === 'decision';
-    if (edge.kind !== 'branch' && edge.label !== null) say(`${name}: only a branch has a label`);
+    if (edge.kind !== 'branch' && edge.label !== null) say(`${name()}: only a branch has a label`);
     if (edge.kind === 'branch') {
       if (fromDecision && (typeof edge.label !== 'string' || edge.label === '')) {
-        say(`${name}: a branch out of a decision needs its outcome`);
+        say(`${name()}: a branch out of a decision needs its outcome`);
       }
       if (
         !fromDecision &&
         (edge.label !== null || edge.to === null || kinds.get(edge.to) !== 'decision')
       ) {
-        say(`${name}: a branch from code goes into a decision, without a label`);
+        say(`${name()}: a branch from code goes into a decision, without a label`);
       }
     }
     // Unknown means the target wasn't found: never a node, always the call's text. Anything else reaches a node.
     if (edge.provenance === 'unknown') {
-      if (edge.to !== null) say(`${name}: an unknown edge can't reach a node`);
+      if (edge.to !== null) say(`${name()}: an unknown edge can't reach a node`);
       if (typeof edge.target !== 'string' || edge.target === '') {
-        say(`${name}: an unknown edge needs the call's text`);
+        say(`${name()}: an unknown edge needs the call's text`);
       }
     } else {
-      if (edge.to === null || !ids.has(edge.to)) say(`${name}: to a node that isn't in the graph`);
-      if (edge.target !== null) say(`${name}: only an unknown edge has a text target`);
+      if (edge.to === null || !ids.has(edge.to))
+        say(`${name()}: to a node that isn't in the graph`);
+      if (edge.target !== null) say(`${name()}: only an unknown edge has a text target`);
     }
     if (
       edge.lines.length === 0 ||
@@ -163,10 +166,10 @@ export function validateGraph(graph: Graph, limit = 50): string[] {
         (line, i) => isPositiveInteger(line) && (i === 0 || line > (edge.lines[i - 1] ?? 0)),
       )
     ) {
-      say(`${name}: its lines must be 1-based, ascending, each once`);
+      say(`${name()}: its lines must be 1-based, ascending, each once`);
     }
     if (edge.guarded !== undefined) {
-      if (edge.kind === 'branch') say(`${name}: a branch has no guarded lines`);
+      if (edge.kind === 'branch') say(`${name()}: a branch has no guarded lines`);
       const lines = new Set(edge.lines);
       if (
         edge.guarded.length === 0 ||
@@ -174,11 +177,11 @@ export function validateGraph(graph: Graph, limit = 50): string[] {
           (line, i) => lines.has(line) && (i === 0 || line > (edge.guarded?.[i - 1] ?? 0)),
         )
       ) {
-        say(`${name}: its guarded lines must be some of its lines, ascending, each once`);
+        say(`${name()}: its guarded lines must be some of its lines, ascending, each once`);
       }
     }
     const key = edgeKey(edge);
-    if (keys.has(key)) say(`${name}: appears twice`);
+    if (keys.has(key)) say(`${name()}: appears twice`);
     keys.add(key);
   }
   return problems;

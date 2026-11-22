@@ -17,7 +17,7 @@ import {
   type FoundService,
   type LinkProtocol,
 } from '@flowcanvas/connectors-web';
-import type { GraphEdge, GraphNode } from '@flowcanvas/graph-model';
+import { edgeKey, type GraphEdge, type GraphNode } from '@flowcanvas/graph-model';
 import type * as TS from 'typescript';
 import { cut, findNode } from './callables.js';
 import { NOT_ENTRY_FILES } from './entry-pass.js';
@@ -479,21 +479,27 @@ export function joinConnections(
       });
     }
   }
+  // The routes serving a call, worked out once per call: many links call the same endpoint, and each is otherwise
+  // checked against every route (Twenty's 701, phase 4 of build plan v2).
+  const served = new Map<string, readonly string[]>();
+  const httpRoutes = (key: string): readonly string[] => {
+    const known = served.get(key);
+    if (known !== undefined) return known;
+    const space = key.indexOf(' ');
+    const method = key.slice(0, space);
+    const call = segmentsOf(key.slice(space + 1));
+    const ids = http
+      .filter((route) => servesMethod(route.method, method) && serves(route.segments, call))
+      .map((route) => route.id);
+    served.set(key, ids);
+    return ids;
+  };
   const matches = (link: PendingLink): Set<string> => {
     const ids = new Set<string>();
     for (const key of link.keys) {
       if (link.protocol === 'trpc') for (const id of trpc.get(key) ?? []) ids.add(id);
       else if (link.protocol === 'graphql') for (const id of graphql.get(key) ?? []) ids.add(id);
-      else {
-        const space = key.indexOf(' ');
-        const method = key.slice(0, space);
-        const call = segmentsOf(key.slice(space + 1));
-        for (const route of http) {
-          if (servesMethod(route.method, method) && serves(route.segments, call)) {
-            ids.add(route.id);
-          }
-        }
-      }
+      else for (const id of httpRoutes(key)) ids.add(id);
     }
     return ids;
   };
@@ -506,10 +512,15 @@ export function joinConnections(
   const beside: GraphEdge[] = [];
   // Where each replacing link is drawn: its own line.
   const drawnAt = new Map<string, number>();
+  // The units that gain an edge here: only their edges can meet another with the same key. Every other edge is
+  // passed through as it is (keying and merging them all was a second of each pass on Twenty, phase 4 of build plan
+  // v2). The order is kept: an entry point's handler is its first edge out.
+  const touched = new Set<string>();
   for (const part of parts) {
     for (const link of part.links) {
       const ids = matches(link);
       if (ids.size === 0) continue;
+      touched.add(link.from);
       if (link.target === null) {
         for (const id of ids) {
           beside.push({
@@ -532,18 +543,24 @@ export function joinConnections(
   }
   // The unit a decision is in: its id up to the `?` (ADR 0028).
   const unitOf = (id: string) => (id.includes('?') ? id.slice(0, id.lastIndexOf('?')) : id);
+  // Hand-offs to their receivers are edges gained too.
+  const receivers = receiverEntries(parts, nodeOf);
+  for (const part of parts) {
+    for (const receiver of part.receivers) touched.add(`(handoff ${receiver.key})`);
+  }
+  for (const edge of receivers.edges) touched.add(edge.from);
   const out = new Map<string, GraphEdge>();
+  const order: (GraphEdge | string)[] = [];
   const put = (edge: GraphEdge) => {
-    const key = [
-      edge.from,
-      edge.to ?? `?${edge.target ?? ''}`,
-      edge.kind,
-      edge.relation ?? '',
-      edge.label ?? '',
-    ].join('\u0000');
+    if (!touched.has(edge.from) && !touched.has(unitOf(edge.from))) {
+      order.push(edge);
+      return;
+    }
+    const key = edgeKey(edge);
     const known = out.get(key);
     if (known === undefined) {
       out.set(key, edge);
+      order.push(key);
       return;
     }
     const lines = [...new Set([...known.lines, ...edge.lines])].sort((a, b) => a - b);
@@ -615,7 +632,13 @@ export function joinConnections(
       });
     }
   }
-  const receivers = receiverEntries(parts, nodeOf);
   for (const edge of receivers.edges) put(edge);
-  return { edges: [...out.values()], entries: receivers.nodes };
+  return {
+    edges: order.flatMap((each) => {
+      if (typeof each !== 'string') return [each];
+      const edge = out.get(each);
+      return edge === undefined ? [] : [edge];
+    }),
+    entries: receivers.nodes,
+  };
 }

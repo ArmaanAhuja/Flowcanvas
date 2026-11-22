@@ -5,6 +5,7 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { encodeGraph, validateGraph } from '@flowcanvas/graph-model';
 import type { CodePosition, SemanticOp } from '../protocol.js';
 import { FactsStore } from '../facts.js';
+import { listedEntries, type ListedEntries } from './graph.js';
 import { SemanticService } from './semantic-service.js';
 import type { TypeScript } from './projects.js';
 
@@ -39,6 +40,8 @@ export interface GraphWire {
 
 export type FromWorker =
   | { readonly type: 'answer'; readonly id: number; readonly result: unknown }
+  /** Before a graph pass's answer, with the same id. */
+  | { readonly type: 'entries'; readonly id: number; readonly listed: ListedEntries }
   | { readonly type: 'failed'; readonly id: number };
 
 /** Passes that keep being started again by structural changes give up after this many tries. */
@@ -72,6 +75,11 @@ if (port !== null) {
           for (let tries = 0; tries < GRAPH_TRIES; tries += 1) {
             const pass = await service.graph(pause);
             if (pass === null) continue;
+            port.postMessage({
+              type: 'entries',
+              id: message.id,
+              listed: listedEntries(pass.graph),
+            } satisfies FromWorker);
             // Checked here, once, before it's saved: loading trusts what was checked (ADR 0028). A graph that breaks
             // the schema is a fault in the pass, answered as a failed pass and never stored.
             if (validateGraph(pass.graph, 1).length > 0) break;

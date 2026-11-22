@@ -21,6 +21,8 @@ const status: EngineStatus = {
   partlyRead: 0,
   lastFullMs: 1800,
   message: null,
+  analysing: false,
+  listed: 1,
 };
 const hit: SymbolHit = {
   path: 'src/poll.ts',

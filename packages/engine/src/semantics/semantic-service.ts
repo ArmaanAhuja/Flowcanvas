@@ -84,6 +84,15 @@ export class SemanticService {
   #registry: TS.DocumentRegistry;
   readonly #live = new Map<string, Live>();
   readonly #versions = new Map<string, number>();
+  /**
+   * Each file's text as last read, by its version: TypeScript asks for every file's whenever a program is brought up to
+   * date, and reading them all again was a third of a warm pass on Twenty (phase 4 of build plan v2). A file is read
+   * again once its version goes up. Emptied when memory runs high and after a whole-project pass.
+   */
+  readonly #snapshots = new Map<
+    string,
+    { readonly version: number; readonly snapshot: TS.IScriptSnapshot }
+  >();
   #clock = 0;
   /** Set when a service was released, or couldn't be built, for memory: answers say they may be partial. */
   readonly #facts: FactsSink | undefined;
@@ -135,7 +144,10 @@ export class SemanticService {
    * services on their next use.
    */
   changed(paths: readonly string[], files?: readonly string[]): void {
-    let structural = files !== undefined;
+    // A list is given with every save: only a different one (a file added or gone) is a change of structure. Taking
+    // every list as one threw away every warm program on each save (11–13 s a save on Twenty, phase 4 of build plan
+    // v2's walkthrough).
+    let structural = files !== undefined && !sameList(files, this.#files);
     for (const path of paths) {
       const absolute = join(this.#root, path);
       this.#versions.set(absolute, (this.#versions.get(absolute) ?? 0) + 1);
@@ -152,6 +164,7 @@ export class SemanticService {
       this.#generation += 1;
       for (const live of this.#live.values()) live.service.dispose();
       this.#live.clear();
+      this.#snapshots.clear();
       this.#registry = this.#ts.createDocumentRegistry(true, this.#root);
       ({ host: this.#host, model: this.#model } = this.#build(this.#files));
     }
@@ -265,9 +278,13 @@ export class SemanticService {
           }
         }
       }
-      if (!warm) held.push(config);
+      // After a change, the programs walked stay warm, released like the questions' when memory runs high: the
+      // next save in the same package then re-reads one file, not the whole program (Twenty's server: 7 s against
+      // well under one, phase 4 of build plan v2).
+      if (!warm && full) held.push(config);
     }
     for (const config of held) this.#release(config);
+    if (full) this.#snapshots.clear();
     // Files changed but not walked again are gone (deleted, or in no program): so are their facts. After a
     // whole-project pass, only the files it walked keep theirs.
     if (full) {
@@ -314,6 +331,7 @@ export class SemanticService {
   dispose(): void {
     for (const live of this.#live.values()) live.service.dispose();
     this.#live.clear();
+    this.#snapshots.clear();
   }
 
   // The language services.
@@ -336,8 +354,17 @@ export class SemanticService {
         getScriptFileNames: () => [...parsed.fileNames],
         getScriptVersion: (file) => String(this.#versions.get(file) ?? 0),
         getScriptSnapshot: (file) => {
+          const version = this.#versions.get(file) ?? 0;
+          const known = this.#snapshots.get(file);
+          if (known?.version === version) return known.snapshot;
           const text = host.readFile(file);
-          return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+          if (text === undefined) {
+            this.#snapshots.delete(file);
+            return undefined;
+          }
+          const snapshot = ts.ScriptSnapshot.fromString(text);
+          this.#snapshots.set(file, { version, snapshot });
+          return snapshot;
         },
         getCurrentDirectory: () => directory,
         getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
@@ -358,6 +385,7 @@ export class SemanticService {
   #makeRoom(): void {
     const { used, limit } = heap.read();
     if (used < limit * this.#memoryShare) return;
+    this.#snapshots.clear();
     const oldest = [...this.#live.values()].sort((a, b) => a.lastUsed - b.lastUsed);
     for (const live of oldest) {
       live.service.dispose();
@@ -819,3 +847,10 @@ const containerOf = (name: string | undefined): string | null =>
     : cut(name);
 
 /** TypeScript's element kinds, in the index's words; components are PascalCase functions (as in ADR 0024). */
+
+/** The same paths, in any order. */
+function sameList(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  const known = new Set(b);
+  return a.every((path) => known.has(path));
+}

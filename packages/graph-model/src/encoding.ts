@@ -70,10 +70,6 @@ interface Encoded {
 }
 
 const byId = (a: GraphNode, b: GraphNode) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-const byKey = (a: GraphEdge, b: GraphEdge) => {
-  const [x, y] = [edgeKey(a), edgeKey(b)];
-  return x < y ? -1 : x > y ? 1 : 0;
-};
 
 /** The graph as one canonical string: the same graph always encodes the same way. */
 export function encodeGraph(graph: Graph): string {
@@ -146,21 +142,25 @@ export function encodeGraph(graph: Graph): string {
       return encodedNode;
     }),
     texts,
-    edges: [...graph.edges].sort(byKey).map((e) => {
-      const target = text(e.target);
-      const encodedEdge: EncodedEdge = [
-        index.get(e.from) ?? -1,
-        e.to === null ? -1 : (index.get(e.to) ?? -1),
-        target,
-        EDGE_KINDS.indexOf(e.kind),
-        e.relation === null ? -1 : RELATIONS.indexOf(e.relation),
-        PROVENANCES.indexOf(e.provenance),
-        [...e.lines],
-        text(e.label),
-      ];
-      if (e.guarded !== undefined && e.guarded.length > 0) encodedEdge.push([...e.guarded]);
-      return encodedEdge;
-    }),
+    // Each key built once, not twice per comparison (a third of encoding Twenty's 24 MB, phase 4 of build plan v2).
+    edges: graph.edges
+      .map((edge) => ({ edge, key: edgeKey(edge) }))
+      .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+      .map(({ edge: e }) => {
+        const target = text(e.target);
+        const encodedEdge: EncodedEdge = [
+          index.get(e.from) ?? -1,
+          e.to === null ? -1 : (index.get(e.to) ?? -1),
+          target,
+          EDGE_KINDS.indexOf(e.kind),
+          e.relation === null ? -1 : RELATIONS.indexOf(e.relation),
+          PROVENANCES.indexOf(e.provenance),
+          [...e.lines],
+          text(e.label),
+        ];
+        if (e.guarded !== undefined && e.guarded.length > 0) encodedEdge.push([...e.guarded]);
+        return encodedEdge;
+      }),
   };
   return JSON.stringify(encoded);
 }

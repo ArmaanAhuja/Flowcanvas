@@ -15,6 +15,7 @@ import {
 import { serveEngine } from './serve.js';
 import { FLOW_LIMITS, encodeGraph, indexGraph, type Graph } from '@flowcanvas/graph-model';
 import { GRAPH_FAILED } from './semantics/client.js';
+import { listedEntries } from './semantics/graph.js';
 import { SnapshotStore } from './snapshots.js';
 import type { GraphStatus, NodeDetails } from './protocol.js';
 import {
@@ -238,6 +239,29 @@ describe('TypeScript’s answers (phase 5)', () => {
     await service.settled();
     await new Promise((resolve) => setImmediate(resolve));
     expect(changed).toHaveBeenLastCalledWith([], ['a.ts', 'b.ts']);
+  });
+
+  it('tells it at once about a file it knows, without listing the project again (phase 4 of build plan v2)', async () => {
+    write('a.ts', 'export function one() {}');
+    files = ['a.ts'];
+    const changed = vi.fn();
+    const listFiles = vi.fn(() => Promise.resolve(files));
+    start({
+      listFiles,
+      semantics: { ask: vi.fn(), changed, close: () => Promise.resolve() } as unknown as Semantics,
+    });
+    await service.settled();
+    const listed = listFiles.mock.calls.length;
+    write('a.ts', 'export function one() { return 1; }');
+    emit({ type: 'changed', path: 'a.ts', deleted: false, version: null });
+    await service.settled();
+    expect(changed).toHaveBeenLastCalledWith(['a.ts']);
+    expect(listFiles).toHaveBeenCalledTimes(listed);
+    // Gone: the list is read again, and the worker gets it.
+    files = [];
+    emit({ type: 'changed', path: 'a.ts', deleted: true, version: null });
+    await service.settled();
+    expect(changed).toHaveBeenLastCalledWith(['a.ts'], []);
   });
 });
 
@@ -965,5 +989,135 @@ describe('serveEngine', () => {
       id: 3,
       body: { ok: false, error: { code: 'failed', message: 'The engine couldn’t answer that.' } },
     });
+  });
+});
+
+describe('a saved edit (phase 4 of build plan v2)', () => {
+  const routes = (...names: string[]): Graph => ({
+    nodes: names.map((name, i) => ({
+      id: `a.ts#(entry ${name})`,
+      kind: 'entry-point' as const,
+      name,
+      place: { path: 'a.ts', line: i + 1, column: 1 },
+      unit: null,
+      change: 'unchanged' as const,
+      entry: {
+        kind: 'api-route' as const,
+        framework: 'hono',
+        complete: true,
+        why: null,
+        within: null,
+      },
+    })),
+    edges: [],
+  });
+  const wire = (graph: Graph) => ({
+    encoded: encodeGraph(graph),
+    files: 1,
+    builtInCalls: 0,
+    complete: true,
+    note: null,
+  });
+  const listedRoutes = async () => {
+    const request = { op: 'entryPoints', kind: 'api-route', after: 0, limit: 50 } as const;
+    const result = await service.handle(request);
+    expect(isEngineResponse(request, { ok: true, result })).toBe(true);
+    const answer = result as EntryPointsResult;
+    return { names: answer.entries.map((e) => e.name), current: answer.current };
+  };
+  const checkedStatus = async () => {
+    const result = await status();
+    expect(isEngineResponse({ op: 'status' }, { ok: true, result })).toBe(true);
+    return result;
+  };
+  const semanticsWith = (graph: Semantics['graph']) =>
+    ({
+      ask: vi.fn(),
+      changed: vi.fn(),
+      graph,
+      close: () => Promise.resolve(),
+    }) as unknown as Semantics;
+
+  it('lists its entry points ahead of the version, and says analysing until the version is kept', async () => {
+    write('a.ts', 'export const app = 1;');
+    files = ['a.ts'];
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const passes = [routes('GET /polls'), routes('GET /polls', 'POST /polls')];
+    let calls = 0;
+    start({
+      semantics: semanticsWith(async (entries) => {
+        const graph = passes[Math.min(calls, passes.length - 1)] ?? routes();
+        calls += 1;
+        entries?.(listedEntries(graph));
+        if (calls === 2) await held;
+        return wire(graph);
+      }),
+      snapshots: new SnapshotStore(':memory:'),
+      graphDelayMs: 1,
+    });
+    await service.settled();
+    await service.graphSettled();
+    const before = await checkedStatus();
+    expect(before.analysing).toBe(false);
+    expect(await listedRoutes()).toEqual({ names: ['GET /polls'], current: true });
+
+    // Saved: from now until the new list, what's listed is from before the edit, and never said to be current.
+    emit({ type: 'changed', path: 'a.ts', deleted: false, version: null });
+    expect((await checkedStatus()).analysing).toBe(true);
+    expect(await listedRoutes()).toEqual({ names: ['GET /polls'], current: false });
+
+    // The pass's entry points arrive while its version is still being checked and stored.
+    await vi.waitFor(async () => {
+      expect((await checkedStatus()).listed).toBeGreaterThan(before.listed);
+    });
+    expect(await listedRoutes()).toEqual({ names: ['GET /polls', 'POST /polls'], current: true });
+    expect((await checkedStatus()).analysing).toBe(true);
+    expect(((await service.handle({ op: 'graph' })) as GraphStatus).state).toBe('building');
+
+    release();
+    await service.graphSettled();
+    expect((await checkedStatus()).analysing).toBe(false);
+    expect(await listedRoutes()).toEqual({ names: ['GET /polls', 'POST /polls'], current: true });
+  });
+
+  it('goes back to the kept version’s entry points when the pass that listed them fails', async () => {
+    write('a.ts', 'export const app = 1;');
+    files = ['a.ts'];
+    let calls = 0;
+    start({
+      semantics: semanticsWith((entries) => {
+        calls += 1;
+        if (calls === 1) {
+          entries?.(listedEntries(routes('GET /polls')));
+          return Promise.resolve(wire(routes('GET /polls')));
+        }
+        entries?.(listedEntries(routes('GET /polls', 'POST /polls')));
+        return Promise.resolve({ failed: GRAPH_FAILED.failed });
+      }),
+      snapshots: new SnapshotStore(':memory:'),
+      graphDelayMs: 1,
+    });
+    await service.settled();
+    await service.graphSettled();
+    emit({ type: 'changed', path: 'a.ts', deleted: false, version: null });
+    await service.settled();
+    await service.graphSettled();
+    // From the version kept before the edit: listed, and not current.
+    expect(await listedRoutes()).toEqual({ names: ['GET /polls'], current: false });
+  });
+
+  it('says a version kept from before a restart isn’t current until a pass of this session', async () => {
+    const snapshots = new SnapshotStore(':memory:');
+    snapshots.save(encodeGraph(routes('GET /polls')), {
+      complete: true,
+      note: null,
+      files: 1,
+      builtInCalls: 0,
+    });
+    start({ snapshots });
+    expect(await listedRoutes()).toEqual({ names: ['GET /polls'], current: false });
   });
 });

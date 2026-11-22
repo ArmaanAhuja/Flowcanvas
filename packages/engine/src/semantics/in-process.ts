@@ -3,6 +3,7 @@
 import { encodeGraph } from '@flowcanvas/graph-model';
 import type { CodePosition, EngineResults, SemanticOp } from '../protocol.js';
 import type { Semantics } from '../service.js';
+import { listedEntries } from './graph.js';
 import type { SemanticService } from './semantic-service.js';
 
 export function inProcessSemantics(service: SemanticService): Semantics {
@@ -12,9 +13,10 @@ export function inProcessSemantics(service: SemanticService): Semantics {
     changed: (paths, files) => {
       service.changed(paths, files);
     },
-    graph: async () => {
+    graph: async (entries) => {
       const pass = await service.graph(() => Promise.resolve());
       if (pass === null) return { failed: 'The project changed while the graph was built.' };
+      entries?.(listedEntries(pass.graph));
       return {
         encoded: encodeGraph(pass.graph),
         files: pass.files,

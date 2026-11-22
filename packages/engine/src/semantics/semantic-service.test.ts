@@ -479,6 +479,25 @@ describe('graph (phase 6)', () => {
     expect(service.liveServices).toBe(warm);
   });
 
+  // Phase 4 of build plan v2: the next save in the same package re-reads one file, not the whole program.
+  it('keeps the programs a pass after a change walked, through saves that bring the same file list', async () => {
+    await service.graph(now);
+    expect(service.liveServices).toBe(0);
+    service.changed(['apps/web/src/page.tsx'], Object.keys(FILES));
+    await service.graph(now);
+    const warm = service.liveServices;
+    expect(warm).toBeGreaterThan(0);
+    // The engine sends the project's list with every save: the same list is no change of structure.
+    service.changed(['apps/web/src/page.tsx'], [...Object.keys(FILES)].reverse());
+    expect(service.liveServices).toBe(warm);
+    await service.graph(now);
+    expect(service.liveServices).toBe(warm);
+    // A file added is: everything is built again.
+    write('apps/web/src/extra.ts', 'export const extra = 1;');
+    service.changed(['apps/web/src/extra.ts'], [...Object.keys(FILES), 'apps/web/src/extra.ts']);
+    expect(service.liveServices).toBe(0);
+  });
+
   it('starts again when the project’s structure changes while it runs', async () => {
     let paused = 0;
     const pass = await service.graph(() => {

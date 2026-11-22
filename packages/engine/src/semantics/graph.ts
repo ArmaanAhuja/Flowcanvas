@@ -1,6 +1,14 @@
 // The flow graph from its files' parts (ADR 0027): one graph, each node once, a file's own nodes over the targets
 // recorded where they're called.
-import type { Graph, GraphNode } from '@flowcanvas/graph-model';
+import {
+  elementsByScreen,
+  indexGraph,
+  listEntryPoints,
+  type EntryPointItem,
+  type EntryPointLists,
+  type Graph,
+  type GraphNode,
+} from '@flowcanvas/graph-model';
 import { joinEntries, type FileEntries, type Located } from './entry-pass.js';
 import type { FileGraph } from './graph-pass.js';
 import { joinConnections, type FileConnections } from './connection-pass.js';
@@ -73,4 +81,20 @@ export function assemble(
     complete,
     note: complete ? null : GRAPH_MESSAGES.partial,
   };
+}
+
+/**
+ * A pass's entry points, sent ahead of its graph (phase 4 of build plan v2): checking, encoding, storing and loading
+ * Twenty's whole graph takes seconds more, and a saved edit is to show in the entry points within 3 s.
+ */
+export interface ListedEntries {
+  readonly lists: EntryPointLists;
+  /** Each screen's elements, by the screen's id. */
+  readonly screens: ReadonlyMap<string, readonly EntryPointItem[]>;
+}
+
+export function listedEntries(graph: Graph): ListedEntries {
+  const index = indexGraph(graph);
+  const lists = listEntryPoints(index);
+  return { lists, screens: elementsByScreen(index, lists.screen, lists.element) };
 }
