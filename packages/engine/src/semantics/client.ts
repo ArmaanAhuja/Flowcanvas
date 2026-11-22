@@ -10,6 +10,7 @@ import type {
   ReferencesResult,
   SemanticOp,
 } from '../protocol.js';
+import type { ListedEntries } from './graph.js';
 import type { FromWorker, GraphWire, ToWorker, WorkerStart } from './worker.js';
 
 /** The heap cap for the worker, in MB: the workspace has 4 GiB, and the indexer and SQLite need the rest. */
@@ -68,6 +69,8 @@ interface Pending {
   /** What to answer when the worker can't: an empty answer for a question, a failure for a graph. */
   readonly fail: (reason: string) => unknown;
   readonly timer: NodeJS.Timeout;
+  /** A graph pass's entry points, ahead of its answer. */
+  readonly entries?: (listed: ListedEntries) => void;
 }
 
 export interface SemanticClientOptions {
@@ -115,12 +118,18 @@ export class SemanticClient {
     ) as Promise<string | null | { readonly failed: string }>;
   }
 
-  /** A graph pass (ADR 0027): the whole project the first time, then what changed since. */
-  graph(): Promise<GraphWire | { readonly failed: string }> {
+  /**
+   * A graph pass (ADR 0027): the whole project the first time, then what changed since. `entries` hears its entry
+   * points first, before the graph is checked and encoded (phase 4 of build plan v2).
+   */
+  graph(
+    entries?: (listed: ListedEntries) => void,
+  ): Promise<GraphWire | { readonly failed: string }> {
     return this.#send(
       (id) => ({ type: 'graph', id }),
       graphFailure,
       this.#options.graphTimeoutMs ?? GRAPH_TIMEOUT_MS,
+      entries,
     ) as Promise<GraphWire | { readonly failed: string }>;
   }
 
@@ -128,6 +137,7 @@ export class SemanticClient {
     message: (id: number) => ToWorker,
     fail: (reason: string) => unknown,
     timeoutMs: number,
+    entries?: (listed: ListedEntries) => void,
   ): Promise<unknown> {
     const worker = await this.#start();
     const id = this.#nextId++;
@@ -136,7 +146,12 @@ export class SemanticClient {
         this.#pending.delete(id);
         resolve(fail(SEMANTIC_MESSAGES.slow));
       }, timeoutMs);
-      this.#pending.set(id, { resolve, fail, timer });
+      this.#pending.set(id, {
+        resolve,
+        fail,
+        timer,
+        ...(entries === undefined ? {} : { entries }),
+      });
       worker.postMessage(message(id));
     });
   }
@@ -170,6 +185,10 @@ export class SemanticClient {
       worker.on('message', (message) => {
         const pending = this.#pending.get(message.id);
         if (pending === undefined) return;
+        if (message.type === 'entries') {
+          pending.entries?.(message.listed);
+          return;
+        }
         this.#pending.delete(message.id);
         clearTimeout(pending.timer);
         pending.resolve(

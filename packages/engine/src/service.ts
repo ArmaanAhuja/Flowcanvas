@@ -44,6 +44,7 @@ import {
 } from './protocol.js';
 import { emptyAnswer, GRAPH_FAILED } from './semantics/client.js';
 import type { UnitFacts } from './semantics/details.js';
+import type { ListedEntries } from './semantics/graph.js';
 import type { GraphWire } from './semantics/worker.js';
 import type { SnapshotStore } from './snapshots.js';
 import type { IndexStore } from './store.js';
@@ -87,8 +88,10 @@ export interface FactsReader {
 export interface Semantics {
   ask<Op extends SemanticOp>(op: Op, position: CodePosition): Promise<EngineResults[Op]>;
   changed(paths: readonly string[], files?: readonly string[]): void;
-  /** A graph pass (ADR 0027). */
-  graph(): Promise<GraphWire | { readonly failed: string }>;
+  /** A graph pass (ADR 0027); `entries` hears its entry points ahead of the graph (phase 4 of build plan v2). */
+  graph(
+    entries?: (listed: ListedEntries) => void,
+  ): Promise<GraphWire | { readonly failed: string }>;
   /** The graph id of the code unit at a place (phase 7): null when it isn't in a TypeScript or JavaScript file. */
   unit(position: CodePosition): Promise<string | null | { readonly failed: string }>;
   close(): Promise<void>;
@@ -110,14 +113,17 @@ export const INDEXING_FAILED = 'Indexing stopped. Reopen the project to try agai
 export const NOT_FOLLOWING =
   'Changes to files aren’t being followed. Reopen the project to update the index.';
 
-const REFRESH_DELAY_MS = 200;
+// Changes this close together are one step: a save's or an agent step's writes land within milliseconds.
+const REFRESH_DELAY_MS = 100;
 
 /** Where no semantic worker was given (tests of the index alone). */
 export const NO_SEMANTICS = 'TypeScript’s answers aren’t available here.';
 /** Where there's no semantic worker or no snapshot store. */
 export const NO_GRAPH = 'The graph isn’t available here.';
 
-const GRAPH_DELAY_MS = 2000;
+// Then the graph waits this long for more: with the refresh's wait, a step's files arrive within it (re-analysed per
+// step, never per keystroke), and it's a fifteenth of the 3 s a saved edit has to show in (phase 4 of build plan v2).
+const GRAPH_DELAY_MS = 100;
 
 /** Words for flows (phase 7), safe to show. */
 export const FLOW_MESSAGES = {
@@ -161,6 +167,8 @@ export function startEngineService(options: EngineServiceOptions): EngineService
   let closed = false;
   let watcher: { close(): void } | undefined;
   const pending = new Map<string, boolean>();
+  // The project's files as last listed: a change to one of them needs no new list.
+  let known: ReadonlySet<string> | undefined;
   let timer: NodeJS.Timeout | undefined;
   let work: Promise<unknown> = Promise.resolve();
 
@@ -177,10 +185,29 @@ export function startEngineService(options: EngineServiceOptions): EngineService
   // Its entry points, listed once per version (phase 8): a page of them is a slice.
   let entryLists: EntryPointLists | undefined;
   let screenElements: ReadonlyMap<string, readonly EntryPointItem[]> | undefined;
-  const keep = (graph: Graph) => {
+  // Which edit each is from (phase 4 of build plan v2): `edits` counts the changes seen, and a pass is from the count
+  // when it began. Anything from before the latest edit is never said to be current. A version kept from before a
+  // restart is from no edit of this session (-1): files may have changed while the app was closed.
+  let edits = 0;
+  let graphAt = -1;
+  let entriesAt = -1;
+  // Goes up each time the entry points are listed again: the page asks for them when it changes.
+  let listed = 0;
+  const showEntries = (
+    lists: EntryPointLists | undefined,
+    screens: ReadonlyMap<string, readonly EntryPointItem[]> | undefined,
+    at: number,
+  ) => {
+    entryLists = lists;
+    screenElements = screens;
+    entriesAt = at;
+    listed += 1;
+  };
+  const keep = (graph: Graph, at: number) => {
     graphIndex = indexGraph(graph);
-    entryLists = listEntryPoints(graphIndex);
-    screenElements = elementsByScreen(graphIndex, entryLists.screen, entryLists.element);
+    graphAt = at;
+    const lists = listEntryPoints(graphIndex);
+    showEntries(lists, elementsByScreen(graphIndex, lists.screen, lists.element), at);
   };
   let graphTimer: NodeJS.Timeout | undefined;
   let graphRunning: Promise<void> | undefined;
@@ -194,7 +221,7 @@ export function startEngineService(options: EngineServiceOptions): EngineService
       const latest = snapshots.latest();
       const loaded = latest === undefined ? undefined : snapshots.load(latest.version);
       if (latest !== undefined && loaded !== undefined) {
-        keep(loaded.graph);
+        keep(loaded.graph, -1);
         graphInfo = {
           ...latest,
           stats: graphStats(loaded.graph),
@@ -218,9 +245,13 @@ export function startEngineService(options: EngineServiceOptions): EngineService
     graphState = 'building';
     const startedUnsettled = unsettled;
     unsettled = false;
+    const at = edits;
     graphRunning = (async () => {
       const started = performance.now();
-      const result = await semantics.graph();
+      // The entry points first, seconds before the version is checked, stored and loaded (phase 4 of build plan v2).
+      const result = await semantics.graph((early) => {
+        if (!closed) showEntries(early.lists, early.screens, at);
+      });
       const buildMs = Math.round(performance.now() - started);
       if ('failed' in result) {
         graphState = 'failed';
@@ -236,7 +267,7 @@ export function startEngineService(options: EngineServiceOptions): EngineService
       // Loaded straight back: every version proves it reads, and how fast (the Done when's "under 1 s").
       const loaded = snapshots.load(saved.meta.version);
       if (loaded === undefined) throw new Error('not stored');
-      keep(loaded.graph);
+      keep(loaded.graph, at);
       graphInfo = {
         ...saved.meta,
         stats: graphStats(loaded.graph),
@@ -250,6 +281,17 @@ export function startEngineService(options: EngineServiceOptions): EngineService
     })()
       .catch(() => {
         unsettled ||= startedUnsettled;
+        // Entry points listed ahead of a version that never came: back to the kept version's.
+        if (entriesAt !== graphAt) {
+          const lists = graphIndex === undefined ? undefined : listEntryPoints(graphIndex);
+          showEntries(
+            lists,
+            graphIndex === undefined || lists === undefined
+              ? undefined
+              : elementsByScreen(graphIndex, lists.screen, lists.element),
+            graphAt,
+          );
+        }
         if (graphState !== 'failed' || graphMessage === null) graphMessage = GRAPH_FAILED.failed;
         graphState = 'failed';
         options.facts?.forget();
@@ -281,6 +323,7 @@ export function startEngineService(options: EngineServiceOptions): EngineService
       try {
         const files = await options.listFiles();
         if (closed) return;
+        known = new Set(files);
         state = 'indexing';
         const run = await indexer.sync(files, (p) => {
           progress = p;
@@ -299,14 +342,24 @@ export function startEngineService(options: EngineServiceOptions): EngineService
     const changes = [...pending].map(([path, deleted]) => ({ path, deleted }));
     pending.clear();
     if (changes.length === 0 || closed) return;
+    // Files it already knows, none gone (a save, an agent's edits): the worker hears at once, while they're indexed,
+    // and the list isn't read again (phase 4 of build plan v2: listing Twenty's 38,000 files, then re-indexing, came
+    // before every pass).
+    const edits = known !== undefined && changes.every((c) => !c.deleted && known?.has(c.path));
+    if (edits && options.semantics !== undefined) {
+      options.semantics.changed(changes.map((c) => c.path));
+      requestGraph(graphDelayMs);
+    }
     void enqueue(async () => {
       try {
         await indexer.refresh(changes);
         // The semantic worker re-checks the same files; with the fresh list, it notices new and deleted ones.
-        if (options.semantics !== undefined) {
+        if (options.semantics !== undefined && !edits) {
+          const files = await options.listFiles();
+          known = new Set(files);
           options.semantics.changed(
             changes.map((c) => c.path),
-            await options.listFiles(),
+            files,
           );
           requestGraph(graphDelayMs);
         }
@@ -321,12 +374,14 @@ export function startEngineService(options: EngineServiceOptions): EngineService
     if (closed) return;
     switch (event.type) {
       case 'changed':
+        edits += 1;
         unsettled = true;
         pending.set(event.path, event.deleted);
         timer ??= setTimeout(flush, refreshDelayMs);
         return;
       case 'overflow':
         // Too many changes at once (a checkout, an install): look at everything again.
+        edits += 1;
         unsettled = true;
         pending.clear();
         void fullPass();
@@ -362,6 +417,12 @@ export function startEngineService(options: EngineServiceOptions): EngineService
   });
   void fullPass();
 
+  // Something is behind the latest edit: a change waiting to be indexed, or a pass waiting, running or yet to run.
+  const analysing = () =>
+    graphTimer !== undefined ||
+    graphRunning !== undefined ||
+    (graphState !== 'failed' && graphAt !== edits);
+
   const status = (): EngineStatus => ({
     state,
     done: progress.done,
@@ -369,6 +430,8 @@ export function startEngineService(options: EngineServiceOptions): EngineService
     ...store.counts(),
     lastFullMs,
     message,
+    analysing: analysing(),
+    listed,
   });
 
   const flow = async (position: CodePosition): Promise<FlowResult> => {
@@ -475,7 +538,7 @@ export function startEngineService(options: EngineServiceOptions): EngineService
   const aboutGraph = () => ({
     version: graphInfo?.version ?? null,
     takenAt: graphInfo?.takenAt ?? null,
-    current: graphState === 'ready',
+    current: graphState === 'ready' && graphAt === edits,
     complete: graphInfo?.complete ?? false,
   });
 
@@ -503,6 +566,8 @@ export function startEngineService(options: EngineServiceOptions): EngineService
             ? (graphMessage ?? ENTRY_POINT_MESSAGES.noGraph)
             : ENTRY_POINT_MESSAGES.noGraph,
       ...aboutGraph(),
+      // Listed ahead of the version (phase 4 of build plan v2): current from the latest edit's pass.
+      current: lists !== undefined && entriesAt === edits,
     };
   };
 

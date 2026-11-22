@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { positionOf } from '../code/CodeEditor';
 import type { IndexStatus } from './api';
 import { INDEX_TEXT, indexChip, paletteNote } from './texts';
-import { useSymbolSearch } from './useProjectIndex';
+import { useProjectIndex, useSymbolSearch } from './useProjectIndex';
 
 const status = (extra: Partial<IndexStatus>): IndexStatus => ({
   state: 'ready',
@@ -17,6 +17,8 @@ const status = (extra: Partial<IndexStatus>): IndexStatus => ({
   partlyRead: 0,
   lastFullMs: null,
   message: null,
+  analysing: false,
+  listed: 1,
   ...extra,
 });
 
@@ -43,6 +45,53 @@ describe('indexChip', () => {
     );
     expect(indexChip(status({}))).toBeUndefined();
     expect(indexChip(undefined)).toBeUndefined();
+  });
+});
+
+describe('a saved edit (phase 4 of build plan v2)', () => {
+  it('the chip says analysing while anything is behind the latest edit', () => {
+    expect(indexChip(status({ analysing: true }))).toEqual({
+      label: INDEX_TEXT.analysing,
+      detail: INDEX_TEXT.analysingDetail,
+    });
+    // Paused says more: changes aren't followed at all.
+    expect(indexChip(status({ analysing: true, message: 'Not following.' }))?.label).toBe(
+      'Index paused',
+    );
+    expect(indexChip(status({ analysing: false }))).toBeUndefined();
+  });
+
+  it('follows the status after a change until it’s analysed, then stops asking', async () => {
+    const answers = [
+      status({ listed: 1 }),
+      status({ analysing: true, listed: 1 }),
+      status({ analysing: true, listed: 2 }),
+      status({ listed: 2 }),
+    ];
+    let asked = 0;
+    const fetcher = (() => {
+      const answer = answers[Math.min(asked, answers.length - 1)];
+      asked += 1;
+      return Promise.resolve(new Response(JSON.stringify(answer)));
+    }) as typeof fetch;
+    const { result, rerender } = renderHook(
+      ({ changes }) => useProjectIndex('p1', true, fetcher, changes),
+      { initialProps: { changes: 0 } },
+    );
+    await waitFor(() => {
+      expect(result.current.status?.listed).toBe(1);
+    });
+    expect(asked).toBe(1);
+    rerender({ changes: 1 });
+    await waitFor(
+      () => {
+        expect(result.current.status).toMatchObject({ analysing: false, listed: 2 });
+      },
+      { timeout: 3000 },
+    );
+    expect(asked).toBe(4);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(asked).toBe(4);
   });
 });
 

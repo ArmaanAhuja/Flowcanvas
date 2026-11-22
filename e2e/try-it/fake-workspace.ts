@@ -38,6 +38,8 @@ export const INDEX_READY = {
   partlyRead: 0,
   lastFullMs: 1015,
   message: null,
+  analysing: false,
+  listed: 1,
 };
 
 /** An answer with a status other than 200; any other answer is the JSON body, sent with 200. */

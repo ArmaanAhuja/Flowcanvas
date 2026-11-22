@@ -6,7 +6,7 @@
 // - build/app/node_modules/node-pty: the terminal's native module (phase 3), which can't be bundled: its JavaScript
 //   and its compiled pty.node only (compiled on this machine; it uses N-API, so Electron loads the same build).
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -72,5 +72,9 @@ execFileSync('tar', [
   `${engine}/typescript`,
 ]);
 rmSync(`${engine}/${ENGINE_TYPESCRIPT_ARCHIVE}`);
+// TypeScript is CommonJS. Without a package.json of its own, the nearest one is the app's ("type": "module"), and
+// requiring it gave an empty module: the semantic worker failed at its first line, and no graph was ever built in
+// the app (found by phase 4's walkthrough).
+writeFileSync(`${engine}/typescript/package.json`, `${JSON.stringify({ type: 'commonjs' })}\n`);
 
 process.stdout.write(`assembled ${out}\n`);

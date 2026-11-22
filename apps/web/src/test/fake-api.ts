@@ -44,6 +44,8 @@ export const INDEX_READY = {
   partlyRead: 0,
   lastFullMs: 10,
   message: null,
+  analysing: false,
+  listed: 1,
 } as const;
 
 /** jsdom has no layout: give the file tree's virtualizer and the panels a viewport. Call in beforeEach. */

@@ -191,6 +191,13 @@ export interface EngineStatus {
   /** How long the last full pass took, or null before the first one ends. */
   readonly lastFullMs: number | null;
   readonly message: string | null;
+  /**
+   * Something is behind the latest edit (phase 4 of build plan v2): a change not yet analysed, or the graph being
+   * built. What's shown meanwhile isn't current.
+   */
+  readonly analysing: boolean;
+  /** Goes up each time the entry points are listed again, so the page knows to ask for them. */
+  readonly listed: number;
 }
 
 export interface SymbolHit {
@@ -473,7 +480,10 @@ function isStatus(value: unknown): value is EngineStatus {
     s !== undefined &&
     byStatus !== undefined &&
     (ENGINE_STATES as readonly unknown[]).includes(s.state) &&
-    [s.done, s.total, s.files, s.symbols, s.withSyntaxErrors, s.partlyRead].every(isCount) &&
+    [s.done, s.total, s.files, s.symbols, s.withSyntaxErrors, s.partlyRead, s.listed].every(
+      isCount,
+    ) &&
+    typeof s.analysing === 'boolean' &&
     FILE_STATUSES.every((status) => isCount(byStatus[status])) &&
     Object.keys(byStatus).length === FILE_STATUSES.length &&
     (s.lastFullMs === null || isCount(s.lastFullMs)) &&

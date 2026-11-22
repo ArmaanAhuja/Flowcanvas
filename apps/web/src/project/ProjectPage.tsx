@@ -210,8 +210,16 @@ function ReadyProject({
   const [treeRefresh, setTreeRefresh] = useState(0);
   const listed = useRef<ReadonlySet<string>>(new Set());
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Each change seen (a burst counted once): the index's status is followed until it's analysed (phase 4 of build
+  // plan v2).
+  const [changes, setChanges] = useState(0);
+  const changeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useWorkspaceEvents(project.id, running, (event) => {
     code.onDiskEvent(event);
+    changeTimer.current ??= setTimeout(() => {
+      changeTimer.current = undefined;
+      setChanges((n) => n + 1);
+    }, 100);
     if (event.type === 'overflow' || event.deleted || !listed.current.has(event.path)) {
       // A burst (a checkout, an install) lists once.
       if (refreshTimer.current !== undefined) clearTimeout(refreshTimer.current);
@@ -226,7 +234,7 @@ function ReadyProject({
   }, [running]);
 
   // The project index (phase 4): its progress while it indexes, and symbol search for the palette.
-  const index = useProjectIndex(project.id, running, fetcher);
+  const index = useProjectIndex(project.id, running, fetcher, changes);
   const [palette, setPalette] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState('');
   const [paletteFiles, setPaletteFiles] = useState<readonly string[]>([]);
@@ -317,7 +325,7 @@ function ReadyProject({
     });
   };
   // Entry points (phase 8): the left panel lists them; each opens the flow from what handles it.
-  const entries = useEntryPoints(project.id, running, fetcher);
+  const entries = useEntryPoints(project.id, running, fetcher, index.status?.listed);
   const [entryFilter, setEntryFilter] = useState('');
   const [entryShown, setEntryShown] = useState<string | null>(null);
   const [entryNotice, setEntryNotice] = useState<string | null>(null);

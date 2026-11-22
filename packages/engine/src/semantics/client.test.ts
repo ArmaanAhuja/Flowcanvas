@@ -144,6 +144,28 @@ describe('SemanticClient.graph (phase 6)', () => {
     expect(await pending).toEqual(wire);
   });
 
+  it('hands on the pass’s entry points ahead of its answer (phase 4 of build plan v2)', async () => {
+    const { client, workers } = setup();
+    const heard = vi.fn();
+    const pending = client.graph(heard);
+    await tick();
+    const worker = workers[0];
+    if (worker === undefined) throw new Error('no worker');
+    const listed = { lists: {} as never, screens: new Map() };
+    worker.reply({ type: 'entries', id: 1, listed });
+    expect(heard).toHaveBeenCalledWith(listed);
+    // Still waiting for the answer itself.
+    let answered = false;
+    void pending.then(() => {
+      answered = true;
+    });
+    await tick();
+    expect(answered).toBe(false);
+    worker.reply({ type: 'answer', id: 1, result: wire });
+    expect(await pending).toEqual(wire);
+    expect(heard).toHaveBeenCalledTimes(1);
+  });
+
   it('says why in its own words when the pass fails, runs out of memory, or takes too long', async () => {
     const failing = setup();
     const failed = failing.client.graph();

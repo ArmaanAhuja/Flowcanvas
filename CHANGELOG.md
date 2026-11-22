@@ -4,6 +4,38 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-11-22 — Phase 4 (build plan v2): the engine on local projects
+
+Open a project and Flowcanvas analyses it on your computer: its entry points, flows and graph are built from the folder, and a saved edit shows in its entry points within about two seconds, with **Analysing…** until everything has caught up.
+
+### Try it
+
+1. Open Twenty (`flowcanvas ~/code/twenty`) and wait while the chip above Entry points says **Analysing…** (about two minutes the first time, on a laptop).
+2. In `packages/twenty-server/src/engine/core-modules/health/controllers/health.controller.ts`, add a route (`@Get('ping') ping() { return 1; }`) and save, in Flowcanvas or your own editor.
+3. Type `ping` in the Entry points filter: the route is there within a couple of seconds, while the chip says **Analysing…** until the flows and graph have caught up too.
+
+### Added
+
+- **Analysing…** in the index chip, whenever anything is behind the latest edit; what's shown until then is never said to be current (`analysing` and `listed` in the engine's status; entry points and flows from before the edit come with `current: false`).
+- Entry points listed straight after the pass, ahead of the version being checked, stored and loaded (seconds on Twenty); the page asks for them again when the engine lists them, not on a 20 s check.
+- The installed app's smoke test also checks the engine builds the graph.
+
+### Fixed
+
+- **The desktop app never built a graph:** the TypeScript shipped with the engine loaded as an empty module (the app's package.json makes `.js` files ES modules), so entry points and flows, which 0.15.0 said worked on a local folder, never appeared in the app. It now has a package.json of its own.
+- A save threw away every TypeScript program the engine held, so each one rebuilt Twenty's server program (11–13 s a save).
+
+### Decisions
+
+- **How fast, measured:** ten saved edits to Twenty in the real app, from the save on disk to the new route in the Entry points panel: 1.2–1.8 s once warm, p90 1.76 s (laptop, 22 Nov 2026). The first save in a package after opening builds that package's program: 5.9 s on Twenty's server.
+- **The engine, a save at a time:** a pass after a change keeps the programs it built (released when memory runs high, like the questions'); each file's text is kept by version; a change to a known file reaches the worker at once, with no new file list; the waits after a change are 100 ms each (an agent step's writes land within them); joining API calls to routes is worked out once per call, and edges that gain no join pass straight through (same graph, checked by the schema's rule that no edge appears twice); edge keys are built once when encoding.
+- **CI:** phase 4's analysis of Rallly and Documenso runs on every pull request (half a minute); Twenty's, with the timed edits, on main only, as phase 3's walkthrough (owner: "only main").
+
+### Known gaps
+
+- The first save in a package after opening is slower (seconds on a large one) while its program is built; the next ones are fast.
+- Flows and the inspector catch up seconds after the entry points on a project of Twenty's size (the whole version is checked, stored and loaded each time); until then they say they're not current.
+
 ## [0.16.0] — 2026-11-22 — Phase 3 (build plan v2): run the project
 
 Press **Run** and the project starts on your computer: Flowcanvas installs its dependencies if they aren't there, asks for the environment variables it needs first, and shows each process as a card with its live output, the address it serves and Stop. A terminal in the project's folder is one tab away.

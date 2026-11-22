@@ -25,6 +25,8 @@ const status: EngineStatus = {
   partlyRead: 3,
   lastFullMs: null,
   message: null,
+  analysing: false,
+  listed: 1,
 };
 
 let db: Database;

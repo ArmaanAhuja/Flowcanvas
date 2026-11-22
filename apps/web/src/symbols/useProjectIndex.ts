@@ -6,19 +6,23 @@ import { fetchIndexStatus, searchSymbols, type IndexStatus } from './api';
 export const POLL = {
   /** How often the status is asked for while the first index runs. */
   indexingMs: 1000,
+  /** While a change is being analysed (phase 4 of build plan v2: a saved edit shows within 3 s). */
+  analysingMs: 250,
   /** After the API couldn't answer (the engine starting, the host restarting). */
   retryMs: 5000,
 } as const;
 
 /**
  * The index's status while the workspace runs. The first request starts the engine; the status is asked for
- * again while it indexes, and no more once it's ready or has failed (changes are then followed in the
- * workspace by themselves). Asking never counts as activity, so this never keeps a workspace awake.
+ * again while it indexes or analyses, and no more once it's caught up or has failed. `changes` goes up with each
+ * change seen in the project's files: the status is then followed again until the change is analysed. Asking never
+ * counts as activity, so this never keeps a workspace awake.
  */
 export function useProjectIndex(
   projectId: string,
   running: boolean,
   fetcher: typeof fetch,
+  changes = 0,
 ): { readonly status: IndexStatus | undefined; readonly problem: string | undefined } {
   const [status, setStatus] = useState<IndexStatus | undefined>(undefined);
   const [problem, setProblem] = useState<string | undefined>(undefined);
@@ -40,6 +44,8 @@ export function useProjectIndex(
         setProblem(undefined);
         if (result.state === 'starting' || result.state === 'indexing') {
           timer = setTimeout(() => void ask(), POLL.indexingMs);
+        } else if (result.state === 'ready' && result.analysing) {
+          timer = setTimeout(() => void ask(), POLL.analysingMs);
         }
       } else {
         setProblem(result.message);
@@ -51,7 +57,7 @@ export function useProjectIndex(
       stopped = true;
       if (timer !== undefined) clearTimeout(timer);
     };
-  }, [projectId, running, fetcher]);
+  }, [projectId, running, fetcher, changes]);
 
   return { status, problem };
 }

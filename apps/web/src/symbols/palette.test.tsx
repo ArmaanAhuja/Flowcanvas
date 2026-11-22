@@ -48,6 +48,8 @@ const status = (state: IndexStatus['state'], done: number, total: number): Index
   partlyRead: 0,
   lastFullMs: state === 'ready' ? 1800 : null,
   message: null,
+  analysing: false,
+  listed: 1,
 });
 
 let statuses: IndexStatus[];
