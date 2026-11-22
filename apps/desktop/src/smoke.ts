@@ -1,7 +1,8 @@
 // `flowcanvas --smoke-test <folder>`: checks an installed app works end to end without a person (CI, after
 // installing the .deb): the page is served under its security policy, the folder's files are listed, and the engine
-// indexes it and finds a symbol, and a process runs on a pty (node-pty shipped and loading, phase 3). Prints one line
-// per check; the exit code says whether all passed.
+// indexes it and finds a symbol, its graph is built (the semantic worker and the TypeScript shipped with it loading,
+// phase 4), and a process runs on a pty (node-pty shipped and loading, phase 3). Prints one line per check; the exit
+// code says whether all passed.
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { Folders } from './folders.js';
 import type { Projects } from './projects.js';
@@ -62,6 +63,17 @@ export async function smokeTest(options: {
   }
   const searched = say(found, 'search finds symbols');
 
+  // The graph: TypeScript, as shipped, loads in the semantic worker and the whole folder is analysed.
+  let built = false;
+  while (indexed && !built && Date.now() < deadline) {
+    const graph = await options.folders.index(project.path, { op: 'graph' }).catch(() => undefined);
+    const state = graph?.ok === true && 'state' in graph.result ? graph.result.state : undefined;
+    built = state === 'ready';
+    if (state === 'failed') break;
+    if (!built) await sleep(500);
+  }
+  const graphed = say(built, 'the engine built the graph');
+
   // The terminal's and the process cards' native module, loaded from the installed app.
   let ran: boolean;
   try {
@@ -80,5 +92,5 @@ export async function smokeTest(options: {
   } catch {
     ran = false;
   }
-  return served && listed && indexed && searched && say(ran, 'a process runs on a pty');
+  return served && listed && indexed && searched && graphed && say(ran, 'a process runs on a pty');
 }
