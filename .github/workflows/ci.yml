@@ -150,13 +150,14 @@ jobs:
 
   desktop:
     # Not a required check. The desktop app (build plan v2): the walkthroughs in the real Electron app (phases 1–2 on
-    # Rallly; phase 3, on main only, installing and starting Rallly and Documenso), then both Linux
+    # Rallly; phases 3 and 4, on main only: installing and starting Rallly and Documenso, and analysing them and
+    # Twenty with a saved edit timed), then both Linux
     # packages built, the .deb installed on this clean Ubuntu and smoke-tested there.
     name: Desktop app (Linux packages)
     needs: changes
     if: ${{ needs.changes.outputs.web == 'true' || needs.changes.outputs.engine == 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -175,7 +176,8 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -yq xvfb
       - run: pnpm build
-      - run: pnpm corpus:fetch rallly documenso
+      # Twenty only for phase 4's walkthrough, on main.
+      - run: pnpm corpus:fetch rallly documenso ${{ needs.changes.outputs.run == 'true' && 'twenty' || '' }}
       # Rallly's engines field asks for Node 24 (the app is built with the Node in .nvmrc): put beside it, on the PATH
       # the app gives the project's processes, as a person would with nvm. Pinned, from nodejs.org.
       - name: Node 24 for Rallly
@@ -187,9 +189,15 @@ jobs:
           echo "FLOWCANVAS_E2E_NODE_BIN=$RUNNER_TEMP/node24/bin" >> "$GITHUB_ENV"
       - name: The walkthroughs in the real app
         env:
-          # Phase 3's walkthrough (installing and starting Rallly and Documenso) on main only.
-          SPECS: ${{ needs.changes.outputs.run == 'true' && 'desktop' || 'desktop/phase-1' }}
-        run: xvfb-run -a pnpm --filter @flowcanvas/e2e test:desktop "$SPECS"
+          # Everything on main. On pull requests, phases 1–2 and phase 4's analysis of Rallly and Documenso (half a
+          # minute); phase 3's (installing and starting them) and Twenty's (minutes) on main only (owner: "only main").
+          MAIN: ${{ needs.changes.outputs.run }}
+        run: |
+          if [ "$MAIN" = true ]; then
+            xvfb-run -a pnpm --filter @flowcanvas/e2e test:desktop desktop
+          else
+            xvfb-run -a pnpm --filter @flowcanvas/e2e test:desktop desktop/phase-1 desktop/phase-4 --grep-invert Twenty
+          fi
       - name: Package (AppImage and .deb)
         run: pnpm --filter @flowcanvas/desktop package
       - name: Install the .deb on this clean Ubuntu, and smoke-test the installed app on Rallly

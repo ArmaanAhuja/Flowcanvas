@@ -1,7 +1,8 @@
 // The project's entry points for the left panel (phase 8): every screen, API route, job, cron, event (phase 11) and
 // command, loaded a page at a
-// time once the graph has them, and a screen's elements when it's opened. Asked for again when the graph has a new
-// version. None of it counts as activity (the control plane), so it never keeps a workspace awake.
+// time once the graph has them, and a screen's elements when it's opened. Asked for again when the engine lists them
+// again (its status's `listed`, phase 4 of build plan v2), or, without that, when the graph has a new version. None of
+// it counts as activity (the control plane), so it never keeps a workspace awake.
 import type { EntryGroup, EntryRow } from '@flowcanvas/ui';
 import type { EntryPointItem } from '@flowcanvas/graph-model';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -10,7 +11,7 @@ import { fetchEntryPoints, type EntryKind } from './api';
 export const ENTRY_POLL = {
   /** While the graph is being built. */
   buildingMs: 3000,
-  /** Once listed: is there a newer version? (One entry point is asked for.) */
+  /** Once listed, without the engine's `listed`: is there a newer version? (One entry point is asked for.) */
   versionMs: 20_000,
   /** After the API couldn't answer. */
   retryMs: 5000,
@@ -40,7 +41,13 @@ const EMPTY_LISTS: EntryPointsState['lists'] = {
   'cli-command': [],
 };
 
-export function useEntryPoints(projectId: string, running: boolean, fetcher: typeof fetch) {
+export function useEntryPoints(
+  projectId: string,
+  running: boolean,
+  fetcher: typeof fetch,
+  /** The engine's count of listings (its status): the entry points are asked for again when it changes. */
+  listed?: number,
+) {
   const [state, setState] = useState<EntryPointsState>({
     status: 'idle',
     message: null,
@@ -48,6 +55,7 @@ export function useEntryPoints(projectId: string, running: boolean, fetcher: typ
     elements: new Map(),
   });
   const version = useRef<string | null>(null);
+  const opened = useRef(new Set<string>());
 
   /** Every page of a kind, or of a screen's elements; null when an answer said there's nothing yet or failed. */
   const all = useCallback(
@@ -80,16 +88,25 @@ export function useEntryPoints(projectId: string, running: boolean, fetcher: typ
     if (!running) {
       setState({ status: 'idle', message: null, lists: EMPTY_LISTS, elements: new Map() });
       version.current = null;
+      opened.current.clear();
       return;
     }
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const load = async () => {
       setState((s) => ({ ...s, status: s.status === 'ready' ? 'ready' : 'loading' }));
+      // Every kind, and the opened screens' elements, at once: a saved edit is to show within 3 s (phase 4 of build
+      // plan v2), and one after another they took most of a second on Twenty.
+      const screens = [...opened.current];
+      const [results, elementResults] = await Promise.all([
+        Promise.all(LISTED.map((kind) => all(kind))),
+        Promise.all(screens.map((screen) => all('element', screen))),
+      ]);
+      if (stopped) return;
       const lists: Record<string, readonly EntryPointItem[]> = {};
-      for (const kind of LISTED) {
-        const result = await all(kind);
-        if (stopped) return;
+      for (const [i, kind] of LISTED.entries()) {
+        const result = results[i];
+        if (result === undefined) continue;
         if (!('entries' in result)) {
           setState((s) => ({ ...s, status: 'loading', message: result.problem ?? null }));
           timer = setTimeout(
@@ -100,13 +117,19 @@ export function useEntryPoints(projectId: string, running: boolean, fetcher: typ
         }
         lists[kind] = result.entries;
       }
+      // The screens opened stay open.
+      const elements = new Map<string, readonly EntryPointItem[]>();
+      for (const [i, screen] of screens.entries()) {
+        const result = elementResults[i];
+        if (result !== undefined && 'entries' in result) elements.set(screen, result.entries);
+      }
       setState({
         status: 'ready',
         message: null,
         lists: lists as EntryPointsState['lists'],
-        elements: new Map(),
+        elements,
       });
-      timer = setTimeout(() => void watch(), ENTRY_POLL.versionMs);
+      if (listed === undefined) timer = setTimeout(() => void watch(), ENTRY_POLL.versionMs);
     };
     // A newer version: everything again (the elements opened are asked for again when opened).
     const watch = async () => {
@@ -127,10 +150,11 @@ export function useEntryPoints(projectId: string, running: boolean, fetcher: typ
       stopped = true;
       if (timer !== undefined) clearTimeout(timer);
     };
-  }, [projectId, running, fetcher, all]);
+  }, [projectId, running, fetcher, all, listed]);
 
   const openScreen = useCallback(
     async (screen: string) => {
+      opened.current.add(screen);
       const result = await all('element', screen);
       if ('entries' in result) {
         setState((s) => ({ ...s, elements: new Map([...s.elements, [screen, result.entries]]) }));

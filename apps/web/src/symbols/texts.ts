@@ -9,6 +9,9 @@ export const INDEX_TEXT = {
   notRunning: 'Open the workspace to search its files and symbols.',
   starting: 'Starting the index…',
   stopped: 'Index stopped',
+  analysing: 'Analysing…',
+  analysingDetail:
+    'Bringing entry points and flows up to date with the latest changes. Until then, what’s shown is from before them.',
 } as const;
 
 /** The chip's words while there's something to say, else undefined (a ready index says nothing). */
@@ -30,9 +33,11 @@ export function indexChip(
       return { label: INDEX_TEXT.stopped, detail: status.message ?? INDEX_TEXT.stopped };
     case 'ready':
       // Ready, but not following changes: worth saying, since results may be out of date.
-      return status.message === null
-        ? undefined
-        : { label: 'Index paused', detail: status.message };
+      if (status.message !== null) return { label: 'Index paused', detail: status.message };
+      // Behind the latest edit (phase 4 of build plan v2): never shown as up to date.
+      return status.analysing
+        ? { label: INDEX_TEXT.analysing, detail: INDEX_TEXT.analysingDetail }
+        : undefined;
   }
 }
 
